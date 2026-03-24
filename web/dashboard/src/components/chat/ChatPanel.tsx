@@ -19,7 +19,7 @@ import {
   Alert,
   alpha,
 } from '@mui/material';
-import { AccountCircle, ExpandMore } from '@mui/icons-material';
+import { Person, ExpandMore } from '@mui/icons-material';
 import ChatInput from './ChatInput.tsx';
 
 interface ChatPanelProps {
@@ -148,7 +148,7 @@ export default function ChatPanel({
             flexShrink: 0,
           }}
         >
-          <AccountCircle sx={{ fontSize: 40, color: 'white' }} />
+          <Person sx={{ fontSize: 24, color: 'common.white' }} />
         </Box>
 
         {/* Text Content */}

@@ -131,7 +131,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       </Typography>
                       <Box
                         sx={{
-                          bgcolor: theme.palette.grey[50],
+                          bgcolor: theme.palette.action.hover,
                           borderRadius: 1,
                           border: `1px solid ${theme.palette.divider}`,
                           overflow: 'auto',
@@ -198,7 +198,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       </Box>
                       <Box
                         sx={{
-                          bgcolor: theme.palette.grey[50],
+                          bgcolor: theme.palette.action.hover,
                           borderRadius: 1,
                           border: `1px solid ${theme.palette.divider}`,
                           p: 1.5,
@@ -246,7 +246,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 </Typography>
                 <Box
                   sx={{
-                    bgcolor: theme.palette.grey[50],
+                    bgcolor: theme.palette.action.hover,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,
                     overflow: 'auto',
@@ -300,7 +300,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 </Box>
                 <Box
                   sx={{
-                    bgcolor: theme.palette.grey[50],
+                    bgcolor: theme.palette.action.hover,
                     borderRadius: 1,
                     border: `1px solid ${theme.palette.divider}`,
                     p: 1.5,
@@ -329,7 +329,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
         return (
           <Box
             sx={{
-              bgcolor: theme.palette.grey[50],
+              bgcolor: theme.palette.action.hover,
               borderRadius: 1,
               border: `1px solid ${theme.palette.divider}`,
               overflow: 'auto',
@@ -364,7 +364,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           return (
             <Box
               sx={{
-                bgcolor: theme.palette.grey[50],
+                bgcolor: theme.palette.action.hover,
                 borderRadius: 1,
                 border: `1px solid ${theme.palette.divider}`,
                 p: 1.5,
@@ -411,7 +411,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           return (
             <Box
               sx={{
-                bgcolor: theme.palette.grey[50],
+                bgcolor: theme.palette.action.hover,
                 borderRadius: 1,
                 border: `1px solid ${theme.palette.divider}`,
                 p: 1.5,

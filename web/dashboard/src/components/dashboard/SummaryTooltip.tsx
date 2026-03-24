@@ -43,11 +43,11 @@ export function SummaryTooltip({ summary }: SummaryTooltipProps) {
           fontSize: '0.75rem',
           fontWeight: 500,
           transition: 'all 0.2s ease-in-out',
-          '&:hover': (theme) => ({
-            backgroundColor: `${theme.palette.grey[700]} !important`,
-            color: `${theme.palette.common.white} !important`,
-            borderColor: `${theme.palette.grey[700]} !important`,
-          }),
+          '&:hover': {
+            backgroundColor: 'text.secondary',
+            color: 'background.paper',
+            borderColor: 'text.secondary',
+          },
         }}
       />
       <Popover

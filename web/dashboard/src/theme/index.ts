@@ -47,7 +47,13 @@ export function buildTheme(mode: PaletteMode) {
         styleOverrides: {
           html: {
             scrollbarGutter: 'stable',
+            colorScheme: mode,
           },
+          body: isDark
+            ? {
+                scrollbarColor: '#555 #1e1e1e',
+              }
+            : undefined,
         },
       },
       MuiChip: {

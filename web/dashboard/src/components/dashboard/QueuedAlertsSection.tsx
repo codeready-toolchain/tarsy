@@ -152,7 +152,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: 'warning.main',
-                      color: 'white',
+                      color: 'common.white',
                       borderRadius: '50%',
                       fontWeight: 700,
                       fontSize: '0.875rem',

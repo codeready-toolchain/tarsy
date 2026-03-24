@@ -47,6 +47,7 @@ import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
 import { useColorMode } from '../../contexts/ColorModeContext.tsx';
+import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx, glassToggleGroupSx } from '../../theme/headerStyles';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
 import { VersionFooter } from '../layout/VersionFooter.tsx';
@@ -806,16 +807,7 @@ export function DashboardView() {
       <AppBar
         position="static"
         elevation={0}
-        sx={(theme) => ({
-          borderRadius: 1,
-          background: theme.palette.mode === 'dark'
-            ? 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)'
-            : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-          boxShadow: theme.palette.mode === 'dark'
-            ? '0 4px 16px rgba(0, 0, 0, 0.4)'
-            : '0 4px 16px rgba(25, 118, 210, 0.3)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-        })}
+        sx={(theme) => ({ ...appBarSx(theme) })}
       >
         <Toolbar>
           {/* Navigation Menu */}
@@ -826,19 +818,7 @@ export function DashboardView() {
             color="inherit"
             aria-label="menu"
             onClick={handleMenuOpen}
-            sx={{
-              mr: 2,
-              background: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              borderRadius: 2,
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                background: 'rgba(255, 255, 255, 0.2)',
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
-              },
-            }}
+            sx={{ mr: 2, ...glassIconButtonSx }}
           >
             <MenuIcon />
           </IconButton>
@@ -849,49 +829,7 @@ export function DashboardView() {
               to="/"
               aria-label="Home"
               sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 40,
-                height: 40,
-                borderRadius: 2,
-                background: 'rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                boxShadow:
-                  '0 4px 12px rgba(0, 0, 0, 0.15), 0 0 20px rgba(255, 255, 255, 0.1)',
-                transition: 'all 0.3s ease',
-                position: 'relative',
-                overflow: 'hidden',
-                textDecoration: 'none',
-                '&:before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: 0,
-                  left: '-100%',
-                  width: '100%',
-                  height: '100%',
-                  background:
-                    'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
-                  animation: 'none',
-                },
-                '&:hover': {
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  transform: 'translateY(-2px) scale(1.05)',
-                  boxShadow:
-                    '0 8px 25px rgba(0, 0, 0, 0.2), 0 0 30px rgba(255, 255, 255, 0.2)',
-                  '&:before': {
-                    animation: 'shimmer 0.6s ease-out',
-                  },
-                },
-                '&:focus-visible': {
-                  outline: '2px solid rgba(255, 255, 255, 0.8)',
-                  outlineOffset: '2px',
-                },
-                '@keyframes shimmer': {
-                  '0%': { left: '-100%' },
-                  '100%': { left: '100%' },
-                },
+                ...logoBoxSx,
               }}
             >
               <img
@@ -908,17 +846,7 @@ export function DashboardView() {
             <Typography
               variant="h5"
               component="div"
-              sx={{
-                fontWeight: 600,
-                letterSpacing: '-0.5px',
-                textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-                background:
-                  'linear-gradient(45deg, #ffffff 0%, rgba(255, 255, 255, 0.9) 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                color: 'white',
-              }}
+              sx={titleSx}
             >
               TARSy
             </Typography>
@@ -965,38 +893,7 @@ export function DashboardView() {
               onChange={handleTabChange}
               size="small"
               aria-label="Dashboard tabs"
-              sx={{
-                mr: 2,
-                bgcolor: 'rgba(255,255,255,0.1)',
-                borderRadius: 3,
-                padding: 0.5,
-                border: '1px solid rgba(255,255,255,0.2)',
-                '& .MuiToggleButton-root': {
-                  color: 'rgba(255,255,255,0.8)',
-                  border: 'none',
-                  borderRadius: 2,
-                  px: 2,
-                  py: 0.5,
-                  minWidth: 100,
-                  fontWeight: 500,
-                  fontSize: '0.875rem',
-                  textTransform: 'none',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    bgcolor: 'rgba(255,255,255,0.15)',
-                    color: 'rgba(255,255,255,0.95)',
-                  },
-                  '&.Mui-selected': {
-                    bgcolor: 'rgba(255,255,255,0.25)',
-                    color: '#fff',
-                    fontWeight: 600,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                    '&:hover': {
-                      bgcolor: 'rgba(255,255,255,0.3)',
-                    },
-                  },
-                },
-              }}
+              sx={{ mr: 2, ...glassToggleGroupSx }}
             >
               <ToggleButton value="sessions">Sessions</ToggleButton>
               <ToggleButton value="triage">Triage</ToggleButton>
@@ -1007,18 +904,7 @@ export function DashboardView() {
               <IconButton
                 size="small"
                 onClick={toggleColorMode}
-                sx={{
-                  color: 'inherit',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: 2,
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    transform: 'translateY(-1px)',
-                    boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
-                  },
-                }}
+                sx={themeToggleSx}
               >
                 {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
               </IconButton>
@@ -1064,24 +950,21 @@ export function DashboardView() {
                     width: 7,
                     height: 7,
                     borderRadius: '50%',
-                    backgroundColor: wsConnected ? '#81C784' : '#FF7043',
-                    boxShadow: `0 0 6px ${wsConnected ? '#4CAF50' : '#F44336'}`,
+                    backgroundColor: wsConnected ? 'success.light' : 'error.light',
+                    boxShadow: (theme) => `0 0 6px ${wsConnected ? theme.palette.success.main : theme.palette.error.main}`,
                     animation: wsConnected ? 'none' : 'pulse 2s infinite',
                     '@keyframes pulse': {
                       '0%': {
                         opacity: 0.7,
                         transform: 'scale(1)',
-                        boxShadow: `0 0 6px ${wsConnected ? '#4CAF50' : '#F44336'}`,
                       },
                       '50%': {
                         opacity: 1,
                         transform: 'scale(1.3)',
-                        boxShadow: `0 0 12px ${wsConnected ? '#4CAF50' : '#F44336'}`,
                       },
                       '100%': {
                         opacity: 0.7,
                         transform: 'scale(1)',
-                        boxShadow: `0 0 6px ${wsConnected ? '#4CAF50' : '#F44336'}`,
                       },
                     },
                   }}
@@ -1089,7 +972,7 @@ export function DashboardView() {
                 <Typography
                   variant="caption"
                   sx={{
-                    color: 'white',
+                    color: 'common.white',
                     fontWeight: 600,
                     fontSize: '0.7rem',
                     letterSpacing: '0.8px',

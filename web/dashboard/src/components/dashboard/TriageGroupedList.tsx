@@ -61,7 +61,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'investigating',
     icon: <SearchIcon sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: '#1976d2',
+    color: 'primary.main',
   },
   {
     key: 'needs_review',
@@ -69,7 +69,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'needs_review',
     icon: <RateReview sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: '#ed6c02',
+    color: 'warning.main',
     accentBorder: true,
   },
   {
@@ -78,7 +78,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'in_progress',
     icon: <AssignmentTurnedIn sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: '#0288d1',
+    color: 'info.main',
   },
   {
     key: 'reviewed',
@@ -86,7 +86,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'reviewed',
     icon: <CheckCircleOutline sx={{ fontSize: 18 }} />,
     defaultOpen: false,
-    color: '#2e7d32',
+    color: 'success.main',
   },
 ];
 
@@ -237,9 +237,10 @@ export function TriageGroupedList({
             variant="outlined"
             sx={{
               overflow: 'hidden',
-              borderLeft: group.accentBorder && !isEmpty
-                ? `3px solid ${group.color}`
-                : undefined,
+              ...(group.accentBorder && !isEmpty && {
+                borderLeft: '3px solid',
+                borderLeftColor: group.color,
+              }),
             }}
           >
             {/* Group header */}
@@ -274,7 +275,7 @@ export function TriageGroupedList({
                   fontSize: '0.75rem',
                   fontWeight: 600,
                   backgroundColor: isEmpty ? 'action.disabledBackground' : group.color,
-                  color: isEmpty ? 'text.disabled' : '#fff',
+                  color: isEmpty ? 'text.disabled' : 'common.white',
                 }}
               />
               <IconButton size="small" sx={{ ml: 0.5 }}>

@@ -62,3 +62,61 @@
 [data-theme="dark"] .json-punctuation {
   color: #bdbdbd;
 }
+
+/* ── YAML highlighting: Light mode ── */
+
+.yaml-key {
+  color: #5E81AC;
+  font-weight: 700;
+}
+
+.yaml-string {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.yaml-boolean {
+  color: #9570A0;
+  font-weight: 600;
+}
+
+.yaml-null {
+  color: #BF616A;
+  font-weight: 600;
+}
+
+.yaml-list-marker {
+  color: #5E81AC;
+  font-weight: 600;
+}
+
+.yaml-comment {
+  color: #757575;
+  font-style: italic;
+}
+
+/* ── YAML highlighting: Dark mode ── */
+
+[data-theme="dark"] .yaml-key {
+  color: #81D4FA;
+}
+
+[data-theme="dark"] .yaml-string {
+  color: #81c784;
+}
+
+[data-theme="dark"] .yaml-boolean {
+  color: #ce93d8;
+}
+
+[data-theme="dark"] .yaml-null {
+  color: #ef9a9a;
+}
+
+[data-theme="dark"] .yaml-list-marker {
+  color: #80DEEA;
+}
+
+[data-theme="dark"] .yaml-comment {
+  color: #9e9e9e;
+}

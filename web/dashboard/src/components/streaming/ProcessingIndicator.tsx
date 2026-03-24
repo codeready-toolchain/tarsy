@@ -1,4 +1,4 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 
 interface ProcessingIndicatorProps {
   message?: string;
@@ -14,6 +14,8 @@ export default function ProcessingIndicator({
   message = 'Processing...',
   centered = false,
 }: ProcessingIndicatorProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   return (
     <Box
       sx={{
@@ -34,7 +36,7 @@ export default function ProcessingIndicator({
             width: 6,
             height: 6,
             borderRadius: '50%',
-            bgcolor: 'rgba(0, 0, 0, 0.6)',
+            bgcolor: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)',
             animation: 'bounce-wave 1.4s ease-in-out infinite',
           },
           '& > div:nth-of-type(2)': {
@@ -63,8 +65,9 @@ export default function ProcessingIndicator({
           fontSize: '1.1rem',
           fontWeight: 500,
           fontStyle: 'italic',
-          background:
-            'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
+          background: isDark
+            ? 'linear-gradient(90deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.7) 40%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.7) 60%, rgba(255,255,255,0.5) 100%)'
+            : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
           backgroundSize: '200% 100%',
           backgroundClip: 'text',
           WebkitBackgroundClip: 'text',

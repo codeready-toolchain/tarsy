@@ -71,10 +71,10 @@ function ReportSkeleton() {
   );
 }
 
-function getScoreColorHex(score: number): string {
-  if (score >= 80) return '#2e7d32';
-  if (score >= 60) return '#ed6c02';
-  return '#d32f2f';
+function getScoreColorKey(score: number): 'success' | 'warning' | 'error' {
+  if (score >= 80) return 'success';
+  if (score >= 60) return 'warning';
+  return 'error';
 }
 
 export function ScoringPage() {
@@ -249,14 +249,14 @@ export function ScoringPage() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          bgcolor: alpha(getScoreColorHex(score.total_score), 0.1),
+                          bgcolor: (theme) => alpha(theme.palette[getScoreColorKey(score.total_score)].main, 0.1),
                           border: '3px solid',
-                          borderColor: getScoreColorHex(score.total_score),
+                          borderColor: `${getScoreColorKey(score.total_score)}.main`,
                         }}
                       >
                         <Typography
                           variant="h4"
-                          sx={{ fontWeight: 700, color: getScoreColorHex(score.total_score) }}
+                          sx={{ fontWeight: 700, color: `${getScoreColorKey(score.total_score)}.main` }}
                         >
                           {score.total_score}
                         </Typography>

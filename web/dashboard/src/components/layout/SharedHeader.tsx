@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext.tsx';
 import { useColorMode } from '../../contexts/ColorModeContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
+import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx } from '../../theme/headerStyles';
 
 interface SharedHeaderProps {
   title: string;
@@ -49,14 +50,7 @@ export function SharedHeader({
       position="static"
       elevation={0}
       sx={(theme) => ({
-        borderRadius: 1,
-        background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)'
-          : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-        boxShadow: theme.palette.mode === 'dark'
-          ? '0 4px 16px rgba(0, 0, 0, 0.4)'
-          : '0 4px 16px rgba(25, 118, 210, 0.3)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        ...appBarSx(theme),
         mb: 2,
       })}
     >
@@ -68,19 +62,7 @@ export function SharedHeader({
             color="inherit"
             aria-label="back"
             onClick={handleBackClick}
-            sx={{
-              mr: 2,
-              background: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              borderRadius: 2,
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                background: 'rgba(255, 255, 255, 0.2)',
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
-              },
-            }}
+            sx={{ mr: 2, ...glassIconButtonSx }}
           >
             <ArrowBackIcon />
           </IconButton>
@@ -93,49 +75,7 @@ export function SharedHeader({
             to="/"
             aria-label="Home"
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 40,
-              height: 40,
-              borderRadius: 2,
-              background: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              boxShadow:
-                '0 4px 12px rgba(0, 0, 0, 0.15), 0 0 20px rgba(255, 255, 255, 0.1)',
-              transition: 'all 0.3s ease',
-              position: 'relative',
-              overflow: 'hidden',
-              textDecoration: 'none',
-              '&:before': {
-                content: '""',
-                position: 'absolute',
-                top: 0,
-                left: '-100%',
-                width: '100%',
-                height: '100%',
-                background:
-                  'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
-                animation: 'none',
-              },
-              '&:hover': {
-                background: 'rgba(255, 255, 255, 0.15)',
-                transform: 'translateY(-2px) scale(1.05)',
-                boxShadow:
-                  '0 8px 25px rgba(0, 0, 0, 0.2), 0 0 30px rgba(255, 255, 255, 0.2)',
-                '&:before': {
-                  animation: 'shimmer 0.6s ease-out',
-                },
-              },
-              '&:focus-visible': {
-                outline: '2px solid rgba(255, 255, 255, 0.8)',
-                outlineOffset: '2px',
-              },
-              '@keyframes shimmer': {
-                '0%': { left: '-100%' },
-                '100%': { left: '100%' },
-              },
+              ...logoBoxSx,
             }}
           >
             <img
@@ -153,16 +93,7 @@ export function SharedHeader({
             variant="h5"
             component="div"
             sx={{
-              fontWeight: 600,
-              letterSpacing: '-0.5px',
-              textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-              background:
-                'linear-gradient(45deg, #ffffff 0%, rgba(255, 255, 255, 0.9) 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              // Fallback for browsers that don't support background-clip: text
-              color: 'white',
+              ...titleSx,
             }}
           >
             {title}
@@ -177,19 +108,7 @@ export function SharedHeader({
           <IconButton
             size="small"
             onClick={toggleColorMode}
-            sx={{
-              color: 'inherit',
-              ml: 1,
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              borderRadius: 2,
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                background: 'rgba(255, 255, 255, 0.2)',
-                transform: 'translateY(-1px)',
-                boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
-              },
-            }}
+            sx={{ ml: 1, ...themeToggleSx }}
           >
             {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
           </IconButton>

@@ -42,7 +42,7 @@ const isSimpleArguments = (args: Record<string, unknown> | null): boolean => {
 const SimpleArgumentsList = ({ args }: { args: Record<string, unknown> }) => (
   <Box
     sx={(theme) => ({
-      bgcolor: theme.palette.grey[50], borderRadius: 1,
+      bgcolor: theme.palette.action.hover, borderRadius: 1,
       border: `1px solid ${theme.palette.divider}`, p: 1.5,
       fontFamily: 'monospace', fontSize: '0.875rem'
     })}
@@ -222,7 +222,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
                 <Box sx={(theme) => ({
                   maxHeight: 400, overflow: 'auto',
                   p: 1.5, borderRadius: 1,
-                  bgcolor: theme.palette.grey[50],
+                  bgcolor: theme.palette.action.hover,
                   border: `1px solid ${theme.palette.divider}`,
                   fontSize: '0.85rem',
                   '& h1': { fontSize: '1.1rem', mt: 0, mb: 1 },
@@ -236,11 +236,11 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
                     bgcolor: alpha(theme.palette.info.main, 0.08),
                     px: 0.5, py: 0.25, borderRadius: 0.5,
                   },
-                  '& pre': { my: 1, p: 1.5, borderRadius: 1, bgcolor: theme.palette.grey[100], overflow: 'auto' },
+                  '& pre': { my: 1, p: 1.5, borderRadius: 1, bgcolor: theme.palette.action.selected, overflow: 'auto' },
                   '& pre code': { bgcolor: 'transparent', px: 0, py: 0 },
                   '& table': { borderCollapse: 'collapse', width: '100%', my: 1, fontSize: '0.8rem' },
                   '& th, & td': { border: `1px solid ${theme.palette.divider}`, px: 1, py: 0.5, textAlign: 'left' },
-                  '& th': { bgcolor: theme.palette.grey[100], fontWeight: 600 },
+                  '& th': { bgcolor: theme.palette.action.selected, fontWeight: 600 },
                   '& hr': { my: 1.5, borderColor: theme.palette.divider },
                   '& strong': { fontWeight: 600 },
                 })}>

@@ -134,7 +134,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           <Chip
             label="Cancelled"
             size="small"
-            sx={{ height: 18, fontSize: '0.65rem', flexShrink: 0, bgcolor: 'grey.300', color: 'grey.700' }}
+            sx={{ height: 18, fontSize: '0.65rem', flexShrink: 0, bgcolor: 'action.selected', color: 'text.secondary' }}
           />
         )}
         {progressStatus && isRunning && (

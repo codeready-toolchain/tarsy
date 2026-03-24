@@ -110,7 +110,7 @@ class ErrorBoundary extends Component<Props, State> {
             </Box>
 
             <Collapse in={this.state.showDetails}>
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
                 <Typography variant="caption" color="text.secondary" component="div">
                   <strong>Error:</strong> {this.state.error?.message}
                 </Typography>

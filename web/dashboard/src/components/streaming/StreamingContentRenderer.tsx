@@ -163,13 +163,13 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
             variant="caption"
             sx={{
               fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
-              fontSize: '0.75rem', color: 'rgba(237, 108, 2, 0.9)', mt: 0.25
+              fontSize: '0.75rem', color: 'warning.main', mt: 0.25
             }}
           >
             TOOL RESULT SUMMARY
           </Typography>
         </Box>
-        <Box sx={{ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: '2px solid rgba(237, 108, 2, 0.2)' }}>
+        <Box sx={(theme) => ({ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: `2px solid ${alpha(theme.palette.warning.main, 0.2)}` })}>
           {isPlaceholder ? (
             <Typography
               variant="body1"
