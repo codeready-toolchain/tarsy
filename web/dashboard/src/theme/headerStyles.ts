@@ -9,7 +9,7 @@ export function appBarSx(theme: Theme) {
     boxShadow: `0 4px 16px ${alpha(primary.main, 0.3)}`,
     border: '1px solid rgba(255, 255, 255, 0.1)',
     ...theme.applyStyles('dark', {
-      background: `linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.95)} 0%, ${theme.palette.background.default} 100%)`,
+      background: 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)',
       boxShadow: `0 4px 16px ${alpha(theme.palette.common.black, 0.4)}`,
     }),
   } as const;
