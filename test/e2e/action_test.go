@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
@@ -67,7 +68,7 @@ func TestE2E_ActionChain(t *testing.T) {
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "Service restarted successfully."},
-			&agent.TextChunk{Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK)."},
+			&agent.TextChunk{Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).\nYES"},
 			&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
 		},
 	})
@@ -127,9 +128,23 @@ func TestE2E_ActionChain(t *testing.T) {
 
 	assert.Equal(t, "remediation", stages[1].StageName)
 	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	require.NotNil(t, stages[1].ActionsExecuted, "action stage should have actions_executed set")
+	assert.True(t, *stages[1].ActionsExecuted, "action stage should report actions_executed=true")
 
 	assert.Equal(t, "Executive Summary", stages[2].StageName)
 	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
+
+	// ── Timeline events for the action stage should have YES/NO stripped ──
+	timeline := app.QueryTimeline(t, sessionID)
+	for _, evt := range timeline {
+		if evt.StageID == nil || *evt.StageID != stages[1].ID {
+			continue
+		}
+		if evt.EventType == timelineevent.EventTypeFinalAnalysis || evt.EventType == timelineevent.EventTypeLlmResponse {
+			assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, evt.Content,
+				"action stage %s timeline event should have YES/NO marker stripped", evt.EventType)
+		}
+	}
 
 	// ── Verify action agent received safety preamble ──
 	captured := llm.CapturedInputs()
@@ -146,6 +161,16 @@ func TestE2E_ActionChain(t *testing.T) {
 		}
 	}
 	assert.True(t, hasSafetyPreamble, "action agent should have safety preamble in system prompt")
+
+	// ── Verify action agent received YES/NO output schema ──
+	var hasOutputSchema bool
+	for _, msg := range actionInput.Messages {
+		if strings.Contains(msg.Content, "YES or NO on the very last line") {
+			hasOutputSchema = true
+			break
+		}
+	}
+	assert.True(t, hasOutputSchema, "action agent should have YES/NO output schema in prompt")
 
 	// ── Verify context flow: action stage receives investigation findings ──
 	var hasInvestigationContext bool

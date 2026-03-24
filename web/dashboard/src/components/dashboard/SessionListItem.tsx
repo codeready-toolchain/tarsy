@@ -101,7 +101,7 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
             </Tooltip>
           )}
           {session.has_action_stages && (
-            <Tooltip title="Action Evaluation - Automated remediation evaluated">
+            <Tooltip title="Automated remediation actions executed">
               <Chip
                 icon={<BuildOutlined sx={{ fontSize: '0.875rem' }} />}
                 size="small"

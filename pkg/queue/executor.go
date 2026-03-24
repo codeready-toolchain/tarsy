@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
@@ -424,6 +425,26 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		finalAnalysis = agentResults[0].finalAnalysis
 	}
 
+	// For completed action stages, parse the YES/NO marker from the
+	// final analysis, strip it, and persist the boolean on the stage record.
+	// Also clean the marker from timeline events so traces show clean text
+	// (raw LLM output is preserved in LLM interactions).
+	if stageType == stage.StageTypeAction && stageStatus == alertsession.StatusCompleted && finalAnalysis != "" {
+		taken, cleaned, parseErr := controller.ExtractActionsTaken(finalAnalysis)
+		if parseErr != nil {
+			logger.Warn("Failed to parse YES/NO marker from action stage",
+				"stage_id", stg.ID, "error", parseErr)
+		} else {
+			finalAnalysis = cleaned
+			if setErr := input.stageService.SetActionsExecuted(context.Background(), stg.ID, taken); setErr != nil {
+				logger.Error("Failed to persist actions_executed", "stage_id", stg.ID, "error", setErr)
+			}
+			if len(agentResults) == 1 {
+				stripActionMarkerFromTimeline(input.timelineService, agentResults[0].executionID, logger)
+			}
+		}
+	}
+
 	return stageResult{
 		stageID:       stg.ID,
 		stageName:     input.stageConfig.Name,
@@ -432,6 +453,33 @@ func (e *RealSessionExecutor) executeStage(ctx context.Context, input executeSta
 		finalAnalysis: finalAnalysis,
 		err:           aggregateError(agentResults, stageStatus, input.stageConfig),
 		agentResults:  agentResults,
+	}
+}
+
+// stripActionMarkerFromTimeline removes the YES/NO marker from
+// final_analysis and llm_response timeline events for the given execution.
+// Best-effort: logs warnings on failure but never blocks the pipeline.
+func stripActionMarkerFromTimeline(timelineService *services.TimelineService, executionID string, logger *slog.Logger) {
+	events, err := timelineService.GetAgentTimeline(context.Background(), executionID)
+	if err != nil {
+		logger.Warn("Failed to get timeline for action marker cleanup", "execution_id", executionID, "error", err)
+		return
+	}
+	for _, evt := range events {
+		if evt.EventType != timelineevent.EventTypeFinalAnalysis && evt.EventType != timelineevent.EventTypeLlmResponse {
+			continue
+		}
+		_, evtCleaned, extractErr := controller.ExtractActionsTaken(evt.Content)
+		if extractErr != nil {
+			continue
+		}
+		if evtCleaned == "" {
+			continue
+		}
+		if updateErr := timelineService.UpdateTimelineEvent(context.Background(), evt.ID, evtCleaned); updateErr != nil {
+			logger.Warn("Failed to strip action marker from timeline event",
+				"event_id", evt.ID, "event_type", evt.EventType, "error", updateErr)
+		}
 	}
 }
 

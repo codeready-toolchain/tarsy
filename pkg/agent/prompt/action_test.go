@@ -81,4 +81,7 @@ func TestBuildActionMessages_UserMessageHasContext(t *testing.T) {
 	// Action-specific task (not the investigation analysisTask)
 	assert.Contains(t, user, "Evaluate the upstream investigation findings")
 	assert.NotContains(t, user, "Use the available tools to investigate this alert")
+
+	// Output schema for YES/NO marker
+	assert.Contains(t, user, "YES or NO on the very last line")
 }

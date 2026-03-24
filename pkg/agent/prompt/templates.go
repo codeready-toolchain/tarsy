@@ -18,6 +18,12 @@ Be thorough in your investigation before providing the final answer.
 
 For each factual finding about the current state of the system, reference where the data came from (e.g., which tool call, which log entry, which metric). General SRE knowledge does not need citations, but any claim about what is happening in this specific environment must be traceable to a tool result or the alert data.`
 
+// ActionOutputSchema instructs the action agent to end its response with
+// a machine-parseable marker indicating whether any actions were executed.
+// The executor parses this to populate the actions_executed column on stages.
+const ActionOutputSchema = `End your response with YES or NO on the very last line to indicate whether you executed any action tools.
+The last line must contain ONLY YES or NO — no formatting, no markdown, no extra text.`
+
 // actionTask is the action-stage task instruction appended to the user message.
 // Distinct from analysisTask so that investigation-template changes don't affect action agents.
 const actionTask = `## Your Task
@@ -28,7 +34,9 @@ For each potential action:
 2. Explain your reasoning
 3. Execute the action via your available tools, or explain why you chose not to act
 
-When you are done, produce an amended report that preserves the investigation findings and appends an actions section.`
+When you are done, produce an amended report that preserves the investigation findings and appends an actions section.
+
+` + ActionOutputSchema
 
 // synthesisTask is the synthesis task instruction for combining parallel results.
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`

@@ -84,6 +84,12 @@ func (Stage) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("FK to another stage in the same session (e.g. synthesis -> investigation)"),
+
+		// Action stage outcome
+		field.Bool("actions_executed").
+			Optional().
+			Nillable().
+			Comment("Whether the action agent executed any remediation tools (null for non-action stages)"),
 	}
 }
 

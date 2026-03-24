@@ -1341,6 +1341,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetStageName("Remediation").
 			SetStageIndex(1).
 			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(true).
 			SetExpectedAgentCount(1).
 			SetStatus(stage.StatusCompleted).
 			SetStartedAt(started).
@@ -1360,6 +1361,86 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
 		assert.False(t, detail.HasActionStages)
+	})
+
+	t.Run("has_action_stages is false when action stage exists but no actions executed", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-5 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("action no exec test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Investigation").
+			SetStageIndex(0).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Remediation").
+			SetStageIndex(1).
+			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(false).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.False(t, detail.HasActionStages, "action stage with actions_executed=false should not set HasActionStages")
+	})
+
+	t.Run("has_action_stages is false when action stage has nil actions_executed", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-5 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("action nil exec test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Remediation").
+			SetStageIndex(0).
+			SetStageType(stage.StageTypeAction).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.False(t, detail.HasActionStages, "action stage with nil actions_executed should not set HasActionStages")
 	})
 
 	t.Run("includes review fields when session has review data", func(t *testing.T) {
@@ -1747,13 +1828,14 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 		actionSessionID := seedDashboardSession(t, client.Client,
 			"Action data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
 
-		// Add an action stage to this session.
+		// Add an action stage with actions_executed=true to this session.
 		client.Stage.Create().
 			SetID(uuid.New().String()).
 			SetSessionID(actionSessionID).
 			SetStageName("Remediation").
 			SetStageIndex(2).
 			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(true).
 			SetExpectedAgentCount(1).
 			SetStatus(stage.StatusCompleted).
 			SaveX(ctx)
@@ -1772,6 +1854,35 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 			}
 		}
 		require.True(t, found, "actionSessionID should appear in dashboard list")
+	})
+
+	t.Run("has_action_stages false when actions_executed is false", func(t *testing.T) {
+		noActSessionID := seedDashboardSession(t, client.Client,
+			"No action exec data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(noActSessionID).
+			SetStageName("Remediation").
+			SetStageIndex(2).
+			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(false).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+
+		for _, s := range result.Sessions {
+			if s.ID == noActSessionID {
+				assert.False(t, s.HasActionStages, "action stage with actions_executed=false should have HasActionStages=false")
+				return
+			}
+		}
+		t.Fatal("noActSessionID should appear in dashboard list")
 	})
 
 	t.Run("provider_fallback_count", func(t *testing.T) {

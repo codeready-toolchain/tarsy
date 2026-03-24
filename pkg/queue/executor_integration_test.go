@@ -2505,7 +2505,7 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 			}},
 			// Stage 2: action
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Classification: MALICIOUS. Confidence: HIGH. Evidence: unauthorized access from IP 10.0.0.5.\n\n## Actions Taken\nSuspended workload per security policy. Reasoning: high-confidence malicious classification."},
+				&agent.TextChunk{Content: "Classification: MALICIOUS. Confidence: HIGH. Evidence: unauthorized access from IP 10.0.0.5.\n\n## Actions Taken\nSuspended workload per security policy. Reasoning: high-confidence malicious classification.\nYES"},
 			}},
 			// Exec summary
 			{chunks: []agent.Chunk{
@@ -2536,9 +2536,25 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 
 	assert.Equal(t, "take-action", stages[1].StageName)
 	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	require.NotNil(t, stages[1].ActionsExecuted, "action stage should have actions_executed set")
+	assert.True(t, *stages[1].ActionsExecuted, "action stage should report actions_executed=true")
 
 	assert.Equal(t, "Executive Summary", stages[2].StageName)
 	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
+
+	// Verify YES/NO marker was stripped from action stage timeline events
+	actionTimeline, err := entClient.TimelineEvent.Query().
+		Where(
+			timelineevent.StageID(stages[1].ID),
+			timelineevent.EventTypeIn(timelineevent.EventTypeFinalAnalysis, timelineevent.EventTypeLlmResponse),
+		).
+		All(context.Background())
+	require.NoError(t, err)
+	for _, evt := range actionTimeline {
+		assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, evt.Content,
+			"action stage %s timeline event should have YES/NO marker stripped", evt.EventType)
+		assert.Contains(t, evt.Content, "Actions Taken", "action stage timeline event should still contain the analysis")
+	}
 
 	// Verify stage events carry correct stage_type from the first event
 	var actionStarted, actionCompleted bool
@@ -2589,4 +2605,106 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 		}
 	}
 	assert.True(t, foundActionContent, "exec summary should receive the action stage's amended report")
+}
+
+func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 1
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+			{
+				Name: "take-action",
+				Agents: []config.StageAgentConfig{
+					{Name: "ActionAgent"},
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent": {
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			"ActionAgent": {
+				Type:          config.AgentTypeAction,
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			config.AgentNameExecSummary: {
+				Type:       config.AgentTypeExecSummary,
+				LLMBackend: config.LLMBackendLangChain,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Classification: BENIGN. Confidence: HIGH. No malicious activity detected."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "No automated remediation warranted. Evidence does not support action.\nNO"},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "No security incident. Investigation complete."},
+			}},
+		},
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Nil(t, result.Error)
+
+	stages, err := entClient.Stage.Query().
+		Order(ent.Asc(stage.FieldStageIndex)).
+		All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 3)
+
+	assert.Equal(t, "take-action", stages[1].StageName)
+	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	require.NotNil(t, stages[1].ActionsExecuted, "action stage should have actions_executed set")
+	assert.False(t, *stages[1].ActionsExecuted, "action stage should report actions_executed=false when no actions taken")
+
+	// Verify NO marker was stripped from timeline events
+	noActionTimeline, err := entClient.TimelineEvent.Query().
+		Where(
+			timelineevent.StageID(stages[1].ID),
+			timelineevent.EventTypeIn(timelineevent.EventTypeFinalAnalysis, timelineevent.EventTypeLlmResponse),
+		).
+		All(context.Background())
+	require.NoError(t, err)
+	for _, evt := range noActionTimeline {
+		assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, evt.Content,
+			"action stage %s timeline event should have YES/NO marker stripped", evt.EventType)
+	}
 }

@@ -488,7 +488,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		if stg.ParallelType != nil {
 			hasParallel = true
 		}
-		if stg.StageType == stage.StageTypeAction {
+		if stg.StageType == stage.StageTypeAction && stg.ActionsExecuted != nil && *stg.ActionsExecuted {
 			hasActionStages = true
 		}
 
@@ -1071,7 +1071,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				"has_sub_agents",
 			)
 			sel.AppendSelectAs(
-				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = '%s') THEN 1 ELSE 0 END)", sid, stage.StageTypeAction),
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = '%s' AND actions_executed = true) THEN 1 ELSE 0 END)", sid, stage.StageTypeAction),
 				"has_action_stages",
 			)
 

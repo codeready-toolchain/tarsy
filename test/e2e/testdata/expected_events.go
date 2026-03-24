@@ -797,9 +797,9 @@ var ActionChainExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.completed", EventType: "llm_thinking",
 		Content: "Service restarted successfully.", Group: 4},
 	{Type: "timeline_event.completed", EventType: "llm_response",
-		Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).", Group: 4},
+		Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).\nYES", Group: 4},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
-		Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK)."},
+		Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).\nYES"},
 
 	{Type: "stage.status", StageName: "remediation", Status: "completed"},
 
