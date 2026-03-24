@@ -73,8 +73,15 @@ func (c *SingleShotController) Run(
 ) (*agent.ExecutionResult, error) {
 	startTime := time.Now()
 	msgSeq := 0
-	eventSeq := 0
 	fbState := NewFallbackState(execCtx)
+
+	// Initialize eventSeq from DB to avoid collisions with events created
+	// before this controller starts (consistent with IteratingController).
+	eventSeq, seqErr := execCtx.Services.Timeline.GetMaxSequenceForExecution(ctx, execCtx.ExecutionID)
+	if seqErr != nil {
+		slog.Warn("Failed to get max sequence for execution, starting from 0",
+			"execution_id", execCtx.ExecutionID, "error", seqErr)
+	}
 	fbState.SingleShot = true
 
 	// 1. Build messages via config-provided builder

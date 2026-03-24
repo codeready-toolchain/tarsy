@@ -460,6 +460,11 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
       case FLOW_ITEM.PROVIDER_FALLBACK:
         lines.push(`[Provider Fallback]\n${item.content}\n`);
         break;
+      case FLOW_ITEM.SKILL_LOADED: {
+        const skillName = item.metadata?.skill_name || 'Skill';
+        lines.push(`[Pre-loaded Skill: ${skillName}]\n${item.content}\n`);
+        break;
+      }
     }
   }
 

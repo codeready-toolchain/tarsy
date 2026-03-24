@@ -714,7 +714,7 @@ Ent auto-generates the join table. Both directions are natural queries: `session
 
 ## Implementation Phases
 
-### Phase 0: Required Skills in Timeline (prerequisite)
+### Phase 0: Required Skills in Timeline (prerequisite) - DONE
 
 1. Add `EventTypeSkillLoaded` to the `timelineevent` enum
 2. Emit `skill_loaded` events at agent execution start (before first LLM call) for each required skill
