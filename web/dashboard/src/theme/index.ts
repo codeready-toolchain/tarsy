@@ -1,81 +1,90 @@
 import { createTheme } from '@mui/material/styles';
+import type { PaletteMode } from '@mui/material';
 
 /**
- * MUI theme.
- * Uses MUI's alpha() utility for lighter/darker variants.
+ * Build a MUI theme for the given palette mode.
  */
-export const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2', // Material Blue
+export function buildTheme(mode: PaletteMode) {
+  const isDark = mode === 'dark';
+
+  return createTheme({
+    palette: {
+      mode,
+      primary: {
+        main: '#1976d2',
+      },
+      secondary: {
+        main: isDark ? '#90a4ae' : '#424242',
+      },
+      success: {
+        main: '#2e7d32',
+      },
+      error: {
+        main: '#d32f2f',
+      },
+      warning: {
+        main: '#ed6c02',
+      },
+      info: {
+        main: '#0288d1',
+      },
+      background: {
+        default: isDark ? '#121212' : '#fafafa',
+        paper: isDark ? '#1e1e1e' : '#ffffff',
+      },
     },
-    secondary: {
-      main: '#424242', // Material Grey
+    typography: {
+      fontFamily: 'Roboto, Arial, sans-serif',
+      h6: {
+        fontWeight: 600,
+      },
+      h5: {
+        fontWeight: 500,
+      },
     },
-    success: {
-      main: '#2e7d32', // Green for completed alerts
-    },
-    error: {
-      main: '#d32f2f', // Red for failed alerts
-    },
-    warning: {
-      main: '#ed6c02', // Orange for pending alerts
-    },
-    info: {
-      main: '#0288d1', // Light blue for processing alerts
-    },
-    background: {
-      default: '#fafafa',
-      paper: '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: 'Roboto, Arial, sans-serif',
-    h6: {
-      fontWeight: 600, // AppBar title
-    },
-    h5: {
-      fontWeight: 500,
-    },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        html: {
-          scrollbarGutter: 'stable',
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          html: {
+            scrollbarGutter: 'stable',
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            fontWeight: 500,
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          head: {
+            fontWeight: 600,
+            backgroundColor: isDark ? '#2c2c2c' : '#f5f5f5',
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            boxShadow: isDark
+              ? '0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5)'
+              : '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+          },
+        },
+      },
+      MuiContainer: {
+        styleOverrides: {
+          root: {
+            paddingTop: '16px',
+            paddingBottom: '16px',
+          },
         },
       },
     },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          fontWeight: 500,
-        },
-      },
-    },
-    MuiTableCell: {
-      styleOverrides: {
-        head: {
-          fontWeight: 600,
-          backgroundColor: '#f5f5f5',
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-        },
-      },
-    },
-    MuiContainer: {
-      styleOverrides: {
-        root: {
-          paddingTop: '16px',
-          paddingBottom: '16px',
-        },
-      },
-    },
-  },
-});
+  });
+}
+
+/** Default light theme (for backwards compatibility / static imports). */
+export const theme = buildTheme('light');

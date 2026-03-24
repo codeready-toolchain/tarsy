@@ -226,7 +226,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               </Alert>
             )}
 
-            <Paper variant="outlined" sx={{ p: 3, bgcolor: 'grey.100' }}>
+            <Paper variant="outlined" sx={{ p: 3, bgcolor: 'action.hover' }}>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                 <CopyButton text={displayAnalysis} variant="icon" size="small" tooltip="Copy analysis" />
               </Box>

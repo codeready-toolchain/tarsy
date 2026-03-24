@@ -133,7 +133,7 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 p: 1.5,
-                bgcolor: 'grey.50',
+                bgcolor: 'action.hover',
                 borderRadius: 1,
                 border: 1,
                 borderColor: 'error.main',
@@ -170,7 +170,7 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
                   fontWeight: 600,
                   mb: 1,
                   p: 1,
-                  bgcolor: 'grey.100',
+                  bgcolor: 'action.selected',
                   borderRadius: 1,
                 }}
               >

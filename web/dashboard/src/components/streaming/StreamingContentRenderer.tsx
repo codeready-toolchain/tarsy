@@ -209,7 +209,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
             variant="caption"
             sx={{
               fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
-              fontSize: '0.75rem', color: '#2e7d32', mt: 0.25
+              fontSize: '0.75rem', color: 'success.main', mt: 0.25
             }}
           >
             FINAL ANSWER

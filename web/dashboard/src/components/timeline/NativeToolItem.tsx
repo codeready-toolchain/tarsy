@@ -2,7 +2,7 @@ import { useState, useMemo, memo } from 'react';
 import { Box, Typography, Collapse, IconButton, Chip, alpha, useTheme } from '@mui/material';
 import { ExpandMore, ExpandLess, Code, Search, Link as LinkIcon } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { highlightSearchTermNodes } from '../../utils/search';
 
@@ -141,7 +141,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       >
                         <SyntaxHighlighter
                           language={lang}
-                          style={vs}
+                          style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
                           customStyle={{
                             margin: 0,
                             padding: '12px',
@@ -256,7 +256,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 >
                   <SyntaxHighlighter
                     language={parsed.language || 'python'}
-                    style={vs}
+                    style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
                     customStyle={{
                       margin: 0,
                       padding: '12px',
@@ -339,7 +339,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           >
             <SyntaxHighlighter
               language="python"
-              style={vs}
+              style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
               customStyle={{
                 margin: 0,
                 padding: '12px',

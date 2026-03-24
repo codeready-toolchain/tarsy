@@ -39,9 +39,9 @@ function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
       <Box
         sx={(theme) => ({
           ml: 4, my: 1, mr: 1, p: 1.5, borderRadius: 1.5,
-          bgcolor: 'grey.50',
+          bgcolor: 'action.hover',
           border: '1px solid',
-          borderColor: alpha(theme.palette.grey[300], 0.4),
+          borderColor: theme.palette.divider,
         })}
       >
         <Typography

@@ -5,8 +5,12 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
+import Tooltip from '@mui/material/Tooltip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
 import { useAuth } from '../../contexts/AuthContext.tsx';
+import { useColorMode } from '../../contexts/ColorModeContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
 
@@ -27,6 +31,7 @@ export function SharedHeader({
 }: SharedHeaderProps) {
   const navigate = useNavigate();
   const { isAuthenticated, authAvailable } = useAuth();
+  const { mode, toggleColorMode } = useColorMode();
 
   const handleBackClick = () => {
     // Smart back navigation:
@@ -43,13 +48,17 @@ export function SharedHeader({
     <AppBar
       position="static"
       elevation={0}
-      sx={{
+      sx={(theme) => ({
         borderRadius: 1,
-        background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-        boxShadow: '0 4px 16px rgba(25, 118, 210, 0.3)',
+        background: theme.palette.mode === 'dark'
+          ? 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)'
+          : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+        boxShadow: theme.palette.mode === 'dark'
+          ? '0 4px 16px rgba(0, 0, 0, 0.4)'
+          : '0 4px 16px rgba(25, 118, 210, 0.3)',
         border: '1px solid rgba(255, 255, 255, 0.1)',
         mb: 2,
-      }}
+      })}
     >
       <Toolbar>
         {/* Back Button */}
@@ -162,6 +171,29 @@ export function SharedHeader({
 
         {/* Additional Controls (passed as children) */}
         {children}
+
+        {/* Dark / Light mode toggle */}
+        <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <IconButton
+            size="small"
+            onClick={toggleColorMode}
+            sx={{
+              color: 'inherit',
+              ml: 1,
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                background: 'rgba(255, 255, 255, 0.2)',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
+              },
+            }}
+          >
+            {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
 
         {/* Authentication Elements */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2 }}>

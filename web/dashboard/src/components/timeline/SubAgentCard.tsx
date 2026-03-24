@@ -203,7 +203,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             )}
 
             {isCancelled && (
-              <Alert severity="info" sx={{ mt: 1, bgcolor: 'grey.100', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
+              <Alert severity="info" sx={{ mt: 1, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
                 <Typography variant="body2" color="text.secondary">
                   <strong>Cancelled</strong>
                   {eo?.error_message ? `: ${eo.error_message}` : ''}

@@ -307,7 +307,7 @@ function DetailedView({ tools, toolUsage }: { tools: ToolKey[]; toolUsage: ToolU
                     key={idx}
                     sx={{
                       p: 1,
-                      bgcolor: 'grey.50',
+                      bgcolor: 'action.hover',
                       borderRadius: 1,
                       border: 1,
                       borderColor: 'divider',
@@ -345,7 +345,7 @@ function DetailedView({ tools, toolUsage }: { tools: ToolKey[]; toolUsage: ToolU
                     key={idx}
                     sx={{
                       p: 1,
-                      bgcolor: 'grey.50',
+                      bgcolor: 'action.hover',
                       borderRadius: 1,
                       border: 1,
                       borderColor: 'divider',

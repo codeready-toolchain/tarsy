@@ -31,7 +31,14 @@ import {
   ToggleButtonGroup,
   ToggleButton,
 } from '@mui/material';
-import { Refresh, Menu as MenuIcon, Send as SendIcon, Dns as DnsIcon } from '@mui/icons-material';
+import {
+  Refresh,
+  Menu as MenuIcon,
+  Send as SendIcon,
+  Dns as DnsIcon,
+  DarkMode as DarkModeIcon,
+  LightMode as LightModeIcon,
+} from '@mui/icons-material';
 import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
@@ -39,6 +46,7 @@ import { TriageView } from './TriageView.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
+import { useColorMode } from '../../contexts/ColorModeContext.tsx';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
 import { VersionFooter } from '../layout/VersionFooter.tsx';
@@ -131,6 +139,7 @@ function buildQueryParams(
 
 export function DashboardView() {
   const { isAuthenticated, authAvailable, user } = useAuth();
+  const { mode, toggleColorMode } = useColorMode();
 
   // ── Navigation menu state ──
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -797,12 +806,16 @@ export function DashboardView() {
       <AppBar
         position="static"
         elevation={0}
-        sx={{
+        sx={(theme) => ({
           borderRadius: 1,
-          background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-          boxShadow: '0 4px 16px rgba(25, 118, 210, 0.3)',
+          background: theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)'
+            : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0 4px 16px rgba(0, 0, 0, 0.4)'
+            : '0 4px 16px rgba(25, 118, 210, 0.3)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
-        }}
+        })}
       >
         <Toolbar>
           {/* Navigation Menu */}
@@ -988,6 +1001,28 @@ export function DashboardView() {
               <ToggleButton value="sessions">Sessions</ToggleButton>
               <ToggleButton value="triage">Triage</ToggleButton>
             </ToggleButtonGroup>
+
+            {/* Dark / Light mode toggle */}
+            <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+              <IconButton
+                size="small"
+                onClick={toggleColorMode}
+                sx={{
+                  color: 'inherit',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 2,
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
+                  },
+                }}
+              >
+                {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
 
             {/* Connection Status Indicator - Fancy LIVE / Offline badge */}
             <Tooltip

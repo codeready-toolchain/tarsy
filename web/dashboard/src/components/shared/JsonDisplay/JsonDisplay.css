@@ -1,6 +1,5 @@
 /* Custom JSON view styling with transparent background and colorful syntax highlighting */
 
-/* Transparent container - inherits background from parent */
 .json-custom-container {
   background: transparent !important;
   line-height: 1.2;
@@ -8,36 +7,58 @@
   overflow-wrap: break-word;
 }
 
-/* Field names/labels - darker blue */
+/* ── Light mode (default) ── */
+
 .json-label {
   font-weight: 600;
   margin-right: 5px;
-  color: #1976d2; /* MUI primary blue */
+  color: #1976d2;
 }
 
-/* String values - green */
 .json-string-value {
-  color: #2e7d32; /* MUI success green */
+  color: #2e7d32;
 }
 
-/* Number values - orange */
 .json-number-value {
-  color: #ed6c02; /* MUI warning orange */
+  color: #ed6c02;
 }
 
-/* Boolean values - purple */
 .json-boolean-value {
-  color: #9c27b0; /* MUI purple */
+  color: #9c27b0;
 }
 
-/* Null/undefined values - grey */
 .json-null-value {
-  color: #757575; /* MUI grey */
+  color: #757575;
   font-style: italic;
 }
 
-/* Punctuation (braces, brackets, colons, commas) - subtle grey */
 .json-punctuation {
-  color: #424242; /* Dark grey for punctuation */
+  color: #424242;
   font-weight: 500;
+}
+
+/* ── Dark mode ── */
+
+[data-theme="dark"] .json-label {
+  color: #64b5f6;
+}
+
+[data-theme="dark"] .json-string-value {
+  color: #81c784;
+}
+
+[data-theme="dark"] .json-number-value {
+  color: #ffb74d;
+}
+
+[data-theme="dark"] .json-boolean-value {
+  color: #ce93d8;
+}
+
+[data-theme="dark"] .json-null-value {
+  color: #9e9e9e;
+}
+
+[data-theme="dark"] .json-punctuation {
+  color: #bdbdbd;
 }

@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { theme } from './theme/index.ts';
+import { buildTheme } from './theme/index.ts';
+import { ColorModeProvider, useColorMode } from './contexts/ColorModeContext.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 import { VersionProvider } from './contexts/VersionContext.tsx';
 import { SystemWarningBanner } from './components/layout/SystemWarningBanner.tsx';
@@ -45,7 +47,10 @@ const router = createBrowserRouter([
   },
 ]);
 
-export function App() {
+function ThemedApp() {
+  const { mode } = useColorMode();
+  const theme = useMemo(() => buildTheme(mode), [mode]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -57,5 +62,13 @@ export function App() {
         </AuthProvider>
       </VersionProvider>
     </ThemeProvider>
+  );
+}
+
+export function App() {
+  return (
+    <ColorModeProvider>
+      <ThemedApp />
+    </ColorModeProvider>
   );
 }
