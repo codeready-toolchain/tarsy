@@ -54,7 +54,7 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 	if err != nil {
 		return nil, fmt.Errorf("similarity search: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var memories []Memory
 	for rows.Next() {
@@ -93,7 +93,7 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	if err != nil {
 		return nil, fmt.Errorf("similarity search with boosts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var memories []Memory
 	for rows.Next() {
@@ -249,9 +249,9 @@ func formatVector(v []float32) string {
 	return sb.String()
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, limit int) string {
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max] + "..."
+	return s[:limit] + "..."
 }

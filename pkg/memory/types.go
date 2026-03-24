@@ -22,16 +22,19 @@ func (r *ReflectorResult) IsEmpty() bool {
 	return len(r.Create) == 0 && len(r.Reinforce) == 0 && len(r.Deprecate) == 0
 }
 
+// ReflectorCreateAction describes a new memory to store.
 type ReflectorCreateAction struct {
 	Content  string `json:"content"`
 	Category string `json:"category"`
 	Valence  string `json:"valence"`
 }
 
+// ReflectorReinforceAction identifies an existing memory to reinforce.
 type ReflectorReinforceAction struct {
 	MemoryID string `json:"memory_id"`
 }
 
+// ReflectorDeprecateAction identifies an existing memory to deprecate.
 type ReflectorDeprecateAction struct {
 	MemoryID string `json:"memory_id"`
 	Reason   string `json:"reason"`

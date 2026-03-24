@@ -1,3 +1,5 @@
+// Package memory provides investigation memory management: CRUD, embedding,
+// similarity search, and reflector-driven memory lifecycle.
 package memory
 
 import (
@@ -11,6 +13,7 @@ import (
 // Google's API uses different task types for each; OpenAI does not.
 type EmbeddingTask string
 
+// Embedding task types used to hint the provider's retrieval mode.
 const (
 	EmbeddingTaskDocument EmbeddingTask = "document"
 	EmbeddingTaskQuery    EmbeddingTask = "query"

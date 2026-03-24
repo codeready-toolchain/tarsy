@@ -24,6 +24,7 @@ type GoogleEmbedder struct {
 	client     *http.Client
 }
 
+// NewGoogleEmbedder creates an embedder backed by the Google Generative Language API.
 func NewGoogleEmbedder(cfg config.EmbeddingConfig) (*GoogleEmbedder, error) {
 	if cfg.APIKeyEnv == "" {
 		return nil, fmt.Errorf("google embedder: api_key_env is required")
@@ -41,6 +42,7 @@ func NewGoogleEmbedder(cfg config.EmbeddingConfig) (*GoogleEmbedder, error) {
 	}, nil
 }
 
+// Embed generates an embedding vector for text using the configured Google model.
 func (e *GoogleEmbedder) Embed(ctx context.Context, text string, task EmbeddingTask) ([]float32, error) {
 	apiKey := os.Getenv(e.apiKeyEnv)
 	if apiKey == "" {
@@ -77,7 +79,7 @@ func (e *GoogleEmbedder) Embed(ctx context.Context, text string, task EmbeddingT
 	if err != nil {
 		return nil, fmt.Errorf("google embedder: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

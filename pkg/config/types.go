@@ -192,6 +192,7 @@ type ScoringConfig struct {
 // EmbeddingProviderType identifies the embedding API provider.
 type EmbeddingProviderType string
 
+// Known embedding provider types.
 const (
 	EmbeddingProviderGoogle EmbeddingProviderType = "google"
 	EmbeddingProviderOpenAI EmbeddingProviderType = "openai"

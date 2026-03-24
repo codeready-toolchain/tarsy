@@ -722,7 +722,7 @@ Ent auto-generates the join table. Both directions are natural queries: `session
 
 **Result:** Skills are visible in the UI timeline, scoring evaluator, and investigation context used by the Reflector. No changes to the scoring or memory code needed — skills flow through existing `buildScoringContext()` automatically.
 
-### Phase 1: Schema + Extraction (core pipeline)
+### Phase 1: Schema + Extraction (core pipeline) - DONE
 
 1. Enable pgvector extension (migration)
 2. `InvestigationMemory` Ent schema + migration (including raw SQL for embedding column + HNSW index)
