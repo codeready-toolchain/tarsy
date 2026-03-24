@@ -130,7 +130,7 @@ Memory retrieval serves two purposes: auto-injecting the top 3-5 memories into t
 
 **Important distinction — two types of scope:**
 - **Security scope** (`project`): a hard WHERE clause, always enforced. Memories never cross project boundaries. This is a data isolation concern, not an investigation concern. Designed from the start so [session authorization](session-authorization-sketch.md) doesn't require schema migration later. Pre-authorization, all memories use a default project.
-- **Investigation scope** (alert_type, service, chain_id): the subject of this question — how to rank and filter memories *within* a project.
+- **Investigation scope** (alert_type, chain_id): the subject of this question — how to rank and filter memories *within* a project.
 
 The central design tension for investigation scope is: **memories should be complementary hints that help in specific or repeating situations — not a rigid playbook that constrains the LLM's natural investigative ability.** LLMs are already good investigators; memory adds value when it surfaces a relevant past lesson at the right moment, not when it floods the context with marginally related knowledge.
 
@@ -143,7 +143,7 @@ This means the retrieval approach must:
 
 ### Option A: Semantic-first retrieval (pgvector-driven)
 
-Embed the current alert context (alert type, description, service, environment) into a query vector. Hard-filter by project (security boundary), then retrieve by cosine similarity within that set. Investigation scope metadata (chain_id, service) provides a soft boost (e.g., same-service memories rank slightly higher) but never hard-filters. Return top N for auto-injection; the tool exposes the full ranked list.
+Embed the current alert context (alert type, description, environment) into a query vector. Hard-filter by project (security boundary), then retrieve by cosine similarity within that set. Investigation scope metadata (`alert_type`, `chain_id`) provides a soft boost (e.g., same-alert-type memories rank slightly higher) but never hard-filters. Return top N for auto-injection; the tool exposes the full ranked list.
 
 - **Pro:** Zero manual tuning — cosine similarity is the only ranking function. No thresholds, no fallback levels, no scope hierarchy to configure.
 - **Pro:** Cross-cutting knowledge surfaces naturally — a memory about "Prometheus metrics lag 5 min on Mondays" appears for any alert where it's semantically relevant, regardless of which service it was learned from.

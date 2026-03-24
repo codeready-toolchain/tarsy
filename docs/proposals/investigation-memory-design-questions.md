@@ -197,7 +197,7 @@ The Reflector's LLM call asks the model to output structured JSON. LLMs sometime
 
 ### Decision: Lenient parsing + silent fallback (C + A)
 
-First try strict `JSON.parse`. If that fails, strip markdown fences and extract the first `{`...`}` by bracket depth (same pattern OpenClaw uses in `qmd-query-parser.ts`). If that still fails, log a warning and proceed with "no memories" — memory extraction is best-effort and must never block scoring. No LLM retry. The lenient parser can be shared with any future structured-output parsing.
+First try strict `encoding/json` unmarshal. If that fails, strip markdown fences and extract the first `{`...`}` by bracket depth (same pattern OpenClaw uses in `qmd-query-parser.ts`). If that still fails, log a warning and proceed with "no memories" — memory extraction is best-effort and must never block scoring. No LLM retry. The lenient parser can be shared with any future structured-output parsing.
 
 ---
 

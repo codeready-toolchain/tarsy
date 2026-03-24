@@ -499,8 +499,9 @@ reflectorResult, err := reflector.Run(ctx, reflector.Input{
 })
 if err != nil {
     logger.Warn("reflector failed", "error", err)
-} else {
-    memoryService.ApplyReflectorActions(ctx, project, sessionID, reflectorResult)
+} else if applyErr := memoryService.ApplyReflectorActions(ctx, project, sessionID, reflectorResult); applyErr != nil {
+    logger.Warn("failed to apply reflector actions",
+        "error", applyErr, "project", project, "session_id", sessionID)
 }
 ```
 
