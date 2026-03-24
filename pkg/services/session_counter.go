@@ -73,6 +73,7 @@ func (c *SessionCounter) ActionOutcomesByAgent(ctx context.Context) ([]metrics.A
 		Where(
 			stage.StageTypeEQ(stage.StageTypeAction),
 			stage.ActionsExecutedNotNil(),
+			stage.HasSessionWith(alertsession.DeletedAtIsNil()),
 		).
 		WithAgentExecutions(func(q *ent.AgentExecutionQuery) {
 			q.Where(agentexecution.ParentExecutionIDIsNil()).

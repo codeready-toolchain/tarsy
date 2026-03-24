@@ -1537,6 +1537,20 @@ func TestStageService_SetActionsExecuted(t *testing.T) {
 		err := stageService.SetActionsExecuted(ctx, "nonexistent-id", true)
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
+
+	t.Run("returns ErrNotFound for non-action stage", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "Investigation",
+			StageIndex:         3,
+			ExpectedAgentCount: 1,
+			StageType:          string(stage.StageTypeInvestigation),
+		})
+		require.NoError(t, err)
+
+		err = stageService.SetActionsExecuted(ctx, stg.ID, true)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
 }
 
 func TestStageService_SubAgentCascadeDelete(t *testing.T) {
