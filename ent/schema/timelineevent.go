@@ -92,6 +92,7 @@ func (TimelineEvent) Fields() []ent.Field {
 				"url_context_result",
 				"task_assigned",
 				"provider_fallback",
+				"skill_loaded",
 			),
 		field.Enum("status").
 			Values("streaming", "completed", "failed", "cancelled", "timed_out").
