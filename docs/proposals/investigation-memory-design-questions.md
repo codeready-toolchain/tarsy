@@ -122,6 +122,8 @@ type EmbeddingConfig struct {
 
 The Go backend calls the provider's embedding API directly — a single HTTP POST per embedding. No Python service involvement. Embedding calls are infrequent: a few per investigation (extraction) and one per investigation (query).
 
+**Resilience:** The `Embedder` implementation wraps each HTTP call with `context.WithTimeout` (30s default — embedding is fast, long waits indicate a problem). On transient failures (5xx, network errors, 429), retry once after a jittered backoff (same pattern as `mcp.Client.CallTool`). On 429, respect the `Retry-After` header if present. No circuit breaker — embedding calls are too infrequent (single-digit per investigation) to trip or benefit from one, and TARSy doesn't use circuit breakers anywhere else. Embedding failures are best-effort: the individual memory is skipped, other memories proceed (see [Observability section](investigation-memory-design.md#observability-tracking-memory-extraction-calls)).
+
 **Google API format** (`text-embedding-004`, `gemini-embedding-2-preview`):
 
 ```text

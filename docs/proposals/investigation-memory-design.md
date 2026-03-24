@@ -12,7 +12,7 @@ This document turns the [investigation memory sketch](investigation-memory-sketc
 
 1. **Memory is a light touch.** Complementary hints for specific/repeating situations, not a playbook. The LLM's investigative creativity is preserved.
 2. **Semantic-first retrieval.** pgvector cosine similarity drives ranking. Investigation scope metadata (`alert_type`, `chain_id`) is a soft boost, never a hard filter. Infrastructure-specific context (service names, clusters, regions) lives in the memory content itself and is matched via semantic search. Project is the only hard filter (security boundary).
-3. **Zero manual tuning.** No thresholds, no fallback levels, no scoring weights to calibrate. The `max_inject` cap (default: 5) is the noise control.
+3. **Zero manual tuning.** No thresholds, no fallback levels, no scoring weights to calibrate. The `max_inject` cap (default: 5) is the noise control. Scope metadata soft boosts (`+0.05` for alert_type, `+0.03` for chain_id) are fixed implementation constants — negligible tiebreakers, not weights to tune.
 4. **Embedded extraction.** Memory extraction runs as a separate LLM call within the scoring stage — triggered by the `ScoringExecutor` after the scoring controller completes. No new infrastructure, near-zero marginal cost.
 5. **In-prompt dedup.** The Reflector sees existing memories and decides what to create, reinforce, or deprecate in one pass.
 6. **Future-proof for multi-tenancy.** `project` field from day one, hard-filtered on every query.
