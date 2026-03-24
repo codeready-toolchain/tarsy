@@ -30,6 +30,7 @@ import {
   SwapHoriz,
   SmsOutlined as ChatIcon,
 } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
 import { PaginationControls } from './PaginationControls.tsx';
 import { TriageSessionRow, type TriageGroup as TriageGroupName } from './TriageSessionRow.tsx';
 import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
@@ -50,13 +51,15 @@ interface TriageGroupedListProps {
   actionLoading?: boolean;
 }
 
+type PaletteColorKey = 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+
 interface GroupConfig {
   key: TriageGroupName;
   label: string;
   dataKey: TriageGroupKey;
   icon: React.ReactElement;
   defaultOpen: boolean;
-  color: string;
+  color: PaletteColorKey;
   accentBorder?: boolean;
 }
 
@@ -67,7 +70,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'investigating',
     icon: <SearchIcon sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: 'primary.main',
+    color: 'primary',
   },
   {
     key: 'needs_review',
@@ -75,7 +78,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'needs_review',
     icon: <RateReview sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: 'warning.main',
+    color: 'warning',
     accentBorder: true,
   },
   {
@@ -84,7 +87,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'in_progress',
     icon: <AssignmentTurnedIn sx={{ fontSize: 18 }} />,
     defaultOpen: true,
-    color: 'info.main',
+    color: 'info',
   },
   {
     key: 'reviewed',
@@ -92,7 +95,7 @@ const groups_config: GroupConfig[] = [
     dataKey: 'reviewed',
     icon: <CheckCircleOutline sx={{ fontSize: 18 }} />,
     defaultOpen: false,
-    color: 'success.main',
+    color: 'success',
   },
 ];
 
@@ -122,6 +125,7 @@ export function TriageGroupedList({
   onBulkReopen,
   actionLoading,
 }: TriageGroupedListProps) {
+  const theme = useTheme();
   const STORAGE_KEY = 'triage-open-sections';
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
@@ -211,7 +215,7 @@ export function TriageGroupedList({
                   '&:hover': { backgroundColor: 'action.hover' },
                 }}
               >
-                <Box sx={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ color: `${group.color}.main`, display: 'flex', alignItems: 'center' }}>
                   {group.icon}
                 </Box>
                 <Typography variant="subtitle2" fontWeight={600} color="text.secondary">
@@ -245,7 +249,7 @@ export function TriageGroupedList({
               overflow: 'hidden',
               ...(group.accentBorder && !isEmpty && {
                 borderLeft: '3px solid',
-                borderLeftColor: group.color,
+                borderLeftColor: `${group.color}.main`,
               }),
             }}
           >
@@ -266,7 +270,7 @@ export function TriageGroupedList({
                 '&:hover': { backgroundColor: 'action.hover' },
               }}
             >
-              <Box sx={{ color: group.color, display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ color: `${group.color}.main`, display: 'flex', alignItems: 'center' }}>
                 {group.icon}
               </Box>
               <Typography variant="subtitle2" fontWeight={600} sx={{ flexGrow: 1 }}>
@@ -280,8 +284,12 @@ export function TriageGroupedList({
                   minWidth: 28,
                   fontSize: '0.75rem',
                   fontWeight: 600,
-                  backgroundColor: isEmpty ? 'action.disabledBackground' : group.color,
-                  color: isEmpty ? 'text.disabled' : 'common.white',
+                  backgroundColor: isEmpty
+                    ? 'action.disabledBackground'
+                    : theme.palette[group.color].main,
+                  color: isEmpty
+                    ? 'text.disabled'
+                    : theme.palette.getContrastText(theme.palette[group.color].main),
                 }}
               />
               <IconButton size="small" sx={{ ml: 0.5 }}>

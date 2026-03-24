@@ -41,7 +41,7 @@ export const highlightYaml = (yaml: string): string => {
       } else if (value === 'true' || value === 'false') {
         highlightedValue = `<span class="yaml-boolean">${escapeHtml(value)}</span>`;
       } else if (/^-?\d+(\.\d+)?$/.test(value.trim())) {
-        highlightedValue = `<span class="yaml-boolean">${escapeHtml(value)}</span>`;
+        highlightedValue = `<span class="yaml-number">${escapeHtml(value)}</span>`;
       } else if (value.startsWith('"') && value.endsWith('"')) {
         highlightedValue = `<span class="yaml-string">${escapeHtml(value)}</span>`;
       } else if (value.startsWith("'") && value.endsWith("'")) {

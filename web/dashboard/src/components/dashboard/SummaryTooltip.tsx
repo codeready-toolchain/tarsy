@@ -7,6 +7,7 @@ import {
   Typography,
   Divider,
 } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material/styles';
 import { Summarize } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
@@ -71,7 +72,7 @@ export function SummaryTooltip({ summary }: SummaryTooltipProps) {
             </Typography>
           </Box>
           <Divider sx={{ mb: 1.5 }} />
-          <Box sx={executiveSummaryMarkdownStyles}>
+          <Box sx={executiveSummaryMarkdownStyles as SxProps<Theme>}>
             <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{summary}</ReactMarkdown>
           </Box>
         </Card>

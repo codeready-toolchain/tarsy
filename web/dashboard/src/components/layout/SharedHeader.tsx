@@ -33,7 +33,7 @@ export function SharedHeader({
   const navigate = useNavigate();
   const { isAuthenticated, authAvailable } = useAuth();
   const { mode, setMode } = useColorScheme();
-  const toggleColorMode = () => setMode(mode === 'dark' ? 'light' : 'dark');
+  const toggleColorMode = () => setMode(mode === 'light' ? 'dark' : 'light');
 
   const handleBackClick = () => {
     // Smart back navigation:
@@ -109,6 +109,7 @@ export function SharedHeader({
           <IconButton
             size="small"
             onClick={toggleColorMode}
+            aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             sx={{ ml: 1, ...themeToggleSx }}
           >
             {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}

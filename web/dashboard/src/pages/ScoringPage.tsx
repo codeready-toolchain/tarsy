@@ -249,7 +249,7 @@ export function ScoringPage() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          bgcolor: (theme) => alpha(theme.palette[getScoreColorKey(score.total_score)].main, 0.1),
+                          bgcolor: (theme) => alpha(theme.palette[getScoreColorKey(score.total_score!)].main, 0.1),
                           border: '3px solid',
                           borderColor: `${getScoreColorKey(score.total_score)}.main`,
                         }}

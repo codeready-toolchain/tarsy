@@ -141,7 +141,7 @@ function buildQueryParams(
 export function DashboardView() {
   const { isAuthenticated, authAvailable, user } = useAuth();
   const { mode, setMode } = useColorScheme();
-  const toggleColorMode = () => setMode(mode === 'dark' ? 'light' : 'dark');
+  const toggleColorMode = () => setMode(mode === 'light' ? 'dark' : 'light');
 
   // ── Navigation menu state ──
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -905,6 +905,7 @@ export function DashboardView() {
               <IconButton
                 size="small"
                 onClick={toggleColorMode}
+                aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 sx={themeToggleSx}
               >
                 {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}

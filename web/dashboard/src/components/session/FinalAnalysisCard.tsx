@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Tooltip } from '@mui/material';
 import { Psychology, ContentCopy, ExpandMore, AutoAwesome, ThumbsUpDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
+import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
 import ErrorCard from '../timeline/ErrorCard';
@@ -201,7 +202,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                   </Box>
                   <CopyButton text={summary} variant="icon" size="small" tooltip="Copy summary" />
                 </Box>
-                <Box sx={executiveSummaryMarkdownStyles}>
+                <Box sx={executiveSummaryMarkdownStyles as SxProps<Theme>}>
                   <ReactMarkdown remarkPlugins={remarkPlugins}>{summary}</ReactMarkdown>
                 </Box>
               </Box>

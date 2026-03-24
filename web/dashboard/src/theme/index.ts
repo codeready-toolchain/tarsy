@@ -51,6 +51,16 @@ export const theme = createTheme({
             scrollbarColor: '#555 #1e1e1e',
           }),
         },
+        '.search-highlight': {
+          background: '#fff59d',
+          color: '#000',
+          padding: '0 1px',
+          borderRadius: '2px',
+          ...theme.applyStyles('dark', {
+            background: '#f9a825',
+            color: '#000',
+          }),
+        },
       }),
     },
     MuiChip: {

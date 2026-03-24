@@ -6,6 +6,7 @@
  */
 
 import { Chip, alpha, type ChipProps } from '@mui/material';
+import type { Theme } from '@mui/material/styles';
 import {
   CheckCircle,
   Error as ErrorIcon,
@@ -71,20 +72,19 @@ export function StatusBadge({ status, size = 'small' }: StatusBadgeProps) {
       outline: '2px solid',
       outlineColor: 'primary.main',
       outlineOffset: '2px',
-      boxShadow: (theme) => `0 0 0 4px ${alpha(theme.palette.primary.main, 0.2)}`,
+      boxShadow: (theme: Theme) => `0 0 0 4px ${alpha(theme.palette.primary.main, 0.2)}`,
     },
   };
 
-  // Custom override for cancelled status
   const cancelledSx =
     status === SESSION_STATUS.CANCELLED
       ? {
           fontWeight: 600,
-          backgroundColor: 'text.secondary',
-          color: 'background.paper',
+          backgroundColor: 'grey.600',
+          color: 'grey.50',
           border: '1px solid',
-          borderColor: 'text.secondary',
-          '& .MuiChip-icon': { marginLeft: '4px', color: 'background.paper' },
+          borderColor: 'grey.600',
+          '& .MuiChip-icon': { marginLeft: '4px', color: 'grey.50' },
         }
       : {};
 

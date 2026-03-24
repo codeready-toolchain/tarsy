@@ -80,6 +80,11 @@
   font-weight: 600;
 }
 
+.yaml-number {
+  color: #9570A0;
+  font-weight: 600;
+}
+
 .yaml-null {
   color: #BF616A;
   font-weight: 600;
@@ -106,6 +111,10 @@
 }
 
 [data-theme="dark"] .yaml-boolean {
+  color: #ce93d8;
+}
+
+[data-theme="dark"] .yaml-number {
   color: #ce93d8;
 }
 

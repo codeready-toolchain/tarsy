@@ -40,7 +40,7 @@ function walk(node: HastNode, regex: RegExp): void {
           newChildren.push({
             type: 'element',
             tagName: 'mark',
-            properties: { style: 'background: #fff59d; color: #000; padding: 0 1px; border-radius: 2px' },
+            properties: { className: ['search-highlight'] },
             children: [{ type: 'text', value: parts[i] }],
           });
         } else {
