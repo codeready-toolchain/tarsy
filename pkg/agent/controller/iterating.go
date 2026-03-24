@@ -62,6 +62,15 @@ func (c *IteratingController) Run(
 		return nil, err
 	}
 
+	// 2.5. Emit skill_loaded timeline events for required skills (visible in UI + scoring context)
+	for _, skill := range execCtx.Config.RequiredSkillContent {
+		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeSkillLoaded,
+			skill.Body,
+			map[string]interface{}{"skill_name": skill.Name},
+			&eventSeq,
+		)
+	}
+
 	// 3. Get available tools
 	tools, err := execCtx.ToolExecutor.ListTools(ctx)
 	if err != nil {

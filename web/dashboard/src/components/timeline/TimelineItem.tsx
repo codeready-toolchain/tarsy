@@ -8,6 +8,7 @@ import UserQuestionItem from './UserQuestionItem';
 import NativeToolItem from './NativeToolItem';
 import ErrorItem from './ErrorItem';
 import ProviderFallbackItem from './ProviderFallbackItem';
+import SkillLoadedItem from './SkillLoadedItem';
 
 interface TimelineItemProps {
   item: FlowItem;
@@ -107,6 +108,18 @@ function TimelineItem({
 
     case FLOW_ITEM.PROVIDER_FALLBACK:
       return <ProviderFallbackItem item={item} searchTerm={searchTerm} />;
+
+    case FLOW_ITEM.SKILL_LOADED:
+      return (
+        <SkillLoadedItem
+          item={item}
+          isAutoCollapsed={isAutoCollapsed}
+          onToggleAutoCollapse={handleToggle}
+          expandAll={expandAll}
+          isCollapsible={isCollapsible}
+          searchTerm={searchTerm}
+        />
+      );
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container

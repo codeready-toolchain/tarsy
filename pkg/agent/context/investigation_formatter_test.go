@@ -204,6 +204,43 @@ func TestFormatTimelineEvents(t *testing.T) {
 				"**Final Analysis:**\n\nRoot cause: OOM.\n\n",
 		},
 		{
+			name: "skill_loaded with metadata",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeSkillLoaded,
+					Content:   "Always check PgBouncer health before blaming the database.",
+					Metadata:  map[string]interface{}{"skill_name": "db-troubleshooting"},
+				},
+			},
+			expected: "**Pre-loaded Skill: db-troubleshooting**\n\n" +
+				"Always check PgBouncer health before blaming the database.\n\n",
+		},
+		{
+			name: "skill_loaded without metadata falls back to generic header",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeSkillLoaded,
+					Content:   "Some skill body.",
+				},
+			},
+			expected: "**Pre-loaded Skill:**\n\nSome skill body.\n\n",
+		},
+		{
+			name: "skill_loaded resets response dedup tracking",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Root cause: OOM."},
+				{
+					EventType: timelineevent.EventTypeSkillLoaded,
+					Content:   "Skill content.",
+					Metadata:  map[string]interface{}{"skill_name": "test-skill"},
+				},
+				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},
+			},
+			expected: "**Agent Response:**\n\nRoot cause: OOM.\n\n" +
+				"**Pre-loaded Skill: test-skill**\n\nSkill content.\n\n" +
+				"**Final Analysis:**\n\nRoot cause: OOM.\n\n",
+		},
+		{
 			name: "tool call with empty summary consumes summary without raw fallback",
 			events: []*ent.TimelineEvent{
 				{

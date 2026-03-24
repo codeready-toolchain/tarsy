@@ -201,6 +201,17 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 			}
 			prevWasLlmResponse = false
 
+		case timelineevent.EventTypeSkillLoaded:
+			prevWasLlmResponse = false
+			skillName, _ := event.Metadata["skill_name"].(string)
+			if skillName != "" {
+				fmt.Fprintf(sb, "**Pre-loaded Skill: %s**\n\n", skillName)
+			} else {
+				sb.WriteString("**Pre-loaded Skill:**\n\n")
+			}
+			sb.WriteString(event.Content)
+			sb.WriteString("\n\n")
+
 		default:
 			prevWasLlmResponse = false
 			sb.WriteString("**" + strings.ReplaceAll(string(event.EventType), "_", " ") + ":**\n\n")

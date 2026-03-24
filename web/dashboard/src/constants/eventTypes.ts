@@ -85,6 +85,7 @@ export const TIMELINE_EVENT_TYPES = {
   URL_CONTEXT_RESULT: 'url_context_result',
   TASK_ASSIGNED: 'task_assigned',
   PROVIDER_FALLBACK: 'provider_fallback',
+  SKILL_LOADED: 'skill_loaded',
   ERROR: 'error',
 } as const;
 
