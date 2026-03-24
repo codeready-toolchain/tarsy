@@ -226,6 +226,13 @@ func TestE2E_ActionChain(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, items, 1)
 	sess := items[0].(map[string]interface{})
-	assert.Equal(t, true, sess["has_action_stages"], "session list should report has_action_stages=true")
+	hasAction, ok := sess["has_action_stages"].(bool)
+	require.True(t, ok, "has_action_stages should be a bool")
+	assert.True(t, hasAction, "session list should report has_action_stages=true")
+
+	actionsExec, ok := sess["actions_executed"].(bool)
+	require.True(t, ok, "actions_executed should be a bool")
+	assert.True(t, actionsExec, "session list should report actions_executed=true")
+
 	assert.Equal(t, "completed", sess["status"])
 }

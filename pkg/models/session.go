@@ -91,6 +91,7 @@ type DashboardSessionItem struct {
 	HasParallelStages     bool       `json:"has_parallel_stages"`
 	HasSubAgents          bool       `json:"has_sub_agents"`
 	HasActionStages       bool       `json:"has_action_stages"`
+	ActionsExecuted       *bool      `json:"actions_executed"`
 	ChatMessageCount      int        `json:"chat_message_count"`
 	ProviderFallbackCount int        `json:"provider_fallback_count"`
 	CurrentStageIndex     *int       `json:"current_stage_index"`
@@ -183,6 +184,7 @@ type SessionDetailResponse struct {
 	FailedStages        int     `json:"failed_stages"`
 	HasParallelStages   bool    `json:"has_parallel_stages"`
 	HasActionStages     bool    `json:"has_action_stages"`
+	ActionsExecuted     *bool   `json:"actions_executed"`
 	InputTokens         int64   `json:"input_tokens"`
 	OutputTokens        int64   `json:"output_tokens"`
 	TotalTokens         int64   `json:"total_tokens"`

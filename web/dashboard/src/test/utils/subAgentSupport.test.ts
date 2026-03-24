@@ -360,6 +360,7 @@ describe('traceHelpers sub-agent support', () => {
       failed_stages: 0,
       has_parallel_stages: false,
       has_action_stages: false,
+      actions_executed: null,
       input_tokens: 0,
       output_tokens: 0,
       total_tokens: 0,

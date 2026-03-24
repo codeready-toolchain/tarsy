@@ -1,5 +1,6 @@
 {
   "action_taken": null,
+  "actions_executed": null,
   "alert_data": "Pod OOMKilled in production",
   "alert_type": "test-skills",
   "assignee": null,

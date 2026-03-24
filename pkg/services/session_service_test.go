@@ -1351,6 +1351,8 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
 		assert.True(t, detail.HasActionStages)
+		require.NotNil(t, detail.ActionsExecuted)
+		assert.True(t, *detail.ActionsExecuted)
 	})
 
 	t.Run("has_action_stages is false when session has no action stages", func(t *testing.T) {
@@ -1361,9 +1363,10 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
 		assert.False(t, detail.HasActionStages)
+		assert.Nil(t, detail.ActionsExecuted)
 	})
 
-	t.Run("has_action_stages is false when action stage exists but no actions executed", func(t *testing.T) {
+	t.Run("has_action_stages is true when action stage exists but no actions executed", func(t *testing.T) {
 		now := time.Now()
 		started := now.Add(-5 * time.Second)
 		completed := now
@@ -1406,7 +1409,9 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
-		assert.False(t, detail.HasActionStages, "action stage with actions_executed=false should not set HasActionStages")
+		assert.True(t, detail.HasActionStages, "action stage with actions_executed=false should set HasActionStages")
+		require.NotNil(t, detail.ActionsExecuted)
+		assert.False(t, *detail.ActionsExecuted)
 	})
 
 	t.Run("has_action_stages is false when action stage has nil actions_executed", func(t *testing.T) {
@@ -1441,6 +1446,68 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, sessionID)
 		require.NoError(t, err)
 		assert.False(t, detail.HasActionStages, "action stage with nil actions_executed should not set HasActionStages")
+		assert.Nil(t, detail.ActionsExecuted)
+	})
+
+	t.Run("actions_executed is true when any action stage took actions", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-5 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("multi action stage test").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Investigation").
+			SetStageIndex(0).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Remediation 1").
+			SetStageIndex(1).
+			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(false).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Remediation 2").
+			SetStageIndex(2).
+			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(true).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.True(t, detail.HasActionStages)
+		require.NotNil(t, detail.ActionsExecuted)
+		assert.True(t, *detail.ActionsExecuted, "should be true when any action stage took actions")
 	})
 
 	t.Run("includes review fields when session has review data", func(t *testing.T) {
@@ -1849,6 +1916,8 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 		for _, s := range result.Sessions {
 			if s.ID == actionSessionID {
 				assert.True(t, s.HasActionStages, "session with action stage should have HasActionStages=true")
+				require.NotNil(t, s.ActionsExecuted)
+				assert.True(t, *s.ActionsExecuted)
 				found = true
 				break
 			}
@@ -1856,7 +1925,7 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 		require.True(t, found, "actionSessionID should appear in dashboard list")
 	})
 
-	t.Run("has_action_stages false when actions_executed is false", func(t *testing.T) {
+	t.Run("has_action_stages true when actions_executed is false", func(t *testing.T) {
 		noActSessionID := seedDashboardSession(t, client.Client,
 			"No action exec data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
 
@@ -1878,11 +1947,55 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 
 		for _, s := range result.Sessions {
 			if s.ID == noActSessionID {
-				assert.False(t, s.HasActionStages, "action stage with actions_executed=false should have HasActionStages=false")
+				assert.True(t, s.HasActionStages, "action stage with actions_executed=false should have HasActionStages=true")
+				require.NotNil(t, s.ActionsExecuted)
+				assert.False(t, *s.ActionsExecuted)
 				return
 			}
 		}
 		t.Fatal("noActSessionID should appear in dashboard list")
+	})
+
+	t.Run("actions_executed true when any action stage took actions", func(t *testing.T) {
+		multiActID := seedDashboardSession(t, client.Client,
+			"Multi action data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(multiActID).
+			SetStageName("Remediation 1").
+			SetStageIndex(2).
+			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(false).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SaveX(ctx)
+
+		client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(multiActID).
+			SetStageName("Remediation 2").
+			SetStageIndex(3).
+			SetStageType(stage.StageTypeAction).
+			SetActionsExecuted(true).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+
+		for _, s := range result.Sessions {
+			if s.ID == multiActID {
+				assert.True(t, s.HasActionStages)
+				require.NotNil(t, s.ActionsExecuted)
+				assert.True(t, *s.ActionsExecuted, "should be true when any action stage took actions")
+				return
+			}
+		}
+		t.Fatal("multiActID should appear in dashboard list")
 	})
 
 	t.Run("provider_fallback_count", func(t *testing.T) {

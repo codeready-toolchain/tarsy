@@ -1,5 +1,6 @@
 {
   "action_taken": null,
+  "actions_executed": null,
   "alert_data": "Pod OOMKilled",
   "alert_type": "test-alert",
   "assignee": null,

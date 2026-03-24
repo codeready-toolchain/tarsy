@@ -1,5 +1,6 @@
 {
   "action_taken": null,
+  "actions_executed": true,
   "alert_data": "api-gateway returning 503 errors",
   "alert_type": "test-action",
   "assignee": null,
