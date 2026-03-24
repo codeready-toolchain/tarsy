@@ -66,8 +66,8 @@ const OUTPUT_FONT = 'Consolas, Monaco, "Courier New", monospace';
 function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
   const [expanded, setExpanded] = useState(false);
   const theme = useTheme();
-  const { mode } = useColorScheme();
-  const isDark = mode === 'dark';
+  const { mode, systemMode } = useColorScheme();
+  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
   const boxColor = theme.palette.info.main;
 
   const previewSummary = useMemo(() => getPreviewSummary(item), [item]);

@@ -20,8 +20,8 @@ export default function InitializingSpinner({
   color = 'primary',
 }: InitializingSpinnerProps) {
   const theme = useTheme();
-  const { mode } = useColorScheme();
-  const isDark = mode === 'dark';
+  const { mode, systemMode } = useColorScheme();
+  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
   const colorValue = theme.palette[color].main;
   const ring = alpha(colorValue, 0.15);
 

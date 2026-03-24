@@ -365,8 +365,8 @@ export const finalAnswerMarkdownComponents = {
   // `& > code` selector applies block styling. Uses useColorScheme() to switch
   // syntax highlighter theme between light and dark modes.
   code: (props: MdProps) => {
-    const { mode } = useColorScheme();
-    const isDark = mode === 'dark';
+    const { mode, systemMode } = useColorScheme();
+    const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
     const { node: _node, inline: _inline, className, children, ...safeProps } = props;
 
     // Fenced code block with language — render with syntax highlighting

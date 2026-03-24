@@ -15,8 +15,8 @@ export default function ProcessingIndicator({
   message = 'Processing...',
   centered = false,
 }: ProcessingIndicatorProps) {
-  const { mode } = useColorScheme();
-  const isDark = mode === 'dark';
+  const { mode, systemMode } = useColorScheme();
+  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
 
   return (
     <Box
