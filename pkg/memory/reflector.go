@@ -13,10 +13,10 @@ import (
 // ReflectorInput carries the data needed to build Reflector prompts.
 type ReflectorInput struct {
 	InvestigationContext string
-	ScoringResult       controller.ScoringResult
-	ExistingMemories    []Memory
-	AlertType           string
-	ChainID             string
+	ScoringResult        controller.ScoringResult
+	ExistingMemories     []Memory
+	AlertType            string
+	ChainID              string
 }
 
 // NewReflectorController creates a SingleShotController configured for memory extraction.

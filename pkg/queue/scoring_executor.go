@@ -475,10 +475,10 @@ func (e *ScoringExecutor) runMemoryExtraction(
 
 	reflectorCtrl := memory.NewReflectorController(memory.ReflectorInput{
 		InvestigationContext: investigationContext,
-		ScoringResult:       parsedScore,
-		ExistingMemories:    existingMemories,
-		AlertType:           session.AlertType,
-		ChainID:             session.ChainID,
+		ScoringResult:        parsedScore,
+		ExistingMemories:     existingMemories,
+		AlertType:            session.AlertType,
+		ChainID:              session.ChainID,
 	})
 
 	reflectorResult, err := reflectorCtrl.Run(ctx, agentExecCtx, "")
