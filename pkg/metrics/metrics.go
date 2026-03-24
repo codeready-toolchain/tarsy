@@ -136,7 +136,7 @@ var (
 	}, []string{"quality_rating"})
 )
 
-// Action stage outcome metrics.
+// ActionStageOutcomesTotal tracks action stages by agent name and whether actions were executed.
 var ActionStageOutcomesTotal = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "tarsy_action_stage_outcomes_total",
 	Help: "Action stages by agent name and whether actions were executed (DB-polled).",
