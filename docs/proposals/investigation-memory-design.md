@@ -171,6 +171,24 @@ CREATE INDEX idx_investigation_memories_embedding
 
 **Index strategy:** HNSW with `m = 16, ef_construction = 64` using `vector_cosine_ops`. Always up-to-date on insert, best recall for TARSy's expected dataset size. See [Q2 decision](investigation-memory-design-questions.md#q2-what-pgvector-index-strategy).
 
+### Prerequisite: Required Skills in Timeline
+
+Currently, required skills (`required_skills` in agent config) are injected into the agent's system prompt at Tier 2.5 but are invisible to anything that reads the investigation timeline — the scoring evaluator, the Reflector, and the UI.
+
+**Change:** At agent execution start (before the first LLM call), emit a `skill_loaded` timeline event for each required skill. The event content includes the full skill text (name + body). On-demand skills loaded via `load_skill` already appear as tool call events.
+
+**Benefits beyond memory:**
+
+| Consumer | Before | After |
+|---|---|---|
+| **UI timeline** | No visibility into agent's domain knowledge | Skills shown at the start of each agent's timeline |
+| **Scoring evaluator** | Can't assess whether agent properly applied skill knowledge (e.g., classification criteria) | Sees exactly what domain knowledge was provided — can evaluate skill application quality |
+| **Reflector** | Needs special handling to avoid duplicating skill content | Skills flow through `buildScoringContext()` automatically — no extra code |
+
+**Implementation:** New `timelineevent.EventTypeSkillLoaded` enum value. `formatTimelineEvents()` in `investigation_formatter.go` formats it as `**Pre-loaded Skill: {name}**` followed by the skill content. Emitted by the iterating/single-shot controllers at execution start.
+
+**Token cost:** Negligible — skills are already in the system prompt consuming tokens. This just makes the same content visible in the timeline. For the scoring context specifically, skills add ~1000-2000 tokens to a timeline that's typically 10,000-50,000+ tokens.
+
 ### Scoring Stage: Reflector (Separate LLM Call)
 
 The existing `ScoringController` runs two turns (score + tool report). After scoring completes, the `ScoringExecutor` runs a **separate** Reflector LLM conversation for memory extraction.
@@ -196,7 +214,8 @@ messages[1] = User:      BuildScoringInitialPrompt(investigationContext, scoring
                            § AVAILABLE TOOLS/AGENT  — MCP tool lists per agent execution
                            § INVESTIGATION TIMELINE — full timeline from DB, formatted by
                              FormatStructuredInvestigation(), which includes per-agent:
-                               • Internal Reasoning  (LlmThinking events — the "thoughts")
+                               • Pre-loaded Skills    (SkillLoaded events — domain knowledge)
+                               • Internal Reasoning   (LlmThinking events — the "thoughts")
                                • Agent Response       (LlmResponse events)
                                • Tool Call + Result   (LlmToolCall events with args & output)
                                • Summarized Results   (McpToolSummary events)
@@ -300,8 +319,9 @@ It also produces failure tags and a tool improvement report.
 Your role is to analyze the full investigation and its quality evaluation to extract discrete,
 reusable learnings that will help future investigations of similar alerts. You receive:
 - The original alert and runbook
-- The full investigation timeline (agent reasoning, tool calls with arguments and results,
-  final analysis)
+- The full investigation timeline, which includes:
+  - Pre-loaded skills (domain knowledge injected into the agent's prompt before investigation)
+  - Agent reasoning, tool calls with arguments and results, final analysis
 - The quality score, analysis, failure tags, and tool improvement report
 - Existing memories from past investigations (for deduplication)
 
@@ -337,6 +357,9 @@ Each learning falls into one category:
 - Ground every learning in **specific evidence** from the investigation — tool call results,
   agent reasoning, or scoring critique. Do not extract generic SRE knowledge the agent already
   has.
+- **Do not duplicate skill content.** The investigation timeline includes the agent's
+  pre-loaded skills. If a learning is already covered by a skill (e.g., classification
+  criteria, report format, environment facts), do not extract it — the agent already knows it.
 - Prefer **specific and actionable** over vague and general. "Check PgBouncer health before
   blaming the database" is better than "Consider all components in the request path."
 - Negative learnings from mistakes are especially valuable — they prevent repeating errors.
@@ -439,6 +462,8 @@ if err != nil {
 }
 
 // 2. Run Reflector as a separate LLM conversation
+//    Skills are visible in the investigationContext because they're stored as
+//    timeline events — no special skill resolution needed here.
 reflectorResult, err := reflector.Run(ctx, reflector.Input{
     InvestigationContext: investigationContext,  // reused from buildScoringContext()
     ScoringResult:       scoringResult,          // score, analysis, tool report, failure tags
@@ -624,6 +649,14 @@ edge.From("injected_into_sessions", AlertSession.Type).Ref("injected_memories")
 Ent auto-generates the join table. Both directions are natural queries: `session.QueryInjectedMemories()` (session detail page) and `memory.QueryInjectedIntoSessions()` (memory usage analytics).
 
 ## Implementation Phases
+
+### Phase 0: Required Skills in Timeline (prerequisite)
+
+1. Add `EventTypeSkillLoaded` to the `timelineevent` enum
+2. Emit `skill_loaded` events at agent execution start (before first LLM call) for each required skill
+3. Add formatting case in `investigation_formatter.go` → `formatTimelineEvents()`
+
+**Result:** Skills are visible in the UI timeline, scoring evaluator, and investigation context used by the Reflector. No changes to the scoring or memory code needed — skills flow through existing `buildScoringContext()` automatically.
 
 ### Phase 1: Schema + Extraction (core pipeline)
 
