@@ -1,310 +1,284 @@
 # Investigation Memory — Design Questions
 
-**Status:** Open — decisions pending
+**Status:** All questions decided
 **Related:** [Design document](investigation-memory-design.md)
 
 Each question has options with trade-offs and a recommendation. Go through them one by one to form the design, then update the design document.
 
 ---
 
-## Q1: Which embedding model and dimensions?
+## Q1: Embedding model, provider, and configuration
 
-Memory content (1-2 sentence learnings) needs to be embedded as vectors for pgvector similarity search. The model choice affects embedding quality, dimensions (storage cost + index performance), and operational complexity.
+Individual memory entries (sentences to short paragraphs, extracted by the Reflector from full investigations) need to be embedded as vectors for pgvector similarity search. The embedding model only sees these extracted entries and query text — never the raw investigation timeline. TARSy already uses Google Gemini as its default LLM provider with `GOOGLE_API_KEY` configured in every deployment. OpenClaw (a reference project) uses the same Gemini embedding API with direct HTTP calls — the same pattern proposed here.
 
-### Option A: OpenAI text-embedding-3-small (1536 dimensions)
+The design needs to answer three coupled questions: which provider/model to use by default, how to make it configurable, and how the Go backend calls the embedding API.
 
-Use OpenAI's latest small embedding model via direct API call from Go.
+### Available embedding models
 
-- **Pro:** High-quality embeddings, well-tested for short text similarity.
-- **Pro:** 1536 dimensions is a standard size — good balance of quality and storage.
-- **Pro:** OpenAI API is straightforward to call from Go (simple HTTP POST).
-- **Con:** Requires OpenAI API key and network access from the Go backend.
-- **Con:** External dependency — adds a failure point for memory extraction.
-- **Con:** Cost per embedding call (though minimal for short texts).
+| Provider | Model | Dimensions | Status | Notes |
+|----------|-------|-----------|--------|-------|
+| Google | `text-embedding-004` | 768 | Stable | Proven, used by OpenClaw, same `GOOGLE_API_KEY` |
+| Google | `gemini-embedding-2-preview` | 3072 (configurable: 768/1536/3072) | Preview (Mar 2026) | Latest, multimodal, requires `dimensions` param for smaller vectors |
+| OpenAI | `text-embedding-3-small` | 1536 (configurable down to 256) | Stable | High quality, requires separate `OPENAI_API_KEY` |
+| OpenAI | `text-embedding-3-large` | 3072 (configurable down to 256) | Stable | Highest quality OpenAI, more expensive |
 
-### Option B: OpenAI text-embedding-3-small with reduced dimensions (512 or 768)
+### Configuration approach
 
-Same model but use OpenAI's native dimension reduction (`dimensions` parameter).
+A `memory` block under `defaults` in `tarsy.yaml`, following the same pattern as `defaults.scoring`:
 
-- **Pro:** Smaller vectors → less storage, faster index operations, lower memory.
-- **Pro:** OpenAI's models support this natively — no quality degradation for reduced dims.
-- **Pro:** For short 1-2 sentence texts, 512 dimensions captures sufficient semantics.
-- **Con:** Same external dependency concerns as Option A.
-- **Con:** Slightly lower recall for edge cases compared to full 1536.
+```yaml
+# tarsy.yaml — memory configuration (override built-in default)
+defaults:
+  memory:
+    enabled: true                              # false to disable memory entirely
+    embedding:
+      provider: "google"                       # google | openai (determines API format)
+      model: "gemini-embedding-2-preview"      # model name sent to the provider API
+      api_key_env: "GOOGLE_API_KEY"            # env var holding the API key
+      dimensions: 768                          # output dimensions (must match pgvector column)
+      # base_url: ""                           # optional custom endpoint (provider default if omitted)
+```
 
-### Option C: Use the same LLM provider configured for scoring
+**Built-in default** (used when `defaults.memory.embedding` is not set in `tarsy.yaml`):
 
-Extend the Python LLM service with an `Embed` RPC, using whatever model backend is configured for scoring (e.g., if scoring uses Anthropic, use Anthropic's embedding model; if OpenAI, use OpenAI's).
+```go
+// pkg/config/defaults.go
+func defaultEmbeddingConfig() EmbeddingConfig {
+    return EmbeddingConfig{
+        Provider:   EmbeddingProviderGoogle,
+        Model:      "gemini-embedding-2-preview",
+        APIKeyEnv:  "GOOGLE_API_KEY",
+        Dimensions: 768, // reduced from model's 3072 default — right-sized for memory content
+    }
+}
+```
 
-- **Pro:** No new API keys or configuration — reuses existing LLM infrastructure.
-- **Pro:** Embedding provider follows the deployment's LLM choice.
-- **Con:** Requires extending the Python gRPC service (new protobuf RPC, new Python code).
-- **Con:** Not all LLM backends have embedding models (Anthropic doesn't offer embeddings directly).
-- **Con:** Couples embedding quality to the LLM provider choice, which may change.
+**Zero-config path:** If `GOOGLE_API_KEY` is set (already required for Gemini LLM), memory embedding works out of the box with no additional configuration. The built-in default uses Google `gemini-embedding-2-preview` at 768 dimensions.
 
-### Option D: Lightweight open-source model via Python service
+**Switching to a different model/provider** — examples:
 
-Add an embedding endpoint to the Python LLM service using a small open-source model (e.g., `all-MiniLM-L6-v2`, 384 dimensions) running locally.
+```yaml
+# Example 1: Use Google's previous stable model
+defaults:
+  memory:
+    embedding:
+      provider: "google"
+      model: "text-embedding-004"
+      api_key_env: "GOOGLE_API_KEY"
+      dimensions: 768                          # text-embedding-004 native dimension
 
-- **Pro:** No external API calls — fully self-contained, no API keys.
-- **Pro:** Very fast inference for short texts.
-- **Pro:** 384 dimensions — minimal storage and index overhead.
-- **Con:** Lower embedding quality than OpenAI's models (may affect retrieval relevance).
-- **Con:** Adds model weight loading to the Python service (memory footprint).
-- **Con:** Need to maintain the model dependency.
+# Example 2: Use OpenAI embeddings
+defaults:
+  memory:
+    embedding:
+      provider: "openai"
+      model: "text-embedding-3-small"
+      api_key_env: "OPENAI_API_KEY"
+      dimensions: 768                          # reduce from 1536 default (must match pgvector column)
 
-**Recommendation:** Option B. OpenAI text-embedding-3-small at 512 dimensions. Short memory texts (1-2 sentences) don't need 1536 dimensions — 512 captures sufficient semantics at lower storage cost. Direct API call from Go avoids extending the Python service. The OpenAI dependency is acceptable since TARSy already relies on external LLM APIs.
+# Example 3: Use OpenAI via a proxy/custom endpoint
+defaults:
+  memory:
+    embedding:
+      provider: "openai"
+      model: "text-embedding-3-small"
+      api_key_env: "OPENAI_API_KEY"
+      dimensions: 768
+      base_url: "https://my-proxy.example.com/v1"
+
+# Example 4: Disable memory entirely
+defaults:
+  memory:
+    enabled: false
+```
+
+### Go types
+
+```go
+// pkg/config/enums.go
+type EmbeddingProviderType string
+
+const (
+    EmbeddingProviderGoogle EmbeddingProviderType = "google"
+    EmbeddingProviderOpenAI EmbeddingProviderType = "openai"
+)
+
+// pkg/config/types.go
+type MemoryConfig struct {
+    Enabled   bool            `yaml:"enabled"`
+    Embedding EmbeddingConfig `yaml:"embedding,omitempty"`
+}
+
+type EmbeddingConfig struct {
+    Provider   EmbeddingProviderType `yaml:"provider,omitempty"`
+    Model      string                `yaml:"model,omitempty"`
+    APIKeyEnv  string                `yaml:"api_key_env,omitempty"`
+    Dimensions int                   `yaml:"dimensions,omitempty"` // 0 = model default
+    BaseURL    string                `yaml:"base_url,omitempty"`
+}
+```
+
+### Embedding API calls (direct HTTP from Go)
+
+The Go backend calls the provider's embedding API directly — a single HTTP POST per embedding. No Python service involvement. Embedding calls are infrequent: a few per investigation (extraction) and one per investigation (query).
+
+**Resilience:** The `Embedder` implementation wraps each HTTP call with `context.WithTimeout` (30s default — embedding is fast, long waits indicate a problem). On transient failures (5xx, network errors, 429), retry once after a jittered backoff (same pattern as `mcp.Client.CallTool`). On 429, respect the `Retry-After` header if present. No circuit breaker — embedding calls are too infrequent (single-digit per investigation) to trip or benefit from one, and TARSy doesn't use circuit breakers anywhere else. Embedding failures are best-effort: the individual memory is skipped, other memories proceed (see [Observability section](investigation-memory-design.md#observability-tracking-memory-extraction-calls)).
+
+**Google API format** (`text-embedding-004`, `gemini-embedding-2-preview`):
+
+```text
+POST https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent
+Header: x-goog-api-key: {api_key}
+Body: {
+  "content": { "parts": [{ "text": "memory content" }] },
+  "taskType": "RETRIEVAL_DOCUMENT"              // or "RETRIEVAL_QUERY" for search queries
+}
+Response: { "embedding": { "values": [0.12, -0.45, ...] } }
+```
+
+The `taskType` parameter tells the model to optimize the embedding for storage (`RETRIEVAL_DOCUMENT`) vs. search (`RETRIEVAL_QUERY`). Google's models use this to produce better search results.
+
+**OpenAI API format** (`text-embedding-3-small`, `text-embedding-3-large`):
+
+```text
+POST https://api.openai.com/v1/embeddings
+Header: Authorization: Bearer {api_key}
+Body: {
+  "model": "text-embedding-3-small",
+  "input": "memory content",
+  "dimensions": 512
+}
+Response: { "data": [{ "embedding": [0.12, -0.45, ...] }] }
+```
+
+The `Embedder` interface in Go dispatches to the correct API format based on `provider`:
+
+```go
+// pkg/memory/embedder.go
+type Embedder interface {
+    Embed(ctx context.Context, text string, task EmbeddingTask) ([]float32, error)
+}
+
+type EmbeddingTask string
+const (
+    EmbeddingTaskDocument EmbeddingTask = "document" // storing a memory
+    EmbeddingTaskQuery    EmbeddingTask = "query"    // searching for memories
+)
+```
+
+### Why direct HTTP and not the Python LLM service
+
+- Embedding is a simple, stateless operation — one HTTP POST, parse JSON, extract float array
+- No streaming, no multi-turn, no tool calling — none of the complexity that justifies the gRPC service
+- The Python service only has a `Generate` RPC; adding `Embed` would require protobuf changes, Python implementation, and deployment coordination
+- OpenClaw uses the same pattern: direct HTTP calls to the embedding API from the application layer
+
+### Decision: Google `gemini-embedding-2-preview` at 768 dimensions
+
+MTEB English #1 (68.32 overall; 67.99 at 768 dims — negligible loss). Better semantic discrimination for TARSy's technical SRE domain than the previous-generation `text-embedding-004`. Same `GOOGLE_API_KEY`, consistent with TARSy already running preview-track LLMs. Zero-config setup; switching to `text-embedding-004` or OpenAI is a single config change.
+
+**Important constraint:** Changing dimensions after memories are stored requires re-embedding all existing memories (pgvector column size is fixed). The system validates dimension consistency at startup.
 
 ---
 
-## Q2: How should the Go backend generate embeddings?
-
-The embedding pipeline needs to convert memory content strings into float vectors. This affects where the code lives and how it's called.
-
-### Option A: Direct HTTP call from Go to OpenAI API
-
-A thin Go client in `pkg/memory/embedder.go` that calls the OpenAI embeddings endpoint directly. No Python service involvement.
-
-- **Pro:** Simplest implementation — one HTTP POST, parse JSON response, extract vector.
-- **Pro:** No changes to the Python LLM service or protobuf definitions.
-- **Pro:** Embedding calls are infrequent (only at memory creation and query time) — no need for batching or streaming.
-- **Con:** New API key configuration (`OPENAI_API_KEY` or `EMBEDDING_API_KEY`).
-- **Con:** Doesn't go through TARSy's existing LLM abstraction layer.
-
-### Option B: New `Embed` RPC on the Python LLM service
-
-Add an `Embed` RPC to the protobuf definition. The Python service handles the embedding model call.
-
-- **Pro:** Consistent with TARSy's architecture — all LLM/AI calls go through the Python service.
-- **Pro:** Can swap embedding models by changing Python config without touching Go.
-- **Con:** Protobuf changes, Python implementation, deployment coordination.
-- **Con:** More moving parts for a simple HTTP call.
-
-### Option C: Configurable — support both direct API and gRPC
-
-The `Embedder` interface in Go accepts a backend config. Initially implement direct HTTP; add gRPC backend later if needed.
-
-- **Pro:** Maximum flexibility.
-- **Con:** Over-engineered for v1 when one approach suffices.
-
-**Recommendation:** Option A. Direct HTTP from Go. Embedding is a simple, infrequent operation (a few calls per investigation for extraction, one call per investigation for query embedding). A thin HTTP client is simpler than extending the gRPC service. The `Embedder` can be an interface for future flexibility without building multiple backends now.
-
----
-
-## Q3: What pgvector index strategy?
+## Q2: What pgvector index strategy?
 
 pgvector supports two approximate nearest-neighbor index types. The choice affects query speed, build time, and memory usage.
 
-### Option A: HNSW (Hierarchical Navigable Small World)
+### Decision: HNSW (Hierarchical Navigable Small World)
 
-- **Pro:** Better recall and query speed for small-to-medium datasets (up to ~1M rows).
-- **Pro:** No training phase — index is always up-to-date after inserts.
-- **Pro:** pgvector's recommended default for most use cases.
-- **Con:** Higher memory usage than IVFFlat.
-- **Con:** Slower inserts than IVFFlat (each insert updates the graph).
+Best recall and query speed for small-to-medium datasets, no training phase (always up-to-date after inserts), pgvector's recommended default. Memory overhead is negligible for TARSy's expected dataset size (low thousands). Including the index from the start avoids a migration under load later.
 
-### Option B: IVFFlat (Inverted File with Flat Compression)
-
-- **Pro:** Lower memory footprint.
-- **Pro:** Faster bulk inserts.
-- **Con:** Requires periodic reindexing (`REINDEX`) after significant data changes for optimal recall.
-- **Con:** Lower recall than HNSW for the same query speed.
-- **Con:** Needs tuning (`lists` parameter based on dataset size).
-
-### Option C: No index initially (exact search)
-
-Start without an ANN index. Use exact `ORDER BY embedding <=> query_embedding` with a `WHERE project = $1` filter.
-
-- **Pro:** Zero index maintenance. Perfect recall.
-- **Pro:** For small memory stores (hundreds to low thousands), exact search is fast enough.
-- **Con:** Doesn't scale — becomes slow at tens of thousands of memories.
-- **Con:** Needs to add an index later when the store grows.
-
-**Recommendation:** Option A (HNSW). TARSy's memory store will grow gradually (a few memories per investigation). HNSW handles this well with no tuning, always-current indexing, and good recall. The memory overhead is negligible for the expected dataset size. If performance is fine without an index at first, HNSW can be added in a later migration — but including it from the start avoids a migration under load.
+Migration creates the index with `m = 16, ef_construction = 64` using `vector_cosine_ops`.
 
 ---
 
-## Q4: How should Reflector parse failures be handled?
+## Q3: How should Reflector parse failures be handled?
 
-The Reflector's third turn asks the LLM to output structured JSON. LLMs sometimes produce malformed JSON, extra text around the JSON, or completely ignore the schema.
+The Reflector's LLM call asks the model to output structured JSON. LLMs sometimes produce malformed JSON, extra text around the JSON, or completely ignore the schema.
 
-### Option A: Best-effort parsing with fallback to "no memories"
+### Decision: Lenient parsing + silent fallback (C + A)
 
-Try to parse JSON. If it fails, log a warning and treat as "no new learnings." Scoring completes successfully either way.
-
-- **Pro:** Memory extraction never blocks or fails scoring.
-- **Pro:** Simplest error handling.
-- **Con:** Silent data loss — if the LLM consistently outputs bad JSON, no memories are ever created.
-- **Con:** No retry to fix the issue.
-
-### Option B: JSON extraction with retry (same pattern as score extraction)
-
-Try to parse. If it fails, append the malformed output as assistant message plus a "please output valid JSON" user message and retry once. If still fails, fall back to "no memories."
-
-- **Pro:** Recovers from common formatting errors (markdown fences, trailing text).
-- **Pro:** Consistent with how `ScoringController` already handles score extraction retries.
-- **Con:** One additional LLM call on failure (extra tokens, latency).
-- **Con:** More complex control flow.
-
-### Option C: Lenient JSON parsing (strip markdown fences, find JSON in text)
-
-Before strict parsing, apply heuristics: strip ```json fences, find the first `{` and last `}`, try parsing that substring. Only if that fails, treat as "no memories."
-
-- **Pro:** Handles the most common LLM formatting issues without a retry call.
-- **Pro:** No extra LLM tokens.
-- **Con:** Heuristic parsing can be fragile.
-- **Con:** Doesn't recover from genuinely malformed JSON (missing commas, etc.).
-
-**Recommendation:** Option C + A combined. First try lenient parsing (strip fences, find JSON object). If that fails, log a warning and proceed with "no memories." No retry — memory extraction is best-effort and the scoring call is already long enough. The lenient parser can be shared with any future structured-output parsing.
+First try strict `encoding/json` unmarshal. If that fails, strip markdown fences and extract the first `{`...`}` by bracket depth (same pattern OpenClaw uses in `qmd-query-parser.ts`). If that still fails, log a warning and proceed with "no memories" — memory extraction is best-effort and must never block scoring. No LLM retry. The lenient parser can be shared with any future structured-output parsing.
 
 ---
 
-## Q5: Should `recall_past_investigations` support structured filters?
+## Q4: Should `recall_past_investigations` support structured filters?
 
 The tool lets the agent search for memories beyond the auto-injected set. The question is whether it accepts just a free-text query or also structured filters.
 
-### Option A: Free-text query only
+### Decision: Free-text query only (Option A)
 
-Single `query` parameter. The tool embeds it and runs pgvector similarity search.
-
-- **Pro:** Simplest tool definition — the agent just describes what it wants.
-- **Pro:** Semantic search handles intent well ("what went wrong with database connections?").
-- **Pro:** Fewer parameters = less for the LLM to get wrong.
-- **Con:** Can't explicitly filter by category or valence.
-
-### Option B: Free-text query + optional category/valence filters
-
-`query` (required) + optional `category` and `valence` parameters. Filters are applied as WHERE clauses before similarity ranking.
-
-- **Pro:** Agent can be specific ("show me procedural tips for this alert type").
-- **Pro:** Structured filters are cheap to implement (simple WHERE clauses).
-- **Con:** More parameters for the LLM to fill — may produce inconsistent results.
-- **Con:** Marginal value — semantic search already ranks relevant memories highly.
-
-### Option C: Free-text query + optional filters + alert-type scoping
-
-All of Option B plus an `alert_type` parameter to scope by alert type.
-
-- **Pro:** Most expressive — agent has full control.
-- **Con:** Over-parameterized. The agent shouldn't need to know metadata field names.
-- **Con:** Conflicts with the "semantic-first, no hard filters" philosophy.
-
-**Recommendation:** Option A. Free-text query only. The semantic search handles intent better than the LLM constructing filter parameters. Keep the tool interface simple — one natural language query, the system does the rest. If agents consistently need structured filtering, it can be added as optional parameters later.
+Single `query` parameter + optional `limit` (default 10, max 20). Semantic search handles intent better than the LLM constructing filter parameters. Keeps the tool interface simple — one natural language query, the system does the rest. Structured filters (category, valence, alert_type) can be added as optional parameters later if agents consistently need them.
 
 ---
 
-## Q6: How should memory refinement trigger on human review?
+## Q5: How should memory refinement trigger on human review?
 
 When a reviewer completes their review (`quality_rating` + optional `investigation_feedback`), memories from that session need their confidence adjusted. The question is when and how.
 
-### Option A: Inline in the review handler
+### Decision: Hybrid — inline confidence + background feedback Reflector (Option C, revised)
 
-`SessionService.UpdateReviewStatus` → after persisting the review, synchronously calls `MemoryService.RefineFromReview(sessionID, qualityRating)`.
+**Two-part refinement on every review completion:**
 
-- **Pro:** Immediate — confidence adjustments happen in the same request.
-- **Pro:** Simple — no background infrastructure.
-- **Pro:** Transactional — review + memory update succeed or fail together.
-- **Con:** Adds latency to the review API response (memory queries + updates).
-- **Con:** Couples review service to memory service.
+**Part 1 — Inline (in review handler, synchronous):** Confidence adjustment based on `quality_rating`. Simple SQL, negligible latency.
 
-### Option B: Background job triggered by review event
+| `quality_rating` | Existing memories | Mechanism |
+|---|---|---|
+| `accurate` | `confidence = min(confidence × 1.2, 1.0)` | Multiplicative boost |
+| `partially_accurate` | `confidence = confidence × 0.6` | Multiplicative degradation — human says "partly wrong" |
+| `inaccurate` | `deprecated = true` | Kill switch — investigation conclusions were wrong |
 
-The review handler publishes a `ReviewCompleted` event. A listener in the memory package processes it asynchronously.
+Human review has higher authority than automated score. Multiplicative adjustment means high-confidence memories get proportionally larger absolute changes.
 
-- **Pro:** Review handler stays fast — no memory work in the hot path.
-- **Pro:** Decoupled — review and memory services don't know about each other.
-- **Con:** Eventual consistency — confidence adjustments are delayed.
-- **Con:** More infrastructure (event listener, error handling, retry).
+**Part 2 — Background job (async, when `investigation_feedback` text is non-empty):** Enqueue a refinement job (same queue infrastructure as scoring). The job runs a Reflector variant that sees:
+- The `investigation_feedback` text
+- The `quality_rating`
+- Existing memories from the session (including newly deprecated ones)
+- Alert context metadata
 
-### Option C: Inline for simple adjustments, background for feedback processing
+The Reflector can create new memories, deprecate specific existing ones, or reinforce ones the human confirmed. **All feedback-derived memories get 0.9 initial confidence** — human-written feedback is the strongest signal, regardless of `quality_rating`.
 
-Confidence adjustments (based on `quality_rating` enum) are inline — they're just numeric updates. If `investigation_feedback` text is present and we want to re-run the Reflector to extract additional memories from the feedback, that goes to a background job.
-
-- **Pro:** Fast path (confidence) is immediate; slow path (feedback analysis) is async.
-- **Pro:** Most operations are simple confidence bumps — no latency hit.
-- **Con:** Two codepaths for the same trigger.
-
-**Recommendation:** Option A for v1. Confidence adjustments are simple SQL updates (`UPDATE investigation_memories SET confidence = LEAST(confidence + 0.15, 1.0) WHERE source_session_id = $1`). This adds negligible latency to the review request. `investigation_feedback` is stored but not automatically processed in v1 — future enhancement. If performance becomes an issue, migrate to Option B.
+This is where learning from mistakes happens: `inaccurate` + feedback "TARSy mistook X for Y" → existing wrong memories deprecated (Part 1) + new `negative`/`procedural` memory created at 0.9 (Part 2). Feedback from `partially_accurate` reviews is equally valuable — the human explains what was right vs. wrong, producing the most nuanced memories.
 
 ---
 
-## Q7: Should the API include a bulk memory management endpoint?
+## Q6: Should the API include a bulk memory management endpoint?
 
 The design includes per-memory CRUD endpoints. The question is whether to also add bulk operations.
 
-### Option A: No bulk endpoint in v1
+### Decision: No bulk endpoint in v1 (Option A)
 
-Per-memory CRUD only. Admin scripts use the list endpoint + per-memory PATCH/DELETE in a loop.
-
-- **Pro:** Simpler API surface.
-- **Pro:** Sufficient for the expected scale (tens to hundreds of memories managed at a time).
-- **Con:** Tedious for large-scale cleanup.
-
-### Option B: Add `PATCH/DELETE /api/v1/memories` (bulk)
-
-Accept an array of memory IDs with a shared action (e.g., deprecate all, delete all).
-
-- **Pro:** Efficient for bulk operations.
-- **Con:** More complex request/response handling, validation.
-- **Con:** Low demand in v1 — memory stores won't be large enough to need this.
-
-**Recommendation:** Option A. No bulk endpoint in v1. The memory store will be small early on, and per-memory operations suffice. Bulk endpoints can be added when there's demonstrated need.
+Per-memory CRUD only. Memory store will be small early on. Bulk endpoints can be added when there's demonstrated need.
 
 ---
 
-## Q8: Should memory decay be implemented in v1?
+## Q7: Should memory decay be implemented in v1?
 
 The sketch describes decay: memories not reinforced within a configurable window lose confidence. The question is whether to build this now.
 
-### Option A: No decay in v1
+### Decision: No decay in v1 (Option A)
 
-Memories keep their confidence indefinitely. Deprecated memories are hidden from retrieval but not deleted.
+Memories keep confidence indefinitely. The Reflector handles explicit deprecation of outdated memories. Early on, memories should accumulate. Even OpenClaw ships temporal decay disabled by default.
 
-- **Pro:** Simpler — no periodic jobs, no decay configuration.
-- **Pro:** Early on, you want memories to accumulate, not disappear.
-- **Pro:** The Reflector already deprecates outdated memories explicitly (Q7 sketch decision).
-- **Con:** Memory store grows without automatic pruning.
-
-### Option B: Simple time-based decay
-
-A periodic job (e.g., daily) reduces confidence of memories not seen in N days.
-
-- **Pro:** Automatic pruning of stale memories.
-- **Con:** Needs a periodic job infrastructure.
-- **Con:** Risk of decaying valid memories that just haven't been triggered recently.
-
-**Recommendation:** Option A. No decay in v1. The Reflector's in-prompt dedup (sketch Q7) already handles the "outdated memory" case — it can explicitly deprecate memories that contradict new evidence. Automatic time-based decay risks removing valid-but-infrequent knowledge (e.g., "this metric is stale on Mondays" only triggers on Mondays). Decay can be added later if the store grows unmanageably.
+**Future enhancement:** If the memory store grows large enough to need pruning, add a **query-time decay multiplier** (not stored data mutation). Apply `score × e^(-λ × age_in_days)` at retrieval time with a configurable half-life. This is cleaner than periodic jobs — no data mutation, reversible via config, no infrastructure. OpenClaw implements this pattern (`temporal-decay.ts`) with a 30-day half-life and evergreen exemptions.
 
 ---
 
-## Q9: How should injected memory IDs be stored per session?
+## Q8: How should injected memory IDs be stored per session?
 
 To show "which memories were injected into this investigation" on the session detail page and to exclude them from recall tool results, we need to record which memory IDs were selected at investigation start.
 
-### Option A: JSON field on AlertSession
+### Decision: Join table via Ent edge (Option B)
 
-Add an `injected_memory_ids` JSON field (string array) to the AlertSession schema.
+Many-to-many Ent edge between `AlertSession` and `InvestigationMemory`:
 
-- **Pro:** Simple — one field, read alongside other session data.
-- **Pro:** No new tables or relationships.
-- **Con:** JSON field — not queryable for "which sessions used this memory?" without JSON operators.
-- **Con:** Adds a field to an already large schema.
+```go
+// alertsession.go
+edge.To("injected_memories", InvestigationMemory.Type)
 
-### Option B: Join table (session ↔ memory)
+// investigationmemory.go
+edge.From("injected_into_sessions", AlertSession.Type).Ref("injected_memories")
+```
 
-A many-to-many relationship table `session_injected_memories` with `session_id` + `memory_id` + `injected_at`.
-
-- **Pro:** Relational — easy to query both directions (memories per session, sessions per memory).
-- **Pro:** Supports future features like "memory usage analytics."
-- **Con:** More schema complexity (new table, edges in Ent).
-- **Con:** Over-engineered for v1 — we mostly read "which memories for this session?"
-
-### Option C: Store in session metadata JSON
-
-Use the existing `session_metadata` JSON field to stash injected memory IDs.
-
-- **Pro:** No schema changes at all.
-- **Con:** `session_metadata` is for alert-submission-time metadata — mixing in runtime injection data is a semantic mismatch.
-- **Con:** Fragile — metadata field is not typed or validated.
-
-**Recommendation:** Option A. JSON field on AlertSession. The primary use case is "show injected memories on session detail" — a simple JSON array read. "Which sessions used this memory?" is a secondary concern that can use JSON operators or be solved by a join table later if analytics demand it.
+Ent auto-generates the join table, queries, and mutations. Both directions are natural queries: `session.QueryInjectedMemories()` and `memory.QueryInjectedIntoSessions()`. Enables memory usage analytics without JSON operators. Minimal schema overhead (~4 lines of edge definitions).

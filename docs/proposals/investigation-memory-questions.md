@@ -109,16 +109,16 @@ The Reflector needs to analyze completed investigations and produce memory entri
 
 ### Option C: Embedded in the scoring stage (scoring + memory extraction in one pass)
 
-Extend the existing `ScoringController` to also produce memory entries as part of its analysis. The scoring LLM already has the full investigation context — add a third turn asking it to extract learnings.
+Run memory extraction within the scoring stage. The `ScoringExecutor` already loads the full investigation context via `buildScoringContext()` — after the scoring controller returns, the executor triggers the Reflector as a separate LLM conversation that receives the investigation context and scoring results.
 
-- **Pro:** No additional LLM call — piggybacks on the scoring context window that's already loaded.
+- **Pro:** Reuses the investigation context already built for scoring — no redundant DB queries.
 - **Pro:** Zero new infrastructure — extends existing scoring pipeline.
-- **Pro:** Scoring analysis and memory extraction are naturally related — the scorer already identifies what went well and poorly.
-- **Con:** Couples memory extraction to scoring — can't run memory extraction without scoring, or change one without affecting the other.
-- **Con:** Makes the scoring controller more complex (currently 2 turns → 3 turns).
-- **Con:** Scoring and memory extraction may benefit from different prompt strategies.
+- **Pro:** Scoring results (score, analysis, failure tags, tool report) are the ideal input for extraction.
+- **Pro:** Separate LLM conversation gives the Reflector its own system prompt and role.
+- **Con:** Couples memory extraction to scoring — can't run memory extraction without scoring.
+- **Con:** One additional LLM call (but lightweight — single turn, no tool calls).
 
-**Decision:** Option C — embedded in the scoring stage. The scoring controller already loads the full investigation timeline and produces exactly the critique (score + failure tags + tool improvement report) that memory extraction needs. Adding a third turn ("Based on your analysis, what discrete learnings should be remembered for future investigations?") is the most token-efficient approach — zero additional LLM cold-start, zero new infrastructure. The coupling is actually a feature: the scorer's own critique is the ideal input for extraction. If they need to diverge later, the third turn can be factored out into its own stage.
+**Decision:** Option C — embedded in the scoring stage. The `ScoringExecutor` already builds the full investigation context via `buildScoringContext()` and produces the scoring critique that memory extraction needs. The Reflector runs as a separate LLM conversation (not a continuation of the scoring conversation) so it gets its own system prompt ("memory extraction specialist" vs. "scoring evaluator"). The investigation context is passed through without redundant DB queries. Near-zero new infrastructure — the executor just makes one more LLM call after scoring completes.
 
 _Considered and rejected: Option A (new stage type — adds latency, extraction failures could affect session status, visible but heavy), Option B (async background process — less visible, separate infrastructure, but non-blocking; a reasonable alternative if the coupling in C becomes problematic)._
 
@@ -130,7 +130,7 @@ Memory retrieval serves two purposes: auto-injecting the top 3-5 memories into t
 
 **Important distinction — two types of scope:**
 - **Security scope** (`project`): a hard WHERE clause, always enforced. Memories never cross project boundaries. This is a data isolation concern, not an investigation concern. Designed from the start so [session authorization](session-authorization-sketch.md) doesn't require schema migration later. Pre-authorization, all memories use a default project.
-- **Investigation scope** (alert_type, service, chain_id): the subject of this question — how to rank and filter memories *within* a project.
+- **Investigation scope** (alert_type, chain_id): the subject of this question — how to rank and filter memories *within* a project.
 
 The central design tension for investigation scope is: **memories should be complementary hints that help in specific or repeating situations — not a rigid playbook that constrains the LLM's natural investigative ability.** LLMs are already good investigators; memory adds value when it surfaces a relevant past lesson at the right moment, not when it floods the context with marginally related knowledge.
 
@@ -143,7 +143,7 @@ This means the retrieval approach must:
 
 ### Option A: Semantic-first retrieval (pgvector-driven)
 
-Embed the current alert context (alert type, description, service, environment) into a query vector. Hard-filter by project (security boundary), then retrieve by cosine similarity within that set. Investigation scope metadata (chain_id, service) provides a soft boost (e.g., same-service memories rank slightly higher) but never hard-filters. Return top N for auto-injection; the tool exposes the full ranked list.
+Embed the current alert context (alert type, description, environment) into a query vector. Hard-filter by project (security boundary), then retrieve by cosine similarity within that set. Investigation scope metadata (`alert_type`, `chain_id`) provides a soft boost (e.g., same-alert-type memories rank slightly higher) but never hard-filters. Return top N for auto-injection; the tool exposes the full ranked list.
 
 - **Pro:** Zero manual tuning — cosine similarity is the only ranking function. No thresholds, no fallback levels, no scope hierarchy to configure.
 - **Pro:** Cross-cutting knowledge surfaces naturally — a memory about "Prometheus metrics lag 5 min on Mondays" appears for any alert where it's semantically relevant, regardless of which service it was learned from.
@@ -153,7 +153,7 @@ Embed the current alert context (alert type, description, service, environment) 
 - **Con:** Requires quality embeddings — if embedding quality is poor (e.g., overly generic memory content), retrieval quality degrades.
 - **Con:** May occasionally surface a memory that is textually similar but contextually irrelevant. Mitigated by the small injection count and prompt framing ("consider if relevant").
 
-**Decision:** Option A — semantic-first retrieval within a project boundary. Let pgvector do the heavy lifting. Memory is a light touch — complementary hints for specific and repeating situations, not a comprehensive briefing. Semantic similarity naturally surfaces the most relevant memories without requiring scope hierarchies or tunable weights. The 3-5 auto-inject cap (Q3) is the noise control, not complex filtering logic. The query shape is `WHERE project = $current_project ORDER BY cosine_similarity + CASE WHEN service = $1 THEN 0.05 ELSE 0 END DESC LIMIT N` — project is the security boundary, everything after is semantic ranking. The `recall_past_investigations` tool uses the same query with the same project constraint.
+**Decision:** Option A — semantic-first retrieval within a project boundary. Let pgvector do the heavy lifting. Memory is a light touch — complementary hints for specific and repeating situations, not a comprehensive briefing. Semantic similarity naturally surfaces the most relevant memories without requiring scope hierarchies or tunable weights. The auto-inject cap (Q3) is the noise control, not complex filtering logic. The query shape is `WHERE project = $current_project AND NOT deprecated ORDER BY cosine_similarity + CASE WHEN alert_type = $1 THEN 0.05 ELSE 0 END + CASE WHEN chain_id = $2 THEN 0.03 ELSE 0 END DESC LIMIT N` — project is the security boundary, everything after is semantic ranking with minor soft boosts for same alert type and chain. The `recall_past_investigations` tool uses the same query with the same project constraint.
 
 _Considered and rejected: Option B (metadata-scoped with semantic ranking — hard-filtering by alert_type blocks cross-cutting knowledge, fallback thresholds are manual tuning), Option C (composite scoring with tunable weights — four weights to calibrate is exactly the tuning treadmill to avoid, over-engineered when the auto-inject cap already bounds noise)._
 
@@ -161,19 +161,19 @@ _Considered and rejected: Option B (metadata-scoped with semantic ranking — ha
 
 ## Q7: How should memory deduplication work?
 
-When the Reflector (third scoring turn, per Q5) extracts memories from a new investigation, some may overlap with existing memories ("check DB connection pool first" extracted from two different investigations). The system needs to handle this — storing duplicates wastes context window space and creates noise. pgvector (Q1) can help identify semantically similar memories even when the text differs.
+When the Reflector extracts memories from a new investigation, some may overlap with existing memories ("check DB connection pool first" extracted from two different investigations). The system needs to handle this — storing duplicates wastes context window space and creates noise. pgvector (Q1) can help identify semantically similar memories even when the text differs.
 
 ### Option C: Include existing memories in the Reflector prompt
 
-When the Reflector extracts memories (the third turn in the scoring stage, per Q5), include the current relevant memories in its context. Instruct it to: update existing memories if new evidence reinforces them, add new memories only if they're genuinely novel, and note any memories that should be deprecated.
+Include the current relevant memories in the Reflector's user prompt. Instruct it to: update existing memories if new evidence reinforces them, add new memories only if they're genuinely novel, and note any memories that should be deprecated.
 
-- **Pro:** No additional LLM call — extraction + dedup happen in the same third scoring turn (Q5). Existing memories are just added to the prompt context.
+- **Pro:** Extraction + dedup happen in one LLM call. Existing memories are just part of the prompt context.
 - **Pro:** The Reflector can make nuanced decisions (strengthen, weaken, merge, deprecate) — exactly what ACE's Curator does.
 - **Pro:** Avoids separate dedup logic — it's part of the extraction prompt.
-- **Con:** Context window grows as memory store grows (existing memories in prompt). Manageable since memories are scoped and capped, and the scoring context window is already large.
+- **Con:** Context window grows as memory store grows (existing memories in prompt). Manageable since memories are scoped and capped.
 - **Con:** Couples extraction and deduplication logic.
 
-**Decision:** Option C — include existing memories in the Reflector prompt. With extraction embedded in the scoring stage (Q5), including existing memories in the same turn is essentially free. The Reflector makes one pass: "here's what we learned before, here's what just happened — update the knowledge base." Consistent with the semantic-first retrieval approach (Q6), existing memories to include in the Reflector prompt are found by pgvector similarity — not just strict scope matching — so cross-cutting memories can be recognized as duplicates even when they originated from different services.
+**Decision:** Option C — include existing memories in the Reflector prompt. The Reflector makes one pass: "here's what we learned before, here's what just happened — update the knowledge base." Consistent with the semantic-first retrieval approach (Q6), existing memories to include in the Reflector prompt are found by pgvector similarity — not just strict scope matching — so cross-cutting memories can be recognized as duplicates even when they originated from different services.
 
 _Considered and rejected: Option A (exact text dedup only — LLM output is never identical, effectively no dedup, memory store grows with near-duplicates), Option B (embedding-based similarity + LLM merge — two-step process with a similarity threshold to tune, when the Reflector can handle it in one pass for free)._
 
@@ -181,18 +181,18 @@ _Considered and rejected: Option A (exact text dedup only — LLM output is neve
 
 ## Q8: Should memory extraction run for every investigation or be selective?
 
-Since extraction is a third turn in the scoring stage (Q5) — not a separate LLM call — the cost argument is weaker than it would be otherwise. Still, every turn adds tokens, and the Reflector needs existing memories in context (Q7 Option C). The question is whether to always run this turn or skip it selectively.
+Since extraction runs within the scoring stage (Q5) — a single additional LLM call that reuses the already-built investigation context — the cost is low. Still, every call adds tokens, and the Reflector needs existing memories in context (Q7 Option C). The question is whether to always run extraction or skip it selectively.
 
 ### Option A: Extract from every completed investigation
 
-Run the Reflector (third scoring turn, per Q5) after every investigation that gets scored, regardless of score or novelty.
+Run the Reflector after every investigation that gets scored, regardless of score or novelty.
 
 - **Pro:** No learning gaps — every investigation contributes.
 - **Pro:** Simple logic — no selectivity to tune.
-- **Pro:** Near-zero marginal cost — extraction is a third turn in an already-running scoring call (Q5), not a separate LLM invocation.
+- **Pro:** Low marginal cost — the Reflector is a lightweight single-turn LLM call reusing context already built for scoring.
 - **Con:** Most extractions for routine investigations will produce nothing new (but the Reflector can simply return "no new learnings" when existing memories cover the case, per Q7).
 
-**Decision:** Option A — always extract. The cost argument for being selective evaporated with Q5 (third scoring turn, not a separate call). The Reflector (Q7) gracefully handles "nothing new" cases in-prompt. No thresholds to tune, no pre-checks, no config surface area. Per-chain enable/disable (Option D) can be added trivially later if needed.
+**Decision:** Option A — always extract. The cost is low since the investigation context is already available from scoring (Q5). The Reflector (Q7) gracefully handles "nothing new" cases in-prompt. No thresholds to tune, no pre-checks, no config surface area. Per-chain enable/disable (Option D) can be added trivially later if needed.
 
 _Considered and rejected: Option B (score-based filtering — arbitrary thresholds, minimal cost savings given Q5), Option C (novelty detection — unnecessary complexity when Q7's in-prompt dedup handles the "nothing new" case), Option D (configurable per chain — not worth the config surface area for v1 when "always" is the right default)._
 
