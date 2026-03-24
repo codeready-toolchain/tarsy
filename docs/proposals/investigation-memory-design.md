@@ -11,9 +11,9 @@ This document turns the [investigation memory sketch](investigation-memory-sketc
 ## Design Principles
 
 1. **Memory is a light touch.** Complementary hints for specific/repeating situations, not a playbook. The LLM's investigative creativity is preserved.
-2. **Semantic-first retrieval.** pgvector cosine similarity drives ranking. Investigation scope metadata (alert_type, service) is a soft boost, never a hard filter. Project is the only hard filter (security boundary).
+2. **Semantic-first retrieval.** pgvector cosine similarity drives ranking. Investigation scope metadata (`alert_type`, `chain_id`) is a soft boost, never a hard filter. Infrastructure-specific context (service names, clusters, regions) lives in the memory content itself and is matched via semantic search. Project is the only hard filter (security boundary).
 3. **Zero manual tuning.** No thresholds, no fallback levels, no scoring weights to calibrate. The 3-5 auto-inject cap is the noise control.
-4. **Embedded extraction.** Memory extraction is a third turn in the existing scoring stage — no new infrastructure, near-zero marginal cost.
+4. **Embedded extraction.** Memory extraction runs as a separate LLM call within the scoring stage — triggered by the `ScoringExecutor` after the scoring controller completes. No new infrastructure, near-zero marginal cost.
 5. **In-prompt dedup.** The Reflector sees existing memories and decides what to create, reinforce, or deprecate in one pass.
 6. **Future-proof for multi-tenancy.** `project` field from day one, hard-filtered on every query.
 
@@ -50,11 +50,9 @@ field.Float("confidence").Default(0.5).Min(0).Max(1)
 field.Int("seen_count").Default(1).NonNegative()
 field.String("source_session_id").NotEmpty()
 
-// Scope metadata (soft signals, not hard filters)
+// Scope metadata (soft signals, not hard filters — TARSy-native fields only)
 field.String("alert_type").Optional().Nillable()
 field.String("chain_id").Optional().Nillable()
-field.String("service").Optional().Nillable()
-field.String("cluster").Optional().Nillable()
 
 // Embedding — stored as pgvector vector type
 // Requires custom SQL migration (Ent doesn't natively support pgvector)
@@ -173,48 +171,226 @@ CREATE INDEX idx_investigation_memories_embedding
 
 **Index strategy:** HNSW with `m = 16, ef_construction = 64` using `vector_cosine_ops`. Always up-to-date on insert, best recall for TARSy's expected dataset size. See [Q2 decision](investigation-memory-design-questions.md#q2-what-pgvector-index-strategy).
 
-### Scoring Stage: Third Turn (Reflector)
+### Scoring Stage: Reflector (Separate LLM Call)
 
-The existing `ScoringController` (2 turns: score + tool report) gains a third turn for memory extraction.
+The existing `ScoringController` runs two turns (score + tool report). After scoring completes, the `ScoringExecutor` runs a **separate** Reflector LLM conversation for memory extraction.
 
-**Flow:**
+**Why a separate conversation (not a third turn in scoring):**
+
+The scoring system prompt defines the role as "You are an expert investigation quality evaluator." The Reflector needs a fundamentally different role — a memory extraction specialist. Continuing the scoring conversation would create a role conflict in the system prompt and pollute the context with scoring-specific instructions. A fresh conversation gives the Reflector a clean, purpose-built prompt.
+
+**How the scoring conversation works today (code reference: `ScoringController.Run()`):**
+
+The scoring controller manages a single `messages []ConversationMessage` array. Each turn appends to it. The conversation starts fresh — not a continuation of the investigation LLM conversation — but `ScoringExecutor.buildScoringContext()` reconstructs the full investigation from timeline events in the database.
 
 ```text
-Turn 1: Score evaluation → score (0-100) + analysis + failure_tags
-Turn 2: Tool improvement report → tool_improvement_report
-Turn 3: Memory extraction (Reflector) → structured memory entries
+Scoring conversation (unchanged)
+════════════════════════════════
+messages[0] = System:    BuildScoringSystemPrompt()
+                         → "You are an expert investigation quality evaluator for TARSy..."
+
+messages[1] = User:      BuildScoringInitialPrompt(investigationContext, scoringOutputSchema)
+                         where investigationContext = ScoringExecutor.buildScoringContext():
+                           § ORIGINAL ALERT         — session.AlertData (raw alert payload)
+                           § RUNBOOK                — resolved runbook content (if configured)
+                           § AVAILABLE TOOLS/AGENT  — MCP tool lists per agent execution
+                           § INVESTIGATION TIMELINE — full timeline from DB, formatted by
+                             FormatStructuredInvestigation(), which includes per-agent:
+                               • Internal Reasoning  (LlmThinking events — the "thoughts")
+                               • Agent Response       (LlmResponse events)
+                               • Tool Call + Result   (LlmToolCall events with args & output)
+                               • Summarized Results   (McpToolSummary events)
+                               • Final Analysis       (FinalAnalysis events)
+                               • Synthesis results (if parallel stage)
+                               • Executive summary (if present)
+
+→ Turn 1: LLM responds with score analysis + numeric score
+  (if score extraction fails, retry messages are appended — up to 5 retries)
+
+→ Turn 2: Tool improvement report prompt appended, LLM responds with report
+
+→ ScoringController.Run() returns ScoringResult (score, analysis, tool report, failure tags)
 ```
 
-**Reflector prompt context:**
-- The scoring analysis and failure tags (from turn 1)
-- The tool improvement report (from turn 2)
-- Existing relevant memories from the same project (fetched by pgvector similarity before the turn)
-- Alert metadata (type, service, chain, cluster)
+**Reflector conversation (new, separate LLM call):**
 
-**Reflector prompt structure:**
+After `ScoringController.Run()` returns, the `ScoringExecutor` runs the Reflector as a new conversation. The executor already has all the data — it threads the context explicitly into the Reflector's prompt.
 
 ```text
-Based on your scoring analysis above, extract discrete learnings that should be
-remembered for future investigations of similar alerts.
+Reflector conversation (new, separate)
+═══════════════════════════════════════
+messages[0] = System:  BuildReflectorSystemPrompt()
+                       → "You are a memory extraction specialist..."
+                       (dedicated role — focused entirely on identifying learnings)
 
-You have access to existing memories that were previously extracted:
+messages[1] = User:    BuildReflectorPrompt() assembles all context explicitly:
+
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │ § INVESTIGATION CONTEXT                                                │
+  │   The same investigationContext string from buildScoringContext().     │
+  │   Already available in the executor — no redundant DB queries.         │
+  │   Contains: raw alert, runbook, tools per agent, full timeline         │
+  │   (thoughts, tool calls, results, final analysis, synthesis,           │
+  │   executive summary).                                                  │
+  │                                                                        │
+  │ § SCORING RESULTS (from ScoringResult returned by the controller)      │
+  │   - Score (0-100)                                                      │
+  │   - Score analysis (what went well, what went wrong)                   │
+  │   - Failure tags                                                       │
+  │   - Tool improvement report                                            │
+  │                                                                        │
+  │ § EXISTING MEMORIES (fetched before this call)                         │
+  │   pgvector similarity search filtered by project, ranked by cosine     │
+  │   similarity to the investigation's final analysis.                    │
+  │   JSON array: [{id, content, category, valence, confidence,            │
+  │   seen_count}]                                                         │
+  │                                                                        │
+  │ § ALERT METADATA                                                       │
+  │   - Alert type                                                         │
+  │   - Chain ID                                                           │
+  │                                                                        │
+  │ § EXTRACTION INSTRUCTIONS + OUTPUT SCHEMA                              │
+  │   (create / reinforce / deprecate actions)                             │
+  └────────────────────────────────────────────────────────────────────────┘
+
+→ LLM responds with: structured JSON (memory create/reinforce/deprecate actions)
+```
+
+**Data flow through the executor:**
+
+```text
+ScoringExecutor.runScoring()
+│
+├─ investigationContext := buildScoringContext(ctx, session)   ← DB queries happen here
+│
+├─ scoringResult := scoringAgent.Execute(ctx, execCtx, investigationContext)
+│     └─ ScoringController.Run() — turns 1 & 2, returns ScoringResult
+│
+├─ existingMemories := memoryService.FindSimilar(ctx, project, finalAnalysis, limit)
+│     └─ pgvector query filtered by project
+│
+└─ reflectorResult := reflector.Run(ctx, ReflectorInput{
+│     InvestigationContext: investigationContext,   // reused, no extra DB call
+│     ScoringResult:       scoringResult,           // score, analysis, tool report
+│     ExistingMemories:    existingMemories,        // for dedup
+│     AlertType:           session.AlertType,
+│     ChainID:             session.ChainID,
+│  })
+│     └─ Builds fresh messages[0..1], calls LLM, parses JSON response
+│
+└─ memoryService.ApplyReflectorActions(ctx, reflectorResult)
+      └─ Creates / reinforces / deprecates memories in DB
+```
+
+**Reflector system prompt (message 0):**
+
+```text
+You are a memory extraction specialist for TARSy, an automated incident investigation platform.
+
+TARSy uses agent chains — multi-stage pipelines where AI agents investigate incidents by
+calling external tools (MCP tools), analyzing evidence, and producing findings. Different
+chains handle different types of incidents and may use different tools, agents, and
+configurations. Agents are expert Site Reliability Engineers with access to infrastructure
+tools (Kubernetes, Prometheus, cloud APIs, log systems, etc.).
+
+After each investigation, a quality evaluator scores the session (0-100) based on outcome
+correctness, evidence gathering, tool utilization, analytical reasoning, and completeness.
+It also produces failure tags and a tool improvement report.
+
+Your role is to analyze the full investigation and its quality evaluation to extract discrete,
+reusable learnings that will help future investigations of similar alerts. You receive:
+- The original alert and runbook
+- The full investigation timeline (agent reasoning, tool calls with arguments and results,
+  final analysis)
+- The quality score, analysis, failure tags, and tool improvement report
+- Existing memories from past investigations (for deduplication)
+
+## Memory Categories
+
+Each learning falls into one category:
+
+- **semantic** — Facts about infrastructure, services, alert patterns, or environment behavior.
+  Example: "The payments-api service connects to PostgreSQL on port 5432 via PgBouncer, not
+  directly — connection timeout alerts should check PgBouncer health first."
+
+- **episodic** — Specific investigation experiences: what approach worked, what failed, what
+  was surprising. Tied to a concrete event.
+  Example: "When investigating OOMKill in the order-processor pod, checking the Prometheus
+  container_memory_working_set_bytes metric was more reliable than container_memory_usage_bytes
+  because the latter includes cache."
+
+- **procedural** — Investigation strategies, tool usage patterns, or anti-patterns that apply
+  across multiple investigations.
+  Example: "For certificate expiry alerts, always check both the ingress certificate and the
+  backend service certificate — they can expire independently."
+
+## Memory Valence
+
+- **positive** — A pattern that worked well and should be repeated.
+- **negative** — A mistake, dead end, or anti-pattern to avoid in the future.
+- **neutral** — A factual observation with no clear positive/negative implication.
+
+## Quality Guidelines
+
+- Extract only learnings that would **concretely help** a future investigation. Ask: "If an
+  agent saw this memory before investigating a similar alert, would it change what it does?"
+- Ground every learning in **specific evidence** from the investigation — tool call results,
+  agent reasoning, or scoring critique. Do not extract generic SRE knowledge the agent already
+  has.
+- Prefer **specific and actionable** over vague and general. "Check PgBouncer health before
+  blaming the database" is better than "Consider all components in the request path."
+- Negative learnings from mistakes are especially valuable — they prevent repeating errors.
+- If the investigation was routine and existing memories already cover the lessons, return
+  empty arrays. Not every investigation produces new learnings.
+```
+
+**Reflector user prompt (message 1):**
+
+```text
+Below is a completed TARSy investigation and its quality evaluation. Extract discrete
+learnings for future investigations.
+
+## Investigation
+
+<investigation_context>
+{investigationContext — from buildScoringContext(): alert, runbook, tools, full timeline}
+</investigation_context>
+
+## Quality Evaluation
+
+Score: {score}/100
+Failure tags: {failureTags — comma-separated, or "none"}
+
+<score_analysis>
+{scoreAnalysis}
+</score_analysis>
+
+<tool_improvement_report>
+{toolImprovementReport}
+</tool_improvement_report>
+
+## Existing Memories
+
+These memories were previously extracted from past investigations in this project. Use them
+to avoid creating duplicates and to decide what to reinforce or deprecate.
 
 <existing_memories>
-{JSON array of existing memories with id, content, category, valence, confidence, seen_count}
+{JSON array: [{id, content, category, valence, confidence, seen_count}]}
 </existing_memories>
 
-For each learning, decide:
-- CREATE: genuinely new knowledge not covered by existing memories
-- REINFORCE: an existing memory is confirmed — return its ID with updated seen_count
-- DEPRECATE: an existing memory is contradicted or outdated — return its ID
+## Your Task
 
-Alert context:
+For each learning you identify, choose an action:
+- **CREATE**: Genuinely new knowledge not covered by existing memories.
+- **REINFORCE**: An existing memory is confirmed by this investigation — return its ID.
+- **DEPRECATE**: An existing memory is contradicted or proven outdated — return its ID with
+  a reason.
+
+Alert context for scoping:
 - Alert type: {alert_type}
-- Service: {service}
 - Chain: {chain_id}
-- Cluster: {cluster}
 
-Respond with a JSON object:
+Respond with a JSON object (and nothing else):
 {reflector_output_schema}
 ```
 
@@ -245,35 +421,43 @@ Respond with a JSON object:
 
 **Parse strategy:** Lenient parsing with silent fallback. Try strict JSON first, then strip markdown fences and extract JSON by bracket depth. If both fail, log a warning and proceed with "no memories" — extraction never blocks scoring. See [Q3 decision](investigation-memory-design-questions.md#q3-how-should-reflector-parse-failures-be-handled).
 
-### Changes to `ScoringController`
+### Changes to `ScoringExecutor`
+
+Memory extraction runs in the `ScoringExecutor` (not the `ScoringController`) — after the scoring controller returns, the executor triggers the Reflector as a separate LLM call.
 
 ```go
-// After turn 2 (tool improvement report):
+// In ScoringExecutor.runScoring(), after scoringAgent.Execute() returns:
 
-// Fetch existing memories for dedup context
-existingMemories, err := memoryService.RetrieveForReflector(ctx, projectID, alertContext)
+// investigationContext is already available — built earlier for the scoring call
+// scoringResult is the ScoringResult returned by ScoringController.Run()
 
-// Turn 3: Memory extraction
-reflectorPrompt := execCtx.PromptBuilder.BuildScoringMemoryExtractionPrompt(
-    existingMemories, alertMetadata,
-)
-messages = append(messages,
-    agent.ConversationMessage{Role: agent.RoleAssistant, Content: toolReportResp.Text},
-    agent.ConversationMessage{Role: agent.RoleUser, Content: reflectorPrompt},
-)
-reflectorResp, err := c.scoringCallLLM(ctx, execCtx, messages, "memory_extraction")
-
-// Parse and persist
-memoryOps, err := memory.ParseReflectorOutput(reflectorResp.Text)
+// 1. Fetch existing memories for dedup context
+existingMemories, err := memoryService.FindSimilar(ctx, projectID, finalAnalysis, reflectorMemoryLimit)
 if err != nil {
-    // Log warning, don't fail scoring — memory extraction is best-effort
-    logger.Warn("failed to parse memory extraction", "error", err)
+    logger.Warn("failed to fetch existing memories for reflector", "error", err)
+    existingMemories = nil // proceed without dedup context
+}
+
+// 2. Run Reflector as a separate LLM conversation
+reflectorResult, err := reflector.Run(ctx, reflector.Input{
+    InvestigationContext: investigationContext,  // reused from buildScoringContext()
+    ScoringResult:       scoringResult,          // score, analysis, tool report, failure tags
+    ExistingMemories:    existingMemories,
+    AlertType:           session.Edges.Alert.AlertType,
+    ChainID:             session.ChainID,
+    LLMClient:           e.llmClient,
+    Config:              resolvedConfig,
+})
+if err != nil {
+    logger.Warn("reflector failed", "error", err)
 } else {
-    memoryService.ApplyReflectorOps(ctx, projectID, sessionID, alertMetadata, memoryOps)
+    memoryService.ApplyReflectorActions(ctx, projectID, sessionID, reflectorResult)
 }
 ```
 
-The `ScoringResult` struct gains a `MemoryExtractionRaw` field to store the raw Reflector output for debugging/audit.
+The `reflector.Run()` function builds a fresh 2-message conversation (system + user), calls the LLM, and parses the JSON response. It is completely independent of the scoring LLM conversation.
+
+**Progress status:** The Reflector call emits a **"Memorizing..."** progress status visible in the UI/streaming output, distinguishing it from the scoring turns. Code-level names (`ScoringController`, `defaults.scoring`, etc.) remain unchanged — memory extraction is a natural extension of the scoring stage, not a separate stage.
 
 ### Memory Retrieval (Auto-Injection)
 
@@ -448,8 +632,8 @@ Ent auto-generates the join table. Both directions are natural queries: `session
 3. `pkg/memory/` package: `MemoryService` with Create, Retrieve, Update
 4. `Embedder` interface + Google/OpenAI provider implementations (direct HTTP)
 5. Startup validation: verify configured dimensions match pgvector column size
-6. Reflector prompt + lenient JSON parser in `pkg/memory/reflector.go` and `pkg/memory/parser.go`
-7. Third turn in `ScoringController`
+6. Reflector prompt builder + lenient JSON parser in `pkg/memory/reflector.go` and `pkg/memory/parser.go`
+7. Reflector LLM call in `ScoringExecutor` (after scoring controller returns) with "Memorizing..." progress status
 8. `ScoringResult` extended with memory extraction output
 
 **Result:** Memories are extracted and stored after every scored investigation.

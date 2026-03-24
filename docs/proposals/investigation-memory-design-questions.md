@@ -193,7 +193,7 @@ Migration creates the index with `m = 16, ef_construction = 64` using `vector_co
 
 ## Q3: How should Reflector parse failures be handled?
 
-The Reflector's third turn asks the LLM to output structured JSON. LLMs sometimes produce malformed JSON, extra text around the JSON, or completely ignore the schema.
+The Reflector's LLM call asks the model to output structured JSON. LLMs sometimes produce malformed JSON, extra text around the JSON, or completely ignore the schema.
 
 ### Decision: Lenient parsing + silent fallback (C + A)
 

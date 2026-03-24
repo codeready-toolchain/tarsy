@@ -126,26 +126,25 @@ Memory scoping has two distinct layers:
 
 Memories are stored with investigation metadata for context, but retrieval within a project is **semantic-first** — driven by pgvector cosine similarity, not rigid scope filtering (see [Q6 decision](investigation-memory-questions.md)).
 
-Stored investigation dimensions (metadata, soft signal only):
+Stored investigation dimensions (metadata, soft signal only — TARSy-native fields):
 
 - **Alert type** — from `AlertSession.alert_type` (e.g., "Kubernetes - Multiple agents")
 - **Chain ID** — from `AlertSession.chain_id` (which investigation pipeline was used)
-- **Service / component** — extracted from alert data (the specific service under investigation)
-- **Cluster / environment** — extracted from alert data or MCP server context
 
-At retrieval time, the query is: `WHERE project = $current_project ORDER BY cosine_similarity + soft_boosts DESC LIMIT N`. Within the project boundary, the most semantically similar memories are returned regardless of investigation scope. Scope metadata provides a minor soft boost (same-service memories rank slightly higher) but never hard-filters. This lets cross-cutting knowledge ("Prometheus metrics lag 5 min on Mondays") surface for any alert where it's relevant, not just the service it was learned from.
+Infrastructure-specific context (service names, clusters, regions, components) lives in the memory *content* itself and is matched via semantic search. This keeps the schema infrastructure-agnostic — TARSy doesn't assume Kubernetes, AWS, or any specific platform.
+
+At retrieval time, the query is: `WHERE project = $current_project ORDER BY cosine_similarity + soft_boosts DESC LIMIT N`. Within the project boundary, the most semantically similar memories are returned regardless of investigation scope. Scope metadata provides a minor soft boost (same alert_type memories rank slightly higher) but never hard-filters. This lets cross-cutting knowledge ("Prometheus metrics lag 5 min on Mondays") surface for any alert where it's relevant, not just the context it was learned from.
 
 The design philosophy: **memory is a light touch** — complementary hints for specific and repeating situations, not a playbook that constrains the LLM's natural investigative ability. Noise is controlled by the auto-inject cap (3-5 memories, Q3), not by complex filtering logic.
 
 ### The Reflector: extracting memories from completed investigations
 
-Inspired by ACE's Reflector/Curator loop. After the scoring turns complete, the Reflector (third turn in the same scoring call, per Q5) analyzes the investigation and extracts discrete memory entries.
+Inspired by ACE's Reflector/Curator loop. After the scoring controller completes, the `ScoringExecutor` runs the Reflector as a **separate LLM conversation** (not a continuation of the scoring conversation — the Reflector needs its own system prompt and role).
 
-The Reflector has access to:
-- The full investigation timeline (already loaded by the scoring stage)
-- The scoring analysis and failure tags (from the preceding scoring turns)
-- The tool improvement report
-- Alert metadata (type, service, environment)
+The Reflector receives as explicit context in its user prompt:
+- The full investigation context (reused from `buildScoringContext()` — no redundant DB queries)
+- The scoring results: score, analysis, failure tags, tool improvement report
+- Alert metadata (type, chain)
 - Existing relevant memories found by pgvector similarity (for dedup, see [Q7 decision](investigation-memory-questions.md))
 
 The Reflector produces structured memory entries, each with:
@@ -153,7 +152,7 @@ The Reflector produces structured memory entries, each with:
 - **Category** — semantic / episodic / procedural
 - **Valence** — positive (repeat this) / negative (avoid this) / neutral (informational)
 - **Project** — inherited from the source session (security boundary, not LLM-assigned)
-- **Scope** — alert type, chain, service, environment (investigation metadata)
+- **Scope** — alert type, chain (TARSy-native metadata; infra-specific context is in the content)
 - **Confidence** — derived from investigation score and evidence quality
 - **Source** — session ID and stage that produced this memory
 
