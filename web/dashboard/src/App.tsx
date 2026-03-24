@@ -1,9 +1,7 @@
-import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { buildTheme } from './theme/index.ts';
-import { ColorModeProvider, useColorMode } from './contexts/ColorModeContext.tsx';
+import { theme } from './theme/index.ts';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 import { VersionProvider } from './contexts/VersionContext.tsx';
 import { SystemWarningBanner } from './components/layout/SystemWarningBanner.tsx';
@@ -47,13 +45,10 @@ const router = createBrowserRouter([
   },
 ]);
 
-function ThemedApp() {
-  const { mode } = useColorMode();
-  const theme = useMemo(() => buildTheme(mode), [mode]);
-
+export function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeProvider theme={theme} defaultMode="light">
+      <CssBaseline enableColorScheme />
       <VersionProvider>
         <AuthProvider>
           <VersionUpdateBanner />
@@ -62,13 +57,5 @@ function ThemedApp() {
         </AuthProvider>
       </VersionProvider>
     </ThemeProvider>
-  );
-}
-
-export function App() {
-  return (
-    <ColorModeProvider>
-      <ThemedApp />
-    </ColorModeProvider>
   );
 }

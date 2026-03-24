@@ -4,8 +4,8 @@
  */
 
 import type { HTMLAttributes, ReactNode } from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { Box, Typography } from '@mui/material';
+import { alpha, useColorScheme } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -45,8 +45,8 @@ export const hasMarkdownSyntax = (text: string): boolean => {
  * Used by FinalAnalysisCard and AlertListItem for consistent lightweight rendering
  */
 export const executiveSummaryMarkdownStyles = (theme: Theme) => {
-  const isDark = theme.palette.mode === 'dark';
-  const overlay = isDark ? theme.palette.grey[100] : theme.palette.grey[900];
+  const lightOverlay = theme.palette.grey[900];
+  const darkOverlay = theme.palette.grey[100];
 
   return {
     '& p': {
@@ -66,20 +66,25 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => {
     '& code': {
       fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
       fontSize: '0.875em',
-      backgroundColor: alpha(overlay, isDark ? 0.12 : 0.08),
-      color: isDark ? theme.palette.warning.light : theme.palette.error.main,
+      backgroundColor: alpha(lightOverlay, 0.08),
+      color: theme.palette.error.main,
       padding: '1px 6px',
       borderRadius: '4px',
       border: '1px solid',
-      borderColor: alpha(overlay, isDark ? 0.2 : 0.12),
+      borderColor: alpha(lightOverlay, 0.12),
       whiteSpace: 'nowrap',
       verticalAlign: 'baseline',
+      ...theme.applyStyles('dark', {
+        backgroundColor: alpha(darkOverlay, 0.12),
+        color: theme.palette.warning.light,
+        borderColor: alpha(darkOverlay, 0.2),
+      }),
     },
     '& pre': {
       display: 'block',
       fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
       fontSize: '0.875em',
-      backgroundColor: alpha(overlay, isDark ? 0.1 : 0.06),
+      backgroundColor: alpha(lightOverlay, 0.06),
       padding: 1.5,
       borderRadius: 1,
       overflowX: 'auto',
@@ -91,6 +96,9 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => {
         color: 'inherit',
         whiteSpace: 'pre',
       },
+      ...theme.applyStyles('dark', {
+        backgroundColor: alpha(darkOverlay, 0.1),
+      }),
     },
     '& ul, & ol': {
       paddingLeft: 2.5,
@@ -115,8 +123,11 @@ export const executiveSummaryMarkdownStyles = (theme: Theme) => {
       padding: '8px 12px',
       borderBottom: '2px solid',
       borderColor: alpha(theme.palette.divider, 0.8),
-      backgroundColor: alpha(overlay, isDark ? 0.08 : 0.04),
+      backgroundColor: alpha(lightOverlay, 0.04),
       whiteSpace: 'nowrap',
+      ...theme.applyStyles('dark', {
+        backgroundColor: alpha(darkOverlay, 0.08),
+      }),
     },
     '& td': {
       padding: '6px 12px',
@@ -328,9 +339,7 @@ export const finalAnswerMarkdownComponents = {
           my: 1,
           '& > code': {
             display: 'block',
-            backgroundColor: theme.palette.mode === 'dark'
-              ? 'rgba(255, 255, 255, 0.06)'
-              : 'rgba(0, 0, 0, 0.06)',
+            backgroundColor: 'rgba(0, 0, 0, 0.06)',
             padding: '12px',
             borderRadius: '4px',
             overflowX: 'auto',
@@ -340,6 +349,9 @@ export const finalAnswerMarkdownComponents = {
             wordBreak: 'break-word',
             color: 'inherit',
             border: 'none',
+            ...theme.applyStyles('dark', {
+              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            }),
           },
         })}
         {...safeProps}
@@ -350,11 +362,11 @@ export const finalAnswerMarkdownComponents = {
   },
   // Code element: handles both inline code and fenced code with language.
   // When inside a <pre> wrapper (block code without language), the parent's
-  // `& > code` selector applies block styling. Uses useTheme() to switch
+  // `& > code` selector applies block styling. Uses useColorScheme() to switch
   // syntax highlighter theme between light and dark modes.
   code: (props: MdProps) => {
-    const theme = useTheme();
-    const isDark = theme.palette.mode === 'dark';
+    const { mode } = useColorScheme();
+    const isDark = mode === 'dark';
     const { node: _node, inline: _inline, className, children, ...safeProps } = props;
 
     // Fenced code block with language — render with syntax highlighting

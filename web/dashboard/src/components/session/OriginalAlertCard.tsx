@@ -220,13 +220,14 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
               left: 0,
               right: 0,
               height: 60,
-              background: theme.palette.mode === 'dark'
-                ? `linear-gradient(transparent, ${theme.palette.background.paper})`
-                : 'linear-gradient(transparent, rgba(255,255,255,0.95))',
+              background: 'linear-gradient(transparent, rgba(255,255,255,0.95))',
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'center',
               pb: 0.5,
+              ...theme.applyStyles('dark', {
+                background: `linear-gradient(transparent, ${theme.palette.background.paper})`,
+              }),
             })}
           >
             <Button

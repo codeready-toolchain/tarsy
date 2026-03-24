@@ -19,14 +19,8 @@ export default function InitializingSpinner({
   color = 'primary',
 }: InitializingSpinnerProps) {
   const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const colorValue = theme.palette[color].main;
   const ring = alpha(colorValue, 0.15);
-  const gradient = color === 'warning'
-    ? `linear-gradient(90deg, ${alpha(colorValue, 0.5)} 0%, ${alpha(colorValue, 0.7)} 40%, ${alpha(colorValue, 0.9)} 50%, ${alpha(colorValue, 0.7)} 60%, ${alpha(colorValue, 0.5)} 100%)`
-    : isDark
-      ? `linear-gradient(90deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.7) 40%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.7) 60%, rgba(255,255,255,0.5) 100%)`
-      : `linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)`;
 
   return (
     <Box
@@ -38,7 +32,6 @@ export default function InitializingSpinner({
         gap: 3,
       }}
     >
-      {/* Pulsing ring spinner */}
       <Box
         sx={{
           position: 'relative',
@@ -67,23 +60,30 @@ export default function InitializingSpinner({
         />
       </Box>
 
-      {/* Shimmer text */}
       <Typography
         variant="body1"
-        sx={{
-          fontSize: '1.1rem',
-          fontWeight: 500,
-          fontStyle: 'italic',
-          background: gradient,
-          backgroundSize: '200% 100%',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          animation: 'init-shimmer 3s linear infinite',
-          '@keyframes init-shimmer': {
-            '0%': { backgroundPosition: '200% center' },
-            '100%': { backgroundPosition: '-200% center' },
-          },
+        sx={(thm) => {
+          const warningGradient = `linear-gradient(90deg, ${alpha(colorValue, 0.5)} 0%, ${alpha(colorValue, 0.7)} 40%, ${alpha(colorValue, 0.9)} 50%, ${alpha(colorValue, 0.7)} 60%, ${alpha(colorValue, 0.5)} 100%)`;
+          return {
+            fontSize: '1.1rem',
+            fontWeight: 500,
+            fontStyle: 'italic',
+            background: color === 'warning'
+              ? warningGradient
+              : 'linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 40%, rgba(0,0,0,0.9) 50%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.5) 100%)',
+            backgroundSize: '200% 100%',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            animation: 'init-shimmer 3s linear infinite',
+            '@keyframes init-shimmer': {
+              '0%': { backgroundPosition: '200% center' },
+              '100%': { backgroundPosition: '-200% center' },
+            },
+            ...(color !== 'warning' && thm.applyStyles('dark', {
+              background: 'linear-gradient(90deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.7) 40%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.7) 60%, rgba(255,255,255,0.5) 100%)',
+            })),
+          };
         }}
       >
         {message}

@@ -1,4 +1,5 @@
-import { Box, Typography, useTheme } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import { useColorScheme } from '@mui/material/styles';
 
 interface ProcessingIndicatorProps {
   message?: string;
@@ -14,8 +15,9 @@ export default function ProcessingIndicator({
   message = 'Processing...',
   centered = false,
 }: ProcessingIndicatorProps) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
+  const { mode } = useColorScheme();
+  const isDark = mode === 'dark';
+
   return (
     <Box
       sx={{

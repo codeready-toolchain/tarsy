@@ -119,7 +119,7 @@ export default function ChatInput({
                   '&:hover': {
                     backgroundColor: 'error.main',
                     borderColor: 'error.main',
-                    color: 'common.white',
+                    color: 'error.contrastText',
                     transform: 'scale(1.05)',
                   },
                   '&:disabled': {

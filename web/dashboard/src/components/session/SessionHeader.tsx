@@ -388,7 +388,7 @@ export default function SessionHeader({
                       '&:hover': {
                         backgroundColor: 'error.main',
                         borderColor: 'error.main',
-                        color: 'common.white',
+                        color: 'error.contrastText',
                         borderWidth: 1.5,
                       },
                     }}
@@ -422,7 +422,7 @@ export default function SessionHeader({
                       '&:hover': {
                         backgroundColor: 'info.main',
                         borderColor: 'info.main',
-                        color: 'common.white',
+                        color: 'info.contrastText',
                       },
                     }}
                   >

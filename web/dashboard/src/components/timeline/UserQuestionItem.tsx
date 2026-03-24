@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
-import { Box, Typography } from '@mui/material';
-import { Person, Assignment } from '@mui/icons-material';
+import { Box, Typography, alpha } from '@mui/material';
+import { AccountCircle, Assignment } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
@@ -16,7 +16,7 @@ const MAX_TASK_HEIGHT = 200;
 function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
   const author = (item.metadata?.author as string) || 'User';
   const isTask = author === 'Task';
-  const Icon = isTask ? Assignment : Person;
+  const Icon = isTask ? Assignment : AccountCircle;
   const accentColor = isTask ? 'secondary.main' : 'primary.main';
   const rehypePlugins = useMemo(
     () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
@@ -26,14 +26,17 @@ function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
   return (
     <Box data-flow-item-id={item.id} sx={{ mb: 1.5, position: 'relative' }}>
       <Box
-        sx={{
+        sx={(theme) => ({
           position: 'absolute', left: 0, top: 8,
           width: 28, height: 28, borderRadius: '50%',
-          bgcolor: accentColor, display: 'flex',
+          bgcolor: alpha(theme.palette[isTask ? 'secondary' : 'primary'].main, 0.15),
+          border: '2px solid',
+          borderColor: accentColor,
+          display: 'flex',
           alignItems: 'center', justifyContent: 'center', zIndex: 1,
-        }}
+        })}
       >
-        <Icon sx={{ fontSize: 18, color: 'common.white' }} />
+        <Icon sx={{ fontSize: 18, color: accentColor }} />
       </Box>
 
       <Box

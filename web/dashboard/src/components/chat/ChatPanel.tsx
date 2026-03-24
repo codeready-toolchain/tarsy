@@ -19,7 +19,7 @@ import {
   Alert,
   alpha,
 } from '@mui/material';
-import { Person, ExpandMore } from '@mui/icons-material';
+import { AccountCircle, ExpandMore } from '@mui/icons-material';
 import ChatInput from './ChatInput.tsx';
 
 interface ChatPanelProps {
@@ -136,19 +136,21 @@ export default function ChatPanel({
       >
         {/* Chat Icon */}
         <Box
-          sx={{
+          sx={(theme) => ({
             width: 40,
             height: 40,
             borderRadius: '50%',
-            bgcolor: 'primary.main',
+            bgcolor: alpha(theme.palette.primary.main, 0.15),
+            border: '2px solid',
+            borderColor: 'primary.main',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             mr: 2,
             flexShrink: 0,
-          }}
+          })}
         >
-          <Person sx={{ fontSize: 24, color: 'common.white' }} />
+          <AccountCircle sx={{ fontSize: 24, color: 'primary.main' }} />
         </Box>
 
         {/* Text Content */}

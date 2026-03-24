@@ -393,7 +393,7 @@ export function MCPSelection({
               height: 36,
               borderRadius: '8px',
               bgcolor: 'primary.main',
-              color: 'common.white',
+              color: 'primary.contrastText',
             }}
           >
             <SettingsIcon sx={{ fontSize: 20 }} />

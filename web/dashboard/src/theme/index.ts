@@ -1,96 +1,81 @@
 import { createTheme } from '@mui/material/styles';
-import type { PaletteMode } from '@mui/material';
 
 /**
- * Build a MUI theme for the given palette mode.
+ * Single static MUI v7 theme with CSS variables and dual color schemes.
+ *
+ * Mode switches update CSS custom properties on <html data-theme="dark|light">,
+ * not the React tree. Use `useColorScheme()` to read/set mode, and
+ * `theme.applyStyles('dark', {...})` for mode-specific CSS in sx/styled.
  */
-export function buildTheme(mode: PaletteMode) {
-  const isDark = mode === 'dark';
-
-  return createTheme({
-    palette: {
-      mode,
-      primary: {
-        main: '#1976d2',
-      },
-      secondary: {
-        main: isDark ? '#90a4ae' : '#424242',
-      },
-      success: {
-        main: '#2e7d32',
-      },
-      error: {
-        main: '#d32f2f',
-      },
-      warning: {
-        main: '#ed6c02',
-      },
-      info: {
-        main: '#0288d1',
-      },
-      background: {
-        default: isDark ? '#121212' : '#fafafa',
-        paper: isDark ? '#1e1e1e' : '#ffffff',
+export const theme = createTheme({
+  cssVariables: {
+    colorSchemeSelector: 'data-theme',
+  },
+  colorSchemes: {
+    light: {
+      palette: {
+        primary: { main: '#1976d2' },
+        secondary: { main: '#424242' },
+        success: { main: '#2e7d32' },
+        error: { main: '#d32f2f' },
+        warning: { main: '#ed6c02' },
+        info: { main: '#0288d1' },
+        background: { default: '#fafafa', paper: '#ffffff' },
       },
     },
-    typography: {
-      fontFamily: 'Roboto, Arial, sans-serif',
-      h6: {
-        fontWeight: 600,
-      },
-      h5: {
-        fontWeight: 500,
+    dark: {
+      palette: {
+        primary: { main: '#90caf9' },
+        secondary: { main: '#90a4ae' },
+        success: { main: '#a5d6a7' },
+        error: { main: '#ef9a9a' },
+        warning: { main: '#ffcc80' },
+        info: { main: '#81d4fa' },
+        background: { default: '#121212', paper: '#1e1e1e' },
       },
     },
-    components: {
-      MuiCssBaseline: {
-        styleOverrides: {
-          html: {
-            scrollbarGutter: 'stable',
-            colorScheme: mode,
-          },
-          body: isDark
-            ? {
-                scrollbarColor: '#555 #1e1e1e',
-              }
-            : undefined,
+  },
+  typography: {
+    fontFamily: 'Roboto, Arial, sans-serif',
+    h6: { fontWeight: 600 },
+    h5: { fontWeight: 500 },
+  },
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: (theme) => ({
+        html: {
+          scrollbarGutter: 'stable',
         },
-      },
-      MuiChip: {
-        styleOverrides: {
-          root: {
-            fontWeight: 500,
-          },
+        body: {
+          ...theme.applyStyles('dark', {
+            scrollbarColor: '#555 #1e1e1e',
+          }),
         },
+      }),
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: { fontWeight: 500 },
       },
-      MuiTableCell: {
-        styleOverrides: {
-          head: {
-            fontWeight: 600,
-            backgroundColor: isDark ? '#2c2c2c' : '#f5f5f5',
-          },
-        },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: ({ theme }) => ({
+          fontWeight: 600,
+          backgroundColor: '#f5f5f5',
+          ...theme.applyStyles('dark', {
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+          }),
+        }),
       },
-      MuiPaper: {
-        styleOverrides: {
-          root: {
-            boxShadow: isDark
-              ? '0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5)'
-              : '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-          },
-        },
-      },
-      MuiContainer: {
-        styleOverrides: {
-          root: {
-            paddingTop: '16px',
-            paddingBottom: '16px',
-          },
+    },
+    MuiContainer: {
+      styleOverrides: {
+        root: {
+          paddingTop: '16px',
+          paddingBottom: '16px',
         },
       },
     },
-  });
-}
-
-/** Default light theme (for backwards compatibility / static imports). */
-export const theme = buildTheme('light');
+  },
+});

@@ -452,12 +452,16 @@ export default function ConversationTimeline({
       {/* Blue "AI Reasoning Flow" bar */}
       <Box
         sx={(theme) => ({
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(25, 118, 210, 0.12)' : '#e3f2fd',
+          bgcolor: '#e3f2fd',
           py: 1.5,
           px: 3,
           mt: 1,
           borderTop: `2px solid ${theme.palette.primary.main}`,
-          borderBottom: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(25, 118, 210, 0.25)' : '#bbdefb'}`,
+          borderBottom: '1px solid #bbdefb',
+          ...theme.applyStyles('dark', {
+            bgcolor: 'rgba(25, 118, 210, 0.12)',
+            borderBottom: '1px solid rgba(25, 118, 210, 0.25)',
+          }),
         })}
       >
         <Typography

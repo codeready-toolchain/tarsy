@@ -115,7 +115,7 @@ export default function StageAccordion({
               width: 32,
               height: 32,
               bgcolor: statusColor === 'default' ? 'action.disabled' : `${statusColor}.main`,
-              color: 'common.white',
+              color: statusColor === 'default' ? 'common.white' : `${statusColor}.contrastText`,
             }}
           >
             {getStageStatusIcon(status)}

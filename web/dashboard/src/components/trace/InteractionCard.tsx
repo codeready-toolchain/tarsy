@@ -105,7 +105,7 @@ export default function InteractionCard({ interaction, sessionId }: InteractionC
           <Avatar
             sx={{
               bgcolor: `${colorKey}.main`,
-              color: 'common.white',
+              color: `${colorKey}.contrastText`,
               width: 40,
               height: 40,
             }}

@@ -10,7 +10,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import { useAuth } from '../../contexts/AuthContext.tsx';
-import { useColorMode } from '../../contexts/ColorModeContext.tsx';
+import { useColorScheme } from '@mui/material/styles';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
 import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx } from '../../theme/headerStyles';
@@ -32,7 +32,8 @@ export function SharedHeader({
 }: SharedHeaderProps) {
   const navigate = useNavigate();
   const { isAuthenticated, authAvailable } = useAuth();
-  const { mode, toggleColorMode } = useColorMode();
+  const { mode, setMode } = useColorScheme();
+  const toggleColorMode = () => setMode(mode === 'dark' ? 'light' : 'dark');
 
   const handleBackClick = () => {
     // Smart back navigation:

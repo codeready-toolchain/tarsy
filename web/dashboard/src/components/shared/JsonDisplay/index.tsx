@@ -56,11 +56,13 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
 
   const parsedContent = parseContent(data);
 
-  const isDark = theme.palette.mode === 'dark';
-
   const scrollbarSx = {
     '&::-webkit-scrollbar': { width: '8px' },
-    '&::-webkit-scrollbar-track': { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.palette.grey[100], borderRadius: '4px' },
+    '&::-webkit-scrollbar-track': {
+      backgroundColor: theme.palette.grey[100],
+      borderRadius: '4px',
+      ...theme.applyStyles('dark', { backgroundColor: 'rgba(255,255,255,0.05)' }),
+    },
     '&::-webkit-scrollbar-thumb': {
       backgroundColor: theme.palette.grey[400],
       borderRadius: '4px',
@@ -69,15 +71,16 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
   };
 
   const renderCopyButton = (text: string, label: string) => (
-    <Box sx={{ 
+    <Box sx={{
       position: 'absolute', top: 8, right: 8, zIndex: 1,
-      backgroundColor: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-      borderRadius: 1, backdropFilter: 'blur(4px)'
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderRadius: 1, backdropFilter: 'blur(4px)',
+      ...theme.applyStyles('dark', { backgroundColor: 'rgba(30, 30, 30, 0.9)' }),
     }}>
       <IconButton
         size="small"
         onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(text).catch(() => {}); }}
-        sx={{ p: 0.5, '&:hover': { backgroundColor: theme.palette.primary.main, color: 'common.white' } }}
+        sx={{ p: 0.5, '&:hover': { backgroundColor: theme.palette.primary.main, color: theme.palette.primary.contrastText } }}
         title={`Copy ${label}`}
       >
         <ContentCopyIcon fontSize="small" />
@@ -331,7 +334,7 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
   );
 
   return (
-    <Box data-theme={isDark ? 'dark' : 'light'} sx={{ maxWidth: '100%', overflow: 'hidden', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+    <Box sx={{ maxWidth: '100%', overflow: 'hidden', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
       {showDebugInfo && (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 2 }}>
           <Typography variant="caption" color="text.secondary">

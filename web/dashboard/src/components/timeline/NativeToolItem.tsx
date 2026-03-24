@@ -1,5 +1,6 @@
 import { useState, useMemo, memo } from 'react';
 import { Box, Typography, Collapse, IconButton, Chip, alpha, useTheme } from '@mui/material';
+import { useColorScheme } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Code, Search, Link as LinkIcon } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -65,6 +66,8 @@ const OUTPUT_FONT = 'Consolas, Monaco, "Courier New", monospace';
 function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
   const [expanded, setExpanded] = useState(false);
   const theme = useTheme();
+  const { mode } = useColorScheme();
+  const isDark = mode === 'dark';
   const boxColor = theme.palette.info.main;
 
   const previewSummary = useMemo(() => getPreviewSummary(item), [item]);
@@ -141,7 +144,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                       >
                         <SyntaxHighlighter
                           language={lang}
-                          style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
+                          style={isDark ? vscDarkPlus : vs}
                           customStyle={{
                             margin: 0,
                             padding: '12px',
@@ -256,7 +259,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
                 >
                   <SyntaxHighlighter
                     language={parsed.language || 'python'}
-                    style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
+                    style={isDark ? vscDarkPlus : vs}
                     customStyle={{
                       margin: 0,
                       padding: '12px',
@@ -339,7 +342,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           >
             <SyntaxHighlighter
               language="python"
-              style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
+              style={isDark ? vscDarkPlus : vs}
               customStyle={{
                 margin: 0,
                 padding: '12px',

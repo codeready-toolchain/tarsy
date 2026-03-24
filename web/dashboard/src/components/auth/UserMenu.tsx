@@ -95,7 +95,7 @@ export function UserMenu() {
         {/* User Info Header */}
         <Box sx={{ px: 2, py: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+            <Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', width: 32, height: 32 }}>
               <PersonIcon />
             </Avatar>
             <Box>

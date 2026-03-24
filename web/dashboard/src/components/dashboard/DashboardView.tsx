@@ -46,7 +46,7 @@ import { TriageView } from './TriageView.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
-import { useColorMode } from '../../contexts/ColorModeContext.tsx';
+import { useColorScheme } from '@mui/material/styles';
 import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx, glassToggleGroupSx } from '../../theme/headerStyles';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
@@ -140,7 +140,8 @@ function buildQueryParams(
 
 export function DashboardView() {
   const { isAuthenticated, authAvailable, user } = useAuth();
-  const { mode, toggleColorMode } = useColorMode();
+  const { mode, setMode } = useColorScheme();
+  const toggleColorMode = () => setMode(mode === 'dark' ? 'light' : 'dark');
 
   // ── Navigation menu state ──
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
