@@ -31,7 +31,7 @@ import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
 import InitializingSpinner from '../common/InitializingSpinner';
-import { TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus';
+import { TERMINAL_EXECUTION_STATUSES, SCORING_STATUS_MESSAGE } from '../../constants/sessionStatus';
 
 /**
  * Synthesis stages auto-collapse only when the session is no longer active
@@ -55,6 +55,8 @@ interface ConversationTimelineProps {
   isActive: boolean;
   /** Processing status message for the indicator */
   progressStatus?: string;
+  /** Live scoring status from session.score_updated WS events (e.g. "memorizing") */
+  scoringStatus?: string | null;
   /** Active streaming events keyed by event_id */
   streamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Per-agent progress statuses */
@@ -95,6 +97,7 @@ export default function ConversationTimeline({
   stages,
   isActive,
   progressStatus,
+  scoringStatus,
   streamingEvents,
   agentProgressStatuses,
   executionStatuses,
@@ -282,7 +285,7 @@ export default function ConversationTimeline({
     let status = progressStatus || 'Processing...';
 
     if (scoringInProgress) {
-      status = 'Evaluating quality…';
+      status = (scoringStatus && SCORING_STATUS_MESSAGE[scoringStatus]) || SCORING_STATUS_MESSAGE.in_progress;
     } else if (chatStageInProgress && !isActive) {
       status = 'Processing...';
     }
@@ -333,7 +336,7 @@ export default function ConversationTimeline({
     }
 
     return status;
-  }, [progressStatus, scoringInProgress, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
+  }, [progressStatus, scoringStatus, scoringInProgress, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
 
   if (items.length === 0 && (!streamingEvents || streamingEvents.size === 0)) {
     // Session is active but no timeline items have arrived yet — show the

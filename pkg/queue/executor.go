@@ -633,6 +633,7 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentIndex:     agentIndex + 1, // 1-based
 		AlertData:      input.session.AlertData,
 		AlertType:      input.session.AlertType,
+		StageType:      string(stg.StageType),
 		RunbookContent: input.runbookContent,
 		Config:         resolvedConfig,
 		LLMClient:      e.llmClient,

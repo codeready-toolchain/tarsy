@@ -66,8 +66,16 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 	return memories, rows.Err()
 }
 
+// candidateMultiplier controls how many extra rows the inner index scan
+// fetches before the boost re-ranking narrows to the final limit.
+const candidateMultiplier = 3
+
 // FindSimilarWithBoosts returns the top-N memories using cosine similarity
 // with soft boosts for alert_type and chain_id scope metadata.
+//
+// The query uses a two-step approach so pgvector's HNSW index is utilised:
+//  1. Inner CTE fetches a larger candidate set ordered by raw cosine distance.
+//  2. Outer query re-ranks candidates with scope boosts and returns the final limit.
 func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText string, alertType, chainID *string, limit int) ([]Memory, error) {
 	queryVec, err := s.embedder.Embed(ctx, queryText, EmbeddingTaskQuery)
 	if err != nil {
@@ -75,20 +83,29 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	}
 
 	vecStr := formatVector(queryVec)
+	candidates := max(limit*candidateMultiplier, 20)
 
 	rows, err := s.db.QueryContext(ctx, `
+		WITH candidates AS (
+			SELECT memory_id, content, category, valence, confidence, seen_count,
+			       alert_type, chain_id,
+			       (embedding <=> $2::vector) AS distance
+			FROM investigation_memories
+			WHERE project = $1
+			  AND deprecated = false
+			  AND embedding IS NOT NULL
+			ORDER BY embedding <=> $2::vector
+			LIMIT $3
+		)
 		SELECT memory_id, content, category, valence, confidence, seen_count
-		FROM investigation_memories
-		WHERE project = $1
-		  AND deprecated = false
-		  AND embedding IS NOT NULL
+		FROM candidates
 		ORDER BY
-		  (1 - (embedding <=> $2::vector))
-		  + CASE WHEN alert_type = $3 THEN 0.05 ELSE 0 END
-		  + CASE WHEN chain_id  = $4 THEN 0.03 ELSE 0 END
+		  (1 - distance)
+		  + CASE WHEN alert_type = $4 THEN 0.05 ELSE 0 END
+		  + CASE WHEN chain_id  = $5 THEN 0.03 ELSE 0 END
 		  DESC
-		LIMIT $5
-	`, project, vecStr, alertType, chainID, limit)
+		LIMIT $6
+	`, project, vecStr, candidates, alertType, chainID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("similarity search with boosts: %w", err)
 	}

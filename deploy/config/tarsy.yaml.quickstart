@@ -22,3 +22,7 @@ defaults:
   llm_provider: "google-default"
   max_iterations: 20
   llm_backend: "langchain"
+  scoring:
+    enabled: true
+  memory:
+    enabled: false

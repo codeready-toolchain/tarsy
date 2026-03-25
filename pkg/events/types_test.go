@@ -60,6 +60,7 @@ func TestEventTypeConstants(t *testing.T) {
 func TestProgressPhaseConstants(t *testing.T) {
 	phases := []string{
 		ProgressPhaseInvestigating,
+		ProgressPhaseRemediating,
 		ProgressPhaseGatheringInfo,
 		ProgressPhaseDistilling,
 		ProgressPhaseConcluding,

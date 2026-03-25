@@ -132,6 +132,14 @@ export interface ReviewStatusPayload {
   timestamp: string;
 }
 
+/** session.score_updated payload (scoring status transitions). */
+export interface SessionScoreUpdatedPayload {
+  type: 'session.score_updated';
+  session_id: string;
+  scoring_status: string;
+  timestamp: string;
+}
+
 /** Union of all possible WebSocket event payloads. */
 export type WebSocketEvent =
   | TimelineCreatedPayload
@@ -144,4 +152,5 @@ export type WebSocketEvent =
   | SessionProgressPayload
   | ExecutionProgressPayload
   | ExecutionStatusPayload
-  | ReviewStatusPayload;
+  | ReviewStatusPayload
+  | SessionScoreUpdatedPayload;

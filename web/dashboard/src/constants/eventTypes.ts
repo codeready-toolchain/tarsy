@@ -32,6 +32,7 @@ export const STAGE_STATUS_CANCELLED = 'cancelled' as const;
 
 // Progress phase values
 export const PROGRESS_PHASE_INVESTIGATING = 'investigating' as const;
+export const PROGRESS_PHASE_REMEDIATING = 'remediating' as const;
 export const PROGRESS_PHASE_GATHERING_INFO = 'gathering_info' as const;
 export const PROGRESS_PHASE_DISTILLING = 'distilling' as const;
 export const PROGRESS_PHASE_CONCLUDING = 'concluding' as const;
@@ -44,6 +45,7 @@ export const PROGRESS_PHASE_FINALIZING = 'finalizing' as const;
  */
 export const PHASE_STATUS_MESSAGE: Record<string, string> = {
   [PROGRESS_PHASE_INVESTIGATING]: 'Investigating...',
+  [PROGRESS_PHASE_REMEDIATING]: 'Remediating...',
   [PROGRESS_PHASE_GATHERING_INFO]: 'Gathering...',
   [PROGRESS_PHASE_DISTILLING]: 'Distilling...',
   [PROGRESS_PHASE_CONCLUDING]: 'Concluding...',

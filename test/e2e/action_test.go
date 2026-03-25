@@ -202,6 +202,27 @@ func TestE2E_ActionChain(t *testing.T) {
 	// ── WS event structural assertions ──
 	AssertEventsInOrder(t, ws.Events(), testdata.ActionChainExpectedEvents)
 
+	// ── execution.progress phase assertions ──
+	// Investigation stage should publish "investigating", action stage should publish "remediating".
+	investigationStageID := stages[0].ID
+	remediationStageID := stages[1].ID
+	var sawInvestigating, sawRemediating bool
+	for _, ev := range ws.Events() {
+		if ev.Type != "execution.progress" {
+			continue
+		}
+		phase, _ := ev.Parsed["phase"].(string)
+		stgID, _ := ev.Parsed["stage_id"].(string)
+		if stgID == investigationStageID && phase == "investigating" {
+			sawInvestigating = true
+		}
+		if stgID == remediationStageID && phase == "remediating" {
+			sawRemediating = true
+		}
+	}
+	assert.True(t, sawInvestigating, "should see 'investigating' progress for investigation stage")
+	assert.True(t, sawRemediating, "should see 'remediating' progress for action stage")
+
 	// ── Golden file assertions ──
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages, ok := traceList["stages"].([]interface{})

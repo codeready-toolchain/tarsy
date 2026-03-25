@@ -27,6 +27,9 @@ type ExecutionContext struct {
 	// Alert type (from session/chain config)
 	AlertType string
 
+	// Stage type (investigation, action, synthesis, etc.)
+	StageType string
+
 	// Runbook content (fetched by executor, passed as text)
 	RunbookContent string
 

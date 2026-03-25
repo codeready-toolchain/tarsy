@@ -87,8 +87,11 @@ func (c *IteratingController) Run(
 	for iteration := 0; iteration < maxIter; iteration++ {
 		state.CurrentIteration = iteration + 1
 
-		// Publish execution progress: investigating
-		publishExecutionProgress(ctx, execCtx, events.ProgressPhaseInvestigating,
+		phase := events.ProgressPhaseInvestigating
+		if execCtx.StageType == "action" {
+			phase = events.ProgressPhaseRemediating
+		}
+		publishExecutionProgress(ctx, execCtx, phase,
 			fmt.Sprintf("Iteration %d/%d", iteration+1, maxIter))
 
 		if state.ShouldAbortOnTimeouts() {

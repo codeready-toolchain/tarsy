@@ -126,6 +126,7 @@ const (
 // ProgressPhase values for execution-level progress events.
 const (
 	ProgressPhaseInvestigating = "investigating"
+	ProgressPhaseRemediating   = "remediating"
 	ProgressPhaseGatheringInfo = "gathering_info"
 	ProgressPhaseDistilling    = "distilling"
 	ProgressPhaseConcluding    = "concluding"

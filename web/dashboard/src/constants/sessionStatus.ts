@@ -29,6 +29,20 @@ export const EXECUTION_STATUS = {
 
 export type ExecutionStatus = (typeof EXECUTION_STATUS)[keyof typeof EXECUTION_STATUS];
 
+/** Scoring status values from session.score_updated WS events (mirrors Go events.ScoringStatus). */
+export const SCORING_STATUS = {
+  IN_PROGRESS: 'in_progress',
+  MEMORIZING: 'memorizing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const;
+
+/** Human-readable display text for each scoring status. */
+export const SCORING_STATUS_MESSAGE: Record<string, string> = {
+  [SCORING_STATUS.IN_PROGRESS]: 'Evaluating quality…',
+  [SCORING_STATUS.MEMORIZING]: 'Memorizing…',
+};
+
 /** Terminal execution/stage statuses — execution will not change further. */
 export const TERMINAL_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.COMPLETED,

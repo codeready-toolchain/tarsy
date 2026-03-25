@@ -60,6 +60,7 @@ import type {
   ExecutionProgressPayload,
   ExecutionStatusPayload,
   ChatCreatedPayload,
+  SessionScoreUpdatedPayload,
 } from '../types/events.ts';
 
 import {
@@ -71,6 +72,7 @@ import {
   EVENT_SESSION_PROGRESS,
   EVENT_EXECUTION_PROGRESS,
   EVENT_EXECUTION_STATUS,
+  EVENT_SESSION_SCORE_UPDATED,
   EVENT_CATCHUP_OVERFLOW,
   EVENT_CHAT_CREATED,
   EVENT_REVIEW_STATUS,
@@ -217,6 +219,9 @@ export function SessionDetailPage() {
   const [subAgentProgressStatuses, setSubAgentProgressStatuses] = useState<Map<string, string>>(
     () => new Map(),
   );
+
+  // Live scoring status from session.score_updated WS events
+  const [scoringStatus, setScoringStatus] = useState<string | null>(null);
 
   // --- View / navigation ---
   const view = 'reasoning' as const;
@@ -894,6 +899,13 @@ export function SessionDetailPage() {
               console.warn('Failed to re-fetch session/timeline after terminal status:', err);
             });
           }
+          return;
+        }
+
+        // --- session.score_updated ---
+        if (eventType === EVENT_SESSION_SCORE_UPDATED) {
+          const payload = data as unknown as SessionScoreUpdatedPayload;
+          setScoringStatus(payload.scoring_status);
           return;
         }
 
@@ -1631,6 +1643,7 @@ export function SessionDetailPage() {
                   stages={session.stages || []}
                   isActive={isActive}
                   progressStatus={progressStatus}
+                  scoringStatus={scoringStatus}
                   streamingEvents={streamingEvents}
                   agentProgressStatuses={agentProgressStatuses}
                   executionStatuses={executionStatuses}
