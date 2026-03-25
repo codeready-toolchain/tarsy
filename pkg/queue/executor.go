@@ -630,10 +630,10 @@ func (e *RealSessionExecutor) executeAgent(
 	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
-	// Retrieve memories for auto-injection into system prompt (all parallel agents
-	// get the same briefing — retrieval is deterministic for the same alert data).
+	// Retrieve memories for auto-injection into system prompt (only for agent types
+	// whose prompts consume MemoryBriefing — investigation, action, orchestrator).
 	var memoryBriefing *agent.MemoryBriefing
-	if e.memoryService != nil && e.memoryConfig != nil {
+	if e.memoryService != nil && e.memoryConfig != nil && agentTypeSupportsMemory(resolvedConfig.Type) {
 		memoryBriefing = e.retrieveMemories(ctx, input.session, logger)
 		if memoryBriefing != nil {
 			if edgeErr := e.dbClient.AlertSession.UpdateOneID(input.session.ID).
@@ -722,8 +722,8 @@ func (e *RealSessionExecutor) executeAgent(
 		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 
-	// Wrap with memory tool executor (outermost layer)
-	if e.memoryService != nil && e.memoryConfig != nil {
+	// Wrap with memory tool executor (outermost layer — same agent-type guard)
+	if e.memoryService != nil && e.memoryConfig != nil && agentTypeSupportsMemory(resolvedConfig.Type) {
 		var alertTypePtr *string
 		if input.session.AlertType != "" {
 			alertTypePtr = &input.session.AlertType

@@ -4,8 +4,37 @@ import (
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestAgentTypeSupportsMemory(t *testing.T) {
+	supported := []config.AgentType{
+		config.AgentTypeDefault,
+		config.AgentTypeAction,
+		config.AgentTypeOrchestrator,
+	}
+	for _, at := range supported {
+		name := string(at)
+		if name == "" {
+			name = "(default)"
+		}
+		t.Run(name+"_supported", func(t *testing.T) {
+			assert.True(t, agentTypeSupportsMemory(at))
+		})
+	}
+
+	unsupported := []config.AgentType{
+		config.AgentTypeSynthesis,
+		config.AgentTypeExecSummary,
+		config.AgentTypeScoring,
+	}
+	for _, at := range unsupported {
+		t.Run(string(at)+"_unsupported", func(t *testing.T) {
+			assert.False(t, agentTypeSupportsMemory(at))
+		})
+	}
+}
 
 func TestMemoryExcludeIDs(t *testing.T) {
 	tests := []struct {

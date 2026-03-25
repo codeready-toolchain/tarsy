@@ -6,8 +6,24 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/memory"
 )
+
+// agentTypeSupportsMemory returns true for agent types whose prompts
+// consume MemoryBriefing (Tier 4 injection) and/or benefit from the
+// recall_past_investigations tool. Single-shot agents (synthesis,
+// exec_summary, scoring) use fixed prompt templates that ignore
+// MemoryBriefing, so retrieving memories would be wasteful and would
+// spuriously record injected IDs.
+func agentTypeSupportsMemory(agentType config.AgentType) bool {
+	switch agentType {
+	case config.AgentTypeDefault, config.AgentTypeAction, config.AgentTypeOrchestrator:
+		return true
+	default:
+		return false
+	}
+}
 
 // memoryToolWrapper returns a ToolExecutor wrapping function for the memory tool.
 // Returns nil when memory is disabled (no wrapping needed).
