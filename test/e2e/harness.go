@@ -156,6 +156,11 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		tc.maxConcurrentSessions = tc.workerCount
 	}
 
+	// Guard: memory service requires a shared DB so both use the same schema.
+	if tc.memoryService != nil && tc.dbClient == nil {
+		t.Fatal("WithMemoryService requires WithDBClient using the same database")
+	}
+
 	// Default config if not provided.
 	if tc.cfg == nil {
 		tc.cfg = defaultTestConfig()
