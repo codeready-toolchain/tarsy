@@ -299,6 +299,43 @@ func TestIntegration_TransientEventDelivery(t *testing.T) {
 	assert.Empty(t, events, "transient events should not be persisted")
 }
 
+func TestIntegration_SessionProgressAndScoreUpdated_DeliveredToSessionChannel(t *testing.T) {
+	env := setupStreamingTest(t)
+	ctx := context.Background()
+
+	conn := env.subscribeAndWait(t)
+
+	err := env.publisher.PublishSessionProgress(ctx, SessionProgressPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeSessionProgress,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		StatusText: "Synthesizing...",
+	})
+	require.NoError(t, err)
+
+	msg := readJSONTimeout(t, conn, 5*time.Second)
+	assert.Equal(t, EventTypeSessionProgress, msg["type"])
+	assert.Equal(t, "Synthesizing...", msg["status_text"])
+	assert.Equal(t, env.sessionID, msg["session_id"])
+
+	err = env.publisher.PublishSessionScoreUpdated(ctx, env.sessionID, SessionScoreUpdatedPayload{
+		BasePayload: BasePayload{
+			Type:      EventTypeSessionScoreUpdated,
+			SessionID: env.sessionID,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		},
+		ScoringStatus: ScoringStatusMemorizing,
+	})
+	require.NoError(t, err)
+
+	msg = readJSONTimeout(t, conn, 5*time.Second)
+	assert.Equal(t, EventTypeSessionScoreUpdated, msg["type"])
+	assert.Equal(t, string(ScoringStatusMemorizing), msg["scoring_status"])
+	assert.Equal(t, env.sessionID, msg["session_id"])
+}
+
 func TestIntegration_DeltaStreamingProtocol(t *testing.T) {
 	// Verifies the full delta streaming protocol:
 	// 1. timeline_event.created (persistent, status=streaming)
