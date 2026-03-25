@@ -14,6 +14,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/stretchr/testify/assert"
@@ -222,6 +223,142 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 	}
 	publisher.mu.Unlock()
 	assert.True(t, foundUserQuestionWS, "user_question must be published via WS for dashboard rendering")
+}
+
+func TestChatExecutor_MemoryEnabled_RecallToolPresent_NoAutoInjection(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	memCfg := &config.MemoryConfig{
+		Enabled:   true,
+		MaxInject: 5,
+		Embedding: config.EmbeddingConfig{Dimensions: 3},
+	}
+	embedder := &fixedEmbedder{vec: []float32{1, 0, 0}}
+	memSvc := memory.NewService(entClient, db, embedder, memCfg)
+
+	chainID := "mem-chat-chain"
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name:   "investigation",
+				Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
+			},
+		},
+		Chat: &config.ChatConfig{Enabled: true},
+	}
+
+	// Seed a memory so the recall tool would have results.
+	sourceSession, err := entClient.AlertSession.Create().
+		SetID("mem-chat-source").
+		SetAlertData("historical alert").
+		SetAgentType("test").
+		SetAlertType("test-alert").
+		SetChainID(chainID).
+		SetStatus(alertsession.StatusCompleted).
+		SetAuthor("test").
+		Save(ctx)
+	require.NoError(t, err)
+
+	alertType := "test-alert"
+	err = memSvc.ApplyReflectorActions(ctx, "default", sourceSession.ID, &alertType, &chainID, 80,
+		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
+			{Content: "Check PgBouncer connection pool health", Category: "procedural", Valence: "positive"},
+		}})
+	require.NoError(t, err)
+
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Thought: I see the investigation context.\nFinal Answer: The pod was OOM killed due to a memory leak."},
+			}},
+		},
+	}
+
+	cfg := chatTestConfig(chainID, chain)
+	publisher := &testEventPublisher{}
+
+	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, publisher,
+		ChatMessageExecutorConfig{
+			SessionTimeout:    30 * time.Second,
+			HeartbeatInterval: 5 * time.Second,
+		},
+		nil, memSvc, memCfg,
+	)
+	defer chatExecutor.Stop()
+
+	session, err := entClient.AlertSession.Create().
+		SetID("session-mem-chat-1").
+		SetAlertData("Pod-1 OOMKilled").
+		SetAgentType("kubernetes").
+		SetAlertType("test-alert").
+		SetChainID(chainID).
+		SetStatus(alertsession.StatusCompleted).
+		SetAuthor("test").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.Stage.Create().
+		SetID("mem-chat-inv-stage").
+		SetSessionID(session.ID).
+		SetStageName("investigation").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStatus(stage.StatusCompleted).
+		Save(ctx)
+	require.NoError(t, err)
+
+	chatService := services.NewChatService(entClient)
+	chatObj, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+		SessionID: session.ID,
+		CreatedBy: "test@example.com",
+	})
+	require.NoError(t, err)
+
+	msg, err := chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+		ChatID:  chatObj.ID,
+		Content: "What caused the OOM?",
+		Author:  "test@example.com",
+	})
+	require.NoError(t, err)
+
+	_, err = chatExecutor.Submit(ctx, ChatExecuteInput{
+		Chat:    chatObj,
+		Message: msg,
+		Session: session,
+	})
+	require.NoError(t, err)
+
+	chatExecutor.wg.Wait()
+
+	// Verify: recall_past_investigations tool is in the LLM's tool list.
+	llm.mu.Lock()
+	require.NotEmpty(t, llm.capturedInputs, "LLM should have been called at least once")
+	firstInput := llm.capturedInputs[0]
+	llm.mu.Unlock()
+
+	var hasRecallTool bool
+	for _, tool := range firstInput.Tools {
+		if tool.Name == memory.ToolRecallPastInvestigations {
+			hasRecallTool = true
+			break
+		}
+	}
+	assert.True(t, hasRecallTool, "chat executor with memory enabled must expose recall_past_investigations tool")
+
+	// Verify: no Tier 4 auto-injection in system prompt (chat never auto-injects).
+	for _, m := range firstInput.Messages {
+		if m.Role == agent.RoleSystem {
+			assert.NotContains(t, m.Content, "Lessons from Past Investigations",
+				"chat prompt must not auto-inject Tier 4 memories")
+			break
+		}
+	}
 }
 
 func TestChatExecutor_ContextAccumulation(t *testing.T) {

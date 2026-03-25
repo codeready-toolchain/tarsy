@@ -255,6 +255,12 @@ func (r *SubAgentRunner) runSubAgent(
 	toolExecutor := r.createSubAgentToolExecutor(ctx, resolvedConfig, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
+	// MemoryBriefing is intentionally omitted: Tier 4 memories are matched
+	// against alert data, not the sub-agent's dynamic task, so injecting them
+	// would add noise. The orchestrator already has the briefing and can
+	// incorporate relevant learnings into task descriptions. Sub-agents still
+	// have the recall_past_investigations tool via WrapToolExecutor for
+	// on-demand retrieval.
 	execCtx := &agent.ExecutionContext{
 		SessionID:      r.sessionID,
 		StageID:        r.stageID,
