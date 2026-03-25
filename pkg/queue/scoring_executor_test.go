@@ -139,6 +139,23 @@ func (m *mockScoreEventPublisher) PublishSessionScoreUpdated(_ context.Context, 
 	return nil
 }
 
+func TestScoringExecutor_RunFeedbackReflectorAsyncRejectedWhenStopped(t *testing.T) {
+	exec := &ScoringExecutor{}
+	exec.Stop()
+
+	assert.NotPanics(t, func() {
+		exec.RunFeedbackReflectorAsync("session-123", "Great investigation", "accurate")
+	})
+}
+
+func TestScoringExecutor_RunFeedbackReflectorAsyncNilFields(t *testing.T) {
+	exec := &ScoringExecutor{}
+
+	assert.NotPanics(t, func() {
+		exec.Stop()
+	})
+}
+
 func TestResolveScoringProviderName(t *testing.T) {
 	tests := []struct {
 		name     string
