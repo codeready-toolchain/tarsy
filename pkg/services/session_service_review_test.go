@@ -276,6 +276,50 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Contains(t, errMsg, "conflict")
 	})
 
+	t.Run("complete from NULL review_status", func(t *testing.T) {
+		id := seedReviewSession(t, service, "", "")
+		rating := "accurate"
+		actionTaken := "Escalated"
+
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
+			Action:        "complete",
+			Actor:         "alice@test.com",
+			QualityRating: &rating,
+			ActionTaken:   &actionTaken,
+		})
+		require.NotNil(t, sess.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *sess.ReviewStatus)
+		assert.Equal(t, "alice@test.com", *sess.Assignee)
+		assert.Equal(t, alertsession.QualityRatingAccurate, *sess.QualityRating)
+		assert.Equal(t, "Escalated", *sess.ActionTaken)
+
+		ctx := context.Background()
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		require.Len(t, activities, 1, "complete from NULL should produce a single activity")
+		assert.Equal(t, sessionreviewactivity.ActionComplete, activities[0].Action)
+		assert.Nil(t, activities[0].FromStatus, "from_status should be nil for NULL transition")
+	})
+
+	t.Run("claim from NULL review_status", func(t *testing.T) {
+		id := seedReviewSession(t, service, "", "")
+
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
+			Action: "claim",
+			Actor:  "alice@test.com",
+		})
+		require.NotNil(t, sess.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusInProgress, *sess.ReviewStatus)
+		assert.Equal(t, "alice@test.com", *sess.Assignee)
+
+		ctx := context.Background()
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		require.Len(t, activities, 1)
+		assert.Equal(t, sessionreviewactivity.ActionClaim, activities[0].Action)
+		assert.Nil(t, activities[0].FromStatus, "from_status should be nil for NULL transition")
+	})
+
 	t.Run("reopen from reviewed", func(t *testing.T) {
 		id := seedReviewSession(t, service, "reviewed", "john@test.com")
 

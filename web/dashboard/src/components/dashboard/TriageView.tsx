@@ -12,7 +12,8 @@ import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
-import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
+import { REVIEW_STATUS, REVIEW_MODAL_MODE } from '../../types/api.ts';
+import type { TriageGroup, TriageGroupKey, ReviewModalMode } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
@@ -65,7 +66,7 @@ export function TriageView({
   const [completeSessionIds, setCompleteSessionIds] = useState<string[] | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{
     session: DashboardSessionItem;
-    mode: 'complete' | 'edit';
+    mode: ReviewModalMode;
   } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
@@ -91,7 +92,7 @@ export function TriageView({
   };
 
   const handleReviewClick = useCallback((session: DashboardSessionItem) => {
-    const mode = session.quality_rating ? 'edit' : 'complete';
+    const mode = session.review_status === REVIEW_STATUS.REVIEWED ? REVIEW_MODAL_MODE.EDIT : REVIEW_MODAL_MODE.COMPLETE;
     setReviewTarget({ session, mode });
   }, []);
 
@@ -165,7 +166,7 @@ export function TriageView({
   // --- Snackbar actions (snackbar mode only) ---
   const handleSnackbarAddFeedback = () => {
     if (!snackbar?.completedSession) return;
-    setReviewTarget({ session: snackbar.completedSession, mode: 'edit' });
+    setReviewTarget({ session: snackbar.completedSession, mode: REVIEW_MODAL_MODE.EDIT });
     setSnackbar(null);
   };
 
@@ -250,7 +251,7 @@ export function TriageView({
 
       {/* Single-session review modals (from Review column click) */}
       <CompleteReviewModal
-        open={reviewTarget?.mode === 'complete'}
+        open={reviewTarget?.mode === REVIEW_MODAL_MODE.COMPLETE}
         onClose={() => setReviewTarget(null)}
         onComplete={handleReviewComplete}
         loading={actionLoading}
@@ -260,7 +261,7 @@ export function TriageView({
         feedbackEdited={reviewTarget?.session.feedback_edited}
       />
       <EditFeedbackModal
-        open={reviewTarget?.mode === 'edit'}
+        open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}
         onClose={() => setReviewTarget(null)}
         onSave={handleReviewSave}
         loading={actionLoading}

@@ -116,6 +116,23 @@ export const REVIEW_ACTION = {
 
 export type ReviewAction = (typeof REVIEW_ACTION)[keyof typeof REVIEW_ACTION];
 
+/** Possible review_status values on a session. */
+export const REVIEW_STATUS = {
+  NEEDS_REVIEW: 'needs_review',
+  IN_PROGRESS: 'in_progress',
+  REVIEWED: 'reviewed',
+} as const;
+
+export type ReviewStatus = (typeof REVIEW_STATUS)[keyof typeof REVIEW_STATUS];
+
+/** Review modal modes used by the dashboard UI. */
+export const REVIEW_MODAL_MODE = {
+  COMPLETE: 'complete',
+  EDIT: 'edit',
+} as const;
+
+export type ReviewModalMode = (typeof REVIEW_MODAL_MODE)[keyof typeof REVIEW_MODAL_MODE];
+
 /** Allowed quality rating values for review feedback. */
 export const QUALITY_RATING = {
   ACCURATE: 'accurate',
