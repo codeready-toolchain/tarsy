@@ -12,6 +12,7 @@ import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
+import { getSession } from '../../services/api.ts';
 import { REVIEW_MODAL_MODE, getReviewModalMode } from '../../types/api.ts';
 import type { TriageGroup, TriageGroupKey, ReviewModalMode } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
@@ -172,11 +173,34 @@ export function TriageView({
   }, [groups]);
 
   // --- Snackbar actions (snackbar mode only) ---
-  const handleSnackbarAddFeedback = () => {
+  const handleSnackbarAddFeedback = async () => {
     if (!snackbar?.completedSession) return;
-    const fresh = findSessionInGroups(snackbar.completedSession.id);
-    setReviewTarget({ session: fresh ?? snackbar.completedSession, mode: REVIEW_MODAL_MODE.EDIT });
+    const stale = snackbar.completedSession;
     setSnackbar(null);
+
+    const fresh = findSessionInGroups(stale.id);
+    if (fresh) {
+      setReviewTarget({ session: fresh, mode: REVIEW_MODAL_MODE.EDIT });
+      return;
+    }
+
+    try {
+      const detail = await getSession(stale.id);
+      setReviewTarget({
+        session: {
+          ...stale,
+          review_status: detail.review_status,
+          assignee: detail.assignee,
+          quality_rating: detail.quality_rating,
+          action_taken: detail.action_taken,
+          investigation_feedback: detail.investigation_feedback,
+          feedback_edited: detail.feedback_edited,
+        },
+        mode: REVIEW_MODAL_MODE.EDIT,
+      });
+    } catch {
+      setReviewTarget({ session: stale, mode: REVIEW_MODAL_MODE.EDIT });
+    }
   };
 
   const handleSnackbarUndo = () => {
