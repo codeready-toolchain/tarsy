@@ -1064,6 +1064,8 @@ export function DashboardView() {
             error={reviewError}
             title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
             executiveSummary={reviewTarget?.session.executive_summary}
+            assignee={reviewTarget?.session.assignee}
+            feedbackEdited={reviewTarget?.session.feedback_edited}
           />
           <EditFeedbackModal
             open={reviewTarget?.mode === 'edit'}
@@ -1075,6 +1077,8 @@ export function DashboardView() {
             initialActionTaken={reviewTarget?.session.action_taken ?? ''}
             initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
             executiveSummary={reviewTarget?.session.executive_summary}
+            assignee={reviewTarget?.session.assignee}
+            feedbackEdited={reviewTarget?.session.feedback_edited}
           />
         </>
       )}

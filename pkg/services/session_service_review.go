@@ -483,6 +483,7 @@ type triageRow struct {
 	FallbackCount         int        `sql:"fallback_count"`
 	LatestScore           *int       `sql:"latest_score"`
 	ScoringStatus         *string    `sql:"scoring_status"`
+	FeedbackEdited        int        `sql:"feedback_edited"`
 }
 
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
@@ -581,6 +582,11 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				fmt.Sprintf("(SELECT status FROM session_scores WHERE session_id = %s ORDER BY started_at DESC LIMIT 1)", sid),
 				"scoring_status",
 			)
+
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback') THEN 1 ELSE 0 END)", sid),
+				"feedback_edited",
+			)
 		}).
 		Scan(ctx, &rows)
 	if err != nil {
@@ -611,6 +617,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			QualityRating:         row.QualityRating,
 			ActionTaken:           row.ActionTaken,
 			InvestigationFeedback: row.InvestigationFeedback,
+			FeedbackEdited:        row.FeedbackEdited != 0,
 			HasParallelStages:     row.HasParallel != 0,
 			HasSubAgents:          row.HasSubAgents != 0,
 			HasActionStages:       row.HasActionStages != 0,

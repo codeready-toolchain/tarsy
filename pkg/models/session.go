@@ -104,6 +104,7 @@ type DashboardSessionItem struct {
 	QualityRating         *string    `json:"quality_rating"`
 	ActionTaken           *string    `json:"action_taken"`
 	InvestigationFeedback *string    `json:"investigation_feedback"`
+	FeedbackEdited        bool       `json:"feedback_edited"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -204,6 +205,7 @@ type SessionDetailResponse struct {
 	QualityRating         *string `json:"quality_rating"`
 	ActionTaken           *string `json:"action_taken"`
 	InvestigationFeedback *string `json:"investigation_feedback"`
+	FeedbackEdited        bool    `json:"feedback_edited"`
 
 	// Stage list
 	Stages []StageOverview `json:"stages"`

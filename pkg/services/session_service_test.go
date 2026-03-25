@@ -802,6 +802,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Nil(t, detail.QualityRating)
 		assert.Nil(t, detail.ActionTaken)
 		assert.Nil(t, detail.InvestigationFeedback)
+		assert.False(t, detail.FeedbackEdited)
 
 		// Stages.
 		require.Len(t, detail.Stages, 1)

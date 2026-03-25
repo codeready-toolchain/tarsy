@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
@@ -605,6 +606,16 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		}
 	}
 
+	feedbackEdited, err := s.client.SessionReviewActivity.Query().
+		Where(
+			sessionreviewactivity.SessionID(sessionID),
+			sessionreviewactivity.ActionEQ(sessionreviewactivity.ActionUpdateFeedback),
+		).
+		Exist(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check feedback edits: %w", err)
+	}
+
 	return &models.SessionDetailResponse{
 		ID:                      session.ID,
 		AlertData:               session.AlertData,
@@ -647,6 +658,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		QualityRating:           ptrStringFromQualityRating(session.QualityRating),
 		ActionTaken:             session.ActionTaken,
 		InvestigationFeedback:   session.InvestigationFeedback,
+		FeedbackEdited:          feedbackEdited,
 		Stages:                  stages,
 	}, nil
 }
@@ -858,6 +870,7 @@ type dashboardRow struct {
 	QualityRating         *string `sql:"quality_rating"`
 	ActionTaken           *string `sql:"action_taken"`
 	InvestigationFeedback *string `sql:"investigation_feedback"`
+	FeedbackEdited        int     `sql:"feedback_edited"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -1124,6 +1137,11 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				"scoring_status",
 			)
 
+			sel.AppendSelectAs(
+				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback') THEN 1 ELSE 0 END)", sid),
+				"feedback_edited",
+			)
+
 			// Computed sort expressions applied inside Modify since they reference subquery results.
 			dir := "DESC"
 			if params.SortOrder == "asc" {
@@ -1187,6 +1205,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			QualityRating:         row.QualityRating,
 			ActionTaken:           row.ActionTaken,
 			InvestigationFeedback: row.InvestigationFeedback,
+			FeedbackEdited:        row.FeedbackEdited != 0,
 		})
 	}
 

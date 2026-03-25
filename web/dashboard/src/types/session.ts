@@ -38,6 +38,7 @@ export interface DashboardSessionItem {
   quality_rating?: string | null;
   action_taken?: string | null;
   investigation_feedback?: string | null;
+  feedback_edited?: boolean;
 }
 
 /** Active (in-progress / cancelling) session. */
@@ -116,6 +117,7 @@ export interface SessionDetailResponse {
   quality_rating?: string | null;
   action_taken?: string | null;
   investigation_feedback?: string | null;
+  feedback_edited?: boolean;
 
   // Stage list
   stages: StageOverview[];

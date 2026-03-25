@@ -705,6 +705,76 @@ func TestSessionService_GetTriageGroup(t *testing.T) {
 	})
 }
 
+func TestSessionService_FeedbackEdited(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	// Create a reviewed session via the normal workflow (claim + complete).
+	id := seedReviewSession(t, service, "needs_review", "")
+	doReview(t, service, id, models.UpdateReviewRequest{Action: "claim", Actor: "alice@test.com"})
+	rating := "accurate"
+	doReview(t, service, id, models.UpdateReviewRequest{
+		Action: "complete", Actor: "alice@test.com", QualityRating: &rating,
+	})
+
+	t.Run("false before any feedback update", func(t *testing.T) {
+		triage, err := service.GetTriageGroup(ctx, models.TriageGroupReviewed,
+			models.TriageGroupParams{Page: 1, PageSize: 20})
+		require.NoError(t, err)
+		require.Len(t, triage.Sessions, 1)
+		assert.False(t, triage.Sessions[0].FeedbackEdited)
+
+		dash, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		var found bool
+		for _, s := range dash.Sessions {
+			if s.ID == id {
+				found = true
+				assert.False(t, s.FeedbackEdited)
+			}
+		}
+		require.True(t, found)
+
+		detail, err := service.GetSessionDetail(ctx, id)
+		require.NoError(t, err)
+		assert.False(t, detail.FeedbackEdited)
+	})
+
+	// Perform an update_feedback action.
+	newRating := "partially_accurate"
+	doReview(t, service, id, models.UpdateReviewRequest{
+		Action: "update_feedback", Actor: "alice@test.com", QualityRating: &newRating,
+	})
+
+	t.Run("true after feedback update", func(t *testing.T) {
+		triage, err := service.GetTriageGroup(ctx, models.TriageGroupReviewed,
+			models.TriageGroupParams{Page: 1, PageSize: 20})
+		require.NoError(t, err)
+		require.Len(t, triage.Sessions, 1)
+		assert.True(t, triage.Sessions[0].FeedbackEdited)
+
+		dash, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		var found bool
+		for _, s := range dash.Sessions {
+			if s.ID == id {
+				found = true
+				assert.True(t, s.FeedbackEdited)
+			}
+		}
+		require.True(t, found)
+
+		detail, err := service.GetSessionDetail(ctx, id)
+		require.NoError(t, err)
+		assert.True(t, detail.FeedbackEdited)
+	})
+}
+
 func collectIDs(items []models.DashboardSessionItem) []string {
 	ids := make([]string, len(items))
 	for i, item := range items {

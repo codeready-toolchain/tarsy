@@ -1732,6 +1732,8 @@ export function SessionDetailPage() {
               error={reviewError}
               title={session.alert_type ? `Review: ${session.alert_type}` : undefined}
               executiveSummary={session.executive_summary}
+              assignee={session.assignee}
+              feedbackEdited={session.feedback_edited}
             />
             <EditFeedbackModal
               open={reviewModalMode === 'edit'}
@@ -1743,6 +1745,8 @@ export function SessionDetailPage() {
               initialActionTaken={session.action_taken ?? ''}
               initialInvestigationFeedback={session.investigation_feedback ?? ''}
               executiveSummary={session.executive_summary}
+              assignee={session.assignee}
+              feedbackEdited={session.feedback_edited}
             />
 
             {/* Jump to Chat button — after Final Analysis, at the bottom */}
