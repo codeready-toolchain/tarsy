@@ -1,0 +1,170 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_7}",
+  "input_tokens": 700,
+  "interaction_type": "memory_extraction",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 162,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 90,
+  "total_tokens": 790
+}
+
+=== MESSAGE: system ===
+You are a memory extraction specialist for TARSy, an automated incident investigation platform.
+
+A human reviewer has examined a completed investigation and provided feedback — their assessment
+of what the automated investigation got right, got wrong, or missed. Your role is to extract
+discrete, reusable learnings from this human feedback that will help future investigations.
+
+Human feedback is the strongest signal TARSy receives. The reviewer has domain expertise and
+has verified findings against reality. Pay close attention to:
+- Corrections: what the investigation got wrong (create negative/procedural memories)
+- Confirmations: what the investigation got right (reinforce existing memories)
+- Missing context: facts the investigation should have known (create semantic memories)
+- Better approaches: alternative investigation strategies (create procedural memories)
+
+## Memory Categories
+
+- **semantic** — Facts about infrastructure, services, alert patterns, or environment behavior.
+- **episodic** — Specific investigation experiences: what worked, failed, or was surprising.
+- **procedural** — Investigation strategies, tool usage patterns, or anti-patterns.
+
+## Memory Valence
+
+- **positive** — A pattern that worked well and should be repeated.
+- **negative** — A mistake, dead end, or anti-pattern to avoid.
+- **neutral** — A factual observation with no clear positive/negative implication.
+
+## Guidelines
+
+- Extract only learnings that would **concretely help** a future investigation.
+- The human's corrections are especially valuable — they represent ground truth.
+- If the feedback merely says "good job" with no specific learnings, return empty arrays.
+- Do not duplicate existing memories. If the feedback confirms an existing memory, reinforce it.
+- If the feedback contradicts an existing memory, deprecate it and create a corrected version.
+
+=== MESSAGE: user ===
+A human reviewer has completed their review of a TARSy investigation. Extract learnings from their feedback.
+
+## Full Investigation Context
+
+This is the complete investigation the reviewer evaluated, including the original alert,
+runbook, tools used, and the full timeline of agent actions and findings.
+
+<investigation_context>
+## ORIGINAL ALERT
+
+Pod OOMKilled in production
+
+## AVAILABLE TOOLS PER AGENT
+
+### Investigator
+
+- .recall_past_investigations — Search learnings from past investigations of similar alerts. Use when you suspect a pattern you may have seen before, or want to check if previous investigations found useful context for this type of issue.
+- test-mcp.get_pods — test tool: get_pods
+
+## INVESTIGATION TIMELINE
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: investigation
+
+**Agent:** Investigator (google-native, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Let me check the pod status.
+
+**Agent Response:**
+
+Checking pods.
+
+**Tool Call:** test-mcp.get_pods({"namespace":"default"})
+**Result:**
+
+[{"name":"pod-1","status":"OOMKilled","restarts":5}]
+
+**Internal Reasoning:**
+
+Pod is OOMKilled.
+
+**Agent Response:**
+
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+
+## Stage 2: Executive Summary
+
+**Agent:** ExecSummaryAgent (google-native, test-provider)
+**Status**: completed
+
+**Agent Response:**
+
+Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.
+
+
+</investigation_context>
+
+## Human Review
+
+Quality rating: partially_accurate
+
+<feedback>
+The investigation missed checking Kubernetes resource limits. Always verify limits before diagnosing OOM.
+</feedback>
+
+## Existing Memories
+
+These memories were previously extracted from this and past investigations. Use them
+to avoid duplicates and to decide what to reinforce or deprecate.
+
+<existing_memories>
+[{"id":"{UUID}","content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive","confidence":0.36,"seen_count":1}]
+</existing_memories>
+
+## Your Task
+
+For each learning from the human feedback, choose an action:
+- **CREATE**: New knowledge from the feedback not covered by existing memories.
+- **REINFORCE**: An existing memory is confirmed by the feedback — return its ID.
+- **DEPRECATE**: An existing memory is contradicted by the feedback — return its ID with a reason.
+
+Alert context for scoping:
+- Alert type: test-memory-reflector
+- Chain: memory-reflector-chain
+
+Respond with a JSON object (and nothing else):
+{
+  "create": [
+    {
+      "content": "string — the learning (a sentence to a short paragraph)",
+      "category": "semantic | episodic | procedural",
+      "valence": "positive | negative | neutral"
+    }
+  ],
+  "reinforce": [
+    {
+      "memory_id": "string — ID of existing memory to reinforce"
+    }
+  ],
+  "deprecate": [
+    {
+      "memory_id": "string — ID of existing memory to deprecate",
+      "reason": "string — why this memory is no longer valid"
+    }
+  ]
+}
+
+=== MESSAGE: assistant ===
+{"create":[{"content":"Always check Kubernetes resource limits before OOM diagnosis","category":"procedural","valence":"positive"}],"reinforce":[],"deprecate":[]}
+

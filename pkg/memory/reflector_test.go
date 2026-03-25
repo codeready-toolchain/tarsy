@@ -90,8 +90,8 @@ func TestBuildReflectorUserPrompt_ContainsOutputSchema(t *testing.T) {
 
 func TestBuildFeedbackReflectorUserPrompt(t *testing.T) {
 	input := FeedbackReflectorInput{
-		FeedbackText:        "The investigation missed the PgBouncer saturation.",
-		QualityRating:       "partially_accurate",
+		FeedbackText:         "The investigation missed the PgBouncer saturation.",
+		QualityRating:        "partially_accurate",
 		InvestigationContext: "## ORIGINAL ALERT\nHigh latency on web-01\n## INVESTIGATION TIMELINE\nAgent checked pods.",
 		ExistingMemories: []Memory{
 			{ID: "mem-1", Content: "Check PgBouncer first", Category: "procedural", Valence: "positive", Confidence: 0.8, SeenCount: 3},
@@ -122,8 +122,8 @@ func TestBuildFeedbackReflectorUserPrompt(t *testing.T) {
 
 func TestBuildFeedbackReflectorUserPrompt_EmptyMemories(t *testing.T) {
 	input := FeedbackReflectorInput{
-		FeedbackText:        "Looks good.",
-		QualityRating:       "accurate",
+		FeedbackText:         "Looks good.",
+		QualityRating:        "accurate",
 		InvestigationContext: "test context",
 	}
 
@@ -133,7 +133,7 @@ func TestBuildFeedbackReflectorUserPrompt_EmptyMemories(t *testing.T) {
 
 func TestBuildFeedbackReflectorUserPrompt_ContainsOutputSchema(t *testing.T) {
 	prompt := buildFeedbackReflectorUserPrompt(FeedbackReflectorInput{
-		FeedbackText:        "test",
+		FeedbackText:         "test",
 		InvestigationContext: "test",
 	})
 
@@ -144,7 +144,7 @@ func TestBuildFeedbackReflectorUserPrompt_ContainsOutputSchema(t *testing.T) {
 
 func TestNewFeedbackReflectorController_NotNil(t *testing.T) {
 	ctrl := NewFeedbackReflectorController(FeedbackReflectorInput{
-		FeedbackText:        "test",
+		FeedbackText:         "test",
 		InvestigationContext: "test",
 	})
 	assert.NotNil(t, ctrl)

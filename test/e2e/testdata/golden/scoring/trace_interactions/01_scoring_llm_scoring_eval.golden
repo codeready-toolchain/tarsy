@@ -92,14 +92,17 @@ Pod OOMKilled
 ## AVAILABLE TOOLS PER AGENT
 
 ### Investigator
+
 - test-mcp.get_pods — test tool: get_pods
 - test-mcp.restart_pod — test tool: restart_pod
 
 ### MetricsChecker
+
 - test-mcp.get_pods — test tool: get_pods
 - test-mcp.restart_pod — test tool: restart_pod
 
 ### Remediator
+
 - test-mcp.get_pods — test tool: get_pods
 - test-mcp.restart_pod — test tool: restart_pod
 

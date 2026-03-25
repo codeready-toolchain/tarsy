@@ -122,6 +122,9 @@ defaults:
   # memories into future sessions via semantic retrieval (pgvector cosine similarity).
   # Extraction runs automatically in the scoring stage; no extra infra needed.
   # Requires pgvector extension and the investigation_memories table (created by migration).
+  # NOTE: Memory extraction (Reflector) runs inside the scoring stage. If memory is
+  # enabled but scoring is disabled on all chains, existing memories will still be
+  # injected into investigations, but no new memories will ever be created.
   # memory:
   #   enabled: true                              # Enable investigation memory (default: false)
   #   max_inject: 5                              # Max memories auto-injected into system prompt (default: 5)

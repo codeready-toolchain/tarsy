@@ -1,20 +1,20 @@
 {
   "created_at": "{TIMESTAMP}",
   "duration_ms": {DURATION_MS},
-  "id": "{INTERACTION_ID_14}",
-  "input_tokens": 600,
+  "id": "{INTERACTION_ID_9}",
+  "input_tokens": 500,
   "interaction_type": "scoring",
   "llm_request": {
     "iteration": 2,
     "messages_count": 4
   },
   "llm_response": {
-    "text_length": 208,
+    "text_length": 67,
     "tool_calls_count": 0
   },
   "model_name": "test-model",
-  "output_tokens": 80,
-  "total_tokens": 680
+  "output_tokens": 60,
+  "total_tokens": 560
 }
 
 === MESSAGE: system ===
@@ -23,6 +23,70 @@ You are an expert investigation quality evaluator for TARSy, an automated incide
 TARSy uses agent chains — multi-stage pipelines where AI agents investigate incidents by calling external tools (MCP tools), analyzing evidence, and producing findings. Different chains handle different types of incidents and may use different tools, agents, and configurations.
 
 Your role is to critically evaluate investigation quality. The most important question is: did the investigation reach the right conclusion? Then: was the path there efficient and thorough? You evaluate both the outcome and the process, with outcome quality as the dominant factor.
+
+=== MESSAGE: system ===
+You are a memory extraction specialist for TARSy, an automated incident investigation platform.
+
+TARSy uses agent chains — multi-stage pipelines where AI agents investigate incidents by
+calling external tools (MCP tools), analyzing evidence, and producing findings. Different
+chains handle different types of incidents and may use different tools, agents, and
+configurations. Agents are expert Site Reliability Engineers with access to infrastructure
+tools (Kubernetes, Prometheus, cloud APIs, log systems, etc.).
+
+After each investigation, a quality evaluator scores the session (0-100) based on outcome
+correctness, evidence gathering, tool utilization, analytical reasoning, and completeness.
+It also produces failure tags and a tool improvement report.
+
+Your role is to analyze the full investigation and its quality evaluation to extract discrete,
+reusable learnings that will help future investigations of similar alerts. You receive:
+- The original alert and runbook
+- The full investigation timeline, which includes:
+  - Pre-loaded skills (domain knowledge injected into the agent's prompt before investigation)
+  - Agent reasoning, tool calls with arguments and results, final analysis
+- The quality score, analysis, failure tags, and tool improvement report
+- Existing memories from past investigations (for deduplication)
+
+## Memory Categories
+
+Each learning falls into one category:
+
+- **semantic** — Facts about infrastructure, services, alert patterns, or environment behavior.
+  Example: "The payments-api service connects to PostgreSQL on port 5432 via PgBouncer, not
+  directly — connection timeout alerts should check PgBouncer health first."
+
+- **episodic** — Specific investigation experiences: what approach worked, what failed, what
+  was surprising. Tied to a concrete event.
+  Example: "When investigating OOMKill in the order-processor pod, checking the Prometheus
+  container_memory_working_set_bytes metric was more reliable than container_memory_usage_bytes
+  because the latter includes cache."
+
+- **procedural** — Investigation strategies, tool usage patterns, or anti-patterns that apply
+  across multiple investigations.
+  Example: "For certificate expiry alerts, always check both the ingress certificate and the
+  backend service certificate — they can expire independently."
+
+## Memory Valence
+
+- **positive** — A pattern that worked well and should be repeated.
+- **negative** — A mistake, dead end, or anti-pattern to avoid in the future.
+- **neutral** — A factual observation with no clear positive/negative implication.
+
+## Quality Guidelines
+
+- Extract only learnings that would **concretely help** a future investigation. Ask: "If an
+  agent saw this memory before investigating a similar alert, would it change what it does?"
+- Ground every learning in **specific evidence** from the investigation — tool call results,
+  agent reasoning, or scoring critique. Do not extract generic SRE knowledge the agent already
+  has.
+- **Do not duplicate skill content.** The investigation timeline includes the agent's skills —
+  both pre-loaded (at the start of the timeline) and dynamically loaded via `load_skill` tool
+  calls. If a learning is already covered by a skill (e.g., classification criteria, report
+  format, environment facts), do not extract it — the agent already knows it.
+- Prefer **specific and actionable** over vague and general. "Check PgBouncer health before
+  blaming the database" is better than "Consider all components in the request path."
+- Negative learnings from mistakes are especially valuable — they prevent repeating errors.
+- If the investigation was routine and existing memories already cover the lessons, return
+  empty arrays. Not every investigation produces new learnings.
 
 === MESSAGE: user ===
 Your task is to critically evaluate the following automated incident investigation using a structured, outcome-first methodology.
@@ -87,24 +151,14 @@ Below is the complete data for the investigation session, including the original
 ----------------------------------- Session data start -----------------------------------
 ## ORIGINAL ALERT
 
-Pod OOMKilled
+Pod OOMKilled in production
 
 ## AVAILABLE TOOLS PER AGENT
 
 ### Investigator
 
+- .recall_past_investigations — Search learnings from past investigations of similar alerts. Use when you suspect a pattern you may have seen before, or want to check if previous investigations found useful context for this type of issue.
 - test-mcp.get_pods — test tool: get_pods
-- test-mcp.restart_pod — test tool: restart_pod
-
-### MetricsChecker
-
-- test-mcp.get_pods — test tool: get_pods
-- test-mcp.restart_pod — test tool: restart_pod
-
-### Remediator
-
-- test-mcp.get_pods — test tool: get_pods
-- test-mcp.restart_pod — test tool: restart_pod
 
 ## INVESTIGATION TIMELINE
 
@@ -114,11 +168,7 @@ Pod OOMKilled
 
 ## Stage 1: investigation
 
-<!-- PARALLEL_RESULTS_START -->
-
-### Parallel Investigation: "investigation" — 2/2 agents succeeded
-
-#### Agent 1: Investigator (google-native, test-provider)
+**Agent:** Investigator (google-native, test-provider)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -142,59 +192,14 @@ Pod is OOMKilled.
 
 Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
-#### Agent 2: MetricsChecker (google-native, test-provider)
-**Status**: completed
-
-**Internal Reasoning:**
-
-Analyzing memory metrics.
-
-**Agent Response:**
-
-Memory usage at 98% of limit (500Mi/512Mi). OOM pattern confirmed over last 2 hours.
-
-<!-- PARALLEL_RESULTS_END -->
-### Synthesis Result
-
-Combined analysis: pod-1 is OOMKilled (5 restarts) with memory at 98% of 512Mi limit. Both agents confirm memory pressure as root cause.
-
-## Stage 2: remediation
-
-**Agent:** Remediator (google-native, test-provider)
-**Status**: completed
-
-**Internal Reasoning:**
-
-Evidence is clear — pod needs restart with higher memory limit.
-
-**Agent Response:**
-
-Restarting pod-1 with increased memory.
-
-**Tool Call:** test-mcp.restart_pod({"pod":"pod-1","namespace":"default"})
-**Result:**
-
-{"pod":"pod-1","action":"restart","result":"success"}
-
-**Internal Reasoning:**
-
-Restart successful.
-
-**Agent Response:**
-
-Remediation complete: restarted pod-1.
-
-## Actions Taken
-Restarted pod-1. Recommend increasing memory limit to 1Gi.
-
-## Stage 3: Executive Summary
+## Stage 2: Executive Summary
 
 **Agent:** ExecSummaryAgent (google-native, test-provider)
 **Status**: completed
 
 **Agent Response:**
 
-Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory limit to 1Gi.
+Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.
 
 
 -----------------------------------  Session data end  -----------------------------------
@@ -212,24 +217,150 @@ Example: if the total score is 62, the last line should be exactly:
 62
 
 
-=== MESSAGE: assistant ===
+=== MESSAGE: user ===
+Below is a completed TARSy investigation and its quality evaluation. Extract discrete
+learnings for future investigations.
+
+## Investigation
+
+<investigation_context>
+## ORIGINAL ALERT
+
+Pod OOMKilled in production
+
+## AVAILABLE TOOLS PER AGENT
+
+### Investigator
+
+- .recall_past_investigations — Search learnings from past investigations of similar alerts. Use when you suspect a pattern you may have seen before, or want to check if previous investigations found useful context for this type of issue.
+- test-mcp.get_pods — test tool: get_pods
+
+## INVESTIGATION TIMELINE
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: investigation
+
+**Agent:** Investigator (google-native, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Let me check the pod status.
+
+**Agent Response:**
+
+Checking pods.
+
+**Tool Call:** test-mcp.get_pods({"namespace":"default"})
+**Result:**
+
+[{"name":"pod-1","status":"OOMKilled","restarts":5}]
+
+**Internal Reasoning:**
+
+Pod is OOMKilled.
+
+**Agent Response:**
+
+Investigation complete: pod-1 is OOMKilled with 5 restarts.
+
+## Stage 2: Executive Summary
+
+**Agent:** ExecSummaryAgent (google-native, test-provider)
+**Status**: completed
+
+**Agent Response:**
+
+Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.
+
+
+</investigation_context>
+
+## Quality Evaluation
+
+Score: 70/100
+Failure tags: incomplete_evidence
+
+<score_analysis>
 ## Dimension Assessments
 
-**Investigation Outcome:** The conclusion is correct — pod-1 is OOMKilled, matching the evidence from get_pods (step 2). Confidence is appropriate given the evidence gathered.
+**Investigation Outcome:** Correct conclusion.
 
-**Evidence Gathering:** The agent showed incomplete_evidence — after confirming pod status via test-mcp.get_pods (step 2), it did not check memory metrics or resource limits despite having access to prometheus.query_range and get_resource_limits.
-
-**Tool Utilization:** missed_available_tool — get_resource_limits was available but never called. The agent relied solely on pod status from test-mcp.get_pods.
-
-**Analytical Reasoning:** The reasoning from pod status to OOMKill was sound, but the agent did not consider alternative explanations for the restart.
-
-**Investigation Completeness:** The agent stopped after a single tool call (step 2), leaving memory and resource dimensions unexplored.
+**Evidence Gathering:** incomplete_evidence — no memory metrics checked.
 
 ## Overall Assessment
 
-Correct conclusion with significant gaps in evidence gathering and tool utilization. The outcome places this in the 60-100 range, but process weaknesses pull it toward the lower end.
+Correct conclusion with gaps.
 
-75
+</score_analysis>
+
+<tool_improvement_report>
+## Missing Tools
+
+1. **get_memory_metrics** — Fetch memory usage.
+</tool_improvement_report>
+
+## Existing Memories
+
+These memories were previously extracted from past investigations in this project. Use them
+to avoid creating duplicates and to decide what to reinforce or deprecate.
+
+<existing_memories>
+[]
+</existing_memories>
+
+## Your Task
+
+For each learning you identify, choose an action:
+- **CREATE**: Genuinely new knowledge not covered by existing memories.
+- **REINFORCE**: An existing memory is confirmed by this investigation — return its ID.
+- **DEPRECATE**: An existing memory is contradicted or proven outdated — return its ID with
+  a reason.
+
+Alert context for scoping:
+- Alert type: test-memory-reflector
+- Chain: memory-reflector-chain
+
+Respond with a JSON object (and nothing else):
+{
+  "create": [
+    {
+      "content": "string — the learning (a sentence to a short paragraph)",
+      "category": "semantic | episodic | procedural",
+      "valence": "positive | negative | neutral"
+    }
+  ],
+  "reinforce": [
+    {
+      "memory_id": "string — ID of existing memory to reinforce"
+    }
+  ],
+  "deprecate": [
+    {
+      "memory_id": "string — ID of existing memory to deprecate",
+      "reason": "string — why this memory is no longer valid"
+    }
+  ]
+}
+
+=== MESSAGE: assistant ===
+## Dimension Assessments
+
+**Investigation Outcome:** Correct conclusion.
+
+**Evidence Gathering:** incomplete_evidence — no memory metrics checked.
+
+## Overall Assessment
+
+Correct conclusion with gaps.
+
+70
+
+=== MESSAGE: assistant ===
+{"create":[{"content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive"}],"reinforce":[],"deprecate":[]}
 
 === MESSAGE: user ===
 Based on your analysis above, now produce a tool improvement report with two parts.
@@ -283,9 +414,5 @@ If no improvements are needed, state "No existing tool improvements identified."
 === MESSAGE: assistant ===
 ## Missing Tools
 
-1. **get_memory_metrics** — Fetch Prometheus memory usage time series.
-
-## Existing Tool Improvements
-
-1. **test-mcp.get_pods** — Response format: include resource limits in pod listing.
+1. **get_memory_metrics** — Fetch memory usage.
 

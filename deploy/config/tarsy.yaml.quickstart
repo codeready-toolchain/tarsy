@@ -24,5 +24,7 @@ defaults:
   llm_backend: "langchain"
   scoring:
     enabled: true
+  # Memory extraction runs inside the scoring stage — if you enable memory,
+  # make sure scoring is also enabled, otherwise no new memories will be created.
   memory:
     enabled: false

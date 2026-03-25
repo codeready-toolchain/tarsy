@@ -161,6 +161,7 @@ func (v *Validator) validateDefaults() error {
 		if err := v.validateMemoryConfig(defaults.Memory); err != nil {
 			return err
 		}
+		v.warnMemoryWithoutScoring(defaults)
 	}
 
 	return nil
@@ -193,6 +194,24 @@ func (v *Validator) validateMemoryConfig(mc *MemoryConfig) error {
 			"env_var", resolved.Embedding.APIKeyEnv)
 	}
 	return nil
+}
+
+// warnMemoryWithoutScoring logs a warning if memory is enabled but no chain
+// has scoring enabled. Memory extraction (Reflector) runs inside the scoring
+// stage, so without scoring the memory pool will never grow from new
+// investigations — only injection of existing memories will work.
+func (v *Validator) warnMemoryWithoutScoring(defaults *Defaults) {
+	if defaults.Scoring != nil && defaults.Scoring.Enabled {
+		return
+	}
+	for _, chain := range v.cfg.ChainRegistry.GetAll() {
+		if chain.Scoring != nil && chain.Scoring.Enabled {
+			return
+		}
+	}
+	slog.Warn("Memory is enabled but no chain has scoring enabled — memory extraction (Reflector) " +
+		"runs inside the scoring stage, so new memories will never be created from investigations. " +
+		"Enable scoring on at least one chain, or via defaults.scoring.enabled, for memory extraction to work.")
 }
 
 func (v *Validator) validateAgents() error {

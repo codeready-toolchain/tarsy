@@ -289,7 +289,7 @@ func (s *Service) AdjustConfidenceForReview(ctx context.Context, project, sessio
 }
 
 // GetByID returns a single memory by ID.
-func (s *Service) GetByID(ctx context.Context, memoryID string) (*MemoryDetail, error) {
+func (s *Service) GetByID(ctx context.Context, memoryID string) (*Detail, error) {
 	m, err := s.entClient.InvestigationMemory.Get(ctx, memoryID)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -297,11 +297,11 @@ func (s *Service) GetByID(ctx context.Context, memoryID string) (*MemoryDetail, 
 		}
 		return nil, fmt.Errorf("get memory %s: %w", memoryID, err)
 	}
-	return entToMemoryDetail(m), nil
+	return entToDetail(m), nil
 }
 
 // GetBySessionID returns all memories extracted from a session (source_session_id).
-func (s *Service) GetBySessionID(ctx context.Context, sessionID string) ([]MemoryDetail, error) {
+func (s *Service) GetBySessionID(ctx context.Context, sessionID string) ([]Detail, error) {
 	memories, err := s.entClient.InvestigationMemory.Query().
 		Where(investigationmemory.SourceSessionIDEQ(sessionID)).
 		Order(ent.Asc(investigationmemory.FieldCreatedAt)).
@@ -309,11 +309,11 @@ func (s *Service) GetBySessionID(ctx context.Context, sessionID string) ([]Memor
 	if err != nil {
 		return nil, fmt.Errorf("get memories for session %s: %w", sessionID, err)
 	}
-	return entToMemoryDetails(memories), nil
+	return entToDetails(memories), nil
 }
 
 // GetInjectedBySessionID returns memories that were injected into a session (M2M edge).
-func (s *Service) GetInjectedBySessionID(ctx context.Context, sessionID string) ([]MemoryDetail, error) {
+func (s *Service) GetInjectedBySessionID(ctx context.Context, sessionID string) ([]Detail, error) {
 	memories, err := s.entClient.AlertSession.Query().
 		Where(alertsession.IDEQ(sessionID)).
 		QueryInjectedMemories().
@@ -322,7 +322,7 @@ func (s *Service) GetInjectedBySessionID(ctx context.Context, sessionID string) 
 	if err != nil {
 		return nil, fmt.Errorf("get injected memories for session %s: %w", sessionID, err)
 	}
-	return entToMemoryDetails(memories), nil
+	return entToDetails(memories), nil
 }
 
 // ListParams configures the List query.
@@ -338,7 +338,7 @@ type ListParams struct {
 
 // ListResult holds paginated memory results.
 type ListResult struct {
-	Memories   []MemoryDetail
+	Memories   []Detail
 	Total      int
 	Page       int
 	PageSize   int
@@ -397,7 +397,7 @@ func (s *Service) List(ctx context.Context, params ListParams) (*ListResult, err
 	}
 
 	return &ListResult{
-		Memories:   entToMemoryDetails(memories),
+		Memories:   entToDetails(memories),
 		Total:      total,
 		Page:       params.Page,
 		PageSize:   params.PageSize,
@@ -414,7 +414,7 @@ type UpdateInput struct {
 }
 
 // Update applies a partial update to a memory.
-func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*MemoryDetail, error) {
+func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*Detail, error) {
 	u := s.entClient.InvestigationMemory.UpdateOneID(memoryID)
 	changed := false
 
@@ -446,7 +446,7 @@ func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput
 		}
 		return nil, fmt.Errorf("update memory %s: %w", memoryID, err)
 	}
-	return entToMemoryDetail(m), nil
+	return entToDetail(m), nil
 }
 
 // Delete permanently removes a memory.
@@ -461,8 +461,8 @@ func (s *Service) Delete(ctx context.Context, memoryID string) error {
 	return nil
 }
 
-func entToMemoryDetail(m *ent.InvestigationMemory) *MemoryDetail {
-	return &MemoryDetail{
+func entToDetail(m *ent.InvestigationMemory) *Detail {
+	return &Detail{
 		ID:              m.ID,
 		Project:         m.Project,
 		Content:         m.Content,
@@ -480,10 +480,10 @@ func entToMemoryDetail(m *ent.InvestigationMemory) *MemoryDetail {
 	}
 }
 
-func entToMemoryDetails(memories []*ent.InvestigationMemory) []MemoryDetail {
-	result := make([]MemoryDetail, 0, len(memories))
+func entToDetails(memories []*ent.InvestigationMemory) []Detail {
+	result := make([]Detail, 0, len(memories))
 	for _, m := range memories {
-		result = append(result, *entToMemoryDetail(m))
+		result = append(result, *entToDetail(m))
 	}
 	return result
 }

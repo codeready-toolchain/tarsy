@@ -142,6 +142,7 @@ func (s *Server) SetScoringService(svc *services.ScoringService) {
 	s.scoringService = svc
 }
 
+// SetMemoryService sets the memory service for memory CRUD endpoints and review-triggered refinement.
 func (s *Server) SetMemoryService(svc *memory.Service) {
 	s.memoryService = svc
 }

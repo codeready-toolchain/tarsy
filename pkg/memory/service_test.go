@@ -59,7 +59,7 @@ func TestTruncate(t *testing.T) {
 	assert.Equal(t, "this is lo...", truncate("this is longer than 10", 10))
 }
 
-func TestEntToMemoryDetail(t *testing.T) {
+func TestEntToDetail(t *testing.T) {
 	now := time.Now()
 	alertType := "cpu_spike"
 	chainID := "chain-1"
@@ -81,7 +81,7 @@ func TestEntToMemoryDetail(t *testing.T) {
 		LastSeenAt:      now,
 	}
 
-	detail := entToMemoryDetail(m)
+	detail := entToDetail(m)
 	assert.Equal(t, m.ID, detail.ID)
 	assert.Equal(t, m.Project, detail.Project)
 	assert.Equal(t, m.Content, detail.Content)

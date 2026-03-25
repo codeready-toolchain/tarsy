@@ -18,8 +18,8 @@ type Memory struct {
 	SeenCount  int     `json:"seen_count"`
 }
 
-// MemoryDetail is the full representation of a memory, used by CRUD endpoints.
-type MemoryDetail struct {
+// Detail is the full representation of a memory, used by CRUD endpoints.
+type Detail struct {
 	ID              string    `json:"id"`
 	Project         string    `json:"project"`
 	Content         string    `json:"content"`

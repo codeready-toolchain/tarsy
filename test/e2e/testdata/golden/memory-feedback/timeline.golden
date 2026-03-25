@@ -1,0 +1,113 @@
+[
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.",
+    "event_type": "final_analysis",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "FeedbackReflector",
+    "content": "{\"create\":[{\"content\":\"Always check Kubernetes resource limits before OOM diagnosis\",\"category\":\"procedural\",\"valence\":\"positive\"}],\"reinforce\":[],\"deprecate\":[]}",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "FeedbackReflector",
+    "content": "{\"create\":[{\"content\":\"Always check Kubernetes resource limits before OOM diagnosis\",\"category\":\"procedural\",\"valence\":\"positive\"}],\"reinforce\":[],\"deprecate\":[]}",
+    "event_type": "final_analysis",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "Investigator",
+    "content": "Let me check the pod status.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "Investigator",
+    "content": "Checking pods.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "Investigator",
+    "content": "[{\"name\":\"pod-1\",\"status\":\"OOMKilled\",\"restarts\":5}]",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"namespace\":\"default\"}",
+      "is_error": false,
+      "server_name": "test-mcp",
+      "tool_name": "get_pods",
+      "tool_type": "mcp"
+    },
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "Investigator",
+    "content": "Pod is OOMKilled.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "agent": "Investigator",
+    "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+    "event_type": "llm_response",
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "agent": "Investigator",
+    "content": "Investigation complete: pod-1 is OOMKilled with 5 restarts.",
+    "event_type": "final_analysis",
+    "sequence": 6,
+    "status": "completed"
+  },
+  {
+    "agent": "ScoringAgent",
+    "content": "## Dimension Assessments\n\n**Investigation Outcome:** Correct conclusion.\n\n**Evidence Gathering:** incomplete_evidence — no memory metrics checked.\n\n## Overall Assessment\n\nCorrect conclusion with gaps.\n\n70",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ScoringAgent",
+    "content": "## Missing Tools\n\n1. **get_memory_metrics** — Fetch memory usage.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "ScoringAgent",
+    "content": "{\"create\":[{\"content\":\"OOMKilled pods need memory metrics verification\",\"category\":\"procedural\",\"valence\":\"positive\"}],\"reinforce\":[],\"deprecate\":[]}",
+    "event_type": "llm_response",
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "ScoringAgent",
+    "content": "{\"create\":[{\"content\":\"OOMKilled pods need memory metrics verification\",\"category\":\"procedural\",\"valence\":\"positive\"}],\"reinforce\":[],\"deprecate\":[]}",
+    "event_type": "final_analysis",
+    "sequence": 4,
+    "status": "completed"
+  }
+]

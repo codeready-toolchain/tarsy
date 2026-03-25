@@ -168,7 +168,7 @@ func mapMemoryError(err error) *echo.HTTPError {
 	return mapServiceError(err)
 }
 
-func toMemoryResponse(m memory.MemoryDetail) models.MemoryResponse {
+func toMemoryResponse(m memory.Detail) models.MemoryResponse {
 	return models.MemoryResponse{
 		ID:              m.ID,
 		Project:         m.Project,
@@ -187,7 +187,7 @@ func toMemoryResponse(m memory.MemoryDetail) models.MemoryResponse {
 	}
 }
 
-func toMemoryResponses(memories []memory.MemoryDetail) []models.MemoryResponse {
+func toMemoryResponses(memories []memory.Detail) []models.MemoryResponse {
 	result := make([]models.MemoryResponse, 0, len(memories))
 	for _, m := range memories {
 		result = append(result, toMemoryResponse(m))

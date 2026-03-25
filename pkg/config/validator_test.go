@@ -3396,3 +3396,84 @@ func intPtr(i int) *int {
 func durPtr(d time.Duration) *time.Duration {
 	return &d
 }
+
+func TestWarnMemoryWithoutScoring(t *testing.T) {
+	captureLogs := func(t *testing.T) (*bytes.Buffer, func()) {
+		t.Helper()
+		var buf bytes.Buffer
+		old := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		return &buf, func() { slog.SetDefault(old) }
+	}
+
+	t.Run("warns when memory enabled and no scoring anywhere", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain-a": {},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnMemoryWithoutScoring(&Defaults{
+			Memory: &MemoryConfig{Enabled: true},
+		})
+
+		assert.Contains(t, buf.String(), "Memory is enabled but no chain has scoring enabled")
+	})
+
+	t.Run("no warning when defaults.scoring.enabled is true", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain-a": {},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnMemoryWithoutScoring(&Defaults{
+			Memory:  &MemoryConfig{Enabled: true},
+			Scoring: &ScoringConfig{Enabled: true},
+		})
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("no warning when at least one chain has scoring enabled", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"no-scoring":  {},
+				"has-scoring": {Scoring: &ScoringConfig{Enabled: true}},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnMemoryWithoutScoring(&Defaults{
+			Memory: &MemoryConfig{Enabled: true},
+		})
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("warns when scoring exists but is disabled", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain-a": {Scoring: &ScoringConfig{Enabled: false}},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnMemoryWithoutScoring(&Defaults{
+			Memory:  &MemoryConfig{Enabled: true},
+			Scoring: &ScoringConfig{Enabled: false},
+		})
+
+		assert.Contains(t, buf.String(), "Memory is enabled but no chain has scoring enabled")
+	})
+}
