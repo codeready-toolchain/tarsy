@@ -27,7 +27,7 @@ func configsDir() string {
 // tarsy.yaml and llm-providers.yaml.
 //
 // Available configs: pipeline, full-flow, two-stage-fail-fast,
-// parallel-any, parallel-all, replica, chat, forced-conclusion.
+// parallel-any, parallel-all, replica, chat, forced-conclusion, memory.
 func Load(t *testing.T, name string) *config.Config {
 	t.Helper()
 	dir := filepath.Join(configsDir(), name)

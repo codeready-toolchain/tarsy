@@ -1,0 +1,31 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  memory:
+    enabled: true
+    max_inject: 5
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  MemoryInvestigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are MemoryInvestigator, investigating infrastructure alerts."
+
+agent_chains:
+  memory-chain:
+    alert_types: [memory-test]
+    llm_provider: "test-provider"
+    llm_backend: "google-native"
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+      llm_backend: "google-native"
+    stages:
+      - name: investigation
+        agents:
+          - name: MemoryInvestigator
