@@ -1,0 +1,29 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  max_iterations: 3
+  memory:
+    enabled: true
+    max_inject: 5
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, gathering evidence about the alert."
+
+agent_chains:
+  memory-reflector-chain:
+    alert_types: [test-memory-reflector]
+    executive_summary_provider: "test-provider"
+    scoring:
+      enabled: true
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
