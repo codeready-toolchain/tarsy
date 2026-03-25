@@ -41,6 +41,8 @@ export const SCORING_STATUS = {
 export const SCORING_STATUS_MESSAGE: Record<string, string> = {
   [SCORING_STATUS.IN_PROGRESS]: 'Evaluating quality…',
   [SCORING_STATUS.MEMORIZING]: 'Memorizing…',
+  [SCORING_STATUS.COMPLETED]: 'Evaluation complete',
+  [SCORING_STATUS.FAILED]: 'Evaluation failed',
 };
 
 /** Terminal execution/stage statuses — execution will not change further. */

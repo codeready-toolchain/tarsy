@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -88,7 +89,7 @@ func (c *IteratingController) Run(
 		state.CurrentIteration = iteration + 1
 
 		phase := events.ProgressPhaseInvestigating
-		if execCtx.StageType == "action" {
+		if execCtx.StageType == string(stage.StageTypeAction) {
 			phase = events.ProgressPhaseRemediating
 		}
 		publishExecutionProgress(ctx, execCtx, phase,

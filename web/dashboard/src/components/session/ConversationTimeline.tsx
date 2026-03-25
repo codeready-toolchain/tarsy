@@ -285,7 +285,9 @@ export default function ConversationTimeline({
     let status = progressStatus || 'Processing...';
 
     if (scoringInProgress) {
-      status = (scoringStatus && SCORING_STATUS_MESSAGE[scoringStatus]) || SCORING_STATUS_MESSAGE.in_progress;
+      status = (scoringStatus && scoringStatus in SCORING_STATUS_MESSAGE)
+        ? SCORING_STATUS_MESSAGE[scoringStatus]
+        : SCORING_STATUS_MESSAGE.in_progress;
     } else if (chatStageInProgress && !isActive) {
       status = 'Processing...';
     }
