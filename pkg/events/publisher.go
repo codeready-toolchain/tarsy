@@ -163,11 +163,16 @@ func (p *EventPublisher) PublishInteractionCreated(ctx context.Context, sessionI
 }
 
 // PublishSessionProgress broadcasts a session.progress transient event (no DB persistence).
-// Published to the global sessions channel for the active alerts panel.
+// Published to both the session-specific channel (for SessionDetailPage) and
+// the global sessions channel (for the dashboard active alerts panel).
 func (p *EventPublisher) PublishSessionProgress(ctx context.Context, payload SessionProgressPayload) error {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal SessionProgressPayload: %w", err)
+	}
+	if err := p.notifyOnly(ctx, SessionChannel(payload.SessionID), payloadJSON); err != nil {
+		slog.Warn("Failed to publish session progress to session channel",
+			"session_id", payload.SessionID, "error", err)
 	}
 	return p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON)
 }
@@ -196,11 +201,16 @@ func (p *EventPublisher) PublishExecutionStatus(ctx context.Context, sessionID s
 }
 
 // PublishSessionScoreUpdated broadcasts a session.score_updated transient event
-// to the global sessions channel so the dashboard can refresh and show the score.
-func (p *EventPublisher) PublishSessionScoreUpdated(ctx context.Context, _ string, payload SessionScoreUpdatedPayload) error {
+// to both the session-specific channel (for SessionDetailPage scoring status)
+// and the global sessions channel (for the dashboard score spinner / refresh).
+func (p *EventPublisher) PublishSessionScoreUpdated(ctx context.Context, sessionID string, payload SessionScoreUpdatedPayload) error {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal SessionScoreUpdatedPayload: %w", err)
+	}
+	if err := p.notifyOnly(ctx, SessionChannel(sessionID), payloadJSON); err != nil {
+		slog.Warn("Failed to publish session score updated to session channel",
+			"session_id", sessionID, "error", err)
 	}
 	return p.notifyOnly(ctx, GlobalSessionsChannel, payloadJSON)
 }

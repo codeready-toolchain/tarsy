@@ -290,7 +290,7 @@ export default function ConversationTimeline({
       status = 'Processing...';
     }
 
-    if (!selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
+    if (!scoringInProgress && !selectedAgentExecutionId && agentProgressStatuses && agentProgressStatuses.size === 1) {
       const singleAgentStatus = agentProgressStatuses.values().next().value;
       if (singleAgentStatus) status = singleAgentStatus;
     }
