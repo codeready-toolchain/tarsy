@@ -65,6 +65,12 @@ No runbook available.
 **Agent:** MemoryInvestigator (google-native, test-provider)
 **Status**: completed
 
+**Pre-loaded Memories (3):**
+
+- [procedural, positive] Check PgBouncer connection pool health before investigating query latency
+- [semantic, neutral] Normal error rate for batch-processor during 2-4am is ~200/hr
+- [procedural, negative] container_memory_rss metric does not exist in this setup
+
 **Internal Reasoning:**
 
 Let me check the pods.

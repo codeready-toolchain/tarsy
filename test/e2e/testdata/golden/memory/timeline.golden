@@ -6,7 +6,7 @@
     "metadata": {
       "author": "api-client"
     },
-    "sequence": 7,
+    "sequence": 8,
     "status": "completed"
   },
   {
@@ -16,14 +16,14 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 8,
+    "sequence": 9,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Searching past investigations.",
     "event_type": "llm_response",
-    "sequence": 9,
+    "sequence": 10,
     "status": "completed"
   },
   {
@@ -37,7 +37,7 @@
       "tool_name": "recall_past_investigations",
       "tool_type": "mcp"
     },
-    "sequence": 10,
+    "sequence": 11,
     "status": "completed"
   },
   {
@@ -47,21 +47,21 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 11,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "Based on past investigations, check PgBouncer connection pool health.",
-    "event_type": "llm_response",
     "sequence": 12,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "Based on past investigations, check PgBouncer connection pool health.",
-    "event_type": "final_analysis",
+    "event_type": "llm_response",
     "sequence": 13,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Based on past investigations, check PgBouncer connection pool health.",
+    "event_type": "final_analysis",
+    "sequence": 14,
     "status": "completed"
   },
   {
@@ -76,6 +76,21 @@
     "content": "All pods healthy. No issues found.",
     "event_type": "final_analysis",
     "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "- [procedural, positive] Check PgBouncer connection pool health before investigating query latency\n- [semantic, neutral] Normal error rate for batch-processor during 2-4am is ~200/hr\n- [procedural, negative] container_memory_rss metric does not exist in this setup",
+    "event_type": "memory_injected",
+    "metadata": {
+      "count": 3,
+      "memory_ids": [
+        "{UUID}",
+        "{UUID}",
+        "{UUID}"
+      ]
+    },
+    "sequence": 1,
     "status": "completed"
   },
   {
@@ -85,14 +100,14 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 1,
+    "sequence": 2,
     "status": "completed"
   },
   {
     "agent": "MemoryInvestigator",
     "content": "Checking pod status.",
     "event_type": "llm_response",
-    "sequence": 2,
+    "sequence": 3,
     "status": "completed"
   },
   {
@@ -106,7 +121,7 @@
       "tool_name": "get_pods",
       "tool_type": "mcp"
     },
-    "sequence": 3,
+    "sequence": 4,
     "status": "completed"
   },
   {
@@ -116,21 +131,21 @@
     "metadata": {
       "source": "native"
     },
-    "sequence": 4,
-    "status": "completed"
-  },
-  {
-    "agent": "MemoryInvestigator",
-    "content": "Investigation complete: all pods healthy.",
-    "event_type": "llm_response",
     "sequence": 5,
     "status": "completed"
   },
   {
     "agent": "MemoryInvestigator",
     "content": "Investigation complete: all pods healthy.",
-    "event_type": "final_analysis",
+    "event_type": "llm_response",
     "sequence": 6,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Investigation complete: all pods healthy.",
+    "event_type": "final_analysis",
+    "sequence": 7,
     "status": "completed"
   }
 ]

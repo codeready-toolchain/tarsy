@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -500,6 +502,367 @@ func TestE2E_MemoryReflectorCreation(t *testing.T) {
 		assert.Equal(t, sessionID, m.SourceSessionID, "memory source_session_id should point to the scored session")
 		assert.False(t, m.Deprecated)
 	}
+}
+
+// TestE2E_MemoryFeedbackReflector verifies the full review → memory feedback flow:
+// investigation → scoring → reflector (initial memories) → human review with
+// feedback → confidence adjustment + feedback reflector (new memories).
+//
+// LLM call sequence:
+//  1. Investigation: tool call + final answer (2 calls)
+//  2. Executive summary (1 call)
+//  3. Scoring: score evaluation + tool improvement (2 calls)
+//  4. Scoring reflector: initial memory extraction (1 call)
+//  5. Feedback reflector: triggered by human review (1 call)
+func TestE2E_MemoryFeedbackReflector(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	memSvc, memCfg := setupMemoryService(t, dbClient, 3)
+	ctx := t.Context()
+
+	llm := NewScriptedLLMClient()
+
+	// Investigation: tool call + final answer.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me check the pod status."},
+			&agent.TextChunk{Content: "Checking pods."},
+			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Pod is OOMKilled."},
+			&agent.TextChunk{Content: "Investigation complete: pod-1 is OOMKilled with 5 restarts."},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit."})
+
+	// Scoring turn 1: score evaluation.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "## Dimension Assessments\n\n" +
+				"**Investigation Outcome:** Correct conclusion.\n\n" +
+				"**Evidence Gathering:** incomplete_evidence — no memory metrics checked.\n\n" +
+				"## Overall Assessment\n\nCorrect conclusion with gaps.\n\n70"},
+			&agent.UsageChunk{InputTokens: 400, OutputTokens: 80, TotalTokens: 480},
+		},
+	})
+	// Scoring turn 2: tool improvement report.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "## Missing Tools\n\n1. **get_memory_metrics** — Fetch memory usage."},
+			&agent.UsageChunk{InputTokens: 500, OutputTokens: 60, TotalTokens: 560},
+		},
+	})
+
+	// Scoring reflector: initial memory extraction.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: `{"create":[` +
+				`{"content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive"}` +
+				`],"reinforce":[],"deprecate":[]}`},
+			&agent.UsageChunk{InputTokens: 600, OutputTokens: 80, TotalTokens: 680},
+		},
+	})
+
+	// Feedback reflector: triggered after human review. Creates a new memory
+	// and reinforces the one from the scoring reflector.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: `{"create":[` +
+				`{"content":"Always check Kubernetes resource limits before OOM diagnosis","category":"procedural","valence":"positive"}` +
+				`],"reinforce":[],"deprecate":[]}`},
+			&agent.UsageChunk{InputTokens: 700, OutputTokens: 90, TotalTokens: 790},
+		},
+	})
+
+	podsResult := `[{"name":"pod-1","status":"OOMKilled","restarts":5}]`
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "memory-reflector")),
+		WithDBClient(dbClient),
+		WithLLMClient(llm),
+		WithMemoryService(memSvc, memCfg),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"get_pods": StaticToolHandler(podsResult),
+			},
+		}),
+	)
+
+	resp := app.SubmitAlert(t, "test-memory-reflector", "Pod OOMKilled in production")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// Wait for scoring stage to complete (includes initial reflector extraction).
+	require.Eventually(t, func() bool {
+		stgs, qErr := app.EntClient.Stage.Query().
+			Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+			All(context.Background())
+		if qErr != nil || len(stgs) == 0 {
+			return false
+		}
+		return stgs[0].Status == stage.StatusCompleted
+	}, 30*time.Second, 200*time.Millisecond, "scoring stage did not complete")
+
+	// Snapshot initial memories created by the scoring reflector.
+	initialMemories, err := memSvc.GetBySessionID(ctx, sessionID)
+	require.NoError(t, err)
+	require.Len(t, initialMemories, 1, "scoring reflector should have created 1 memory")
+	initialMem := initialMemories[0]
+	assert.Equal(t, "OOMKilled pods need memory metrics verification", initialMem.Content)
+	initialConfidence := initialMem.Confidence
+
+	// ── Submit human review with feedback ──
+	app.PatchReview(t, sessionID, map[string]interface{}{
+		"action":                 "complete",
+		"quality_rating":         "partially_accurate",
+		"action_taken":           "Needs more evidence on resource limits.",
+		"investigation_feedback": "The investigation missed checking Kubernetes resource limits. Always verify limits before diagnosing OOM.",
+	})
+
+	// Wait for feedback reflector to complete (creates a FeedbackReflector execution).
+	require.Eventually(t, func() bool {
+		execs, qErr := app.EntClient.AgentExecution.Query().
+			Where(
+				agentexecution.SessionIDEQ(sessionID),
+				agentexecution.AgentNameEQ("FeedbackReflector"),
+			).
+			All(context.Background())
+		if qErr != nil || len(execs) == 0 {
+			return false
+		}
+		return execs[0].Status == agentexecution.StatusCompleted
+	}, 30*time.Second, 200*time.Millisecond, "feedback reflector execution did not complete")
+
+	// ── Assert: confidence was adjusted (partially_accurate → 0.6x) ──
+	adjustedMem, err := memSvc.GetByID(ctx, initialMem.ID)
+	require.NoError(t, err)
+	assert.InDelta(t, initialConfidence*0.6, adjustedMem.Confidence, 0.01,
+		"partially_accurate review should degrade confidence by 0.6x")
+
+	// ── Assert: feedback reflector created a new memory at 0.9 confidence ──
+	allMemories, err := memSvc.GetBySessionID(ctx, sessionID)
+	require.NoError(t, err)
+	require.Len(t, allMemories, 2, "should have 1 initial + 1 feedback memory")
+
+	var feedbackMem *memory.MemoryDetail
+	for _, m := range allMemories {
+		if m.ID != initialMem.ID {
+			feedbackMem = &m
+			break
+		}
+	}
+	require.NotNil(t, feedbackMem, "should find the feedback-created memory")
+	assert.Equal(t, "Always check Kubernetes resource limits before OOM diagnosis", feedbackMem.Content)
+	assert.InDelta(t, 0.9, feedbackMem.Confidence, 0.01, "feedback memories should have 0.9 confidence")
+
+	// ── Assert: FeedbackReflector execution is on the scoring stage ──
+	fbExecs, err := app.EntClient.AgentExecution.Query().
+		Where(
+			agentexecution.SessionIDEQ(sessionID),
+			agentexecution.AgentNameEQ("FeedbackReflector"),
+		).
+		All(ctx)
+	require.NoError(t, err)
+	require.Len(t, fbExecs, 1)
+
+	scoringStages, err := app.EntClient.Stage.Query().
+		Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+		All(ctx)
+	require.NoError(t, err)
+	require.Len(t, scoringStages, 1)
+	assert.Equal(t, scoringStages[0].ID, fbExecs[0].StageID,
+		"feedback reflector execution should be attached to the scoring stage")
+}
+
+// TestE2E_MemoryCRUDAPI verifies all memory HTTP endpoints through a full
+// pipeline: investigation → scoring → reflector creates memories → exercise
+// the GET/LIST/PATCH/DELETE API endpoints and session-scoped queries.
+//
+// Endpoints tested:
+//   - GET  /api/v1/sessions/:id/memories         (session-extracted)
+//   - GET  /api/v1/sessions/:id/injected-memories (session-injected)
+//   - GET  /api/v1/memories                       (list with filters/pagination)
+//   - GET  /api/v1/memories/:id                   (single)
+//   - PATCH /api/v1/memories/:id                  (update)
+//   - DELETE /api/v1/memories/:id                 (delete)
+func TestE2E_MemoryCRUDAPI(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	memSvc, memCfg := setupMemoryService(t, dbClient, 3)
+
+	llm := NewScriptedLLMClient()
+
+	// Investigation: tool call + final answer.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Checking pods."},
+			&agent.TextChunk{Content: "Checking pods."},
+			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Investigation complete: pod-1 is OOMKilled."},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled."})
+
+	// Scoring turn 1 + turn 2.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "## Overall\nDecent investigation.\n\n75"},
+			&agent.UsageChunk{InputTokens: 400, OutputTokens: 80, TotalTokens: 480},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "## Missing Tools\nNone."},
+			&agent.UsageChunk{InputTokens: 500, OutputTokens: 40, TotalTokens: 540},
+		},
+	})
+
+	// Reflector: creates two memories with different categories.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: `{"create":[` +
+				`{"content":"Check resource limits when pods OOMKill","category":"procedural","valence":"positive"},` +
+				`{"content":"Batch processor normal error rate is 200/hr","category":"semantic","valence":"neutral"}` +
+				`],"reinforce":[],"deprecate":[]}`},
+			&agent.UsageChunk{InputTokens: 600, OutputTokens: 100, TotalTokens: 700},
+		},
+	})
+
+	podsResult := `[{"name":"pod-1","status":"OOMKilled","restarts":5}]`
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "memory-reflector")),
+		WithDBClient(dbClient),
+		WithLLMClient(llm),
+		WithMemoryService(memSvc, memCfg),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"get_pods": StaticToolHandler(podsResult),
+			},
+		}),
+	)
+
+	resp := app.SubmitAlert(t, "test-memory-reflector", "Pod OOMKilled")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// Wait for scoring + reflector.
+	require.Eventually(t, func() bool {
+		stgs, qErr := app.EntClient.Stage.Query().
+			Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+			All(context.Background())
+		if qErr != nil || len(stgs) == 0 {
+			return false
+		}
+		return stgs[0].Status == stage.StatusCompleted
+	}, 30*time.Second, 200*time.Millisecond, "scoring stage did not complete")
+
+	// ════════════════════════════════════════════════════════════
+	// A. GET /sessions/:id/memories — extracted from session
+	// ════════════════════════════════════════════════════════════
+
+	sessionMemories := app.GetSessionMemories(t, sessionID)
+	require.Len(t, sessionMemories, 2, "reflector should have created 2 memories")
+
+	memoryIDs := make([]string, 2)
+	for i, raw := range sessionMemories {
+		m := raw.(map[string]interface{})
+		memoryIDs[i] = m["id"].(string)
+		assert.Equal(t, sessionID, m["source_session_id"])
+		assert.Equal(t, "default", m["project"])
+		assert.Equal(t, false, m["deprecated"])
+	}
+
+	// ════════════════════════════════════════════════════════════
+	// B. GET /sessions/:id/injected-memories — empty for first session
+	// ════════════════════════════════════════════════════════════
+
+	injected := app.GetInjectedMemories(t, sessionID)
+	assert.Empty(t, injected, "first session should have no injected memories")
+
+	// ════════════════════════════════════════════════════════════
+	// C. GET /memories/:id — single memory detail
+	// ════════════════════════════════════════════════════════════
+
+	mem := app.GetMemory(t, memoryIDs[0])
+	assert.Equal(t, memoryIDs[0], mem["id"])
+	assert.NotEmpty(t, mem["content"])
+	assert.NotEmpty(t, mem["category"])
+	assert.NotEmpty(t, mem["created_at"])
+
+	// ════════════════════════════════════════════════════════════
+	// D. GET /memories — list with pagination and filters
+	// ════════════════════════════════════════════════════════════
+
+	listResp := app.ListMemories(t, "")
+	assert.Equal(t, float64(2), listResp["total"])
+	assert.Equal(t, float64(1), listResp["page"])
+	memories := listResp["memories"].([]interface{})
+	assert.Len(t, memories, 2)
+
+	// Filter by category.
+	procedural := app.ListMemories(t, "category=procedural")
+	assert.Equal(t, float64(1), procedural["total"])
+	pm := procedural["memories"].([]interface{})[0].(map[string]interface{})
+	assert.Equal(t, "procedural", pm["category"])
+
+	// Filter by source_session_id.
+	bySession := app.ListMemories(t, "source_session_id="+sessionID)
+	assert.Equal(t, float64(2), bySession["total"])
+
+	// Pagination: page_size=1.
+	page1 := app.ListMemories(t, "page_size=1&page=1")
+	assert.Equal(t, float64(2), page1["total"])
+	assert.Equal(t, float64(2), page1["total_pages"])
+	assert.Len(t, page1["memories"].([]interface{}), 1)
+
+	// ════════════════════════════════════════════════════════════
+	// E. PATCH /memories/:id — update content and deprecated flag
+	// ════════════════════════════════════════════════════════════
+
+	updated := app.UpdateMemory(t, memoryIDs[0], map[string]interface{}{
+		"content":    "Updated memory content",
+		"deprecated": true,
+	})
+	assert.Equal(t, "Updated memory content", updated["content"])
+	assert.Equal(t, true, updated["deprecated"])
+
+	// Verify via GET.
+	fetched := app.GetMemory(t, memoryIDs[0])
+	assert.Equal(t, "Updated memory content", fetched["content"])
+	assert.Equal(t, true, fetched["deprecated"])
+
+	// Filter deprecated=true returns only the updated one.
+	depList := app.ListMemories(t, "deprecated=true")
+	assert.Equal(t, float64(1), depList["total"])
+
+	// ════════════════════════════════════════════════════════════
+	// F. DELETE /memories/:id — remove and verify 404
+	// ════════════════════════════════════════════════════════════
+
+	app.DeleteMemory(t, memoryIDs[1])
+
+	// Should be gone — GET returns 404.
+	app.GetMemoryExpectStatus(t, memoryIDs[1], http.StatusNotFound)
+
+	// List should now have 1 memory total.
+	afterDelete := app.ListMemories(t, "")
+	assert.Equal(t, float64(1), afterDelete["total"])
 }
 
 // TestE2E_MemoryDisabled verifies that when memory is not configured,

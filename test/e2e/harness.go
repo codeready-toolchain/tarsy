@@ -268,6 +268,9 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	if scoringExecutor != nil {
 		server.SetScoringExecutor(scoringExecutor)
 	}
+	if tc.memoryService != nil {
+		server.SetMemoryService(tc.memoryService)
+	}
 
 	require.NoError(t, server.ValidateWiring(), "server wiring incomplete — did you forget a Set* call?")
 

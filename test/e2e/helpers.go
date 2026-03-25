@@ -246,6 +246,66 @@ func (app *TestApp) GetTriageGroup(t *testing.T, group string, queryParams strin
 }
 
 // ────────────────────────────────────────────────────────────
+// Memory API Helpers
+// ────────────────────────────────────────────────────────────
+
+// GetSessionMemories calls GET /api/v1/sessions/:id/memories.
+func (app *TestApp) GetSessionMemories(t *testing.T, sessionID string) []interface{} {
+	t.Helper()
+	return app.getJSONArray(t, "/api/v1/sessions/"+sessionID+"/memories", http.StatusOK)
+}
+
+// GetInjectedMemories calls GET /api/v1/sessions/:id/injected-memories.
+func (app *TestApp) GetInjectedMemories(t *testing.T, sessionID string) []interface{} {
+	t.Helper()
+	return app.getJSONArray(t, "/api/v1/sessions/"+sessionID+"/injected-memories", http.StatusOK)
+}
+
+// ListMemories calls GET /api/v1/memories with optional query params.
+func (app *TestApp) ListMemories(t *testing.T, queryParams string) map[string]interface{} {
+	t.Helper()
+	path := "/api/v1/memories"
+	if queryParams != "" {
+		path += "?" + queryParams
+	}
+	return app.getJSON(t, path, http.StatusOK)
+}
+
+// GetMemory calls GET /api/v1/memories/:id.
+func (app *TestApp) GetMemory(t *testing.T, memoryID string) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/memories/"+memoryID, http.StatusOK)
+}
+
+// UpdateMemory calls PATCH /api/v1/memories/:id.
+func (app *TestApp) UpdateMemory(t *testing.T, memoryID string, body map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	return app.patchJSON(t, "/api/v1/memories/"+memoryID, body, http.StatusOK)
+}
+
+// DeleteMemory calls DELETE /api/v1/memories/:id.
+func (app *TestApp) DeleteMemory(t *testing.T, memoryID string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, app.BaseURL+"/api/v1/memories/"+memoryID, nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode, "DELETE /api/v1/memories/%s: unexpected status", memoryID)
+}
+
+// GetMemoryExpectStatus calls GET /api/v1/memories/:id with an expected status code.
+func (app *TestApp) GetMemoryExpectStatus(t *testing.T, memoryID string, expectedStatus int) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, app.BaseURL+"/api/v1/memories/"+memoryID, nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, expectedStatus, resp.StatusCode, "GET /api/v1/memories/%s: unexpected status", memoryID)
+}
+
+// ────────────────────────────────────────────────────────────
 // Trace API Helpers
 // ────────────────────────────────────────────────────────────
 
