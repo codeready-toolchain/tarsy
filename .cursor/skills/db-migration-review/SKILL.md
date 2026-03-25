@@ -40,15 +40,30 @@ Occasionally Atlas includes `ALTER TABLE` statements for tables unrelated to the
 
 **Action:** If the operation is clearly unrelated to the migration's named purpose, remove it. If uncertain, investigate the Ent schema change that caused it.
 
+## Transactional Migrations (Required)
+
+Every migration **must** be wrapped in `BEGIN;` / `COMMIT;` so that a failure rolls back all DDL atomically. This keeps the database schema clean on error and enables the app's auto-recovery logic (`recoverDirtyMigration` in `pkg/database/client.go`) to retry on the next deploy without manual intervention.
+
+```sql
+BEGIN;
+
+-- ... migration statements ...
+
+COMMIT;
+```
+
+**Exception:** Statements that cannot run inside a transaction (e.g., `CREATE INDEX CONCURRENTLY`) must be in a separate migration file without `BEGIN`/`COMMIT`.
+
 ## Review Checklist
 
 After `make migrate-create NAME=<name>`:
 
-1. **Read the generated `.up.sql` file end to end**
-2. **For every `DROP INDEX` statement:** verify the index name relates to the migration's purpose. Cross-reference with `pkg/database/migrations/` to find where it was created. If it was created manually (not by Atlas) or with a `WHERE` clause, remove the `DROP`.
-3. **For every `DROP INDEX` + `CREATE INDEX` pair on the same index:** compare the `CREATE` definition with the prior migration. If identical, remove both.
-4. **For every `ALTER TABLE` statement:** verify it targets a table related to the migration's purpose.
-5. **After edits:** run `make migrate-hash` to update `atlas.sum`.
+1. **Wrap the migration in `BEGIN;` / `COMMIT;`** — add these if the generated file doesn't include them.
+2. **Read the generated `.up.sql` file end to end**
+3. **For every `DROP INDEX` statement:** verify the index name relates to the migration's purpose. Cross-reference with `pkg/database/migrations/` to find where it was created. If it was created manually (not by Atlas) or with a `WHERE` clause, remove the `DROP`.
+4. **For every `DROP INDEX` + `CREATE INDEX` pair on the same index:** compare the `CREATE` definition with the prior migration. If identical, remove both.
+5. **For every `ALTER TABLE` statement:** verify it targets a table related to the migration's purpose.
+6. **After edits:** run `make migrate-hash` to update `atlas.sum`.
 
 ## Adding New Manually-Managed Indexes
 

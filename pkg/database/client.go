@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 )
@@ -165,10 +168,20 @@ func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.D
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
-	// Apply all pending migrations
+	// Apply all pending migrations. If a previous deploy left the DB dirty
+	// (failed migration with transactional DDL), recover automatically by
+	// rolling back to the predecessor version and retrying once.
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("failed to apply migrations: %w", err)
+		var dirtyErr migrate.ErrDirty
+		if errors.As(err, &dirtyErr) {
+			if recoverDirtyMigration(m, sourceDriver, uint(dirtyErr.Version)) {
+				err = m.Up()
+			}
+		}
+		if err != nil && err != migrate.ErrNoChange {
+			return fmt.Errorf("failed to apply migrations: %w", err)
+		}
 	}
 
 	// Close only the migration source driver. We must NOT call m.Close() because
@@ -184,6 +197,39 @@ func runMigrations(ctx context.Context, db *stdsql.DB, cfg Config, drv *entsql.D
 	}
 
 	return nil
+}
+
+// recoverDirtyMigration rolls the schema_migrations version back to the
+// predecessor of the dirty version so that m.Up() can re-attempt it.
+//
+// This is safe when migrations use BEGIN/COMMIT: a failed transactional
+// migration leaves the schema unchanged, so only the version marker needs
+// fixing. Returns true if recovery succeeded and the caller should retry.
+func recoverDirtyMigration(m *migrate.Migrate, src source.Driver, dirtyVersion uint) bool {
+	slog.Warn("Dirty migration detected — attempting auto-recovery",
+		"dirty_version", dirtyVersion)
+
+	prevVersion, err := src.Prev(dirtyVersion)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Error("Failed to find predecessor migration", "dirty_version", dirtyVersion, "error", err)
+		return false
+	}
+
+	var forceVersion int
+	if errors.Is(err, os.ErrNotExist) {
+		forceVersion = -1 // NilVersion — no migrations applied
+	} else {
+		forceVersion = int(prevVersion)
+	}
+
+	if err := m.Force(forceVersion); err != nil {
+		slog.Error("Failed to force migration version", "target_version", forceVersion, "error", err)
+		return false
+	}
+
+	slog.Info("Auto-recovered dirty migration — retrying",
+		"dirty_version", dirtyVersion, "rolled_back_to", forceVersion)
+	return true
 }
 
 // hasEmbeddedMigrations checks if the embedded FS contains any .sql migration files

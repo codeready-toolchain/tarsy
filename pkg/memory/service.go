@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"math"
 	"strings"
-	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
@@ -121,14 +119,14 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 	}
 
 	for _, action := range result.Reinforce {
-		if err := s.reinforce(ctx, action.MemoryID); err != nil {
+		if err := s.reinforce(ctx, project, action.MemoryID); err != nil {
 			slog.Warn("Failed to reinforce memory",
 				"memory_id", action.MemoryID, "error", err)
 		}
 	}
 
 	for _, action := range result.Deprecate {
-		if err := s.deprecate(ctx, action.MemoryID); err != nil {
+		if err := s.deprecate(ctx, project, action.MemoryID); err != nil {
 			slog.Warn("Failed to deprecate memory",
 				"memory_id", action.MemoryID, "error", err)
 		}
@@ -137,7 +135,16 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 	return nil
 }
 
+// createMemory uses raw SQL instead of Ent so the row and its embedding
+// (pgvector type, not managed by Ent) are written in a single atomic INSERT.
 func (s *Service) createMemory(ctx context.Context, project, sessionID string, alertType, chainID *string, score int, action ReflectorCreateAction) error {
+	if err := investigationmemory.CategoryValidator(investigationmemory.Category(action.Category)); err != nil {
+		return fmt.Errorf("invalid category %q: %w", action.Category, err)
+	}
+	if err := investigationmemory.ValenceValidator(investigationmemory.Valence(action.Valence)); err != nil {
+		return fmt.Errorf("invalid valence %q: %w", action.Valence, err)
+	}
+
 	vec, err := s.embedder.Embed(ctx, action.Content, EmbeddingTaskDocument)
 	if err != nil {
 		return fmt.Errorf("embed memory content: %w", err)
@@ -145,57 +152,60 @@ func (s *Service) createMemory(ctx context.Context, project, sessionID string, a
 
 	memoryID := uuid.New().String()
 	confidence := initialConfidence(score)
-
-	builder := s.entClient.InvestigationMemory.Create().
-		SetID(memoryID).
-		SetProject(project).
-		SetContent(action.Content).
-		SetCategory(investigationmemory.Category(action.Category)).
-		SetValence(investigationmemory.Valence(action.Valence)).
-		SetConfidence(confidence).
-		SetSourceSessionID(sessionID)
-
-	if alertType != nil {
-		builder.SetAlertType(*alertType)
-	}
-	if chainID != nil {
-		builder.SetChainID(*chainID)
-	}
-
-	if _, err := builder.Save(ctx); err != nil {
-		return fmt.Errorf("save memory: %w", err)
-	}
-
 	vecStr := formatVector(vec)
+
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE investigation_memories SET embedding = $1::vector WHERE memory_id = $2`,
-		vecStr, memoryID,
+		`INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, alert_type, chain_id, created_at, updated_at,
+			 last_seen_at, deprecated, embedding)
+		 VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, NOW(), NOW(), NOW(), false, $10::vector)`,
+		memoryID, project, action.Content, action.Category, action.Valence, confidence,
+		sessionID, alertType, chainID, vecStr,
 	); err != nil {
-		return fmt.Errorf("store embedding: %w", err)
+		return fmt.Errorf("create memory: %w", err)
 	}
 
 	return nil
 }
 
-func (s *Service) reinforce(ctx context.Context, memoryID string) error {
-	mem, err := s.entClient.InvestigationMemory.Get(ctx, memoryID)
+// reinforce uses raw SQL instead of Ent because the confidence update
+// (LEAST(confidence * 1.1, 1.0)) requires a multiplicative expression
+// that Ent's update builder cannot express atomically.
+func (s *Service) reinforce(ctx context.Context, project, memoryID string) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE investigation_memories
+		SET confidence = LEAST(confidence * 1.1, 1.0),
+		    seen_count = seen_count + 1,
+		    last_seen_at = NOW(),
+		    updated_at = NOW()
+		WHERE memory_id = $1 AND project = $2
+	`, memoryID, project)
 	if err != nil {
-		return fmt.Errorf("get memory %s: %w", memoryID, err)
+		return fmt.Errorf("reinforce memory %s: %w", memoryID, err)
 	}
-
-	newConfidence := math.Min(mem.Confidence*1.1, 1.0)
-
-	return s.entClient.InvestigationMemory.UpdateOneID(memoryID).
-		SetConfidence(newConfidence).
-		SetSeenCount(mem.SeenCount + 1).
-		SetLastSeenAt(time.Now()).
-		Exec(ctx)
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("memory %s not found in project %s", memoryID, project)
+	}
+	return nil
 }
 
-func (s *Service) deprecate(ctx context.Context, memoryID string) error {
-	return s.entClient.InvestigationMemory.UpdateOneID(memoryID).
+func (s *Service) deprecate(ctx context.Context, project, memoryID string) error {
+	n, err := s.entClient.InvestigationMemory.Update().
+		Where(
+			investigationmemory.ID(memoryID),
+			investigationmemory.Project(project),
+		).
 		SetDeprecated(true).
-		Exec(ctx)
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("deprecate memory %s: %w", memoryID, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("memory %s not found in project %s", memoryID, project)
+	}
+	return nil
 }
 
 // initialConfidence derives initial confidence from the investigation's quality score.

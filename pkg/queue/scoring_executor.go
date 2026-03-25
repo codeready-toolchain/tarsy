@@ -402,6 +402,12 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		e.failScore(scoreID, errMsg)
 	}
 
+	// Run memory extraction while the scoring execution is still active so
+	// reflector timeline events stream to the dashboard in real-time.
+	if scoreCompleted && e.memoryService != nil && e.memoryConfig != nil {
+		e.runMemoryExtraction(ctx, session, investigationContext, result, agentExecCtx)
+	}
+
 	// Update AgentExecution terminal status
 	entStatus := mapAgentStatusToEntStatus(agentStatus)
 	if updateErr := e.stageService.UpdateAgentExecutionStatus(context.Background(), exec.ID, entStatus, errMsg); updateErr != nil {
@@ -421,11 +427,6 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Info("Scoring executor: completed successfully")
 	} else {
 		logger.Warn("Scoring executor: failed", "error", errMsg)
-	}
-
-	// Run memory extraction before publishing the final scoring status.
-	if scoreCompleted && e.memoryService != nil && e.memoryConfig != nil {
-		e.runMemoryExtraction(ctx, session, investigationContext, result, agentExecCtx)
 	}
 
 	// Notify global sessions channel so the dashboard refreshes the score

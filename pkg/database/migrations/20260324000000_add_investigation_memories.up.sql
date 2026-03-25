@@ -7,6 +7,8 @@
 -- llm_interactions interaction_type enum.
 -- ============================================================
 
+BEGIN;
+
 -- 1. Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -46,7 +48,11 @@ CREATE INDEX "investigationmemory_source_session_id"
 CREATE INDEX "investigationmemory_category"
   ON "public"."investigation_memories" ("category");
 
--- 4. Embedding column (pgvector type — not managed by Ent)
+-- 4. Embedding column (pgvector type — not managed by Ent).
+-- Intentionally nullable: Ent cannot manage pgvector types, so the embedding
+-- is set via a raw SQL UPDATE immediately after the Ent record is created.
+-- If the embedding API fails, the record exists without an embedding.
+-- Similarity queries filter with "embedding IS NOT NULL" to handle this.
 ALTER TABLE "public"."investigation_memories"
   ADD COLUMN "embedding" vector(768);
 
@@ -70,3 +76,5 @@ CREATE TABLE "public"."alert_session_injected_memories" (
     REFERENCES "public"."investigation_memories" ("memory_id")
     ON UPDATE NO ACTION ON DELETE CASCADE
 );
+
+COMMIT;

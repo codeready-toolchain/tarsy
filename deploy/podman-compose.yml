@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: mirror.gcr.io/library/postgres:17-alpine
+    image: mirror.gcr.io/pgvector/pgvector:pg17
     container_name: tarsy-postgres
     environment:
       POSTGRES_USER: tarsy

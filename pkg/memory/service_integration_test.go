@@ -28,12 +28,9 @@ func newTestService(t *testing.T, vec []float32) (*memory.Service, string) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	// Enable pgvector in this test schema.
-	_, err := db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-	require.NoError(t, err)
-
-	// Create the embedding column (Ent doesn't manage it).
-	_, err = db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	// Add the embedding column — Ent can't manage pgvector types, so this
+	// column is handled via raw SQL in production migrations.
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
 	require.NoError(t, err)
 
 	// Create a source session (FK target).
@@ -85,6 +82,16 @@ func TestService_ApplyReflectorActions_CreateAndQuery(t *testing.T) {
 		assert.InDelta(t, 0.6, m.Confidence, 0.01)
 		assert.Equal(t, 1, m.SeenCount)
 	}
+
+	// Verify category and valence survive the raw INSERT → SELECT round-trip.
+	// Catches parameter ordering bugs (e.g. $4/$5 swap).
+	categories := []string{memories[0].Category, memories[1].Category}
+	assert.Contains(t, categories, "procedural")
+	assert.Contains(t, categories, "episodic")
+
+	valences := []string{memories[0].Valence, memories[1].Valence}
+	assert.Contains(t, valences, "positive")
+	assert.Contains(t, valences, "neutral")
 }
 
 func TestService_ApplyReflectorActions_Reinforce(t *testing.T) {
@@ -150,6 +157,24 @@ func TestService_ApplyReflectorActions_Deprecate(t *testing.T) {
 	assert.Empty(t, memories)
 }
 
+func TestService_ApplyReflectorActions_InvalidEnums(t *testing.T) {
+	svc, sessionID := newTestService(t, []float32{1, 0, 0})
+	ctx := t.Context()
+
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80, &memory.ReflectorResult{
+		Create: []memory.ReflectorCreateAction{
+			{Content: "Bad category", Category: "invented", Valence: "positive"},
+			{Content: "Bad valence", Category: "semantic", Valence: "invented"},
+			{Content: "Both bad", Category: "foo", Valence: "bar"},
+		},
+	})
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilar(ctx, "default", "anything", 10)
+	require.NoError(t, err)
+	assert.Empty(t, memories, "memories with invalid enums must not be persisted")
+}
+
 func TestService_ApplyReflectorActions_NilResult(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 1, 1})
 
@@ -161,9 +186,7 @@ func TestService_ApplyReflectorActions_WithScopeMetadata(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
 	require.NoError(t, err)
 
 	sessionID := uuid.New().String()
@@ -195,13 +218,117 @@ func TestService_ApplyReflectorActions_WithScopeMetadata(t *testing.T) {
 	assert.Equal(t, "infra", *mem.ChainID)
 }
 
+func TestService_FindSimilarWithBoosts(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	sessionID := uuid.New().String()
+	_, err = entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	alertType := "cpu_high"
+	chainID := "infra"
+
+	// Create memories with different scope metadata.
+	// Identical embeddings → cosine distance is the same; ranking
+	// differences come exclusively from the scope boosts.
+	err = svc.ApplyReflectorActions(ctx, "default", sessionID, &alertType, &chainID, 80,
+		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
+			{Content: "Both scopes", Category: "semantic", Valence: "positive"},
+		}})
+	require.NoError(t, err)
+
+	err = svc.ApplyReflectorActions(ctx, "default", sessionID, &alertType, nil, 80,
+		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
+			{Content: "Alert only", Category: "semantic", Valence: "positive"},
+		}})
+	require.NoError(t, err)
+
+	err = svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80,
+		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
+			{Content: "No scopes", Category: "semantic", Valence: "positive"},
+		}})
+	require.NoError(t, err)
+
+	// Query with both boosts. alert_type match → +0.05, chain_id match → +0.03.
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", &alertType, &chainID, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 3)
+
+	assert.Equal(t, "Both scopes", memories[0].Content)
+	assert.Equal(t, "Alert only", memories[1].Content)
+	assert.Equal(t, "No scopes", memories[2].Content)
+}
+
+func TestService_CreateMemory_PersistsAllColumns(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	sessionID := uuid.New().String()
+	_, err = entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0.1, 0.2, 0.3}}, cfg)
+
+	alertType := "cpu_high"
+	chainID := "infra"
+	err = svc.ApplyReflectorActions(ctx, "default", sessionID, &alertType, &chainID, 90, &memory.ReflectorResult{
+		Create: []memory.ReflectorCreateAction{
+			{Content: "Always check logs first", Category: "procedural", Valence: "positive"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Read back via Ent to verify every column written by the raw INSERT.
+	mem, err := entClient.InvestigationMemory.Query().
+		Where(investigationmemory.Project("default")).
+		Only(ctx)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, mem.ID)
+	assert.Equal(t, "default", mem.Project)
+	assert.Equal(t, "Always check logs first", mem.Content)
+	assert.Equal(t, investigationmemory.CategoryProcedural, mem.Category)
+	assert.Equal(t, investigationmemory.ValencePositive, mem.Valence)
+	assert.InDelta(t, 0.8, mem.Confidence, 0.01) // score 90 → 0.8
+	assert.Equal(t, 1, mem.SeenCount)
+	assert.Equal(t, sessionID, mem.SourceSessionID)
+	require.NotNil(t, mem.AlertType)
+	assert.Equal(t, "cpu_high", *mem.AlertType)
+	require.NotNil(t, mem.ChainID)
+	assert.Equal(t, "infra", *mem.ChainID)
+	assert.False(t, mem.Deprecated)
+	assert.False(t, mem.CreatedAt.IsZero())
+	assert.False(t, mem.UpdatedAt.IsZero())
+	assert.False(t, mem.LastSeenAt.IsZero())
+
+	// Verify the embedding (pgvector, not managed by Ent) was written
+	// atomically by confirming the record is returned by similarity search.
+	memories, err := svc.FindSimilar(ctx, "default", "anything", 1)
+	require.NoError(t, err)
+	require.Len(t, memories, 1)
+	assert.Equal(t, mem.ID, memories[0].ID)
+}
+
 func TestService_ValidateDimensions(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(768)`)
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(768)`)
 	require.NoError(t, err)
 
 	t.Run("matching dimensions", func(t *testing.T) {

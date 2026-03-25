@@ -52,9 +52,22 @@ make migrate-hash
 ## Important Notes
 
 - **Forward-only**: No `.down.sql` files. To undo a change, create a new migration that reverses it.
+- **Transactional**: Wrap every migration in `BEGIN;` / `COMMIT;` so failures roll back atomically. The app auto-recovers from dirty migrations on next startup (see `recoverDirtyMigration` in `pkg/database/client.go`). Exception: `CREATE INDEX CONCURRENTLY` cannot run in a transaction — put it in a separate migration file without `BEGIN`/`COMMIT`.
 - **Enums are VARCHAR**: Adding new enum values in Ent doesn't need a migration -- just `make ent-generate`. Validation is at the app level.
 - **Don't edit existing migrations**: Treat applied migrations as immutable.
 - **atlas.sum must stay in sync**: If you manually edit a migration, run `make migrate-hash`.
+
+## Dev Environment: pgvector Image Upgrade
+
+Migration `20260324000000_add_investigation_memories` requires the `pgvector` PostgreSQL extension. The local dev container image was changed from `postgres:17-alpine` to `pgvector/pgvector:pg17`.
+
+If your local dev database was created before this change, run the upgrade script to swap the container image (data is preserved):
+
+```bash
+./scripts/upgrade-dev-postgres-pgvector.sh
+```
+
+Then start normally with `make dev` — the pending migration applies automatically.
 
 ## Available Make Targets
 

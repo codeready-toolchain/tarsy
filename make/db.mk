@@ -4,7 +4,7 @@
 
 # Container configuration
 CONTAINER_NAME := tarsy-postgres
-IMAGE_NAME := docker.io/library/postgres:17-alpine
+IMAGE_NAME := mirror.gcr.io/pgvector/pgvector:pg17
 COMPOSE_FILE := $(CURDIR)/deploy/podman-compose.yml
 COMPOSE ?= COMPOSE_PROJECT_NAME=tarsy podman compose -f $(COMPOSE_FILE)
 

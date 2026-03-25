@@ -132,6 +132,23 @@ func getOrCreateSharedDatabase(t *testing.T) string {
 			return
 		}
 
+		// Create extensions upfront, matching CI's "Initialize PostgreSQL extensions" step.
+		// Without this, a test that forgets CREATE EXTENSION would pass in CI
+		// (pre-created) but fail locally.
+		db, err := stdsql.Open("pgx", connStr)
+		if err != nil {
+			containerErr = fmt.Errorf("failed to connect for extension setup: %w", err)
+			return
+		}
+		for _, ext := range []string{"vector", "uuid-ossp", "pg_trgm"} {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE EXTENSION IF NOT EXISTS "%s"`, ext)); err != nil {
+				_ = db.Close()
+				containerErr = fmt.Errorf("failed to create extension %s: %w", ext, err)
+				return
+			}
+		}
+		_ = db.Close()
+
 		sharedConnStr = connStr
 		t.Logf("Shared container ready: %s", sharedConnStr)
 	})

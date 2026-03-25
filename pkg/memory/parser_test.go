@@ -47,8 +47,14 @@ func TestParseReflectorResponse(t *testing.T) {
 			wantCreate: 1, wantReinf: 2, wantDeprec: 1,
 		},
 		{
-			name:       "nested braces in content",
+			name:       "nested braces in content — balanced",
 			input:      `Some text {  "create": [{"content": "handle {ns} properly", "category": "semantic", "valence": "positive"}], "reinforce": [], "deprecate": [] } more text`,
+			wantOK:     true,
+			wantCreate: 1,
+		},
+		{
+			name:       "unbalanced brace in string value",
+			input:      `Prose { "create": [{"content": "error } in logs", "category": "semantic", "valence": "negative"}], "reinforce": [], "deprecate": [] } end`,
 			wantOK:     true,
 			wantCreate: 1,
 		},
