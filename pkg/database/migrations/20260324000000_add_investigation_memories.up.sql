@@ -9,8 +9,17 @@
 
 BEGIN;
 
--- 1. Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+-- 1. Enable pgvector — gracefully handle managed databases where the
+--    current user lacks CREATE EXTENSION privileges.
+DO $$
+BEGIN
+  CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN insufficient_privilege THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+    RAISE EXCEPTION 'pgvector extension is not installed and the current user lacks permission to create it. A database admin must run: CREATE EXTENSION IF NOT EXISTS vector;';
+  END IF;
+END
+$$;
 
 -- 2. Create investigation_memories table (Ent-managed columns)
 CREATE TABLE "public"."investigation_memories" (
