@@ -12,7 +12,7 @@ import { TriageGroupedList } from './TriageGroupedList.tsx';
 import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
-import { REVIEW_STATUS, REVIEW_MODAL_MODE } from '../../types/api.ts';
+import { REVIEW_MODAL_MODE, getReviewModalMode } from '../../types/api.ts';
 import type { TriageGroup, TriageGroupKey, ReviewModalMode } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
@@ -92,7 +92,7 @@ export function TriageView({
   };
 
   const handleReviewClick = useCallback((session: DashboardSessionItem) => {
-    const mode = session.review_status === REVIEW_STATUS.REVIEWED ? REVIEW_MODAL_MODE.EDIT : REVIEW_MODAL_MODE.COMPLETE;
+    const mode = getReviewModalMode(session.review_status);
     setReviewTarget({ session, mode });
   }, []);
 
@@ -163,10 +163,19 @@ export function TriageView({
     withAction(() => onBulkReopen(sessionIds));
   };
 
+  const findSessionInGroups = useCallback((sessionId: string): DashboardSessionItem | undefined => {
+    for (const g of Object.values(groups)) {
+      const found = g?.sessions.find(s => s.id === sessionId);
+      if (found) return found;
+    }
+    return undefined;
+  }, [groups]);
+
   // --- Snackbar actions (snackbar mode only) ---
   const handleSnackbarAddFeedback = () => {
     if (!snackbar?.completedSession) return;
-    setReviewTarget({ session: snackbar.completedSession, mode: REVIEW_MODAL_MODE.EDIT });
+    const fresh = findSessionInGroups(snackbar.completedSession.id);
+    setReviewTarget({ session: fresh ?? snackbar.completedSession, mode: REVIEW_MODAL_MODE.EDIT });
     setSnackbar(null);
   };
 

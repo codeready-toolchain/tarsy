@@ -133,6 +133,11 @@ export const REVIEW_MODAL_MODE = {
 
 export type ReviewModalMode = (typeof REVIEW_MODAL_MODE)[keyof typeof REVIEW_MODAL_MODE];
 
+/** Returns the modal mode for a given review_status. */
+export function getReviewModalMode(reviewStatus: string | null | undefined): ReviewModalMode {
+  return reviewStatus === REVIEW_STATUS.REVIEWED ? REVIEW_MODAL_MODE.EDIT : REVIEW_MODAL_MODE.COMPLETE;
+}
+
 /** Allowed quality rating values for review feedback. */
 export const QUALITY_RATING = {
   ACCURATE: 'accurate',

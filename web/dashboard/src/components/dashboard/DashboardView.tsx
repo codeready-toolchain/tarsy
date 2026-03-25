@@ -69,7 +69,7 @@ import {
 } from '../../constants/eventTypes.ts';
 import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
-import { REVIEW_ACTION, REVIEW_STATUS, REVIEW_MODAL_MODE } from '../../types/api.ts';
+import { REVIEW_ACTION, REVIEW_MODAL_MODE, getReviewModalMode } from '../../types/api.ts';
 import type { ReviewModalMode } from '../../types/api.ts';
 import type { DashboardListParams, TriageGroup, TriageGroupKey, TriageGroupParams, UpdateReviewResponse } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
@@ -744,7 +744,7 @@ export function DashboardView() {
   const [reviewError, setReviewError] = useState<string | null>(null);
 
   const handleSessionReviewClick = useCallback((session: DashboardSessionItem) => {
-    const mode = session.review_status === REVIEW_STATUS.REVIEWED ? REVIEW_MODAL_MODE.EDIT : REVIEW_MODAL_MODE.COMPLETE;
+    const mode = getReviewModalMode(session.review_status);
     setReviewTarget({ session, mode });
     setReviewError(null);
   }, []);
