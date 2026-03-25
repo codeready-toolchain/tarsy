@@ -106,6 +106,34 @@ func publishTimelineCreated(
 	}
 }
 
+// emitMemoryInjectedEvent creates a single memory_injected timeline event
+// consolidating all pre-loaded memories. No-op when no memories were injected.
+func emitMemoryInjectedEvent(ctx context.Context, execCtx *agent.ExecutionContext, eventSeq *int) {
+	if execCtx.MemoryBriefing == nil || len(execCtx.MemoryBriefing.Memories) == 0 {
+		return
+	}
+
+	var sb strings.Builder
+	for i, m := range execCtx.MemoryBriefing.Memories {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(fmt.Sprintf("- [%s, %s] %s", m.Category, m.Valence, m.Content))
+	}
+
+	ids := make([]string, len(execCtx.MemoryBriefing.InjectedIDs))
+	copy(ids, execCtx.MemoryBriefing.InjectedIDs)
+
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeMemoryInjected,
+		sb.String(),
+		map[string]interface{}{
+			"count":      len(execCtx.MemoryBriefing.Memories),
+			"memory_ids": ids,
+		},
+		eventSeq,
+	)
+}
+
 // finalizeStreamingEvent completes or fails a streaming timeline event.
 // If content is non-empty, the event is completed normally. If content is
 // empty (edge case: event created but all chunks were empty), it is marked

@@ -2,7 +2,10 @@ package memory
 
 import (
 	"testing"
+	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,4 +57,40 @@ func TestTruncate(t *testing.T) {
 	assert.Equal(t, "short", truncate("short", 10))
 	assert.Equal(t, "exactly10!", truncate("exactly10!", 10))
 	assert.Equal(t, "this is lo...", truncate("this is longer than 10", 10))
+}
+
+func TestEntToMemoryDetail(t *testing.T) {
+	now := time.Now()
+	alertType := "cpu_spike"
+	chainID := "chain-1"
+
+	m := &ent.InvestigationMemory{
+		ID:              "mem-1",
+		Project:         "default",
+		Content:         "test content",
+		Category:        investigationmemory.CategorySemantic,
+		Valence:         investigationmemory.ValencePositive,
+		Confidence:      0.75,
+		SeenCount:       3,
+		SourceSessionID: "sess-1",
+		AlertType:       &alertType,
+		ChainID:         &chainID,
+		Deprecated:      false,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		LastSeenAt:      now,
+	}
+
+	detail := entToMemoryDetail(m)
+	assert.Equal(t, m.ID, detail.ID)
+	assert.Equal(t, m.Project, detail.Project)
+	assert.Equal(t, m.Content, detail.Content)
+	assert.Equal(t, string(m.Category), detail.Category)
+	assert.Equal(t, string(m.Valence), detail.Valence)
+	assert.Equal(t, m.Confidence, detail.Confidence)
+	assert.Equal(t, m.SeenCount, detail.SeenCount)
+	assert.Equal(t, m.SourceSessionID, detail.SourceSessionID)
+	assert.Equal(t, m.AlertType, detail.AlertType)
+	assert.Equal(t, m.ChainID, detail.ChainID)
+	assert.Equal(t, m.Deprecated, detail.Deprecated)
 }

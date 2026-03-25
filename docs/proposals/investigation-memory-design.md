@@ -747,7 +747,7 @@ Ent auto-generates the join table. Both directions are natural queries: `session
 
 **Result:** Investigations benefit from past learnings. Chat sessions can recall past investigations via tool.
 
-### Phase 3: Human Refinement + API + Dashboard
+### Phase 3: Human Refinement + API + Dashboard - DONE
 
 1. Inline confidence adjustment on review completion (multiplicative, Q5 Part 1)
 2. Background feedback Reflector job — enqueue when `investigation_feedback` is non-empty, runs Reflector variant to create/deprecate/reinforce memories from human feedback (Q5 Part 2)

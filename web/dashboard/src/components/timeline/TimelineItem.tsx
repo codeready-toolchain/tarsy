@@ -9,6 +9,7 @@ import NativeToolItem from './NativeToolItem';
 import ErrorItem from './ErrorItem';
 import ProviderFallbackItem from './ProviderFallbackItem';
 import SkillLoadedItem from './SkillLoadedItem';
+import MemoryInjectedItem from './MemoryInjectedItem';
 
 interface TimelineItemProps {
   item: FlowItem;
@@ -111,6 +112,9 @@ function TimelineItem({
 
     case FLOW_ITEM.SKILL_LOADED:
       return <SkillLoadedItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
+
+    case FLOW_ITEM.MEMORY_INJECTED:
+      return <MemoryInjectedItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container

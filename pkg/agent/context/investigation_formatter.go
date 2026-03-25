@@ -212,6 +212,17 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 
+		case timelineevent.EventTypeMemoryInjected:
+			prevWasLlmResponse = false
+			count, _ := event.Metadata["count"].(float64)
+			if count > 0 {
+				fmt.Fprintf(sb, "**Pre-loaded Memories (%d):**\n\n", int(count))
+			} else {
+				sb.WriteString("**Pre-loaded Memories:**\n\n")
+			}
+			sb.WriteString(event.Content)
+			sb.WriteString("\n\n")
+
 		default:
 			prevWasLlmResponse = false
 			sb.WriteString("**" + strings.ReplaceAll(string(event.EventType), "_", " ") + ":**\n\n")

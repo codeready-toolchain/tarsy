@@ -104,6 +104,9 @@ func (c *SingleShotController) Run(
 		)
 	}
 
+	// 2.6. Emit a single memory_injected event for all pre-loaded memories
+	emitMemoryInjectedEvent(ctx, execCtx, &eventSeq)
+
 	// 3. Single LLM call with streaming (no tools), with fallback retry
 	var streamed *StreamedResponse
 	var err error

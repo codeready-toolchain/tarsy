@@ -241,6 +241,29 @@ func TestFormatTimelineEvents(t *testing.T) {
 				"**Final Analysis:**\n\nRoot cause: OOM.\n\n",
 		},
 		{
+			name: "memory_injected with count metadata",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeMemoryInjected,
+					Content:   "- [pattern, positive] Check PgBouncer health first\n- [anti_pattern, negative] Don't restart pods blindly",
+					Metadata:  map[string]interface{}{"count": float64(2), "memory_ids": []interface{}{"m1", "m2"}},
+				},
+			},
+			expected: "**Pre-loaded Memories (2):**\n\n" +
+				"- [pattern, positive] Check PgBouncer health first\n- [anti_pattern, negative] Don't restart pods blindly\n\n",
+		},
+		{
+			name: "memory_injected without metadata falls back to generic header",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeMemoryInjected,
+					Content:   "- [pattern, positive] Some memory",
+				},
+			},
+			expected: "**Pre-loaded Memories:**\n\n" +
+				"- [pattern, positive] Some memory\n\n",
+		},
+		{
 			name: "tool call with empty summary consumes summary without raw fallback",
 			events: []*ent.TimelineEvent{
 				{

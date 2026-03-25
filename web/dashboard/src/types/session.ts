@@ -192,6 +192,24 @@ export interface ActiveSessionsResponse {
   queued: QueuedSessionItem[];
 }
 
+/** Investigation memory item from the memory API. */
+export interface MemoryItem {
+  id: string;
+  project: string;
+  content: string;
+  category: 'semantic' | 'episodic' | 'procedural';
+  valence: 'positive' | 'negative' | 'neutral';
+  confidence: number;
+  seen_count: number;
+  source_session_id: string;
+  alert_type: string | null;
+  chain_id: string | null;
+  deprecated: boolean;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+}
+
 /** Timeline event from GET /sessions/:id/timeline. */
 export interface TimelineEvent {
   id: string;

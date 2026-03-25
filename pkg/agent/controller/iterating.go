@@ -72,6 +72,9 @@ func (c *IteratingController) Run(
 		)
 	}
 
+	// 2.6. Emit a single memory_injected event for all pre-loaded memories
+	emitMemoryInjectedEvent(ctx, execCtx, &eventSeq)
+
 	// 3. Get available tools
 	tools, err := execCtx.ToolExecutor.ListTools(ctx)
 	if err != nil {

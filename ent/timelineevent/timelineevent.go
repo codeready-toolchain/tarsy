@@ -165,6 +165,7 @@ const (
 	EventTypeTaskAssigned       EventType = "task_assigned"
 	EventTypeProviderFallback   EventType = "provider_fallback"
 	EventTypeSkillLoaded        EventType = "skill_loaded"
+	EventTypeMemoryInjected     EventType = "memory_injected"
 )
 
 func (et EventType) String() string {
@@ -174,7 +175,7 @@ func (et EventType) String() string {
 // EventTypeValidator is a validator for the "event_type" field enum values. It is called by the builders before save.
 func EventTypeValidator(et EventType) error {
 	switch et {
-	case EventTypeLlmThinking, EventTypeLlmResponse, EventTypeLlmToolCall, EventTypeMcpToolSummary, EventTypeError, EventTypeUserQuestion, EventTypeExecutiveSummary, EventTypeFinalAnalysis, EventTypeCodeExecution, EventTypeGoogleSearchResult, EventTypeURLContextResult, EventTypeTaskAssigned, EventTypeProviderFallback, EventTypeSkillLoaded:
+	case EventTypeLlmThinking, EventTypeLlmResponse, EventTypeLlmToolCall, EventTypeMcpToolSummary, EventTypeError, EventTypeUserQuestion, EventTypeExecutiveSummary, EventTypeFinalAnalysis, EventTypeCodeExecution, EventTypeGoogleSearchResult, EventTypeURLContextResult, EventTypeTaskAssigned, EventTypeProviderFallback, EventTypeSkillLoaded, EventTypeMemoryInjected:
 		return nil
 	default:
 		return fmt.Errorf("timelineevent: invalid enum value for event_type field: %q", et)

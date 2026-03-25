@@ -98,7 +98,9 @@ import {
 
 const SessionHeader = lazy(() => import('../components/session/SessionHeader.tsx'));
 const OriginalAlertCard = lazy(() => import('../components/session/OriginalAlertCard.tsx'));
+const InjectedMemoriesCard = lazy(() => import('../components/session/InjectedMemoriesCard.tsx'));
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
+const ExtractedLearningsCard = lazy(() => import('../components/session/ExtractedLearningsCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
 const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
 
@@ -1601,6 +1603,11 @@ export function SessionDetailPage() {
               <OriginalAlertCard alertData={session.alert_data} />
             </Suspense>
 
+            {/* Injected Memories (lessons from past investigations) */}
+            <Suspense fallback={null}>
+              <InjectedMemoriesCard sessionId={session.id} />
+            </Suspense>
+
             {/* Jump to Summary button */}
             {hasFinalContent && (
               <Box sx={{ display: 'flex', justifyContent: 'center', my: 1.5 }}>
@@ -1721,6 +1728,14 @@ export function SessionDetailPage() {
                 scoringStatus={session.scoring_status}
                 qualityRating={session.quality_rating}
                 onReviewClick={handleReviewClick}
+              />
+            </Suspense>
+
+            {/* Extracted Learnings from this investigation */}
+            <Suspense fallback={null}>
+              <ExtractedLearningsCard
+                sessionId={session.id}
+                hasScore={session.latest_score != null}
               />
             </Suspense>
 

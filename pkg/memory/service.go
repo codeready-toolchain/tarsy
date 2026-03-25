@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ func NewService(entClient *ent.Client, db *sql.DB, embedder Embedder, cfg *confi
 }
 
 // FindSimilar returns the top-N memories most similar to queryText within a project.
+// Raw SQL: pgvector's cosine distance operator (<=>) is not supported by Ent.
 func (s *Service) FindSimilar(ctx context.Context, project, queryText string, limit int) ([]Memory, error) {
 	queryVec, err := s.embedder.Embed(ctx, queryText, EmbeddingTaskQuery)
 	if err != nil {
@@ -72,6 +74,8 @@ const candidateMultiplier = 3
 
 // FindSimilarWithBoosts returns the top-N memories using cosine similarity
 // with soft boosts for alert_type and chain_id scope metadata.
+// Raw SQL: pgvector's cosine distance operator (<=>) and the CTE-based
+// re-ranking are not expressible in Ent.
 //
 // The query uses a two-step approach so pgvector's HNSW index is utilised:
 //  1. Inner CTE fetches a larger candidate set ordered by raw cosine distance.
@@ -231,6 +235,328 @@ func (s *Service) deprecate(ctx context.Context, project, memoryID string) error
 	return nil
 }
 
+// feedbackConfidence is the initial confidence for memories created from human feedback.
+const feedbackConfidence = 0.9
+
+// AdjustConfidenceForReview adjusts confidence of all non-deprecated memories
+// sourced from sessionID based on the human quality rating.
+// Raw SQL: multiplicative confidence updates (LEAST(confidence * N, 1.0))
+// cannot be expressed atomically in Ent's update builder.
+//   - accurate:            confidence = min(confidence * 1.2, 1.0)
+//   - partially_accurate:  confidence = confidence * 0.6
+//   - inaccurate:          deprecated = true
+func (s *Service) AdjustConfidenceForReview(ctx context.Context, project, sessionID string, rating alertsession.QualityRating) error {
+	switch rating {
+	case alertsession.QualityRatingAccurate:
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE investigation_memories
+			SET confidence = LEAST(confidence * 1.2, 1.0),
+			    updated_at = NOW()
+			WHERE source_session_id = $1 AND project = $2 AND deprecated = false
+		`, sessionID, project)
+		if err != nil {
+			return fmt.Errorf("boost confidence for session %s: %w", sessionID, err)
+		}
+		return nil
+
+	case alertsession.QualityRatingPartiallyAccurate:
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE investigation_memories
+			SET confidence = confidence * 0.6,
+			    updated_at = NOW()
+			WHERE source_session_id = $1 AND project = $2 AND deprecated = false
+		`, sessionID, project)
+		if err != nil {
+			return fmt.Errorf("degrade confidence for session %s: %w", sessionID, err)
+		}
+		return nil
+
+	case alertsession.QualityRatingInaccurate:
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE investigation_memories
+			SET deprecated = true,
+			    updated_at = NOW()
+			WHERE source_session_id = $1 AND project = $2 AND deprecated = false
+		`, sessionID, project)
+		if err != nil {
+			return fmt.Errorf("deprecate memories for session %s: %w", sessionID, err)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown quality rating %q", rating)
+	}
+}
+
+// GetByID returns a single memory by ID.
+func (s *Service) GetByID(ctx context.Context, memoryID string) (*MemoryDetail, error) {
+	m, err := s.entClient.InvestigationMemory.Get(ctx, memoryID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrMemoryNotFound
+		}
+		return nil, fmt.Errorf("get memory %s: %w", memoryID, err)
+	}
+	return entToMemoryDetail(m), nil
+}
+
+// GetBySessionID returns all memories extracted from a session (source_session_id).
+func (s *Service) GetBySessionID(ctx context.Context, sessionID string) ([]MemoryDetail, error) {
+	memories, err := s.entClient.InvestigationMemory.Query().
+		Where(investigationmemory.SourceSessionIDEQ(sessionID)).
+		Order(ent.Asc(investigationmemory.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get memories for session %s: %w", sessionID, err)
+	}
+	return entToMemoryDetails(memories), nil
+}
+
+// GetInjectedBySessionID returns memories that were injected into a session (M2M edge).
+func (s *Service) GetInjectedBySessionID(ctx context.Context, sessionID string) ([]MemoryDetail, error) {
+	memories, err := s.entClient.AlertSession.Query().
+		Where(alertsession.IDEQ(sessionID)).
+		QueryInjectedMemories().
+		Order(ent.Asc(investigationmemory.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get injected memories for session %s: %w", sessionID, err)
+	}
+	return entToMemoryDetails(memories), nil
+}
+
+// ListParams configures the List query.
+type ListParams struct {
+	Project         string
+	Category        *string
+	Valence         *string
+	Deprecated      *bool
+	SourceSessionID *string
+	Page            int
+	PageSize        int
+}
+
+// ListResult holds paginated memory results.
+type ListResult struct {
+	Memories   []MemoryDetail
+	Total      int
+	Page       int
+	PageSize   int
+	TotalPages int
+}
+
+// List returns a paginated, filtered list of memories.
+func (s *Service) List(ctx context.Context, params ListParams) (*ListResult, error) {
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	if params.PageSize < 1 {
+		params.PageSize = 20
+	}
+	if params.PageSize > 200 {
+		params.PageSize = 200
+	}
+
+	q := s.entClient.InvestigationMemory.Query().
+		Where(investigationmemory.ProjectEQ(params.Project))
+
+	if params.Category != nil {
+		q = q.Where(investigationmemory.CategoryEQ(investigationmemory.Category(*params.Category)))
+	}
+	if params.Valence != nil {
+		q = q.Where(investigationmemory.ValenceEQ(investigationmemory.Valence(*params.Valence)))
+	}
+	if params.Deprecated != nil {
+		q = q.Where(investigationmemory.DeprecatedEQ(*params.Deprecated))
+	}
+	if params.SourceSessionID != nil {
+		q = q.Where(investigationmemory.SourceSessionIDEQ(*params.SourceSessionID))
+	}
+
+	total, err := q.Count(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count memories: %w", err)
+	}
+
+	totalPages := (total + params.PageSize - 1) / params.PageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if params.Page > totalPages {
+		params.Page = totalPages
+	}
+
+	offset := (params.Page - 1) * params.PageSize
+	memories, err := q.Clone().
+		Order(ent.Desc(investigationmemory.FieldCreatedAt)).
+		Limit(params.PageSize).
+		Offset(offset).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list memories: %w", err)
+	}
+
+	return &ListResult{
+		Memories:   entToMemoryDetails(memories),
+		Total:      total,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// UpdateInput holds the fields for a partial memory update.
+type UpdateInput struct {
+	Content    *string
+	Category   *string
+	Valence    *string
+	Deprecated *bool
+}
+
+// Update applies a partial update to a memory.
+func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*MemoryDetail, error) {
+	u := s.entClient.InvestigationMemory.UpdateOneID(memoryID)
+	changed := false
+
+	if input.Content != nil {
+		u.SetContent(*input.Content)
+		changed = true
+	}
+	if input.Category != nil {
+		u.SetCategory(investigationmemory.Category(*input.Category))
+		changed = true
+	}
+	if input.Valence != nil {
+		u.SetValence(investigationmemory.Valence(*input.Valence))
+		changed = true
+	}
+	if input.Deprecated != nil {
+		u.SetDeprecated(*input.Deprecated)
+		changed = true
+	}
+
+	if !changed {
+		return s.GetByID(ctx, memoryID)
+	}
+
+	m, err := u.Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrMemoryNotFound
+		}
+		return nil, fmt.Errorf("update memory %s: %w", memoryID, err)
+	}
+	return entToMemoryDetail(m), nil
+}
+
+// Delete permanently removes a memory.
+func (s *Service) Delete(ctx context.Context, memoryID string) error {
+	err := s.entClient.InvestigationMemory.DeleteOneID(memoryID).Exec(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrMemoryNotFound
+		}
+		return fmt.Errorf("delete memory %s: %w", memoryID, err)
+	}
+	return nil
+}
+
+func entToMemoryDetail(m *ent.InvestigationMemory) *MemoryDetail {
+	return &MemoryDetail{
+		ID:              m.ID,
+		Project:         m.Project,
+		Content:         m.Content,
+		Category:        string(m.Category),
+		Valence:         string(m.Valence),
+		Confidence:      m.Confidence,
+		SeenCount:       m.SeenCount,
+		SourceSessionID: m.SourceSessionID,
+		AlertType:       m.AlertType,
+		ChainID:         m.ChainID,
+		Deprecated:      m.Deprecated,
+		CreatedAt:       m.CreatedAt,
+		UpdatedAt:       m.UpdatedAt,
+		LastSeenAt:      m.LastSeenAt,
+	}
+}
+
+func entToMemoryDetails(memories []*ent.InvestigationMemory) []MemoryDetail {
+	result := make([]MemoryDetail, 0, len(memories))
+	for _, m := range memories {
+		result = append(result, *entToMemoryDetail(m))
+	}
+	return result
+}
+
+// ApplyFeedbackReflectorActions processes Reflector output from human feedback.
+// New memories get fixed 0.9 confidence instead of score-derived confidence.
+func (s *Service) ApplyFeedbackReflectorActions(ctx context.Context, project, sessionID string, alertType, chainID *string, result *ReflectorResult) error {
+	if result == nil || result.IsEmpty() {
+		return nil
+	}
+
+	var errs []error
+
+	for _, action := range result.Create {
+		if err := s.createMemoryWithConfidence(ctx, project, sessionID, alertType, chainID, feedbackConfidence, action); err != nil {
+			slog.Warn("Failed to create feedback memory",
+				"session_id", sessionID, "content_prefix", truncate(action.Content, 80), "error", err)
+			errs = append(errs, err)
+		}
+	}
+
+	for _, action := range result.Reinforce {
+		if err := s.reinforce(ctx, project, action.MemoryID); err != nil {
+			slog.Warn("Failed to reinforce memory from feedback",
+				"memory_id", action.MemoryID, "error", err)
+			errs = append(errs, err)
+		}
+	}
+
+	for _, action := range result.Deprecate {
+		if err := s.deprecate(ctx, project, action.MemoryID); err != nil {
+			slog.Warn("Failed to deprecate memory from feedback",
+				"memory_id", action.MemoryID, "error", err)
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// createMemoryWithConfidence is like createMemory but uses an explicit confidence value.
+// Raw SQL: same reason as createMemory — embedding (pgvector) must be written atomically.
+func (s *Service) createMemoryWithConfidence(ctx context.Context, project, sessionID string, alertType, chainID *string, confidence float64, action ReflectorCreateAction) error {
+	if err := investigationmemory.CategoryValidator(investigationmemory.Category(action.Category)); err != nil {
+		return fmt.Errorf("invalid category %q: %w", action.Category, err)
+	}
+	if err := investigationmemory.ValenceValidator(investigationmemory.Valence(action.Valence)); err != nil {
+		return fmt.Errorf("invalid valence %q: %w", action.Valence, err)
+	}
+
+	vec, err := s.embedder.Embed(ctx, action.Content, EmbeddingTaskDocument)
+	if err != nil {
+		return fmt.Errorf("embed memory content: %w", err)
+	}
+
+	memoryID := uuid.New().String()
+	vecStr := formatVector(vec)
+
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, alert_type, chain_id, created_at, updated_at,
+			 last_seen_at, deprecated, embedding)
+		 VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, NOW(), NOW(), NOW(), false, $10::vector)`,
+		memoryID, project, action.Content, action.Category, action.Valence, confidence,
+		sessionID, alertType, chainID, vecStr,
+	); err != nil {
+		return fmt.Errorf("create memory: %w", err)
+	}
+
+	return nil
+}
+
 // initialConfidence derives initial confidence from the investigation's quality score.
 func initialConfidence(score int) float64 {
 	switch {
@@ -247,6 +573,7 @@ func initialConfidence(score int) float64 {
 
 // ValidateDimensions checks that the configured embedding dimensions match the
 // pgvector column size. Returns an error on mismatch.
+// Raw SQL: pg_attribute introspection is not available through Ent.
 func (s *Service) ValidateDimensions(ctx context.Context) error {
 	var atttypmod int
 	err := s.db.QueryRowContext(ctx, `

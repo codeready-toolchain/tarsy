@@ -32,6 +32,7 @@ import type {
   SessionSummaryResponse,
   ActiveSessionsResponse,
   TimelineEvent,
+  MemoryItem,
 } from '../types/session.ts';
 import type {
   TraceListResponse,
@@ -292,5 +293,17 @@ export async function getRunbooks(): Promise<string[]> {
 
 export async function submitAlert(data: SubmitAlertRequest): Promise<AlertResponse> {
   const response = await client.post<AlertResponse>('/api/v1/alerts', data);
+  return response.data;
+}
+
+// --- Memories ---
+
+export async function getSessionMemories(sessionId: string): Promise<MemoryItem[]> {
+  const response = await client.get<MemoryItem[]>(`/api/v1/sessions/${sessionId}/memories`);
+  return response.data;
+}
+
+export async function getInjectedMemories(sessionId: string): Promise<MemoryItem[]> {
+  const response = await client.get<MemoryItem[]>(`/api/v1/sessions/${sessionId}/injected-memories`);
   return response.data;
 }

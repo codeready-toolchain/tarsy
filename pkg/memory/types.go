@@ -1,6 +1,14 @@
 package memory
 
-// Memory represents a stored investigation memory.
+import (
+	"errors"
+	"time"
+)
+
+// ErrMemoryNotFound is returned when a memory ID does not exist.
+var ErrMemoryNotFound = errors.New("memory not found")
+
+// Memory represents a stored investigation memory (lightweight, used in retrieval).
 type Memory struct {
 	ID         string  `json:"id"`
 	Content    string  `json:"content"`
@@ -8,6 +16,24 @@ type Memory struct {
 	Valence    string  `json:"valence"`
 	Confidence float64 `json:"confidence"`
 	SeenCount  int     `json:"seen_count"`
+}
+
+// MemoryDetail is the full representation of a memory, used by CRUD endpoints.
+type MemoryDetail struct {
+	ID              string    `json:"id"`
+	Project         string    `json:"project"`
+	Content         string    `json:"content"`
+	Category        string    `json:"category"`
+	Valence         string    `json:"valence"`
+	Confidence      float64   `json:"confidence"`
+	SeenCount       int       `json:"seen_count"`
+	SourceSessionID string    `json:"source_session_id"`
+	AlertType       *string   `json:"alert_type"`
+	ChainID         *string   `json:"chain_id"`
+	Deprecated      bool      `json:"deprecated"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	LastSeenAt      time.Time `json:"last_seen_at"`
 }
 
 // ReflectorResult holds the parsed output from a Reflector LLM call.

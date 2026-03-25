@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -50,6 +51,7 @@ type Server struct {
 	scoringExecutor    *queue.ScoringExecutor          // nil until set (scoring endpoint)
 	scoringService     *services.ScoringService        // nil until set (score read endpoint)
 	cancelNotifier     events.SessionCancelNotifier    // nil until set (cross-pod cancel)
+	memoryService      *memory.Service                 // nil until set (memory endpoints + review refinement)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 	wsOriginPatterns   []string                        // allowed WebSocket origin patterns
 }
@@ -138,6 +140,10 @@ func (s *Server) SetScoringExecutor(executor *queue.ScoringExecutor) {
 // SetScoringService sets the scoring service for score read endpoints.
 func (s *Server) SetScoringService(svc *services.ScoringService) {
 	s.scoringService = svc
+}
+
+func (s *Server) SetMemoryService(svc *memory.Service) {
+	s.memoryService = svc
 }
 
 // SetDashboardDir sets the path to the dashboard build directory and
@@ -229,7 +235,7 @@ func (s *Server) setupRoutes() {
 
 	s.echo.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     s.corsAllowOrigins(),
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodOptions},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{"Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
 		MaxAge:           3600,
@@ -270,6 +276,14 @@ func (s *Server) setupRoutes() {
 	v1.GET("/system/default-tools", s.defaultToolsHandler)
 	v1.GET("/alert-types", s.alertTypesHandler)
 	v1.GET("/runbooks", s.handleListRunbooks)
+
+	// Memory endpoints.
+	v1.GET("/sessions/:id/memories", s.getSessionMemoriesHandler)
+	v1.GET("/sessions/:id/injected-memories", s.getInjectedMemoriesHandler)
+	v1.GET("/memories", s.listMemoriesHandler)
+	v1.GET("/memories/:id", s.getMemoryHandler)
+	v1.PATCH("/memories/:id", s.updateMemoryHandler)
+	v1.DELETE("/memories/:id", s.deleteMemoryHandler)
 
 	// Trace/observability endpoints (two-level loading).
 	v1.GET("/sessions/:id/trace", s.getTraceListHandler)

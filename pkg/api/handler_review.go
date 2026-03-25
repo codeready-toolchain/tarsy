@@ -45,6 +45,29 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 
 	resp, updated := s.sessionService.UpdateReviewStatus(c.Request().Context(), req)
 
+	for _, session := range updated {
+		// Adjust memory confidence based on quality rating.
+		if s.memoryService != nil && session.QualityRating != nil {
+			adjustCtx, adjustCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := s.memoryService.AdjustConfidenceForReview(
+				adjustCtx, "default", session.ID, *session.QualityRating,
+			); err != nil {
+				slog.Warn("Failed to adjust memory confidence on review",
+					"session_id", session.ID, "rating", *session.QualityRating, "error", err)
+			}
+			adjustCancel()
+		}
+
+		// Trigger feedback Reflector if feedback text is present.
+		if s.scoringExecutor != nil && session.InvestigationFeedback != nil && *session.InvestigationFeedback != "" {
+			rating := ""
+			if session.QualityRating != nil {
+				rating = string(*session.QualityRating)
+			}
+			s.scoringExecutor.RunFeedbackReflectorAsync(session.ID, *session.InvestigationFeedback, rating)
+		}
+	}
+
 	if s.eventPublisher != nil {
 		pubCtx, pubCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer pubCancel()
