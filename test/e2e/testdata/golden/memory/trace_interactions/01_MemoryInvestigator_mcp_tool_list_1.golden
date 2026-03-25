@@ -1,0 +1,14 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "id": "{INTERACTION_ID_3}",
+  "interaction_type": "tool_list",
+  "server_name": ""
+}
+
+=== AVAILABLE_TOOLS ===
+[
+  {
+    "description": "Search learnings from past investigations of similar alerts. Use when you suspect a pattern you may have seen before, or want to check if previous investigations found useful context for this type of issue.",
+    "name": "recall_past_investigations"
+  }
+]

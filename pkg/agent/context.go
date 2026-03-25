@@ -66,6 +66,10 @@ type ExecutionContext struct {
 	// failed to initialize. Used by the prompt builder to warn the LLM.
 	// nil when all servers initialized successfully.
 	FailedServers map[string]string
+
+	// MemoryBriefing holds pre-retrieved memories for Tier 4 prompt injection.
+	// nil when memory is disabled or no relevant memories exist.
+	MemoryBriefing *MemoryBriefing
 }
 
 // ServiceBundle groups all service dependencies needed during execution.
@@ -202,6 +206,21 @@ type SubAgentResultCollector interface {
 	// HasPending returns true if any dispatched sub-agents haven't delivered
 	// results yet.
 	HasPending() bool
+}
+
+// MemoryBriefing carries pre-retrieved memories for auto-injection into the
+// agent's system prompt (Tier 4) and for excluding from tool search results.
+type MemoryBriefing struct {
+	Memories    []MemoryHint
+	InjectedIDs []string
+}
+
+// MemoryHint is a single memory formatted for prompt injection.
+type MemoryHint struct {
+	ID       string
+	Content  string
+	Category string
+	Valence  string
 }
 
 // ChatContext carries chat-specific data for controllers.

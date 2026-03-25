@@ -18,6 +18,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -65,6 +66,8 @@ type testAppConfig struct {
 	dbClient              *database.Client    // injected DB client (for multi-replica tests)
 	podID                 string              // custom pod ID (for multi-replica tests)
 	slackService          *tarsyslack.Service // optional Slack service (for Slack notification tests)
+	memoryService         *memory.Service     // optional memory service (for memory injection tests)
+	memoryConfig          *config.MemoryConfig
 }
 
 // TestAppOption configures the test app.
@@ -126,6 +129,15 @@ func WithSlackService(svc *tarsyslack.Service) TestAppOption {
 	return func(c *testAppConfig) { c.slackService = svc }
 }
 
+// WithMemoryService injects a pre-created memory service for memory injection
+// and recall tests. Must be paired with WithDBClient using the same database.
+func WithMemoryService(svc *memory.Service, cfg *config.MemoryConfig) TestAppOption {
+	return func(c *testAppConfig) {
+		c.memoryService = svc
+		c.memoryConfig = cfg
+	}
+}
+
 // NewTestApp creates and starts a full TARSy test instance.
 // Shutdown is registered via t.Cleanup automatically.
 func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
@@ -142,6 +154,11 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	}
 	if tc.maxConcurrentSessions == 0 {
 		tc.maxConcurrentSessions = tc.workerCount
+	}
+
+	// Guard: memory service requires a shared DB so both use the same schema.
+	if tc.memoryService != nil && tc.dbClient == nil {
+		t.Fatal("WithMemoryService requires WithDBClient using the same database")
 	}
 
 	// Default config if not provided.
@@ -207,12 +224,12 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	runbookService := runbook.NewService(tc.cfg.Runbooks, "", tc.cfg.Defaults.Runbook)
 
 	// 8. Session executor.
-	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService)
+	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService, tc.memoryService, tc.memoryConfig)
 
 	// 8a. Scoring executor — created when any chain has scoring enabled.
 	var scoringExecutor *queue.ScoringExecutor
 	if hasScoringEnabled(tc.cfg) {
-		scoringExecutor = queue.NewScoringExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, nil, nil)
+		scoringExecutor = queue.NewScoringExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, runbookService, tc.memoryService)
 	}
 
 	// 9. Worker pool.
@@ -230,7 +247,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 			SessionTimeout:    tc.chatTimeout,
 			HeartbeatInterval: tc.cfg.Queue.HeartbeatInterval,
 		},
-		runbookService,
+		runbookService, tc.memoryService, tc.memoryConfig,
 	)
 
 	// 11. HTTP server on random port.

@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -175,6 +176,15 @@ func (p *testEventPublisher) filterExecutionStatuses(status string) []events.Exe
 	return filtered
 }
 
+// fixedEmbedder always returns the same vector — used for deterministic memory tests.
+type fixedEmbedder struct {
+	vec []float32
+}
+
+func (f *fixedEmbedder) Embed(_ context.Context, _ string, _ memory.EmbeddingTask) ([]float32, error) {
+	return f.vec, nil
+}
+
 // ────────────────────────────────────────────────────────────
 // Test helpers
 // ────────────────────────────────────────────────────────────
@@ -263,7 +273,7 @@ func TestExecutor_SingleStageChain(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -331,7 +341,7 @@ func TestExecutor_MultiStageChain(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -397,7 +407,7 @@ func TestExecutor_FailFast(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -471,7 +481,7 @@ func TestExecutor_CancellationBetweenStages(t *testing.T) {
 
 			cfg := testConfig("test-chain", chain)
 			publisher := &testEventPublisher{}
-			executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+			executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 			session := createExecutorTestSession(t, entClient, "test-chain")
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -548,7 +558,7 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -630,7 +640,7 @@ func TestExecutor_ExecutiveSummaryNoLegacyTimelineEvent(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -674,7 +684,7 @@ func TestExecutor_ExecutiveSummaryFailOpen(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -725,7 +735,7 @@ func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -836,7 +846,7 @@ func TestExecutor_MultiAgentOneFailsPolicyAll(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -913,7 +923,7 @@ func TestExecutor_MultiAgentOneFailsPolicyAny(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -954,7 +964,7 @@ func TestExecutor_NilEventPublisher(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	// nil eventPublisher — should not panic
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1000,7 +1010,7 @@ func TestExecutor_ReplicaAllSucceed(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1047,7 +1057,7 @@ func TestExecutor_EmptyChainStages(t *testing.T) {
 
 	llm := &mockLLMClient{}
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1095,7 +1105,7 @@ func TestExecutor_ContextPassedBetweenStages(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1169,7 +1179,7 @@ func TestExecutor_StageEventsHaveCorrectIndex(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1229,7 +1239,7 @@ func TestExecutor_SynthesisSkippedForSingleAgent(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1282,7 +1292,7 @@ func TestExecutor_SynthesisFailure(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1339,7 +1349,7 @@ func TestExecutor_SynthesisWithDefaults(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1439,7 +1449,7 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 	}
 
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1534,7 +1544,7 @@ func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {
 
 	cfg := testConfig("test-chain", chain)
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1763,7 +1773,7 @@ func TestExecutor_ReplicaMixedResultsPolicyAny(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -1807,7 +1817,7 @@ func TestExecutor_ContextIsolation(t *testing.T) {
 	}
 
 	cfg := testConfig("test-chain", chain)
-	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -2105,7 +2115,7 @@ func TestExecutor_MCPSelectionFailureEmitsTerminalStatus(t *testing.T) {
 	// Registry is non-nil but empty, so any server reference in the override
 	// will fail the Has() check inside resolveMCPSelection.
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 
 	// Create session with an MCP override referencing a non-existent server.
 	sessionID := uuid.New().String()
@@ -2196,7 +2206,7 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 	}
 
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -2379,7 +2389,7 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 	}
 
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -2515,7 +2525,7 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 	}
 
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -2675,7 +2685,7 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 	}
 
 	publisher := &testEventPublisher{}
-	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
 	session := createExecutorTestSession(t, entClient, "test-chain")
 
 	result := executor.Execute(context.Background(), session)
@@ -2707,4 +2717,130 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 		assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, evt.Content,
 			"action stage %s timeline event should have YES/NO marker stripped", evt.EventType)
 	}
+}
+
+func TestExecutor_MemoryEnabled_BriefingAndRecallTool(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	memCfg := &config.MemoryConfig{
+		Enabled:   true,
+		MaxInject: 5,
+		Embedding: config.EmbeddingConfig{Dimensions: 3},
+	}
+	embedder := &fixedEmbedder{vec: []float32{1, 0, 0}}
+	memSvc := memory.NewService(entClient, db, embedder, memCfg)
+
+	chainID := "mem-exec-chain"
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name:   "investigation",
+				Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
+			},
+		},
+	}
+
+	// Seed a memory via a source session so FindSimilarWithBoosts can find it.
+	sourceSession, err := entClient.AlertSession.Create().
+		SetID(uuid.New().String()).
+		SetAlertData("historical alert").
+		SetAgentType("test").
+		SetAlertType("test-alert").
+		SetChainID(chainID).
+		SetStatus(alertsession.StatusCompleted).
+		SetAuthor("test").
+		Save(ctx)
+	require.NoError(t, err)
+
+	alertType := "test-alert"
+	err = memSvc.ApplyReflectorActions(ctx, "default", sourceSession.ID, &alertType, &chainID, 80,
+		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
+			{Content: "Check PgBouncer connection pool health", Category: "procedural", Valence: "positive"},
+		}})
+	require.NoError(t, err)
+
+	// Two LLM calls: investigation agent (1 iteration) + exec_summary.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Everything looks healthy."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Summary: all good."},
+			}},
+		},
+	}
+
+	cfg := testConfig(chainID, chain)
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, memSvc, memCfg)
+	session := createExecutorTestSession(t, entClient, chainID)
+
+	result := executor.Execute(context.Background(), session)
+
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Nil(t, result.Error)
+
+	// The investigation agent (call 0) should have Tier 4 memory injection.
+	llm.mu.Lock()
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 2, "expected at least 2 LLM calls (investigation + exec_summary)")
+	investigationInput := llm.capturedInputs[0]
+	execSummaryInput := llm.capturedInputs[1]
+	llm.mu.Unlock()
+
+	// Verify: investigation system prompt includes Tier 4 memories.
+	var investigationSystemPrompt string
+	for _, m := range investigationInput.Messages {
+		if m.Role == agent.RoleSystem {
+			investigationSystemPrompt = m.Content
+			break
+		}
+	}
+	assert.Contains(t, investigationSystemPrompt, "Lessons from Past Investigations",
+		"investigation agent must have Tier 4 memory injection")
+	assert.Contains(t, investigationSystemPrompt, "Check PgBouncer connection pool health")
+
+	// Verify: recall tool is available to the investigation agent.
+	var hasRecallTool bool
+	for _, tool := range investigationInput.Tools {
+		if tool.Name == memory.ToolRecallPastInvestigations {
+			hasRecallTool = true
+			break
+		}
+	}
+	assert.True(t, hasRecallTool, "investigation agent must expose recall_past_investigations tool")
+
+	// Verify: exec_summary agent does NOT get Tier 4 injection or recall tool.
+	var execSummarySystemPrompt string
+	for _, m := range execSummaryInput.Messages {
+		if m.Role == agent.RoleSystem {
+			execSummarySystemPrompt = m.Content
+			break
+		}
+	}
+	assert.NotContains(t, execSummarySystemPrompt, "Lessons from Past Investigations",
+		"exec_summary agent must NOT have Tier 4 memory injection")
+
+	var execSummaryHasRecall bool
+	for _, tool := range execSummaryInput.Tools {
+		if tool.Name == memory.ToolRecallPastInvestigations {
+			execSummaryHasRecall = true
+			break
+		}
+	}
+	assert.False(t, execSummaryHasRecall, "exec_summary agent must NOT have recall_past_investigations tool")
+
+	// Verify: injected memory IDs are recorded on the session.
+	updatedSession, err := entClient.AlertSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+	injectedIDs, err := updatedSession.QueryInjectedMemories().IDs(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, injectedIDs, "session should have injected memory IDs recorded via Ent edge")
 }

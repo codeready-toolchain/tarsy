@@ -1,0 +1,20 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_11}",
+  "interaction_type": "tool_call",
+  "server_name": "",
+  "tool_name": "recall_past_investigations"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "limit": 10,
+  "query": "pod health check patterns"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "Found 3 relevant memories:\n\n1. [procedural, positive] Check PgBouncer connection pool health before investigating query latency\n2. [semantic, neutral] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, negative] container_memory_rss metric does not exist in this setup",
+  "is_error": false
+}
