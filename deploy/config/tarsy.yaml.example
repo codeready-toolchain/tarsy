@@ -118,6 +118,21 @@ defaults:
   #   llm_provider: "gemini-3-flash"      # Default LLM provider for scoring
   #   llm_backend: "google-native"        # Default LLM backend for scoring
   
+  # Investigation memory — learns from past investigations and injects relevant
+  # memories into future sessions via semantic retrieval (pgvector cosine similarity).
+  # Extraction runs automatically in the scoring stage; no extra infra needed.
+  # Requires pgvector extension and the investigation_memories table (created by migration).
+  # memory:
+  #   enabled: true                              # Enable investigation memory (default: false)
+  #   max_inject: 5                              # Max memories auto-injected into system prompt (default: 5)
+  #   reflector_memory_limit: 20                 # Max existing memories shown to Reflector for dedup (default: 20)
+  #   embedding:                                 # Embedding model for semantic retrieval
+  #     provider: "google"                       # google | openai (default: google)
+  #     model: "gemini-embedding-2-preview"      # Model name (default: gemini-embedding-2-preview)
+  #     api_key_env: "GOOGLE_API_KEY"            # Env var for API key (default: GOOGLE_API_KEY)
+  #     dimensions: 768                          # Output dimensions — must match pgvector column (default: 768)
+  #     # base_url: ""                           # Optional custom endpoint for compatible APIs
+
   # Default alert type for new sessions (used in UI dropdown)
   alert_type: "kubernetes"
   
