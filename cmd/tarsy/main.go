@@ -268,26 +268,27 @@ func main() {
 		slog.Info("Slack notifications disabled")
 	}
 
-	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService)
-
-	// Initialize memory service if memory extraction is enabled
+	// Initialize memory service if memory is enabled (used by session, chat, and scoring executors)
 	var memoryService *memory.Service
-	if memCfg := config.ResolvedMemoryConfig(cfg.Defaults); memCfg != nil {
-		embedder, embErr := memory.NewEmbedder(memCfg.Embedding)
+	var memCfg *config.MemoryConfig
+	if resolved := config.ResolvedMemoryConfig(cfg.Defaults); resolved != nil {
+		embedder, embErr := memory.NewEmbedder(resolved.Embedding)
 		if embErr != nil {
-			slog.Error("Failed to create embedder — memory extraction disabled", "error", embErr)
+			slog.Error("Failed to create embedder — memory disabled", "error", embErr)
 		} else {
-			memoryService = memory.NewService(dbClient.Client, dbClient.DB(), embedder, memCfg)
+			memoryService = memory.NewService(dbClient.Client, dbClient.DB(), embedder, resolved)
 			if valErr := memoryService.ValidateDimensions(ctx); valErr != nil {
 				slog.Error("Embedding dimension validation failed", "error", valErr)
 				os.Exit(1)
 			}
+			memCfg = resolved
 			slog.Info("Investigation memory enabled",
-				"provider", memCfg.Embedding.Provider, "model", memCfg.Embedding.Model,
-				"dimensions", memCfg.Embedding.Dimensions)
+				"provider", resolved.Embedding.Provider, "model", resolved.Embedding.Model,
+				"dimensions", resolved.Embedding.Dimensions)
 		}
 	}
 
+	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService, memoryService, memCfg)
 	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService, memoryService)
 
 	// 6. Start worker pool (before HTTP server)
@@ -311,7 +312,7 @@ func main() {
 			SessionTimeout:    cfg.Queue.SessionTimeout,
 			HeartbeatInterval: cfg.Queue.HeartbeatInterval,
 		},
-		runbookService,
+		runbookService, memoryService, memCfg,
 	)
 	slog.Info("Chat message executor initialized")
 

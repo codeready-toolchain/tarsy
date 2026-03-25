@@ -207,7 +207,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	runbookService := runbook.NewService(tc.cfg.Runbooks, "", tc.cfg.Defaults.Runbook)
 
 	// 8. Session executor.
-	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService)
+	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService, nil, nil)
 
 	// 8a. Scoring executor — created when any chain has scoring enabled.
 	var scoringExecutor *queue.ScoringExecutor
@@ -230,7 +230,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 			SessionTimeout:    tc.chatTimeout,
 			HeartbeatInterval: tc.cfg.Queue.HeartbeatInterval,
 		},
-		runbookService,
+		runbookService, nil, nil,
 	)
 
 	// 11. HTTP server on random port.

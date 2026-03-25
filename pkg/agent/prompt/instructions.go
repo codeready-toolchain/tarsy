@@ -111,6 +111,9 @@ func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) str
 		sections = append(sections, "## Agent-Specific Instructions\n\n"+execCtx.Config.CustomInstructions)
 	}
 
+	// Tier 4: Memory hints from past investigations (investigation sessions only)
+	sections = appendMemorySection(sections, execCtx)
+
 	return strings.Join(sections, "\n\n")
 }
 
@@ -215,6 +218,24 @@ func appendSkillSections(sections []string, execCtx *agent.ExecutionContext) []s
 		sections = append(sections, formatSkillCatalog(execCtx.Config.OnDemandSkills))
 	}
 	return sections
+}
+
+// appendMemorySection adds Tier 4 memory hints from past investigations.
+// Only appended when MemoryBriefing is non-nil and contains memories.
+func appendMemorySection(sections []string, execCtx *agent.ExecutionContext) []string {
+	if execCtx.MemoryBriefing == nil || len(execCtx.MemoryBriefing.Memories) == 0 {
+		return sections
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Lessons from Past Investigations\n\n")
+	sb.WriteString("The following are learnings from previous investigations of similar alerts.\n")
+	sb.WriteString("Consider them as hints — they may or may not apply to your current investigation.\n")
+	sb.WriteString("Do not treat them as rules.\n")
+	for _, m := range execCtx.MemoryBriefing.Memories {
+		sb.WriteString(fmt.Sprintf("\n- [%s, %s] %s", m.Category, m.Valence, m.Content))
+	}
+	return append(sections, sb.String())
 }
 
 // appendMCPInstructions adds Tier 2 MCP server instructions to a sections slice.

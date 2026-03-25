@@ -401,6 +401,10 @@ func (r *SubAgentRunner) createSubAgentToolExecutor(
 		executor = skill.NewSkillToolExecutor(executor, r.deps.Config.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 
+	if r.deps.WrapToolExecutor != nil {
+		executor = r.deps.WrapToolExecutor(executor)
+	}
+
 	return executor
 }
 

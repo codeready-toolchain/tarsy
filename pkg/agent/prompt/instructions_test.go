@@ -337,6 +337,132 @@ func TestComposeInstructions_MultipleRequiredSkills(t *testing.T) {
 	assert.Less(t, idxFirst, idxSecond, "skills should appear in order")
 }
 
+func TestComposeInstructions_MemoryTier4(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			CustomInstructions: "CUSTOM_TIER3_MARKER",
+		},
+		MemoryBriefing: &agent.MemoryBriefing{
+			Memories: []agent.MemoryHint{
+				{ID: "m1", Content: "Check PgBouncer health first", Category: "procedural", Valence: "positive"},
+				{ID: "m2", Content: "Normal error rate is 200/hr", Category: "semantic", Valence: "neutral"},
+			},
+			InjectedIDs: []string{"m1", "m2"},
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	assert.Contains(t, result, "Lessons from Past Investigations")
+	assert.Contains(t, result, "[procedural, positive] Check PgBouncer health first")
+	assert.Contains(t, result, "[semantic, neutral] Normal error rate is 200/hr")
+}
+
+func TestComposeInstructions_MemoryTier4Ordering(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			CustomInstructions: "CUSTOM_TIER3_MARKER",
+		},
+		MemoryBriefing: &agent.MemoryBriefing{
+			Memories: []agent.MemoryHint{
+				{ID: "m1", Content: "MEMORY_TIER4_MARKER", Category: "procedural", Valence: "positive"},
+			},
+			InjectedIDs: []string{"m1"},
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
+	idxT4 := strings.Index(result, "MEMORY_TIER4_MARKER")
+	assert.Greater(t, idxT4, idxT3, "Tier 4 (memory) should come after Tier 3")
+}
+
+func TestComposeInstructions_NoMemoryBriefing(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+	assert.NotContains(t, result, "Lessons from Past Investigations")
+}
+
+func TestComposeInstructions_EmptyMemoryBriefing(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config:         &agent.ResolvedAgentConfig{},
+		MemoryBriefing: &agent.MemoryBriefing{},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+	assert.NotContains(t, result, "Lessons from Past Investigations")
+}
+
+func TestComposeChatInstructions_NoMemoryInjection(t *testing.T) {
+	registry := newTestMCPRegistry(nil)
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{},
+		MemoryBriefing: &agent.MemoryBriefing{
+			Memories: []agent.MemoryHint{
+				{ID: "m1", Content: "Should not appear in chat", Category: "procedural", Valence: "positive"},
+			},
+			InjectedIDs: []string{"m1"},
+		},
+	}
+
+	result := builder.ComposeChatInstructions(execCtx)
+	assert.NotContains(t, result, "Lessons from Past Investigations")
+	assert.NotContains(t, result, "Should not appear in chat")
+}
+
+func TestComposeInstructions_FullTierOrdering_WithMemory(t *testing.T) {
+	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
+		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
+	})
+	builder := NewPromptBuilder(registry)
+	execCtx := &agent.ExecutionContext{
+		Config: &agent.ResolvedAgentConfig{
+			MCPServers:         []string{"kubernetes-server"},
+			CustomInstructions: "CUSTOM_TIER3_MARKER",
+			RequiredSkillContent: []agent.ResolvedSkill{
+				{Name: "k8s-basics", Body: "REQUIRED_SKILL_MARKER"},
+			},
+		},
+		FailedServers: map[string]string{
+			"broken-server": "FAILED_SERVER_MARKER",
+		},
+		MemoryBriefing: &agent.MemoryBriefing{
+			Memories: []agent.MemoryHint{
+				{ID: "m1", Content: "MEMORY_TIER4_MARKER", Category: "procedural", Valence: "positive"},
+			},
+			InjectedIDs: []string{"m1"},
+		},
+	}
+
+	result := builder.ComposeInstructions(execCtx)
+
+	idxT1 := strings.Index(result, "General SRE Agent Instructions")
+	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
+	idxWarn := strings.Index(result, "FAILED_SERVER_MARKER")
+	idxT25 := strings.Index(result, "REQUIRED_SKILL_MARKER")
+	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
+	idxT4 := strings.Index(result, "MEMORY_TIER4_MARKER")
+
+	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
+	assert.Greater(t, idxWarn, idxT2, "Warnings should come after Tier 2")
+	assert.Greater(t, idxT25, idxWarn, "Tier 2.5 should come after warnings")
+	assert.Greater(t, idxT3, idxT25, "Tier 3 should come after Tier 2.5")
+	assert.Greater(t, idxT4, idxT3, "Tier 4 (memory) should come after Tier 3")
+}
+
 func TestComposeInstructions_OnlyOnDemandSkills(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
 	builder := NewPromptBuilder(registry)

@@ -736,7 +736,7 @@ Ent auto-generates the join table. Both directions are natural queries: `session
 
 **Result:** Memories are extracted and stored after every scored investigation.
 
-### Phase 2: Retrieval + Injection (agent uses memory)
+### Phase 2: Retrieval + Injection (agent uses memory) - DONE
 
 1. `MemoryRetriever` — pgvector similarity search within project
 2. `MemoryBriefing` on `ExecutionContext`

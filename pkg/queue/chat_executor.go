@@ -23,6 +23,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -66,6 +67,8 @@ type ChatMessageExecutor struct {
 	promptBuilder  *prompt.PromptBuilder
 	execConfig     ChatMessageExecutorConfig
 	runbookService *runbook.Service
+	memoryService  *memory.Service
+	memoryConfig   *config.MemoryConfig
 
 	// Services
 	timelineService    *services.TimelineService
@@ -83,6 +86,7 @@ type ChatMessageExecutor struct {
 
 // NewChatMessageExecutor creates a new ChatMessageExecutor.
 // runbookService may be nil (uses config default runbook content).
+// memoryService and memoryConfig may be nil (memory disabled).
 func NewChatMessageExecutor(
 	cfg *config.Config,
 	dbClient *ent.Client,
@@ -91,6 +95,8 @@ func NewChatMessageExecutor(
 	eventPublisher agent.EventPublisher,
 	execConfig ChatMessageExecutorConfig,
 	runbookService *runbook.Service,
+	memoryService *memory.Service,
+	memoryConfig *config.MemoryConfig,
 ) *ChatMessageExecutor {
 	controllerFactory := controller.NewFactory()
 	msgService := services.NewMessageService(dbClient)
@@ -104,6 +110,8 @@ func NewChatMessageExecutor(
 		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry),
 		execConfig:         execConfig,
 		runbookService:     runbookService,
+		memoryService:      memoryService,
+		memoryConfig:       memoryConfig,
 		timelineService:    services.NewTimelineService(dbClient),
 		stageService:       services.NewStageService(dbClient),
 		chatService:        services.NewChatService(dbClient),
@@ -340,6 +348,18 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	// Wrap with skill tool executor if on-demand skills are configured
 	if len(resolvedConfig.OnDemandSkills) > 0 && e.cfg.SkillRegistry != nil {
 		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
+	}
+
+	// Wrap with memory tool executor (chat gets the tool but no auto-injection)
+	if e.memoryService != nil && e.memoryConfig != nil {
+		var alertTypePtr *string
+		if input.Session.AlertType != "" {
+			alertTypePtr = &input.Session.AlertType
+		}
+		toolExecutor = memory.NewToolExecutor(
+			toolExecutor, e.memoryService, "default",
+			alertTypePtr, &input.Session.ChainID, nil,
+		)
 	}
 
 	// 8. Build ExecutionContext (with ChatContext populated)

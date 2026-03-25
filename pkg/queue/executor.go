@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -35,13 +36,16 @@ type RealSessionExecutor struct {
 	mcpFactory       *mcp.ClientFactory
 	runbookService   *runbook.Service
 	subAgentRegistry *config.SubAgentRegistry
+	memoryService    *memory.Service
+	memoryConfig     *config.MemoryConfig
 }
 
 // NewRealSessionExecutor creates a new session executor.
 // eventPublisher may be nil (streaming disabled).
 // mcpFactory may be nil (MCP disabled — uses stub tool executor).
 // runbookService may be nil (uses config default runbook content).
-func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.Service) *RealSessionExecutor {
+// memoryService and memoryConfig may be nil (memory disabled).
+func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient agent.LLMClient, eventPublisher agent.EventPublisher, mcpFactory *mcp.ClientFactory, runbookService *runbook.Service, memoryService *memory.Service, memoryConfig *config.MemoryConfig) *RealSessionExecutor {
 	controllerFactory := controller.NewFactory()
 	return &RealSessionExecutor{
 		cfg:              cfg,
@@ -53,6 +57,8 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 		mcpFactory:       mcpFactory,
 		runbookService:   runbookService,
 		subAgentRegistry: config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll()),
+		memoryService:    memoryService,
+		memoryConfig:     memoryConfig,
 	}
 }
 
@@ -624,6 +630,20 @@ func (e *RealSessionExecutor) executeAgent(
 	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
+	// Retrieve memories for auto-injection into system prompt (all parallel agents
+	// get the same briefing — retrieval is deterministic for the same alert data).
+	var memoryBriefing *agent.MemoryBriefing
+	if e.memoryService != nil && e.memoryConfig != nil {
+		memoryBriefing = e.retrieveMemories(ctx, input.session, logger)
+		if memoryBriefing != nil {
+			if edgeErr := e.dbClient.AlertSession.UpdateOneID(input.session.ID).
+				AddInjectedMemoryIDs(memoryBriefing.InjectedIDs...).
+				Exec(ctx); edgeErr != nil {
+				logger.Warn("Failed to record injected memory IDs", "error", edgeErr)
+			}
+		}
+	}
+
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
 		SessionID:      input.session.ID,
@@ -640,6 +660,7 @@ func (e *RealSessionExecutor) executeAgent(
 		EventPublisher: e.eventPublisher,
 		PromptBuilder:  e.promptBuilder,
 		FailedServers:  failedServers,
+		MemoryBriefing: memoryBriefing,
 		Services: &agent.ServiceBundle{
 			Timeline:    input.timelineService,
 			Message:     input.messageService,
@@ -687,6 +708,7 @@ func (e *RealSessionExecutor) executeAgent(
 			AlertData:          input.session.AlertData,
 			AlertType:          input.session.AlertType,
 			RunbookContent:     input.runbookContent,
+			WrapToolExecutor:   e.memoryToolWrapper(input.session),
 		}
 
 		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
@@ -695,9 +717,22 @@ func (e *RealSessionExecutor) executeAgent(
 		execCtx.SubAgentCatalog = registry.Entries()
 	}
 
-	// Wrap with skill tool executor (outermost layer, after orchestrator)
+	// Wrap with skill tool executor (after orchestrator)
 	if len(resolvedConfig.OnDemandSkills) > 0 && e.cfg.SkillRegistry != nil {
 		toolExecutor = skill.NewSkillToolExecutor(toolExecutor, e.cfg.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
+	}
+
+	// Wrap with memory tool executor (outermost layer)
+	if e.memoryService != nil && e.memoryConfig != nil {
+		var alertTypePtr *string
+		if input.session.AlertType != "" {
+			alertTypePtr = &input.session.AlertType
+		}
+		excludeIDs := memoryExcludeIDs(memoryBriefing)
+		toolExecutor = memory.NewToolExecutor(
+			toolExecutor, e.memoryService, "default",
+			alertTypePtr, &input.session.ChainID, excludeIDs,
+		)
 	}
 
 	execCtx.ToolExecutor = toolExecutor

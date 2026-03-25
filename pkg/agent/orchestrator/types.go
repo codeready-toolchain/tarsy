@@ -41,6 +41,11 @@ type SubAgentDeps struct {
 	AlertData      string
 	AlertType      string
 	RunbookContent string
+
+	// WrapToolExecutor is an optional function that wraps a ToolExecutor with
+	// additional layers (e.g., memory tool). Called after skill wrapping.
+	// nil when no additional wrapping is needed.
+	WrapToolExecutor func(agent.ToolExecutor) agent.ToolExecutor
 }
 
 // OrchestratorGuardrails holds resolved orchestrator limits
