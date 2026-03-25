@@ -19,6 +19,7 @@
   "executive_summary": "Pod-1 OOM killed. Memory limit increase to 1Gi recommended.",
   "executive_summary_error": null,
   "failed_stages": 0,
+  "feedback_edited": false,
   "final_analysis": "Remediation: increase memory limit for pod-1 to 1Gi.",
   "has_action_stages": false,
   "has_parallel_stages": false,

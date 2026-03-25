@@ -19,6 +19,7 @@
   "executive_summary": "api-gateway outage detected and remediated by automated restart.",
   "executive_summary_error": null,
   "failed_stages": 0,
+  "feedback_edited": false,
   "final_analysis": "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).",
   "has_action_stages": true,
   "has_parallel_stages": false,

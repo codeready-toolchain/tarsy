@@ -19,6 +19,7 @@
   "executive_summary": "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.",
   "executive_summary_error": null,
   "failed_stages": 0,
+  "feedback_edited": false,
   "final_analysis": "Investigation complete: payment service has 2,847 5xx errors due to memory pressure from recent deployment. Recommend rollback and memory limit increase.",
   "has_action_stages": false,
   "has_parallel_stages": false,
