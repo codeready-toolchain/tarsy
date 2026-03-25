@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -111,10 +112,13 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 		return nil
 	}
 
+	var errs []error
+
 	for _, action := range result.Create {
 		if err := s.createMemory(ctx, project, sessionID, alertType, chainID, score, action); err != nil {
 			slog.Warn("Failed to create memory",
 				"session_id", sessionID, "content_prefix", truncate(action.Content, 80), "error", err)
+			errs = append(errs, err)
 		}
 	}
 
@@ -122,6 +126,7 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 		if err := s.reinforce(ctx, project, action.MemoryID); err != nil {
 			slog.Warn("Failed to reinforce memory",
 				"memory_id", action.MemoryID, "error", err)
+			errs = append(errs, err)
 		}
 	}
 
@@ -129,10 +134,11 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 		if err := s.deprecate(ctx, project, action.MemoryID); err != nil {
 			slog.Warn("Failed to deprecate memory",
 				"memory_id", action.MemoryID, "error", err)
+			errs = append(errs, err)
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // createMemory uses raw SQL instead of Ent so the row and its embedding

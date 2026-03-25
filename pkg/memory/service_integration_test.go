@@ -168,7 +168,9 @@ func TestService_ApplyReflectorActions_InvalidEnums(t *testing.T) {
 			{Content: "Both bad", Category: "foo", Valence: "bar"},
 		},
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid category")
+	assert.Contains(t, err.Error(), "invalid valence")
 
 	memories, err := svc.FindSimilar(ctx, "default", "anything", 10)
 	require.NoError(t, err)
