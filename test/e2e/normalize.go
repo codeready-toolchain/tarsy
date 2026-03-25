@@ -28,12 +28,14 @@ type Normalizer struct {
 
 // Regex patterns for dynamic values.
 var (
-	uuidRe       = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-	timestampRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
-	unixTSRe     = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
-	dbEventIDRe  = regexp.MustCompile(`"db_event_id":\s*\d+`)
-	connIDRe     = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
-	durationMsRe = regexp.MustCompile(`"duration_ms":\s*\d+`)
+	uuidRe            = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	timestampRe       = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+	unixTSRe          = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
+	dbEventIDRe       = regexp.MustCompile(`"db_event_id":\s*\d+`)
+	connIDRe          = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
+	durationMsRe      = regexp.MustCompile(`"duration_ms":\s*\d+`)
+	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
+	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
 )
 
 // NewNormalizer creates a normalizer that knows the session ID to replace.
@@ -134,26 +136,31 @@ func (n *Normalizer) Normalize(data string) string {
 		data = strings.ReplaceAll(data, id, placeholder)
 	}
 
-	// 7. Replace any remaining UUIDs.
+	// 7. Replace "Current time:" line (varies every run).
+	data = currentTimeLineRe.ReplaceAllString(data, "Current time: {CURRENT_TIME}")
+
+	// 8. Replace memory age labels (vary based on when memories were created).
+	data = memoryAgeRe.ReplaceAllString(data, "${1} {AGE}")
+
+	// 9. Replace any remaining UUIDs.
 	data = uuidRe.ReplaceAllString(data, "{UUID}")
 
-	// 8. Replace RFC3339 timestamps.
+	// 10. Replace RFC3339 timestamps.
 	data = timestampRe.ReplaceAllString(data, "{TIMESTAMP}")
 
-	// 9. Replace Unix timestamps in known fields.
+	// 11. Replace Unix timestamps in known fields.
 	data = unixTSRe.ReplaceAllStringFunc(data, func(match string) string {
-		// Keep the field name, replace the value.
 		idx := strings.Index(match, ":")
 		return match[:idx+1] + " {UNIX_TS}"
 	})
 
-	// 10. Replace db_event_id.
+	// 12. Replace db_event_id.
 	data = dbEventIDRe.ReplaceAllString(data, `"db_event_id": {DB_EVENT_ID}`)
 
-	// 11. Replace connection_id.
+	// 13. Replace connection_id.
 	data = connIDRe.ReplaceAllString(data, `"connection_id": "{CONN_ID}"`)
 
-	// 12. Replace duration_ms (non-deterministic timing).
+	// 14. Replace duration_ms (non-deterministic timing).
 	data = durationMsRe.ReplaceAllString(data, `"duration_ms": {DURATION_MS}`)
 
 	return data

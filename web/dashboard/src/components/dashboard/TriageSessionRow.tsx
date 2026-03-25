@@ -28,6 +28,7 @@ import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { formatTimestamp } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
+import { actionStageChipStyles } from './sessionActionChipSx.ts';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
 
@@ -126,7 +127,17 @@ export function TriageSessionRow({
           )}
           {session.has_action_stages && (
             <Tooltip title={session.actions_executed ? 'Automated remediation actions executed' : 'Action agent ran — no actions taken'}>
-              <Chip icon={<BuildOutlined sx={{ fontSize: '0.875rem' }} />} label="Actions" size="small" color={session.actions_executed ? 'success' : 'default'} variant="outlined" tabIndex={0} sx={iconOnlyChipSx} />
+              <Chip
+                icon={<BuildOutlined sx={{ fontSize: '0.875rem' }} />}
+                label="Actions"
+                size="small"
+                variant="outlined"
+                tabIndex={0}
+                sx={(theme) => ({
+                  ...iconOnlyChipSx,
+                  ...actionStageChipStyles(theme, !!session.actions_executed),
+                })}
+              />
             </Tooltip>
           )}
           {session.provider_fallback_count > 0 && (

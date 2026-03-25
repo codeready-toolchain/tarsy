@@ -36,6 +36,10 @@ func TestComposeInstructions_ThreeTiers(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
+	// Tier 0: Dynamic context
+	assert.Contains(t, result, "## Context")
+	assert.Contains(t, result, "Current time:")
+
 	// Tier 1: General instructions
 	assert.Contains(t, result, "General SRE Agent Instructions")
 	assert.Contains(t, result, "Site Reliability Engineer")
@@ -98,6 +102,10 @@ func TestComposeChatInstructions_UsesChatGeneralInstructions(t *testing.T) {
 	execCtx := newTestExecCtx()
 
 	result := builder.ComposeChatInstructions(execCtx)
+
+	// Tier 0: Dynamic context
+	assert.Contains(t, result, "## Context")
+	assert.Contains(t, result, "Current time:")
 
 	// Tier 1: Chat-specific (not investigation)
 	assert.Contains(t, result, "Chat Assistant Instructions")
@@ -180,11 +188,13 @@ func TestComposeInstructions_OrderingPreserved(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
-	// Verify ordering: Tier 1 < Tier 2 < Unavailable warnings < Tier 3
+	// Verify ordering: Tier 0 < Tier 1 < Tier 2 < Unavailable warnings < Tier 3
+	idxT0 := strings.Index(result, "Current time:")
 	idxT1 := strings.Index(result, "General SRE Agent Instructions")
 	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
 	idxWarn := strings.Index(result, "FAILED_SERVER_MARKER")
 	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
+	assert.Greater(t, idxT1, idxT0, "Tier 1 should come after Tier 0 (context)")
 	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
 	assert.Greater(t, idxWarn, idxT2, "Unavailable warnings should come after Tier 2")
 	assert.Greater(t, idxT3, idxWarn, "Tier 3 should come after unavailable warnings")
@@ -346,7 +356,7 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 		},
 		MemoryBriefing: &agent.MemoryBriefing{
 			Memories: []agent.MemoryHint{
-				{ID: "m1", Content: "Check PgBouncer health first", Category: "procedural", Valence: "positive"},
+				{ID: "m1", Content: "Check PgBouncer health first", Category: "procedural", Valence: "positive", AgeLabel: "learned 3 days ago"},
 				{ID: "m2", Content: "Normal error rate is 200/hr", Category: "semantic", Valence: "neutral"},
 			},
 			InjectedIDs: []string{"m1", "m2"},
@@ -359,7 +369,7 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 	assert.Contains(t, result, "<memory_data>")
 	assert.Contains(t, result, "</memory_data>")
 	assert.Contains(t, result, "Consider them as hints")
-	assert.Contains(t, result, "[procedural, positive] Check PgBouncer health first")
+	assert.Contains(t, result, "[procedural, positive, learned 3 days ago] Check PgBouncer health first")
 	assert.Contains(t, result, "[semantic, neutral] Normal error rate is 200/hr")
 }
 
@@ -452,6 +462,7 @@ func TestComposeInstructions_FullTierOrdering_WithMemory(t *testing.T) {
 
 	result := builder.ComposeInstructions(execCtx)
 
+	idxT0 := strings.Index(result, "Current time:")
 	idxT1 := strings.Index(result, "General SRE Agent Instructions")
 	idxT2 := strings.Index(result, "MCP_TIER2_MARKER")
 	idxWarn := strings.Index(result, "FAILED_SERVER_MARKER")
@@ -459,6 +470,7 @@ func TestComposeInstructions_FullTierOrdering_WithMemory(t *testing.T) {
 	idxT3 := strings.Index(result, "CUSTOM_TIER3_MARKER")
 	idxT4 := strings.Index(result, "MEMORY_TIER4_MARKER")
 
+	assert.Greater(t, idxT1, idxT0, "Tier 1 should come after Tier 0 (context)")
 	assert.Greater(t, idxT2, idxT1, "Tier 2 should come after Tier 1")
 	assert.Greater(t, idxWarn, idxT2, "Warnings should come after Tier 2")
 	assert.Greater(t, idxT25, idxWarn, "Tier 2.5 should come after warnings")

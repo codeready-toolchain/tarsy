@@ -28,7 +28,7 @@
   },
   {
     "agent": "ChatAgent",
-    "content": "Found 3 relevant memories:\n\n1. [procedural, positive] Check PgBouncer connection pool health before investigating query latency\n2. [semantic, neutral] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, negative] container_memory_rss metric does not exist in this setup",
+    "content": "Found 3 relevant memories:\n\n1. [procedural, positive, learned {AGE}] Check PgBouncer connection pool health before investigating query latency\n2. [semantic, neutral, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, negative, learned {AGE}] container_memory_rss metric does not exist in this setup",
     "event_type": "llm_tool_call",
     "metadata": {
       "arguments": "{\"query\":\"pod health check patterns\",\"limit\":10}",
@@ -80,7 +80,7 @@
   },
   {
     "agent": "MemoryInvestigator",
-    "content": "- [procedural, positive] Check PgBouncer connection pool health before investigating query latency\n- [semantic, neutral] Normal error rate for batch-processor during 2-4am is ~200/hr\n- [procedural, negative] container_memory_rss metric does not exist in this setup",
+    "content": "- [procedural, positive, learned {AGE}] Check PgBouncer connection pool health before investigating query latency\n- [semantic, neutral, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr\n- [procedural, negative, learned {AGE}] container_memory_rss metric does not exist in this setup",
     "event_type": "memory_injected",
     "metadata": {
       "count": 3,

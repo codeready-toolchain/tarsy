@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
 
 var update = flag.Bool("update", false, "update golden files")
 
@@ -46,9 +49,11 @@ func goldenPath(t *testing.T, name string) string {
 
 // assertGolden compares actual against a golden file. If -update is set,
 // the golden file is (re)written with actual content instead.
+// Dynamic values (e.g. "Current time:") are normalized before comparison.
 func assertGolden(t *testing.T, name string, actual string) {
 	t.Helper()
 	path := goldenPath(t, name)
+	actual = normalizeGolden(actual)
 
 	if *update {
 		err := os.MkdirAll(filepath.Dir(path), 0o755)
@@ -65,6 +70,10 @@ func assertGolden(t *testing.T, name string, actual string) {
 	if string(expected) != actual {
 		t.Errorf("golden file mismatch: %s\n%s", path, findFirstDiff(string(expected), actual))
 	}
+}
+
+func normalizeGolden(s string) string {
+	return currentTimeLineRe.ReplaceAllString(s, "Current time: {CURRENT_TIME}")
 }
 
 // findFirstDiff produces a human-readable description of where two strings diverge.

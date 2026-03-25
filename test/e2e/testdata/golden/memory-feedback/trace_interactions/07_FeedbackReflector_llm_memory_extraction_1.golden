@@ -129,7 +129,7 @@ These memories were previously extracted from this and past investigations. Use 
 to avoid duplicates and to decide what to reinforce or deprecate.
 
 <existing_memories>
-[{"id":"{UUID}","content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive","confidence":0.36,"seen_count":1}]
+[{"id":"{UUID}","content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive","confidence":0.36,"seen_count":1,"created_at":"{TIMESTAMP}","updated_at":"{TIMESTAMP}"}]
 </existing_memories>
 
 ## Your Task

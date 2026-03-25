@@ -1,4 +1,8 @@
 === message[0] role=system ===
+## Context
+
+Current time: {CURRENT_TIME}
+
 ## Chat Assistant Instructions
 
 You are an expert Site Reliability Engineer (SRE) assistant helping with follow-up questions about a completed alert investigation.

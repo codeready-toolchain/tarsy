@@ -1,4 +1,8 @@
 === message[0] role=system ===
+## Context
+
+Current time: {CURRENT_TIME}
+
 ## General SRE Agent Instructions
 
 You are an expert Site Reliability Engineer (SRE) with deep knowledge of:

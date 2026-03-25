@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -94,6 +95,9 @@ const chatResponseGuidelines = `## Response Guidelines
 func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) string {
 	var sections []string
 
+	// Tier 0: Dynamic context (current time)
+	sections = append(sections, currentTimeSection())
+
 	// Tier 1: General SRE instructions
 	sections = append(sections, generalInstructions)
 
@@ -120,6 +124,9 @@ func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) str
 // ComposeChatInstructions builds the instruction set for chat sessions.
 func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext) string {
 	var sections []string
+
+	// Tier 0: Dynamic context (current time)
+	sections = append(sections, currentTimeSection())
 
 	// Tier 1: Chat-specific general instructions
 	sections = append(sections, chatGeneralInstructions)
@@ -220,6 +227,12 @@ func appendSkillSections(sections []string, execCtx *agent.ExecutionContext) []s
 	return sections
 }
 
+func currentTimeSection() string {
+	now := time.Now().UTC()
+	return fmt.Sprintf("## Context\n\nCurrent time: %s (%s)",
+		now.Format(time.RFC3339), now.Format("Monday"))
+}
+
 // appendMemorySection adds Tier 4 memory hints from past investigations.
 // Only appended when MemoryBriefing is non-nil and contains memories.
 // Content is rendered inside delimiters and treated as untrusted data
@@ -239,7 +252,11 @@ func appendMemorySection(sections []string, execCtx *agent.ExecutionContext) []s
 		if i > 0 {
 			sb.WriteByte('\n')
 		}
-		sb.WriteString(fmt.Sprintf("- [%s, %s] %s\n", m.Category, m.Valence, m.Content))
+		if m.AgeLabel != "" {
+			sb.WriteString(fmt.Sprintf("- [%s, %s, %s] %s\n", m.Category, m.Valence, m.AgeLabel, m.Content))
+		} else {
+			sb.WriteString(fmt.Sprintf("- [%s, %s] %s\n", m.Category, m.Valence, m.Content))
+		}
 	}
 	sb.WriteString("</memory_data>")
 	return append(sections, sb.String())

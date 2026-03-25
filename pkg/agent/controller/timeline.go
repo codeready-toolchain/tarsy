@@ -118,7 +118,11 @@ func emitMemoryInjectedEvent(ctx context.Context, execCtx *agent.ExecutionContex
 		if i > 0 {
 			sb.WriteByte('\n')
 		}
-		sb.WriteString(fmt.Sprintf("- [%s, %s] %s", m.Category, m.Valence, m.Content))
+		if m.AgeLabel != "" {
+			sb.WriteString(fmt.Sprintf("- [%s, %s, %s] %s", m.Category, m.Valence, m.AgeLabel, m.Content))
+		} else {
+			sb.WriteString(fmt.Sprintf("- [%s, %s] %s", m.Category, m.Valence, m.Content))
+		}
 	}
 
 	ids := make([]string, len(execCtx.MemoryBriefing.InjectedIDs))

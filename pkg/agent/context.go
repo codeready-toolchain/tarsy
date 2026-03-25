@@ -221,6 +221,7 @@ type MemoryHint struct {
 	Content  string
 	Category string
 	Valence  string
+	AgeLabel string // pre-computed, e.g. "learned 3 days ago" or "learned 6 months ago, updated 1 day ago"
 }
 
 // ChatContext carries chat-specific data for controllers.

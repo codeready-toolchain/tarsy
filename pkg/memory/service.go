@@ -44,7 +44,8 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 	vecStr := formatVector(queryVec)
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT memory_id, content, category, valence, confidence, seen_count
+		SELECT memory_id, content, category, valence, confidence, seen_count,
+		       created_at, updated_at
 		FROM investigation_memories
 		WHERE project = $1
 		  AND deprecated = false
@@ -60,7 +61,8 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 	var memories []Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.Content, &m.Category, &m.Valence, &m.Confidence, &m.SeenCount); err != nil {
+		if err := rows.Scan(&m.ID, &m.Content, &m.Category, &m.Valence, &m.Confidence, &m.SeenCount,
+			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory row: %w", err)
 		}
 		memories = append(memories, m)
@@ -92,7 +94,7 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	rows, err := s.db.QueryContext(ctx, `
 		WITH candidates AS (
 			SELECT memory_id, content, category, valence, confidence, seen_count,
-			       alert_type, chain_id,
+			       alert_type, chain_id, created_at, updated_at,
 			       (embedding <=> $2::vector) AS distance
 			FROM investigation_memories
 			WHERE project = $1
@@ -101,7 +103,8 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 			ORDER BY embedding <=> $2::vector
 			LIMIT $3
 		)
-		SELECT memory_id, content, category, valence, confidence, seen_count
+		SELECT memory_id, content, category, valence, confidence, seen_count,
+		       created_at, updated_at
 		FROM candidates
 		ORDER BY
 		  (1 - distance)
@@ -118,7 +121,8 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	var memories []Memory
 	for rows.Next() {
 		var m Memory
-		if err := rows.Scan(&m.ID, &m.Content, &m.Category, &m.Valence, &m.Confidence, &m.SeenCount); err != nil {
+		if err := rows.Scan(&m.ID, &m.Content, &m.Category, &m.Valence, &m.Confidence, &m.SeenCount,
+			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan memory row: %w", err)
 		}
 		memories = append(memories, m)

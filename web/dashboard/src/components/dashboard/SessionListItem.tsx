@@ -34,6 +34,7 @@ import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
+import { actionStageChipStyles } from './sessionActionChipSx.ts';
 
 interface SessionListItemProps {
   session: DashboardSessionItem;
@@ -105,9 +106,11 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
               <Chip
                 icon={<BuildOutlined sx={{ fontSize: '0.875rem' }} />}
                 size="small"
-                color={session.actions_executed ? 'success' : 'default'}
                 variant="outlined"
-                sx={iconOnlyChipSx}
+                sx={(theme) => ({
+                  ...iconOnlyChipSx,
+                  ...actionStageChipStyles(theme, !!session.actions_executed),
+                })}
               />
             </Tooltip>
           )}

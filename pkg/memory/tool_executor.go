@@ -189,7 +189,8 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Found %d relevant memories:\n", len(filtered)))
 	for i, m := range filtered {
-		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s] %s", i+1, m.Category, m.Valence, m.Content))
+		age := FormatMemoryAge(m.CreatedAt, m.UpdatedAt)
+		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, %s] %s", i+1, m.Category, m.Valence, age, m.Content))
 	}
 
 	return &agent.ToolResult{
