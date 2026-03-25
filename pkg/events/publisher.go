@@ -204,6 +204,7 @@ func (p *EventPublisher) PublishExecutionStatus(ctx context.Context, sessionID s
 // to both the session-specific channel (for SessionDetailPage scoring status)
 // and the global sessions channel (for the dashboard score spinner / refresh).
 func (p *EventPublisher) PublishSessionScoreUpdated(ctx context.Context, sessionID string, payload SessionScoreUpdatedPayload) error {
+	payload.SessionID = sessionID
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal SessionScoreUpdatedPayload: %w", err)

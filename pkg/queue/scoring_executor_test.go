@@ -87,6 +87,9 @@ func TestScoringExecutor_PublishScoreUpdatedNilPublisher(t *testing.T) {
 		exec.publishScoreUpdated("session-123", events.ScoringStatusInProgress)
 	})
 	assert.NotPanics(t, func() {
+		exec.publishScoreUpdated("session-456", events.ScoringStatusMemorizing)
+	})
+	assert.NotPanics(t, func() {
 		exec.publishScoreUpdated("session-456", events.ScoringStatusCompleted)
 	})
 	assert.NotPanics(t, func() {
@@ -101,6 +104,7 @@ func TestScoringExecutor_PublishScoreUpdatedWithPublisher(t *testing.T) {
 		expectedStatus events.ScoringStatus
 	}{
 		{"in_progress", events.ScoringStatusInProgress, events.ScoringStatusInProgress},
+		{"memorizing", events.ScoringStatusMemorizing, events.ScoringStatusMemorizing},
 		{"completed", events.ScoringStatusCompleted, events.ScoringStatusCompleted},
 		{"failed", events.ScoringStatusFailed, events.ScoringStatusFailed},
 	}
