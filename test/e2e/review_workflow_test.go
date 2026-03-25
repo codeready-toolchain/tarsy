@@ -230,8 +230,15 @@ func TestE2E_ReviewWorkflow_DirectComplete(t *testing.T) {
 	assert.Equal(t, "Acknowledged but needs follow-up.", act1["note"])
 
 	// Verify ordering: claim created_at < complete created_at.
-	assert.True(t, act0["created_at"].(string) < act1["created_at"].(string),
-		"claim timestamp should be strictly before complete timestamp")
+	// Parse timestamps rather than string-compare — RFC3339Nano strips trailing
+	// zeros, so different fractional digit counts break lexicographic ordering.
+	claimTS, err := time.Parse(time.RFC3339Nano, act0["created_at"].(string))
+	require.NoError(t, err)
+	completeTS, err := time.Parse(time.RFC3339Nano, act1["created_at"].(string))
+	require.NoError(t, err)
+	assert.True(t, claimTS.Before(completeTS),
+		"claim timestamp should be strictly before complete timestamp (claim=%s, complete=%s)",
+		act0["created_at"], act1["created_at"])
 
 	// ── Triage ──
 	reviewedGroup := app.GetTriageGroup(t, "reviewed", "")
