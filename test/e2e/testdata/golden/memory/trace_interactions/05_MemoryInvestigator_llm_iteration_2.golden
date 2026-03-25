@@ -56,9 +56,13 @@ The following are learnings from previous investigations of similar alerts.
 Consider them as hints — they may or may not apply to your current investigation.
 Do not treat them as rules.
 
+<memory_data>
 - [procedural, positive] Check PgBouncer connection pool health before investigating query latency
+
 - [semantic, neutral] Normal error rate for batch-processor during 2-4am is ~200/hr
+
 - [procedural, negative] container_memory_rss metric does not exist in this setup
+</memory_data>
 
 Focus on investigation and providing recommendations for human operators to execute.
 

@@ -356,6 +356,9 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 	result := builder.ComposeInstructions(execCtx)
 
 	assert.Contains(t, result, "Lessons from Past Investigations")
+	assert.Contains(t, result, "<memory_data>")
+	assert.Contains(t, result, "</memory_data>")
+	assert.Contains(t, result, "Consider them as hints")
 	assert.Contains(t, result, "[procedural, positive] Check PgBouncer health first")
 	assert.Contains(t, result, "[semantic, neutral] Normal error rate is 200/hr")
 }
