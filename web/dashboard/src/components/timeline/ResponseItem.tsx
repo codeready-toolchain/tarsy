@@ -115,7 +115,7 @@ function ResponseItem({
           <EmojiIcon emoji="🧠" opacity={collapsedLeadingIconOpacity} showTooltip={shouldShowCollapsed} tooltipContent={tooltipText} tooltipType="final_answer" />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <CollapsibleItemHeader
-              headerText="LEARNED"
+              headerText="LESSONS LEARNED"
               headerColor="secondary.main"
               headerTextTransform="uppercase"
               shouldShowCollapsed={shouldShowCollapsed}

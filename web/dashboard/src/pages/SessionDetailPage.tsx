@@ -1725,7 +1725,7 @@ export function SessionDetailPage() {
               />
             </Suspense>
 
-            {/* Extracted Learnings from this investigation */}
+            {/* Lessons learned (memories) from this investigation */}
             <Suspense fallback={null}>
               <ExtractedLearningsCard
                 sessionId={session.id}

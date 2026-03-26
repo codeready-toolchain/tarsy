@@ -221,7 +221,7 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	assert.Contains(t, stageTypes, stage.StageTypeScoring)
 
 	lastStage := stages[len(stages)-1]
-	assert.Equal(t, "Evaluation & Learning", lastStage.StageName)
+	assert.Equal(t, "Reflection", lastStage.StageName)
 	assert.Equal(t, stage.StageTypeScoring, lastStage.StageType)
 	assert.Equal(t, stage.StatusCompleted, lastStage.Status)
 
@@ -405,7 +405,7 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 
 	ws.WaitForEvent(t, func(e WSEvent) bool {
 		return e.Type == "stage.status" &&
-			e.Parsed["stage_name"] == "Evaluation & Learning" &&
+			e.Parsed["stage_name"] == "Reflection" &&
 			e.Parsed["status"] == "completed"
 	}, 5*time.Second, "expected scoring stage.status completed WS event")
 

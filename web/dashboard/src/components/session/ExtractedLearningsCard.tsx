@@ -81,7 +81,7 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
           </Button>
         }
       >
-        Failed to load extracted learnings.
+        Failed to load lessons for this session.
       </Alert>
     );
   }
@@ -99,7 +99,7 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <School fontSize="small" sx={{ color: 'info.main' }} />
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Extracted Learnings
+            Lessons Learned
           </Typography>
           {memories.length > 0 && (
             <Chip
@@ -113,7 +113,7 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
         <IconButton
           size="small"
           onClick={() => setIsExpanded(!isExpanded)}
-          aria-label={isExpanded ? 'Collapse learnings' : 'Expand learnings'}
+          aria-label={isExpanded ? 'Collapse lessons' : 'Expand lessons'}
           sx={{
             transition: 'transform 0.4s',
             transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
@@ -126,7 +126,7 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
       <Collapse in={isExpanded} timeout={400}>
         {memories.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-            No new learnings were extracted from this investigation.
+            No new lessons were captured from this investigation.
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>

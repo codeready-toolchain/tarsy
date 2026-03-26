@@ -131,7 +131,7 @@ func TestScoringExecutor_PrepareScoring_CreatesRecords(t *testing.T) {
 		All(ctx)
 	require.NoError(t, err)
 	require.Len(t, stages, 1)
-	assert.Equal(t, "Evaluation & Learning", stages[0].StageName)
+	assert.Equal(t, "Reflection", stages[0].StageName)
 	assert.Equal(t, 1, stages[0].StageIndex) // GetMaxStageIndex returns 0 for no stages, so +1 = 1
 
 	// Verify AgentExecution created
@@ -247,7 +247,7 @@ func TestScoringExecutor_SubmitScoring_ReturnsScoreID(t *testing.T) {
 
 	executor.Stop()
 
-	assert.True(t, pub.hasStageStatus("Evaluation & Learning", "started"), "expected scoring stage started event")
+	assert.True(t, pub.hasStageStatus("Reflection", "started"), "expected scoring stage started event")
 }
 
 func TestScoringExecutor_ScoreSessionAsync_SilentWhenScoringDisabled(t *testing.T) {
@@ -419,8 +419,8 @@ func TestScoringExecutor_ExecuteScoring_FailsGracefully(t *testing.T) {
 	assert.NotNil(t, score.ErrorMessage)
 
 	// Verify terminal stage events were published
-	assert.True(t, pub.hasStageStatus("Evaluation & Learning", "started"))
-	assert.True(t, pub.hasStageStatus("Evaluation & Learning", "failed"))
+	assert.True(t, pub.hasStageStatus("Reflection", "started"))
+	assert.True(t, pub.hasStageStatus("Reflection", "failed"))
 }
 
 func TestScoringExecutor_BuildScoringContext_FiltersStageTypes(t *testing.T) {

@@ -30,7 +30,7 @@ import (
 
 const scoringTimeout = 10 * time.Minute
 const feedbackReflectorTimeout = 3 * time.Minute
-const scoringStageName = "Evaluation & Learning"
+const scoringStageName = "Reflection"
 
 // ScoringExecutor orchestrates the scoring workflow: creating stage/execution
 // records, running the scoring agent, and writing results to session_scores.
