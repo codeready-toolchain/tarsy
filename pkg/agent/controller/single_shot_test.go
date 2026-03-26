@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -34,6 +35,19 @@ func TestSynthesisController_HappyPath(t *testing.T) {
 	require.Contains(t, result.FinalAnalysis, "OOM on web-1")
 	require.Equal(t, 150, result.TokensUsed.TotalTokens)
 	require.Equal(t, 1, llm.callCount)
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	found := false
+	for _, ev := range events {
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
+			found = true
+			assert.Equal(t, "synthesis", ev.Metadata["interaction_type"],
+				"final_analysis event should carry the controller's interaction_type")
+			break
+		}
+	}
+	require.True(t, found, "final_analysis event must exist")
 }
 
 func TestSynthesisController_WithThinking(t *testing.T) {

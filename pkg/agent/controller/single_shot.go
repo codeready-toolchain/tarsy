@@ -185,7 +185,8 @@ func (c *SingleShotController) Run(
 	}
 
 	// 6. Record final analysis
-	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnalysis, nil, &eventSeq)
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeFinalAnalysis, finalAnalysis,
+		map[string]interface{}{"interaction_type": string(c.cfg.InteractionLabel)}, &eventSeq)
 
 	// 7. Store assistant message and LLM interaction
 	storeResp := resp

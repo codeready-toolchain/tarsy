@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
-import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined, AutoStoriesOutlined, PsychologyOutlined } from '@mui/icons-material';
+import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined, AutoStoriesOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
@@ -9,6 +9,7 @@ import { formatDurationMs, getSkillNamesLabel } from '../../utils/format';
 import { highlightSearchTermNodes } from '../../utils/search';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
+import InsightsCard from './InsightsCard';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 import { TOOL_TYPE } from '../../constants/toolTypes';
@@ -152,10 +153,62 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
   // Tool result is in item.content (after completion)
   const toolResult = item.content || null;
 
+  // Keep all hooks above any conditional return.
   const rehypePlugins = useMemo(
     () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
     [searchTerm],
   );
+
+  // Successful memory recall — delegate to shared InsightsCard
+  if (isMemory && !isMcpFailure && !isToolResultError) {
+    const query = toolArguments.query ? String(toolArguments.query) : null;
+
+    return (
+      <InsightsCard
+        itemId={item.id}
+        title={searchTerm ? highlightSearchTermNodes('Recalled Insights', searchTerm) : 'Recalled Insights'}
+        headerExtras={
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {query || ''}
+            </Typography>
+            {durationMs != null && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', flexShrink: 0 }}>
+                {formatDurationMs(durationMs)}
+              </Typography>
+            )}
+          </>
+        }
+        expandAll={expandAll}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Recalled during investigation
+        </Typography>
+        {query && (
+          <Box sx={{ mb: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.5, display: 'block' }}>Searched for</Typography>
+            <Typography variant="body2" sx={(theme) => ({
+              fontStyle: 'italic', color: 'text.secondary', lineHeight: 1.6,
+              pl: 1.5, borderLeft: `3px solid ${alpha(theme.palette.success.main, 0.3)}`,
+            })}>
+              &ldquo;{query}&rdquo;
+            </Typography>
+          </Box>
+        )}
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Result</Typography>
+            <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+          </Box>
+          {toolResult && typeof toolResult === 'string' ? (
+            <MemoryResultCards result={toolResult} searchTerm={searchTerm} />
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No result</Typography>
+          )}
+        </Box>
+      </InsightsCard>
+    );
+  }
 
   const skillNamesLabel = isSkill ? getSkillNamesLabel(toolArguments) : null;
   const displayName = isMemory ? 'Recalled Insights' : isSkill ? 'Loaded Skills' : toolName;
@@ -178,12 +231,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
 
   const StatusIcon = isMcpFailure ? ErrorIcon
     : isToolResultError ? InfoOutlined
-    : isMemory ? PsychologyOutlined
     : isSkill ? AutoStoriesOutlined
     : CheckCircle;
-  const accentKey: 'error' | 'warning' | 'info' | 'secondary' | 'primary' = isMcpFailure ? 'error'
+  const accentKey: 'error' | 'warning' | 'info' | 'primary' = isMcpFailure ? 'error'
     : isToolResultError ? 'warning'
-    : isMemory ? 'secondary'
     : isSkill ? 'info'
     : 'primary';
 
@@ -229,11 +280,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
 
       <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-          {isMemory ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              Recalled during investigation
-            </Typography>
-          ) : isSkill ? (
+          {isSkill ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               Skill
             </Typography>
@@ -251,29 +298,17 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
             </Box>
           )}
 
-          {isMemory && toolArguments.query ? (
-            <Box sx={{ mb: 1 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.5, display: 'block' }}>Searched for</Typography>
-              <Typography variant="body2" sx={(theme) => ({
-                fontStyle: 'italic', color: 'text.secondary', lineHeight: 1.6,
-                pl: 1.5, borderLeft: `3px solid ${alpha(theme.palette.secondary.main, 0.3)}`,
-              })}>
-                &ldquo;{String(toolArguments.query)}&rdquo;
-              </Typography>
+          <Box sx={{ mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Arguments</Typography>
+              <CopyButton text={JSON.stringify(toolArguments, null, 2)} variant="icon" size="small" tooltip="Copy arguments" />
             </Box>
-          ) : (
-            <Box sx={{ mb: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Arguments</Typography>
-                <CopyButton text={JSON.stringify(toolArguments, null, 2)} variant="icon" size="small" tooltip="Copy arguments" />
-              </Box>
-              {toolArguments && Object.keys(toolArguments).length > 0 ? (
-                isSimpleArguments(toolArguments) ? <SimpleArgumentsList args={toolArguments} /> : <JsonDisplay data={toolArguments} maxHeight={250} />
-              ) : (
-                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No arguments</Typography>
-              )}
-            </Box>
-          )}
+            {toolArguments && Object.keys(toolArguments).length > 0 ? (
+              isSimpleArguments(toolArguments) ? <SimpleArgumentsList args={toolArguments} /> : <JsonDisplay data={toolArguments} maxHeight={250} />
+            ) : (
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No arguments</Typography>
+            )}
+          </Box>
 
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
@@ -281,9 +316,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
               <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
             </Box>
             {toolResult ? (
-              isMemory && typeof toolResult === 'string' ? (
-                <MemoryResultCards result={toolResult} searchTerm={searchTerm} />
-              ) : isSkill && typeof toolResult === 'string' ? (
+              isSkill && typeof toolResult === 'string' ? (
                 <Box sx={(theme) => ({
                   maxHeight: 400, overflow: 'auto',
                   p: 1.5, borderRadius: 1,

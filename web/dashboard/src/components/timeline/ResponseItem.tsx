@@ -10,6 +10,7 @@ import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import { highlightSearchTermNodes } from '../../utils/search';
+import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
 import { MemoryCardList, type ParsedMemory } from './MemoryCardList';
 
 interface ReflectorResult {
@@ -57,7 +58,11 @@ function ResponseItem({
 }: ResponseItemProps) {
   const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
-  const reflectorResult = useMemo(() => isFinalAnalysis ? tryParseReflectorResult(item.content) : null, [isFinalAnalysis, item.content]);
+  const isReflector = item.metadata?.interaction_type === LLM_INTERACTION_TYPE.MEMORY_EXTRACTION;
+  const reflectorResult = useMemo(
+    () => (isFinalAnalysis && isReflector) ? tryParseReflectorResult(item.content) : null,
+    [isFinalAnalysis, isReflector, item.content],
+  );
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
   const rehypePlugins = useMemo(
     () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
@@ -128,59 +133,61 @@ function ResponseItem({
             />
             <Collapse in={!shouldShowCollapsed} timeout={300}>
               <Box sx={{ mt: 1, pb: 3 }}>
-                {totalActions === 0 ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    No new learnings extracted from this investigation.
-                  </Typography>
-                ) : (
-                  <>
-                    {created.length > 0 && (
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', display: 'block', mb: 0.75 }}>
-                          New Insights ({created.length})
-                        </Typography>
-                        <MemoryCardList memories={createdMemories} renderContent={(c) => c} />
-                      </Box>
-                    )}
-                    {reinforced.length > 0 && (
-                      <Box sx={(theme) => ({
-                        mb: deprecated.length > 0 ? 2 : 0,
-                        display: 'flex', alignItems: 'center', gap: 1,
-                        p: 1, borderRadius: 1,
-                        bgcolor: alpha(theme.palette.success.main, 0.06),
-                        border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
-                      })}>
-                        <Chip label={reinforced.length} size="small" color="success" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
-                        <Typography variant="body2" color="text.secondary">
-                          existing {reinforced.length === 1 ? 'insight' : 'insights'} reinforced
-                        </Typography>
-                      </Box>
-                    )}
-                    {deprecated.length > 0 && (
-                      <Box>
-                        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', display: 'block', mb: 0.75 }}>
-                          Deprecated ({deprecated.length})
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                          {deprecated.map((d, i) => (
-                            <Box key={i} sx={(theme) => ({
-                              p: 1, borderRadius: 1,
-                              bgcolor: alpha(theme.palette.error.main, 0.04),
-                              border: `1px solid ${alpha(theme.palette.error.main, 0.12)}`,
-                            })}>
-                              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                                <Typography component="span" sx={{ fontWeight: 600, fontSize: '0.7rem', color: 'text.secondary' }}>
-                                  {d.memory_id}
-                                </Typography>
-                                {' — '}{d.reason}
-                              </Typography>
-                            </Box>
-                          ))}
+                <ContentCard>
+                  {totalActions === 0 ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      No new learnings extracted from this investigation.
+                    </Typography>
+                  ) : (
+                    <>
+                      {created.length > 0 && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', display: 'block', mb: 0.75 }}>
+                            New Insights ({created.length})
+                          </Typography>
+                          <MemoryCardList memories={createdMemories} renderContent={(c) => c} />
                         </Box>
-                      </Box>
-                    )}
-                  </>
-                )}
+                      )}
+                      {reinforced.length > 0 && (
+                        <Box sx={(theme) => ({
+                          mb: deprecated.length > 0 ? 2 : 0,
+                          display: 'flex', alignItems: 'center', gap: 1,
+                          p: 1, borderRadius: 1,
+                          bgcolor: alpha(theme.palette.success.main, 0.06),
+                          border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
+                        })}>
+                          <Chip label={reinforced.length} size="small" color="success" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
+                          <Typography variant="body2" color="text.secondary">
+                            existing {reinforced.length === 1 ? 'insight' : 'insights'} reinforced
+                          </Typography>
+                        </Box>
+                      )}
+                      {deprecated.length > 0 && (
+                        <Box>
+                          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', display: 'block', mb: 0.75 }}>
+                            Deprecated ({deprecated.length})
+                          </Typography>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                            {deprecated.map((d, i) => (
+                              <Box key={i} sx={(theme) => ({
+                                p: 1, borderRadius: 1,
+                                bgcolor: alpha(theme.palette.error.main, 0.04),
+                                border: `1px solid ${alpha(theme.palette.error.main, 0.12)}`,
+                              })}>
+                                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                                  <Typography component="span" sx={{ fontWeight: 600, fontSize: '0.7rem', color: 'text.secondary' }}>
+                                    {d.memory_id}
+                                  </Typography>
+                                  {' — '}{d.reason}
+                                </Typography>
+                              </Box>
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
+                    </>
+                  )}
+                </ContentCard>
                 {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
               </Box>
             </Collapse>
@@ -221,7 +228,9 @@ function ResponseItem({
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
             <Box sx={{ mt: 0.5, pb: 3 }}>
-              {renderContent()}
+              <ContentCard maxHeight="900px" copyText={item.content || ''}>
+                {renderContent()}
+              </ContentCard>
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
             </Box>
           </Collapse>
