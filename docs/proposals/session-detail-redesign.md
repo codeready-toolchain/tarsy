@@ -59,37 +59,41 @@ The header simultaneously displays: identity, status, timing, authorship, stats,
 
 ### A. Compress SessionHeader into a lean banner ✅ DONE
 
-**Implemented layout:**
+**Final layout:**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ SecurityInvestigation                [Completed]   DURATION  │
-│ Started at Mar 26, 7:09 AM · by guardian-cockpit-sa    4m 40s│
-│                                          [RE-SUBMIT ALERT]   │
-│─────────────────────────────────────────────────────────────│
-│ USED TOKENS    785,935 total    759,945 in    19,877 out     │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ SecurityInvestigation  ● Completed · 4m 40s        ↻  📋  ★ │
+│ Mar 26, 7:09 AM · by guardian-cockpit-sa                     │
+│──────────────────────────────────────────────────────────────│
+│ USED TOKENS  785,935 total  759,945 in  19,877 out | 📄 ALERT DATA ▾ 📋│
+│ (expanded: rich field rendering with 2-col grid, chips)      │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Changes made:
 
-1. **Removed the stats pills row entirely** — all 6–7 colored badges (total, LLM, MCP, stages, tokens, score, errors) and the "Session Summary" section header deleted.
-2. **Removed the Parallel Agents badge** — implementation detail, visible from the timeline itself.
-3. **Token usage shown once at card bottom** — separated by a divider, displayed as a compact stat row with color-coded full numbers (`785,935 total  759,945 in  19,877 out`). Both the old pill variant and `variant="detailed"` block removed.
-4. **Removed duplicate stage/interaction counts from AppBar** — the header title is sufficient.
-5. **Truncated author** — K8s service account paths like `system:serviceaccount:ns:name` display just the last segment; full path in a tooltip.
-6. **Removed session UUID entirely** — available from the URL, no need to display it.
-7. **Removed chain ID** — alert type in the title is sufficient.
-8. **Moved scoring trigger button** to the right-side actions column alongside Cancel/Re-submit.
+1. **Removed stats pills row entirely** — all colored badges and "Session Summary" header deleted.
+2. **Removed Parallel Agents badge** — implementation detail, visible from the timeline.
+3. **Single-flow layout** — eliminated the two-column layout (left metadata / right actions) that created vertical gaps. Title, status, duration, and actions now share one row.
+4. **Duration moved inline** — added `variant="inline"` to `ProgressIndicator`; duration renders as compact text next to the status badge instead of a separate "DURATION" header block.
+5. **Action buttons replaced with icon buttons** — Re-submit (↻), Cancel (✕), Score (★) are now small icon buttons with tooltips, eliminating large outlined buttons.
+6. **Token usage + alert data in a unified footer bar** — tokens on the left, alert data toggle on the right, separated by a subtle vertical divider.
+7. **Alert data merged into header card** — no longer a separate `Paper` card. Collapsed by default; expands inline with rich field rendering (`AlertDataContent` extracted as reusable component).
+8. **Removed duplicate stage/interaction counts from AppBar**.
+9. **Truncated author** — K8s service account paths show last segment; full path in tooltip.
+10. **Removed session UUID** — available from URL.
+11. **Removed chain ID** — alert type in title is sufficient.
+12. **Interactive JSON rendering** — nested JSON fields now use `JsonDisplay` (react-json-view-lite) instead of plain `<pre>` dumps.
 
-### B. Collapse Original Alert Data by default (completed sessions) ✅ DONE
+### B. Alert Data merged into header ✅ DONE
 
-Changes made:
+Alert data is no longer a separate card. It lives inside the `SessionHeader` footer bar:
 
-1. **Collapsed by default for terminal sessions** — new `sessionStatus` prop; card starts collapsed when status is completed/failed/cancelled/timed_out, expanded for active sessions.
-2. **Summary preview when collapsed** — shows top 2–3 fields by priority as a single-line preview (e.g., `Cluster: api1.r83... · Namespace: babyzalokvich-dev · Node: ip-10-8-16-49`), truncated with ellipsis.
-3. **2-column grid for simple fields** — short string/number values render in a responsive 2-column CSS grid. Complex fields (URLs, JSON objects, multi-line text, timestamps with icons) still get full width.
-4. **Clickable header row** — the entire header is now clickable to toggle expand/collapse, not just the chevron icon.
+1. **Always collapsed by default** — users click "ALERT DATA" in the footer to expand.
+2. **Rich field rendering on expand** — `AlertDataContent` extracted as a reusable component from `OriginalAlertCard`. Renders severity/environment chips, 2-column grid for simple fields, full-width for complex fields, importance-based ordering.
+3. **Copy button** inline in the footer bar for quick raw data copy.
+4. **`OriginalAlertCard` preserved** as a standalone component (still available for other uses) but no longer rendered on the session detail page.
 
 ### C. Prioritize field ordering ✅ DONE
 
@@ -121,42 +125,6 @@ Benefits:
 - Most users want Timeline or Summary, not raw alert data
 
 Even without tabs, a sticky header + collapsed-by-default alert card is a major improvement.
-
----
-
-## Implementation Plan
-
-### Phase 1: SessionHeader cleanup ✅ DONE
-
-| Change | Status |
-|--------|--------|
-| Remove stats pills row + "Session Summary" section entirely | ✅ |
-| Remove Parallel Agents badge | ✅ |
-| Remove duplicate token displays; add single compact row at card bottom | ✅ |
-| Remove stage/interaction counts from SharedHeader children | ✅ |
-| Remove chain ID from title | ✅ |
-| Remove session UUID (available from URL) | ✅ |
-| Truncate K8s service account author string (tooltip for full path) | ✅ |
-| Move scoring trigger to actions column | ✅ |
-
-Net result: `SessionHeader.tsx` reduced from 790 → ~498 lines.
-
-### Phase 2: OriginalAlertCard improvements ✅ DONE
-
-| Change | Status |
-|--------|--------|
-| Default collapsed for terminal sessions | ✅ |
-| Two-column grid for simple fields | ✅ |
-| Summary preview line when collapsed | ✅ |
-| Field importance ordering | ✅ |
-| Clickable header row | ✅ |
-
-### Phase 3: Larger redesign
-
-| Change | Impact | Est. LOC |
-|--------|--------|----------|
-| Sticky session header on scroll | Persistent context while browsing timeline | ~80 |
-| Tab or accordion section navigation | Direct access to Timeline/Summary/Alert Data | ~200 |
 
 ---
 

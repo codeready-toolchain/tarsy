@@ -12,6 +12,7 @@ import {
   DialogActions,
   CircularProgress,
   Tooltip,
+  IconButton,
   Collapse,
   alpha,
 } from '@mui/material';
@@ -200,102 +201,57 @@ export default function SessionHeader({
             />
           </Box>
 
-          {/* Right: compact action buttons */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          {/* Right: icon action buttons */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             {canCancel && (
-              <Tooltip title="Cancels entire session including all agents">
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleCancelClick}
-                  disabled={isCanceling || session.status === SESSION_STATUS.CANCELLING}
-                  startIcon={
-                    isCanceling || session.status === SESSION_STATUS.CANCELLING
-                      ? <CircularProgress size={14} color="inherit" />
-                      : <CancelOutlined sx={{ fontSize: '1rem' }} />
-                  }
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    py: 0.5,
-                    px: 1.5,
-                    color: 'error.main',
-                    borderColor: 'error.main',
-                    borderWidth: 1.5,
-                    '&:hover': {
-                      backgroundColor: 'error.main',
-                      borderColor: 'error.main',
-                      color: 'error.contrastText',
-                      borderWidth: 1.5,
-                    },
-                  }}
-                >
-                  {isCanceling || session.status === SESSION_STATUS.CANCELLING ? 'Canceling…' : 'Cancel'}
-                </Button>
+              <Tooltip title={isCanceling || session.status === SESSION_STATUS.CANCELLING ? 'Canceling…' : 'Cancel session'}>
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={handleCancelClick}
+                    disabled={isCanceling || session.status === SESSION_STATUS.CANCELLING}
+                    sx={{ color: 'error.main', '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.1) } }}
+                  >
+                    {isCanceling || session.status === SESSION_STATUS.CANCELLING
+                      ? <CircularProgress size={18} color="inherit" />
+                      : <CancelOutlined sx={{ fontSize: '1.2rem' }} />}
+                  </IconButton>
+                </span>
               </Tooltip>
             )}
 
             {isTerminal && (
-              <Tooltip title="Submit a new alert with the same data">
-                <Button
-                  variant="outlined"
+              <Tooltip title="Re-submit alert">
+                <IconButton
                   size="small"
                   onClick={handleResubmit}
-                  startIcon={<ReplayIcon sx={{ fontSize: '1rem' }} />}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    py: 0.5,
-                    px: 1.5,
-                    color: 'info.main',
-                    borderColor: 'info.main',
-                    borderWidth: 1.5,
-                    '&:hover': {
-                      backgroundColor: 'info.main',
-                      borderColor: 'info.main',
-                      color: 'info.contrastText',
-                    },
-                  }}
+                  sx={{ color: 'info.main', '&:hover': { bgcolor: (theme) => alpha(theme.palette.info.main, 0.1) } }}
                 >
-                  Re-submit
-                </Button>
+                  <ReplayIcon sx={{ fontSize: '1.2rem' }} />
+                </IconButton>
               </Tooltip>
             )}
 
             {session.status === SESSION_STATUS.COMPLETED && session.latest_score == null &&
               (!session.scoring_status || session.scoring_status === 'not_scored') && !scoringTriggered && (
-              <Tooltip title={scoringError || 'Run quality scoring on this session'}>
-                <Button
+              <Tooltip title={scoringError || 'Score session'}>
+                <IconButton
                   size="small"
-                  variant="outlined"
-                  startIcon={<GradingOutlined sx={{ fontSize: '0.9rem' }} />}
                   onClick={handleTriggerScoring}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 500,
-                    fontSize: '0.8rem',
-                    py: 0.5,
-                    px: 1.5,
-                    color: scoringError ? 'error.main' : 'text.secondary',
-                    borderColor: scoringError ? 'error.main' : 'divider',
-                  }}
+                  sx={{ color: scoringError ? 'error.main' : 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}
                 >
-                  Score
-                </Button>
+                  <GradingOutlined sx={{ fontSize: '1.2rem' }} />
+                </IconButton>
               </Tooltip>
             )}
             {scoringTriggered && (
-              <Button
-                size="small"
-                variant="outlined"
-                disabled
-                startIcon={<CircularProgress size={14} color="inherit" />}
-                sx={{ textTransform: 'none', fontWeight: 500, fontSize: '0.8rem', py: 0.5, px: 1.5 }}
-              >
-                Scoring…
-              </Button>
+              <Tooltip title="Scoring in progress…">
+                <span>
+                  <IconButton size="small" disabled>
+                    <CircularProgress size={18} color="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
             )}
           </Box>
         </Box>
