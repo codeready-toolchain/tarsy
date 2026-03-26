@@ -246,6 +246,45 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Contains(t, err.Error(), "only allowed for tool messages")
 	})
 
+	t.Run("gets max sequence for execution", func(t *testing.T) {
+		maxSeq, err := messageService.GetMaxSequenceForExecution(ctx, exec.ID)
+		require.NoError(t, err)
+		// exec has messages at sequences 1,2,10,11,15 from earlier subtests
+		// (rejected messages don't create DB records)
+		assert.Equal(t, 15, maxSeq)
+	})
+
+	t.Run("max sequence returns 0 for empty execution", func(t *testing.T) {
+		emptyExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "EmptyAgent",
+			AgentIndex: 99,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+
+		maxSeq, err := messageService.GetMaxSequenceForExecution(ctx, emptyExec.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 0, maxSeq)
+	})
+
+	t.Run("gets messages in sequence range", func(t *testing.T) {
+		msgs, err := messageService.GetMessagesInSequenceRange(ctx, exec.ID, 1, 2)
+		require.NoError(t, err)
+		assert.Len(t, msgs, 2)
+		assert.Equal(t, 1, msgs[0].SequenceNumber)
+		assert.Equal(t, 2, msgs[1].SequenceNumber)
+	})
+
+	t.Run("sequence range excludes messages outside bounds", func(t *testing.T) {
+		msgs, err := messageService.GetMessagesInSequenceRange(ctx, exec.ID, 10, 11)
+		require.NoError(t, err)
+		assert.Len(t, msgs, 2)
+		assert.Equal(t, 10, msgs[0].SequenceNumber)
+		assert.Equal(t, 11, msgs[1].SequenceNumber)
+	})
+
 	t.Run("gets stage messages across executions", func(t *testing.T) {
 		// Create a second execution in the same stage
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{

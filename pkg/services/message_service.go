@@ -141,6 +141,44 @@ func (s *MessageService) GetMessagesUpToSequence(ctx context.Context, executionI
 	return messages, nil
 }
 
+// GetMaxSequenceForExecution returns the maximum message sequence number for
+// an execution. Returns 0 if no messages exist.
+func (s *MessageService) GetMaxSequenceForExecution(ctx context.Context, executionID string) (int, error) {
+	if executionID == "" {
+		return 0, NewValidationError("executionID", "required")
+	}
+
+	msg, err := s.client.Message.Query().
+		Where(message.ExecutionIDEQ(executionID)).
+		Order(ent.Desc(message.FieldSequenceNumber)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to get max message sequence: %w", err)
+	}
+
+	return msg.SequenceNumber, nil
+}
+
+// GetMessagesInSequenceRange retrieves messages within a sequence number range (inclusive).
+func (s *MessageService) GetMessagesInSequenceRange(ctx context.Context, executionID string, minSeq, maxSeq int) ([]*ent.Message, error) {
+	messages, err := s.client.Message.Query().
+		Where(
+			message.ExecutionIDEQ(executionID),
+			message.SequenceNumberGTE(minSeq),
+			message.SequenceNumberLTE(maxSeq),
+		).
+		Order(ent.Asc(message.FieldSequenceNumber)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages in range: %w", err)
+	}
+
+	return messages, nil
+}
+
 // GetStageMessages retrieves all messages for a stage across all agent executions
 func (s *MessageService) GetStageMessages(ctx context.Context, stageID string) ([]*ent.Message, error) {
 	messages, err := s.client.Message.Query().

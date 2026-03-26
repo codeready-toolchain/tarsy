@@ -72,15 +72,22 @@ func (c *SingleShotController) Run(
 	prevStageContext string,
 ) (*agent.ExecutionResult, error) {
 	startTime := time.Now()
-	msgSeq := 0
 	fbState := NewFallbackState(execCtx)
 
 	// Initialize eventSeq from DB to avoid collisions with events created
 	// before this controller starts (consistent with IteratingController).
 	eventSeq, seqErr := execCtx.Services.Timeline.GetMaxSequenceForExecution(ctx, execCtx.ExecutionID)
 	if seqErr != nil {
-		slog.Warn("Failed to get max sequence for execution, starting from 0",
+		slog.Warn("Failed to get max event sequence for execution, starting from 0",
 			"execution_id", execCtx.ExecutionID, "error", seqErr)
+	}
+
+	// Initialize msgSeq from DB to avoid collisions when multiple controllers
+	// run under the same execution (e.g. scoring + reflector).
+	msgSeq, msgSeqErr := execCtx.Services.Message.GetMaxSequenceForExecution(ctx, execCtx.ExecutionID)
+	if msgSeqErr != nil {
+		slog.Warn("Failed to get max message sequence for execution, starting from 0",
+			"execution_id", execCtx.ExecutionID, "error", msgSeqErr)
 	}
 	fbState.SingleShot = true
 
