@@ -11,6 +11,10 @@ export const LLM_INTERACTION_TYPE = {
   FINAL_ANALYSIS: 'final_analysis',
   EXECUTIVE_SUMMARY: 'executive_summary',
   CHAT_RESPONSE: 'chat_response',
+  SYNTHESIS: 'synthesis',
+  FORCED_CONCLUSION: 'forced_conclusion',
+  SCORING: 'scoring',
+  MEMORY_EXTRACTION: 'memory_extraction',
 } as const;
 
 export type LLMInteractionType =

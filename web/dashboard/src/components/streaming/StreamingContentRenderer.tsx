@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import TypewriterText from './TypewriterText';
 import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
+import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
 import { TOOL_TYPE } from '../../constants/toolTypes';
 import { getSkillNamesLabel } from '../../utils/format';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
@@ -199,20 +200,21 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
   }
   
   if (item.eventType === TIMELINE_EVENT_TYPES.FINAL_ANALYSIS) {
+    const isReflector = item.metadata?.interaction_type === LLM_INTERACTION_TYPE.MEMORY_EXTRACTION;
     return (
       <Box sx={{ mb: 2, mt: 3 }}>
         <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5 }}>
           <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0 }}>
-            🎯
+            {isReflector ? '🧠' : '🎯'}
           </Typography>
           <Typography
             variant="caption"
             sx={{
               fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
-              fontSize: '0.75rem', color: 'success.main', mt: 0.25
+              fontSize: '0.75rem', color: isReflector ? 'secondary.main' : 'success.main', mt: 0.25
             }}
           >
-            FINAL ANSWER
+            {isReflector ? 'LESSONS LEARNED' : 'FINAL ANSWER'}
           </Typography>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, ml: 4, color: 'text.primary' }}>
@@ -234,7 +236,7 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
     const toolType = (item.metadata?.tool_type as string);
     const isSkill = toolType === TOOL_TYPE.SKILL;
     const isMemory = toolType === TOOL_TYPE.MEMORY;
-    const paletteKey = isMemory ? 'secondary' : isSkill ? 'info' : 'primary';
+    const paletteKey = isMemory ? 'success' : isSkill ? 'info' : 'primary';
 
     let displayName = toolName;
     let statusLabel = 'Executing...';

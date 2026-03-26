@@ -75,6 +75,9 @@
     "agent": "ExecSummaryAgent",
     "content": "All pods healthy. No issues found.",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "executive_summary"
+    },
     "sequence": 2,
     "status": "completed"
   },

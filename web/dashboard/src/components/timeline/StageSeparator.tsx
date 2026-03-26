@@ -2,7 +2,7 @@ import { memo, useCallback } from 'react';
 import { Box, Typography, Divider, Alert } from '@mui/material';
 import {
   Search, ExpandMore, ExpandLess,
-  MergeType, SmsOutlined, AutoAwesome, BuildOutlined, GradingOutlined,
+  MergeType, SmsOutlined, AutoAwesome, BuildOutlined,
 } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
@@ -22,7 +22,7 @@ function getStageTypeIcon(stageType: string | undefined) {
     case STAGE_TYPE.CHAT: return <SmsOutlined sx={sx} />;
     case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome sx={sx} />;
     case STAGE_TYPE.ACTION: return <BuildOutlined sx={sx} />;
-    case STAGE_TYPE.SCORING: return <GradingOutlined sx={sx} />;
+    case STAGE_TYPE.SCORING: return <Box component="span" sx={{ fontSize: 14 }} aria-hidden>🧠</Box>;
     default: return <Search sx={sx} />;
   }
 }
