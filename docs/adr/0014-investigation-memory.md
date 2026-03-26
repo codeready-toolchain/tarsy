@@ -6,7 +6,30 @@
 
 ## Overview
 
-TARSy investigations are stateless — each investigation starts from scratch with no knowledge of past investigations. When the same alert pattern recurs, the system rediscovers the same facts, repeats the same mistakes, and misses lessons from prior investigations. Investigation Memory adds a learning loop: after each investigation, a Reflector extracts discrete learnings; before each investigation, relevant memories are injected as hints. Human review feedback refines memory quality over time.
+TARSy investigations are stateless — each investigation starts from scratch with no knowledge of past investigations. This manifests as:
+
+- **Repeated dead ends** — the agent queries a metric that doesn't exist under that name in this environment, every time
+- **Missed shortcuts** — a senior SRE would check the database connection pool first for this type of alert, but the agent doesn't know that
+- **Lost baselines** — "200 errors/hr during batch processing is normal for this service" is discovered and forgotten
+- **No learning from quality feedback** — investigations scored poorly (or reviewed by humans) don't improve future investigations
+
+Investigation Memory adds a learning loop: after each investigation, a Reflector extracts discrete learnings; before each investigation, relevant memories are injected as hints. Human review feedback refines memory quality over time. The goal is to accumulate institutional knowledge so that each investigation benefits from what was learned before — both **what works** (effective strategies, environment facts) and **what doesn't** (dead ends, mistakes, misleading patterns).
+
+### Existing Signals
+
+TARSy already produces the raw material for memory extraction:
+
+| Signal | Source | What it tells us |
+|--------|--------|------------------|
+| Score (0-100) | `SessionScore.total_score` | Overall investigation quality |
+| Score analysis | `SessionScore.score_analysis` | Detailed critique of what went well/poorly |
+| Failure tags | `SessionScore.failure_tags` | Standardized failure patterns (`premature_conclusion`, `missed_available_tool`, etc.) |
+| Tool improvement report | `SessionScore.tool_improvement_report` | Tool misuse, missed tools, or improvement needs |
+| Human quality rating | `AlertSession.quality_rating` | `accurate` / `partially_accurate` / `inaccurate` — explicit investigation quality ([ADR-0013](0013-review-feedback-redesign.md)) |
+| Investigation feedback | `AlertSession.investigation_feedback` | Free-text explaining why the investigation was good or bad |
+| Final analysis | `AlertSession.final_analysis` | The investigation's conclusion |
+| Investigation timeline | `TimelineEvent` rows | Full tool calls, reasoning, findings |
+| Alert metadata | `AlertSession.alert_type`, `chain_id` | Categorization and context |
 
 ## Design Principles
 
@@ -47,6 +70,40 @@ TARSy investigations are stateless — each investigation starts from scratch wi
 | D8 | Storing injected memory IDs | Many-to-many Ent edge (join table) | Both query directions natural: `session.QueryInjectedMemories()` and `memory.QueryInjectedIntoSessions()`. |
 
 ## Architecture
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│                   Investigation Flow                     │
+│                                                          │
+│  Alert → Chain Stages → Final Analysis → Exec Summary    │
+│                                                    │     │
+│                                              ┌─────▼──┐  │
+│                                              │Scoring │  │
+│                                              └────┬───┘  │
+│                                                   │      │
+│                                      ┌────────────▼───┐  │
+│                                      │  Reflector     │  │
+│                                      │  (extract      │  │
+│                                      │   memories)    │  │
+│                                      └───────┬────────┘  │
+└──────────────────────────────────────────────┼───────────┘
+                                               │
+                                               ▼
+                                    ┌─────────────────────┐
+                                    │   Memory Store      │
+                                    │   (PostgreSQL +     │
+                                    │    pgvector)        │
+                                    └─────────┬───────────┘
+                                              │
+                              ┌───────────────┼───────────────┐
+                              │               │               │
+                              ▼               ▼               ▼
+                      ┌──────────┐    ┌───────────┐    ┌──────────┐
+                      │ Prompt   │    │ Session   │    │ Human    │
+                      │ Injection│    │ Detail +  │    │ Review   │
+                      │ (Tier 4) │    │ API       │    │ Feedback │
+                      └──────────┘    └───────────┘    └──────────┘
+```
 
 ### Data Model: InvestigationMemory
 
@@ -145,6 +202,13 @@ Embedding calls are direct HTTP from Go (not via the Python LLM service) — emb
 
 **Dimension consistency:** The system validates at startup that configured dimensions match the pgvector column size. Changing dimensions requires re-embedding all stored memories.
 
+### Memory Scoping
+
+Memory scoping has two distinct layers:
+
+- **Security scope (hard filter — always enforced):** `project` is inherited from the source session. Every query includes `WHERE project = $current_project`. This is a tenant isolation boundary, not an investigation concern. Pre-authorization, all memories use `"default"`. When session authorization lands, memories inherit the real project — designed from the start to avoid schema migration later.
+- **Investigation scope (soft boost — never hard-filters):** `alert_type` and `chain_id` provide minor ranking boosts. Infrastructure-specific context (service names, clusters, regions) lives in the memory *content* and is matched via semantic search. This keeps the schema infrastructure-agnostic.
+
 ### Memory Retrieval (Auto-Injection)
 
 At investigation start, the session executor retrieves the top `max_inject` memories by cosine similarity within the project boundary.
@@ -202,6 +266,8 @@ A Reflector variant sees the feedback text, `quality_rating`, existing session m
 This is the primary mechanism for learning from mistakes: `inaccurate` reviews deprecate wrong memories (Part 1) while feedback text produces new corrective memories (Part 2).
 
 ### Confidence Model
+
+Memory quality is determined by two signal types: **automated** (score 0-100, failure tags, tool improvement report — determines initial valence and confidence) and **human** (`quality_rating` adjusts confidence, `investigation_feedback` triggers targeted memory creation/deprecation). Valence tags each memory as a pattern to repeat (`positive`), avoid (`negative`), or note (`neutral`) — preventing the system from learning the wrong lesson from a bad investigation.
 
 **Initial confidence** from investigation score:
 

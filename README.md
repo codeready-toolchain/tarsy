@@ -89,6 +89,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
 - **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Session Scoring**: Automated quality evaluation of completed investigations (0–100 score across four categories) with missing tools reports, re-scoring via API, and a dedicated scoring dashboard page
+- **Investigation Memory**: Cross-session learning — the Reflector extracts discrete learnings after each scored investigation; relevant memories are auto-injected into future investigations via pgvector semantic retrieval. Human review feedback refines memory quality over time. Agents can also search memories on-demand via the `recall_past_investigations` tool
 - **Triage Workflow**: Post-investigation review lifecycle with self-claim assignment, complete with `quality_rating` and `action_taken`, and a grouped Triage view alongside the session list — real-time updates via WebSocket
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
 - **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
@@ -127,9 +128,10 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 8. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
 9. **Comprehensive analysis** provided to engineers with actionable recommendations
 10. **Session scored** (if enabled) -- async quality evaluation with score, analysis, and missing tools report
-11. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, complete, dismiss)
-12. **Follow-up chat available** after investigation completes
-13. **Full audit trail** captured with stage-level detail and sub-agent trace trees
+11. **Memories extracted** (if enabled) -- Reflector analyzes the investigation and scoring results to extract reusable learnings into the memory store
+12. **Session enters triage** -- automatically queued as "Needs Review" for human triage (claim, complete, dismiss)
+13. **Follow-up chat available** after investigation completes
+14. **Full audit trail** captured with stage-level detail and sub-agent trace trees
 
 ### Components
 
@@ -172,6 +174,14 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `PATCH /api/v1/sessions/review` -- Review workflow transition for one or more sessions (claim, unclaim, complete, reopen, update_feedback)
 - `GET /api/v1/sessions/:id/review-activity` -- Review activity audit log
 - `GET /api/v1/sessions/triage/:group` -- Per-group paginated triage view
+
+### Memory
+- `GET /api/v1/sessions/:id/memories` -- Memories extracted from this session
+- `GET /api/v1/sessions/:id/injected-memories` -- Memories auto-injected into this session
+- `GET /api/v1/memories` -- List all memories (paginated, filterable by category, valence, deprecated)
+- `GET /api/v1/memories/:id` -- Memory detail
+- `PATCH /api/v1/memories/:id` -- Edit memory (content, category, valence, deprecated)
+- `DELETE /api/v1/memories/:id` -- Delete memory
 
 ### Trace & Observability
 - `GET /api/v1/sessions/:id/timeline` -- Session timeline events
