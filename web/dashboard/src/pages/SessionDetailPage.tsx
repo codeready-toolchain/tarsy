@@ -98,7 +98,6 @@ import {
 
 const SessionHeader = lazy(() => import('../components/session/SessionHeader.tsx'));
 const OriginalAlertCard = lazy(() => import('../components/session/OriginalAlertCard.tsx'));
-const InjectedMemoriesCard = lazy(() => import('../components/session/InjectedMemoriesCard.tsx'));
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
 const ExtractedLearningsCard = lazy(() => import('../components/session/ExtractedLearningsCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
@@ -1601,11 +1600,6 @@ export function SessionDetailPage() {
             {/* Original Alert Data */}
             <Suspense fallback={<AlertCardSkeleton />}>
               <OriginalAlertCard alertData={session.alert_data} />
-            </Suspense>
-
-            {/* Injected Memories (lessons from past investigations) */}
-            <Suspense fallback={null}>
-              <InjectedMemoriesCard sessionId={session.id} />
             </Suspense>
 
             {/* Jump to Summary button */}

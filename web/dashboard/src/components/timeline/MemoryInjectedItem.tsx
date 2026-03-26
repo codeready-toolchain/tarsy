@@ -4,6 +4,33 @@ import { ExpandMore, ExpandLess, PsychologyOutlined } from '@mui/icons-material'
 import CopyButton from '../shared/CopyButton';
 import type { FlowItem } from '../../utils/timelineParser';
 
+interface ParsedMemory {
+  category: string;
+  valence: string;
+  ageLabel: string;
+  content: string;
+}
+
+const MEMORY_LINE_RE = /^-\s*\[([^,\]]+),\s*([^,\]]+)(?:,\s*([^\]]+))?\]\s*(.+)$/;
+
+function parseMemoryLines(raw: string): ParsedMemory[] {
+  if (!raw) return [];
+  const results: ParsedMemory[] = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = MEMORY_LINE_RE.exec(trimmed);
+    if (m) {
+      results.push({ category: m[1].trim(), valence: m[2].trim(), ageLabel: m[3]?.trim() ?? '', content: m[4].trim() });
+    } else if (trimmed.startsWith('- ')) {
+      results.push({ category: '', valence: '', ageLabel: '', content: trimmed.slice(2) });
+    } else {
+      results.push({ category: '', valence: '', ageLabel: '', content: trimmed });
+    }
+  }
+  return results;
+}
+
 function highlightText(text: string, term: string) {
   if (!term) return text;
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -15,6 +42,18 @@ function highlightText(text: string, term: string) {
       : part,
   );
 }
+
+const CATEGORY_LABEL: Record<string, string> = {
+  semantic: 'S',
+  episodic: 'E',
+  procedural: 'P',
+};
+
+const VALENCE_COLOR: Record<string, 'success' | 'error' | 'default'> = {
+  positive: 'success',
+  negative: 'error',
+  neutral: 'default',
+};
 
 interface MemoryInjectedItemProps {
   item: FlowItem;
@@ -31,10 +70,7 @@ function MemoryInjectedItem({ item, expandAll = false, searchTerm }: MemoryInjec
 
   const count = (item.metadata?.count as number) || 0;
 
-  const memoryLines = useMemo(() => {
-    if (!item.content) return [];
-    return item.content.split('\n').filter((line) => line.trim().length > 0);
-  }, [item.content]);
+  const memories = useMemo(() => parseMemoryLines(item.content || ''), [item.content]);
 
   return (
     <Box
@@ -74,27 +110,64 @@ function MemoryInjectedItem({ item, expandAll = false, searchTerm }: MemoryInjec
 
       <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
             <Typography variant="caption" color="text.secondary">
               Injected into system prompt from past investigations
             </Typography>
             <CopyButton text={item.content || ''} variant="icon" size="small" tooltip="Copy memory content" />
           </Box>
-          {memoryLines.length > 0 ? (
-            <Box sx={(theme) => ({
-              maxHeight: 400, overflow: 'auto',
-              p: 1.5, borderRadius: 1,
-              bgcolor: '#fff',
-              border: `1px solid ${theme.palette.divider}`,
-              fontSize: '0.85rem',
-              ...theme.applyStyles('dark', {
-                bgcolor: 'rgba(255, 255, 255, 0.06)',
-              }),
-            })}>
-              {memoryLines.map((line, i) => (
-                <Typography key={i} variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', lineHeight: 1.6, py: 0.25 }}>
-                  {highlightText(line, searchTerm || '')}
-                </Typography>
+          {memories.length > 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 500, overflow: 'auto' }}>
+              {memories.map((mem, i) => (
+                <Box
+                  key={i}
+                  sx={(theme) => ({
+                    display: 'flex',
+                    gap: 1,
+                    alignItems: 'flex-start',
+                    p: 1.25,
+                    borderRadius: 1,
+                    bgcolor: '#fff',
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.15)}`,
+                    ...theme.applyStyles('dark', {
+                      bgcolor: 'rgba(255, 255, 255, 0.04)',
+                    }),
+                  })}
+                >
+                  {mem.category && (
+                    <Chip
+                      label={CATEGORY_LABEL[mem.category] ?? mem.category.charAt(0).toUpperCase()}
+                      size="small"
+                      variant="outlined"
+                      sx={(theme) => ({
+                        minWidth: 28, height: 22, fontSize: '0.7rem', fontWeight: 700,
+                        borderColor: alpha(theme.palette.warning.main, 0.4),
+                        color: theme.palette.warning.dark,
+                        flexShrink: 0,
+                        mt: 0.1,
+                      })}
+                    />
+                  )}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ lineHeight: 1.6, wordBreak: 'break-word' }}>
+                      {highlightText(mem.content, searchTerm || '')}
+                    </Typography>
+                    {mem.ageLabel && (
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', mt: 0.25, display: 'block' }}>
+                        {mem.ageLabel}
+                      </Typography>
+                    )}
+                  </Box>
+                  {mem.valence && (
+                    <Chip
+                      label={mem.valence}
+                      size="small"
+                      color={VALENCE_COLOR[mem.valence] ?? 'default'}
+                      variant="outlined"
+                      sx={{ flexShrink: 0, height: 20, fontSize: '0.65rem', mt: 0.1 }}
+                    />
+                  )}
+                </Box>
               ))}
             </Box>
           ) : (
