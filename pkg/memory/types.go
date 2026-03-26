@@ -50,7 +50,11 @@ func FormatMemoryAge(createdAt, updatedAt time.Time) string {
 }
 
 // FormatMemoryAgeSince is the testable variant with a fixed "now".
+// Returns "" if createdAt is zero (legacy rows with NULL timestamps).
 func FormatMemoryAgeSince(createdAt, updatedAt, now time.Time) string {
+	if createdAt.IsZero() {
+		return ""
+	}
 	learned := humanizeAge(createdAt, now)
 	if updatedAt.Sub(createdAt) > updatedAtThreshold {
 		return fmt.Sprintf("learned %s, updated %s", learned, humanizeAge(updatedAt, now))

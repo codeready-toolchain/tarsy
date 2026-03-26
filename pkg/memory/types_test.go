@@ -67,4 +67,17 @@ func TestFormatMemoryAgeSince(t *testing.T) {
 		updated := created.Add(time.Hour + time.Second)
 		assert.Contains(t, FormatMemoryAgeSince(created, updated, now), "updated")
 	})
+
+	t.Run("zero created timestamp returns empty", func(t *testing.T) {
+		assert.Equal(t, "", FormatMemoryAgeSince(time.Time{}, time.Time{}, now))
+	})
+
+	t.Run("zero created with non-zero updated returns empty", func(t *testing.T) {
+		assert.Equal(t, "", FormatMemoryAgeSince(time.Time{}, now.Add(-time.Hour), now))
+	})
+
+	t.Run("non-zero created with zero updated omits updated part", func(t *testing.T) {
+		created := now.Add(-3 * 24 * time.Hour)
+		assert.Equal(t, "learned 3 days ago", FormatMemoryAgeSince(created, time.Time{}, now))
+	})
 }
