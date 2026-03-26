@@ -10,6 +10,9 @@
     "agent": "ExecSummaryAgent",
     "content": "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "executive_summary"
+    },
     "sequence": 2,
     "status": "completed"
   },
@@ -24,6 +27,9 @@
     "agent": "FeedbackReflector",
     "content": "{\"create\":[{\"content\":\"Always check Kubernetes resource limits before OOM diagnosis\",\"category\":\"procedural\",\"valence\":\"positive\"}],\"reinforce\":[],\"deprecate\":[]}",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "memory_extraction"
+    },
     "sequence": 2,
     "status": "completed"
   },
@@ -107,6 +113,9 @@
     "agent": "ScoringAgent",
     "content": "{\"create\":[{\"content\":\"OOMKilled pods need memory metrics verification\",\"category\":\"procedural\",\"valence\":\"positive\"}],\"reinforce\":[],\"deprecate\":[]}",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "memory_extraction"
+    },
     "sequence": 4,
     "status": "completed"
   }

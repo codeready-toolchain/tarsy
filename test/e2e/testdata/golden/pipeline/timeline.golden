@@ -314,6 +314,9 @@
     "agent": "ExecSummaryAgent",
     "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "executive_summary"
+    },
     "sequence": 2,
     "status": "completed"
   },
@@ -539,6 +542,9 @@
     "agent": "SynthesisAgent",
     "content": "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "synthesis"
+    },
     "sequence": 2,
     "status": "completed"
   },
@@ -572,6 +578,9 @@
     "agent": "SynthesisAgent",
     "content": "Combined validation confirms pod-1 has correct memory limit of 512Mi but violates 99.9% availability SLO.",
     "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "synthesis"
+    },
     "sequence": 4,
     "status": "completed"
   }
