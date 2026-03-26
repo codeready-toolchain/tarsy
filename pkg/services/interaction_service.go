@@ -170,9 +170,11 @@ func (s *InteractionService) GetMCPInteractionDetail(ctx context.Context, intera
 	return interaction, nil
 }
 
-// ReconstructConversation rebuilds the conversation from messages
+// ReconstructConversation rebuilds the conversation from messages.
+// Uses the messages_count stored in llm_request metadata to compute a sequence
+// range, so that only messages belonging to this specific LLM interaction are
+// returned (not messages from other controllers sharing the same execution).
 func (s *InteractionService) ReconstructConversation(ctx context.Context, interactionID string) ([]*ent.Message, error) {
-	// Get the interaction to find last_message_id
 	interaction, err := s.GetLLMInteractionDetail(ctx, interactionID)
 	if err != nil {
 		return nil, err
@@ -182,7 +184,6 @@ func (s *InteractionService) ReconstructConversation(ctx context.Context, intera
 		return []*ent.Message{}, nil
 	}
 
-	// Get the last message
 	lastMessage, err := s.client.Message.Get(ctx, *interaction.LastMessageID)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -191,15 +192,39 @@ func (s *InteractionService) ReconstructConversation(ctx context.Context, intera
 		return nil, fmt.Errorf("failed to get last message: %w", err)
 	}
 
-	// Get all messages up to that sequence number
-	messages, err := s.messageService.GetMessagesUpToSequence(
-		ctx,
-		*interaction.ExecutionID,
-		lastMessage.SequenceNumber,
-	)
-	if err != nil {
-		return nil, err
+	// Compute the first message's sequence from the messages_count metadata.
+	// messages_count is the number of input messages sent to the LLM (excluding
+	// the assistant response), so first_seq = last_seq - messages_count.
+	if minSeq, ok := firstMessageSequence(interaction.LlmRequest, lastMessage.SequenceNumber); ok {
+		return s.messageService.GetMessagesInSequenceRange(
+			ctx, *interaction.ExecutionID, minSeq, lastMessage.SequenceNumber,
+		)
 	}
 
-	return messages, nil
+	// Fallback for older interactions without messages_count metadata.
+	return s.messageService.GetMessagesUpToSequence(
+		ctx, *interaction.ExecutionID, lastMessage.SequenceNumber,
+	)
+}
+
+// firstMessageSequence extracts messages_count from llm_request metadata and
+// computes the first message sequence number. Returns (minSeq, true) on success.
+func firstMessageSequence(llmRequest map[string]interface{}, lastSeq int) (int, bool) {
+	if llmRequest == nil {
+		return 0, false
+	}
+	raw, ok := llmRequest["messages_count"]
+	if !ok {
+		return 0, false
+	}
+	// JSON numbers deserialize as float64 in Go's map[string]interface{}.
+	count, ok := raw.(float64)
+	if !ok || count <= 0 {
+		return 0, false
+	}
+	minSeq := lastSeq - int(count)
+	if minSeq < 1 {
+		minSeq = 1
+	}
+	return minSeq, true
 }

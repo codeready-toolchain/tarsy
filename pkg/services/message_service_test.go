@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/message"
@@ -246,6 +247,64 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		assert.Contains(t, err.Error(), "only allowed for tool messages")
 	})
 
+	t.Run("gets max sequence for execution", func(t *testing.T) {
+		isolatedExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "MaxSeqAgent",
+			AgentIndex: 50,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+
+		for _, seq := range []int{1, 2, 10, 11, 15} {
+			_, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+				SessionID:      session.ID,
+				StageID:        stg.ID,
+				ExecutionID:    isolatedExec.ID,
+				SequenceNumber: seq,
+				Role:           message.RoleUser,
+				Content:        fmt.Sprintf("msg-%d", seq),
+			})
+			require.NoError(t, err)
+		}
+
+		maxSeq, err := messageService.GetMaxSequenceForExecution(ctx, isolatedExec.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 15, maxSeq)
+	})
+
+	t.Run("max sequence returns 0 for empty execution", func(t *testing.T) {
+		emptyExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "EmptyAgent",
+			AgentIndex: 99,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+
+		maxSeq, err := messageService.GetMaxSequenceForExecution(ctx, emptyExec.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 0, maxSeq)
+	})
+
+	t.Run("gets messages in sequence range", func(t *testing.T) {
+		msgs, err := messageService.GetMessagesInSequenceRange(ctx, exec.ID, 1, 2)
+		require.NoError(t, err)
+		assert.Len(t, msgs, 2)
+		assert.Equal(t, 1, msgs[0].SequenceNumber)
+		assert.Equal(t, 2, msgs[1].SequenceNumber)
+	})
+
+	t.Run("sequence range excludes messages outside bounds", func(t *testing.T) {
+		msgs, err := messageService.GetMessagesInSequenceRange(ctx, exec.ID, 10, 11)
+		require.NoError(t, err)
+		assert.Len(t, msgs, 2)
+		assert.Equal(t, 10, msgs[0].SequenceNumber)
+		assert.Equal(t, 11, msgs[1].SequenceNumber)
+	})
+
 	t.Run("gets stage messages across executions", func(t *testing.T) {
 		// Create a second execution in the same stage
 		exec2, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
@@ -281,9 +340,11 @@ func TestMessageService_CreateAndRetrieve(t *testing.T) {
 		// Get all messages for the stage
 		messages, err := messageService.GetStageMessages(ctx, stg.ID)
 		require.NoError(t, err)
-		// Should have all messages from both executions
-		// (original 2 + tool call + empty-content tool call + tool response + 2 new = 7)
-		// Note: validation test failures don't create messages
-		assert.Len(t, messages, 7)
+		// All messages across all executions in this stage:
+		// exec: 5 (seq 1,2,10,11,15) + 1 new (seq 20) = 6
+		// MaxSeqAgent exec: 5 (seq 1,2,10,11,15)
+		// exec2: 1 (seq 1)
+		// Total = 12
+		assert.Len(t, messages, 12)
 	})
 }

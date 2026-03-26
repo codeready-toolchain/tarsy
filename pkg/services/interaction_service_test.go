@@ -549,6 +549,113 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		assert.Equal(t, ErrNotFound, err)
 	})
 
+	t.Run("scopes reconstruction to interaction using messages_count", func(t *testing.T) {
+		// Simulates the bug: two controllers sharing one execution_id with
+		// non-overlapping sequence numbers. Without messages_count, the
+		// second interaction would incorrectly include the first's messages.
+		execShared, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "SharedExecAgent",
+			AgentIndex: 10,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+
+		// First controller's messages (scoring): seq 1-3
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execShared.ID,
+			SequenceNumber: 1, Role: message.RoleSystem, Content: "Scoring system prompt",
+		})
+		require.NoError(t, err)
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execShared.ID,
+			SequenceNumber: 2, Role: message.RoleUser, Content: "Scoring user prompt",
+		})
+		require.NoError(t, err)
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execShared.ID,
+			SequenceNumber: 3, Role: message.RoleAssistant, Content: "Scoring response",
+		})
+		require.NoError(t, err)
+
+		// Second controller's messages (reflector): seq 4-6
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execShared.ID,
+			SequenceNumber: 4, Role: message.RoleSystem, Content: "Reflector system prompt",
+		})
+		require.NoError(t, err)
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execShared.ID,
+			SequenceNumber: 5, Role: message.RoleUser, Content: "Reflector user prompt",
+		})
+		require.NoError(t, err)
+		reflectorAssistant, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execShared.ID,
+			SequenceNumber: 6, Role: message.RoleAssistant, Content: "Reflector response",
+		})
+		require.NoError(t, err)
+
+		// Interaction with messages_count=2 (system + user sent to LLM)
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &execShared.ID,
+			InteractionType: "memory_extraction",
+			ModelName:       "test-model",
+			LastMessageID:   &reflectorAssistant.ID,
+			LLMRequest:      map[string]any{"messages_count": float64(2)},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+
+		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
+		require.NoError(t, err)
+		assert.Len(t, conversation, 3) // seq 4,5,6 only — not scoring's 1,2,3
+		assert.Equal(t, "Reflector system prompt", conversation[0].Content)
+		assert.Equal(t, "Reflector user prompt", conversation[1].Content)
+		assert.Equal(t, "Reflector response", conversation[2].Content)
+	})
+
+	t.Run("falls back to LTE when messages_count is missing", func(t *testing.T) {
+		execFallback, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  session.ID,
+			AgentName:  "FallbackAgent",
+			AgentIndex: 11,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+
+		_, err = messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execFallback.ID,
+			SequenceNumber: 1, Role: message.RoleSystem, Content: "System",
+		})
+		require.NoError(t, err)
+		lastMsg, err := messageService.CreateMessage(ctx, models.CreateMessageRequest{
+			SessionID: session.ID, StageID: stg.ID, ExecutionID: execFallback.ID,
+			SequenceNumber: 2, Role: message.RoleAssistant, Content: "Response",
+		})
+		require.NoError(t, err)
+
+		// No messages_count in metadata → fallback to old LTE behavior
+		interaction, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			StageID:         &stg.ID,
+			ExecutionID:     &execFallback.ID,
+			InteractionType: "iteration",
+			ModelName:       "test-model",
+			LastMessageID:   &lastMsg.ID,
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+
+		conversation, err := interactionService.ReconstructConversation(ctx, interaction.ID)
+		require.NoError(t, err)
+		assert.Len(t, conversation, 2)
+	})
+
 	t.Run("handles execution with no messages at all", func(t *testing.T) {
 		// Create a new execution with no messages
 		exec4, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
@@ -577,4 +684,55 @@ func TestInteractionService_ReconstructConversation(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, conversation, 0)
 	})
+}
+
+func TestFirstMessageSequence(t *testing.T) {
+	tests := []struct {
+		name    string
+		request map[string]interface{}
+		lastSeq int
+		wantSeq int
+		wantOK  bool
+	}{
+		{
+			name:    "normal case",
+			request: map[string]interface{}{"messages_count": float64(2)},
+			lastSeq: 5, wantSeq: 3, wantOK: true,
+		},
+		{
+			name:    "clamps to 1",
+			request: map[string]interface{}{"messages_count": float64(10)},
+			lastSeq: 3, wantSeq: 1, wantOK: true,
+		},
+		{
+			name:    "nil request",
+			request: nil,
+			lastSeq: 5, wantOK: false,
+		},
+		{
+			name:    "missing key",
+			request: map[string]interface{}{"iteration": float64(1)},
+			lastSeq: 5, wantOK: false,
+		},
+		{
+			name:    "zero count",
+			request: map[string]interface{}{"messages_count": float64(0)},
+			lastSeq: 5, wantOK: false,
+		},
+		{
+			name:    "negative count",
+			request: map[string]interface{}{"messages_count": float64(-1)},
+			lastSeq: 5, wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seq, ok := firstMessageSequence(tt.request, tt.lastSeq)
+			assert.Equal(t, tt.wantOK, ok)
+			if ok {
+				assert.Equal(t, tt.wantSeq, seq)
+			}
+		})
+	}
 }
