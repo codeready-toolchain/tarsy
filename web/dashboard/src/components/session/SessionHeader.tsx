@@ -91,8 +91,7 @@ export default function SessionHeader({
   const canCancel = canCancelSession(session.status as SessionStatus);
   const isTerminal = isTerminalStatus(session.status as SessionStatus);
 
-  // Alert data — collapsed by default for terminal sessions
-  const [alertExpanded, setAlertExpanded] = useState(!isTerminal);
+  const [alertExpanded, setAlertExpanded] = useState(false);
 
 
   // Cancel dialog
@@ -165,249 +164,187 @@ export default function SessionHeader({
     <Paper
       elevation={2}
       sx={{
-        p: 3,
+        px: 3,
+        py: 2,
         mb: 2,
         borderRadius: 2,
         ...(isActive ? breathingGlowSx : {}),
       }}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {/* Top row: title + status + actions */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {/* Row 1: Title + Status + Duration + Actions */}
         <Box
           sx={{
             display: 'flex',
+            alignItems: 'center',
             justifyContent: 'space-between',
-            alignItems: 'flex-start',
             gap: 2,
             flexWrap: 'wrap',
           }}
         >
-          {/* Left: Alert details */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* Title + Status */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-                mb: 0.5,
-                flexWrap: 'wrap',
-              }}
+          {/* Left: title + status + duration */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+            <Typography
+              variant="h5"
+              sx={{ fontWeight: 600, wordBreak: 'break-word' }}
             >
-              <Typography
-                variant="h5"
-                sx={{ fontWeight: 600, wordBreak: 'break-word' }}
-              >
-                {session.alert_type || 'Alert Processing'}
-              </Typography>
-              <Box sx={{ transform: 'scale(1.1)' }}>
-                <StatusBadge status={session.status} />
-              </Box>
-            </Box>
-
-            {/* Metadata line: timestamp + author */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.5 }}>
-              <Typography variant="body2" color="text.secondary">
-                Started at {formatTimestamp(session.started_at, 'absolute')}
-              </Typography>
-              {session.author && (
-                <>
-                  <Typography variant="body2" color="text.secondary">·</Typography>
-                  <Tooltip title={session.author}>
-                    <Typography variant="body2" color="text.secondary">
-                      by <strong>{extractDisplayName(session.author)}</strong>
-                    </Typography>
-                  </Tooltip>
-                </>
-              )}
-            </Box>
-
-            {session.runbook_url && (() => {
-              let isSafeUrl = false;
-              try {
-                const parsed = new URL(session.runbook_url);
-                isSafeUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
-              } catch { /* invalid URL */ }
-              const displayText = session.runbook_url.length > 200
-                ? `${session.runbook_url.substring(0, 197)}...`
-                : session.runbook_url;
-              return (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    mt: 0.5,
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    Runbook:{' '}
-                    {isSafeUrl ? (
-                      <a
-                        href={session.runbook_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          color: 'inherit',
-                          textDecoration: 'underline',
-                          fontFamily: 'monospace',
-                          fontSize: '0.85em',
-                        }}
-                      >
-                        {displayText}
-                      </a>
-                    ) : (
-                      <span style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
-                        {displayText}
-                      </span>
-                    )}
-                  </Typography>
-                </Box>
-              );
-            })()}
-
-          </Box>
-
-          {/* Right: Duration + Actions */}
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              gap: 1.5,
-              minWidth: 200,
-            }}
-          >
+              {session.alert_type || 'Alert Processing'}
+            </Typography>
+            <StatusBadge status={session.status} />
+            <Typography variant="body2" color="text.disabled">·</Typography>
             <ProgressIndicator
               status={session.status}
               startedAt={session.started_at}
               durationMs={session.duration_ms}
+              variant="inline"
             />
+          </Box>
 
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-                width: '100%',
-                mt: 1,
-              }}
-            >
-              {canCancel && (
-                <Tooltip title="Cancels entire session including all agents">
-                  <Button
-                    variant="outlined"
-                    size="medium"
-                    onClick={handleCancelClick}
-                    disabled={
-                      isCanceling ||
-                      session.status === SESSION_STATUS.CANCELLING
-                    }
-                    startIcon={
-                      isCanceling ||
-                      session.status === SESSION_STATUS.CANCELLING ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : (
-                        <CancelOutlined />
-                      )
-                    }
-                    fullWidth
-                    sx={{
-                      textTransform: 'uppercase',
-                      fontWeight: 600,
-                      fontSize: '0.875rem',
-                      py: 1,
-                      px: 2,
-                      backgroundColor: 'background.paper',
-                      color: 'error.main',
+          {/* Right: compact action buttons */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+            {canCancel && (
+              <Tooltip title="Cancels entire session including all agents">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleCancelClick}
+                  disabled={isCanceling || session.status === SESSION_STATUS.CANCELLING}
+                  startIcon={
+                    isCanceling || session.status === SESSION_STATUS.CANCELLING
+                      ? <CircularProgress size={14} color="inherit" />
+                      : <CancelOutlined sx={{ fontSize: '1rem' }} />
+                  }
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    py: 0.5,
+                    px: 1.5,
+                    color: 'error.main',
+                    borderColor: 'error.main',
+                    borderWidth: 1.5,
+                    '&:hover': {
+                      backgroundColor: 'error.main',
                       borderColor: 'error.main',
+                      color: 'error.contrastText',
                       borderWidth: 1.5,
-                      transition: 'all 0.2s ease-in-out',
-                      '&:hover': {
-                        backgroundColor: 'error.main',
-                        borderColor: 'error.main',
-                        color: 'error.contrastText',
-                        borderWidth: 1.5,
-                      },
-                    }}
-                  >
-                    {isCanceling ||
-                    session.status === SESSION_STATUS.CANCELLING
-                      ? 'Canceling...'
-                      : 'Cancel Session'}
-                  </Button>
-                </Tooltip>
-              )}
+                    },
+                  }}
+                >
+                  {isCanceling || session.status === SESSION_STATUS.CANCELLING ? 'Canceling…' : 'Cancel'}
+                </Button>
+              </Tooltip>
+            )}
 
-              {isTerminal && (
-                <Tooltip title="Submit a new alert with the same data">
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    onClick={handleResubmit}
-                    sx={{
-                      minWidth: 180,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      fontSize: '0.95rem',
-                      py: 1,
-                      px: 2.5,
-                      backgroundColor: 'background.paper',
-                      color: 'info.main',
+            {isTerminal && (
+              <Tooltip title="Submit a new alert with the same data">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleResubmit}
+                  startIcon={<ReplayIcon sx={{ fontSize: '1rem' }} />}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    py: 0.5,
+                    px: 1.5,
+                    color: 'info.main',
+                    borderColor: 'info.main',
+                    borderWidth: 1.5,
+                    '&:hover': {
+                      backgroundColor: 'info.main',
                       borderColor: 'info.main',
-                      borderWidth: 1.5,
-                      transition: 'all 0.2s ease-in-out',
-                      '&:hover': {
-                        backgroundColor: 'info.main',
-                        borderColor: 'info.main',
-                        color: 'info.contrastText',
-                      },
-                    }}
-                  >
-                    <ReplayIcon sx={{ mr: 1, fontSize: '1.2rem' }} />
-                    RE-SUBMIT ALERT
-                  </Button>
-                </Tooltip>
-              )}
+                      color: 'info.contrastText',
+                    },
+                  }}
+                >
+                  Re-submit
+                </Button>
+              </Tooltip>
+            )}
 
-              {/* Score trigger — only for completed sessions that haven't been scored */}
-              {session.status === SESSION_STATUS.COMPLETED && session.latest_score == null &&
-                (!session.scoring_status || session.scoring_status === 'not_scored') && !scoringTriggered && (
-                <Tooltip title={scoringError || 'Run quality scoring on this session'}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<GradingOutlined sx={{ fontSize: '1rem' }} />}
-                    onClick={handleTriggerScoring}
-                    fullWidth
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 500,
-                      fontSize: '0.8rem',
-                      py: 0.5,
-                      borderRadius: '8px',
-                      color: scoringError ? 'error.main' : 'text.secondary',
-                      borderColor: scoringError ? 'error.main' : 'divider',
-                    }}
-                  >
-                    Score
-                  </Button>
-                </Tooltip>
-              )}
-              {scoringTriggered && (
+            {session.status === SESSION_STATUS.COMPLETED && session.latest_score == null &&
+              (!session.scoring_status || session.scoring_status === 'not_scored') && !scoringTriggered && (
+              <Tooltip title={scoringError || 'Run quality scoring on this session'}>
                 <Button
                   size="small"
                   variant="outlined"
-                  disabled
-                  fullWidth
-                  startIcon={<CircularProgress size={14} color="inherit" />}
-                  sx={{ textTransform: 'none', fontWeight: 500, fontSize: '0.8rem', py: 0.5, borderRadius: '8px' }}
+                  startIcon={<GradingOutlined sx={{ fontSize: '0.9rem' }} />}
+                  onClick={handleTriggerScoring}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    fontSize: '0.8rem',
+                    py: 0.5,
+                    px: 1.5,
+                    color: scoringError ? 'error.main' : 'text.secondary',
+                    borderColor: scoringError ? 'error.main' : 'divider',
+                  }}
                 >
-                  Scoring…
+                  Score
                 </Button>
-              )}
-            </Box>
+              </Tooltip>
+            )}
+            {scoringTriggered && (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled
+                startIcon={<CircularProgress size={14} color="inherit" />}
+                sx={{ textTransform: 'none', fontWeight: 500, fontSize: '0.8rem', py: 0.5, px: 1.5 }}
+              >
+                Scoring…
+              </Button>
+            )}
           </Box>
+        </Box>
+
+        {/* Row 2: Metadata line */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary">
+            {formatTimestamp(session.started_at, 'absolute')}
+          </Typography>
+          {session.author && (
+            <>
+              <Typography variant="body2" color="text.secondary">·</Typography>
+              <Tooltip title={session.author}>
+                <Typography variant="body2" color="text.secondary">
+                  by <strong>{extractDisplayName(session.author)}</strong>
+                </Typography>
+              </Tooltip>
+            </>
+          )}
+          {session.runbook_url && (() => {
+            let isSafeUrl = false;
+            try {
+              const parsed = new URL(session.runbook_url);
+              isSafeUrl = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+            } catch { /* invalid URL */ }
+            const displayText = session.runbook_url.length > 80
+              ? `${session.runbook_url.substring(0, 77)}...`
+              : session.runbook_url;
+            return (
+              <>
+                <Typography variant="body2" color="text.secondary">·</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Runbook:{' '}
+                  {isSafeUrl ? (
+                    <a
+                      href={session.runbook_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'inherit', textDecoration: 'underline', fontFamily: 'monospace', fontSize: '0.85em' }}
+                    >
+                      {displayText}
+                    </a>
+                  ) : (
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{displayText}</span>
+                  )}
+                </Typography>
+              </>
+            );
+          })()}
         </Box>
 
         {/* Footer bar: token usage (left) + alert data toggle (right) */}
@@ -453,6 +390,11 @@ export default function SessionHeader({
                   )}
                 </Box>
               ) : <Box />}
+
+              {/* Divider between tokens and alert data */}
+              {session.total_tokens > 0 && alertData && (
+                <Box sx={{ width: '1px', height: 16, bgcolor: 'divider', mx: 1 }} />
+              )}
 
               {/* Right: alert data toggle */}
               {alertData && (

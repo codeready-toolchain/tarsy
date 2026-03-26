@@ -12,6 +12,8 @@ interface ProgressIndicatorProps {
   durationMs?: number | null;
   /** Whether to display the duration text */
   showDuration?: boolean;
+  /** 'default' = stacked label+value, 'inline' = compact single-line for embedding in headers */
+  variant?: 'default' | 'inline';
 }
 
 /**
@@ -26,6 +28,7 @@ export default function ProgressIndicator({
   startedAt,
   durationMs,
   showDuration = true,
+  variant = 'default',
 }: ProgressIndicatorProps) {
   const isActive =
     status === SESSION_STATUS.IN_PROGRESS ||
@@ -54,62 +57,34 @@ export default function ProgressIndicator({
     return () => clearInterval(interval);
   }, [isActive, durationMs, computeLive]);
 
-  // --- Active: ticking duration (no progress bar) ---
-  if (isActive) {
-    const color =
-      status === SESSION_STATUS.CANCELLING
-        ? 'warning.main'
-        : status === SESSION_STATUS.PENDING
-          ? 'warning.main'
-          : 'primary.main';
+  const statusColor = isActive
+    ? (status === SESSION_STATUS.CANCELLING || status === SESSION_STATUS.PENDING ? 'warning.main' : 'primary.main')
+    : status === SESSION_STATUS.COMPLETED ? 'success.main'
+      : (status === SESSION_STATUS.FAILED || status === SESSION_STATUS.TIMED_OUT) ? 'error.main'
+        : status === SESSION_STATUS.CANCELLED ? 'text.disabled'
+          : 'text.secondary';
 
+  // --- Inline variant: compact "50s" text for embedding in title rows ---
+  if (variant === 'inline') {
+    if (!showDuration || liveDurationMs == null) return null;
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, width: '100%' }}>
-        <Typography
-          variant="caption"
-          sx={{
-            fontWeight: 600,
-            color,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-            textAlign: 'right',
-          }}
-        >
-          Duration
-        </Typography>
-        {showDuration && liveDurationMs != null && (
-          <Typography
-            sx={{
-              fontSize: '1.4rem',
-              fontWeight: 800,
-              color,
-              textAlign: 'right',
-            }}
-          >
-            {formatDurationMs(liveDurationMs)}
-          </Typography>
-        )}
-      </Box>
+      <Typography
+        variant="body2"
+        sx={{ fontWeight: 700, color: statusColor, whiteSpace: 'nowrap' }}
+      >
+        {formatDurationMs(liveDurationMs)}
+      </Typography>
     );
   }
 
-  // --- Terminal: duration text only, colored by status ---
-  const color =
-    status === SESSION_STATUS.COMPLETED
-      ? 'success.main'
-      : status === SESSION_STATUS.FAILED || status === SESSION_STATUS.TIMED_OUT
-        ? 'error.main'
-        : status === SESSION_STATUS.CANCELLED
-          ? 'text.disabled'
-          : 'text.secondary';
-
+  // --- Default variant: stacked "DURATION" label + large value ---
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, width: '100%' }}>
       <Typography
         variant="caption"
         sx={{
           fontWeight: 600,
-          color,
+          color: statusColor,
           textTransform: 'uppercase',
           letterSpacing: 0.5,
           textAlign: 'right',
@@ -122,7 +97,7 @@ export default function ProgressIndicator({
           sx={{
             fontSize: '1.4rem',
             fontWeight: 800,
-            color,
+            color: statusColor,
             textAlign: 'right',
           }}
         >
