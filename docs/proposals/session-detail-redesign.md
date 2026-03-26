@@ -57,45 +57,50 @@ The header simultaneously displays: identity, status, timing, authorship, stats,
 
 ## Recommendations
 
-### A. Compress SessionHeader into a lean banner
+### A. Compress SessionHeader into a lean banner ✅ DONE
 
-**Target layout:**
+**Implemented layout:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ SecurityInvestigation                        [Completed]    │
-│ 📅 Mar 26, 7:09 AM · ⏱ 4m 40s · by guardian-cockpit-sa      │
-│ 🪙 786k tokens (in: 759k · out: 19k)    [RE-SUBMIT ALERT]   │
+│ SecurityInvestigation                [Completed]   DURATION  │
+│ Started at Mar 26, 7:09 AM · by guardian-cockpit-sa    4m 40s│
+│                                          [RE-SUBMIT ALERT]   │
+│─────────────────────────────────────────────────────────────│
+│ USED TOKENS    785,935 total    759,945 in    19,877 out     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Specific changes:
+Changes made:
 
-1. **Remove the stats pills row entirely** — the 6–7 colored badges (total, LLM, MCP, stages, tokens, score) are redundant. Stage/interaction counts already appear in the AppBar. Score has its own section. Remove the entire "Session Summary" section and all pills.
-2. **Remove the Parallel Agents badge** — this is an internal implementation detail. Whether stages ran in parallel is visible from the timeline itself. No need for a prominent badge.
-3. **Keep token usage, but show it once** — keep a single compact line showing total tokens with input/output breakdown inline. Remove both the pill variant and the `variant="detailed"` block. Replace with one clean line in the metadata row (e.g., `🪙 786k tokens (in: 759k · out: 19k)`).
-4. **Remove duplicate counts from AppBar** — the AppBar title "AI Reasoning View - 72424927" is sufficient.
-5. **Truncate author** — extract just the service account name ("guardian-cockpit-sa"). Show full path in a tooltip.
-6. **Hide UUID by default** — replace with a small copy-to-clipboard icon. Almost nobody reads the full UUID on first glance.
-7. **Move chain ID out of the title** — show as a small subtitle, chip, or tooltip. Don't append it to the main heading.
+1. **Removed the stats pills row entirely** — all 6–7 colored badges (total, LLM, MCP, stages, tokens, score, errors) and the "Session Summary" section header deleted.
+2. **Removed the Parallel Agents badge** — implementation detail, visible from the timeline itself.
+3. **Token usage shown once at card bottom** — separated by a divider, displayed as a compact stat row with color-coded full numbers (`785,935 total  759,945 in  19,877 out`). Both the old pill variant and `variant="detailed"` block removed.
+4. **Removed duplicate stage/interaction counts from AppBar** — the header title is sufficient.
+5. **Truncated author** — K8s service account paths like `system:serviceaccount:ns:name` display just the last segment; full path in a tooltip.
+6. **Removed session UUID entirely** — available from the URL, no need to display it.
+7. **Removed chain ID** — alert type in the title is sufficient.
+8. **Moved scoring trigger button** to the right-side actions column alongside Cancel/Re-submit.
 
-### B. Collapse Original Alert Data by default (completed sessions)
+### B. Collapse Original Alert Data by default (completed sessions) ✅ DONE
 
-- Change default state: `useState(isTerminal ? false : true)` — pass session status as a prop.
-- When collapsed, show a **summary line** with 2–3 key fields extracted from the data (e.g., Cluster, Namespace, WorkloadName).
-- When expanded, use a **2-column grid** for short fields instead of stacking everything vertically.
+Changes made:
 
-### C. Prioritize field ordering
+1. **Collapsed by default for terminal sessions** — new `sessionStatus` prop; card starts collapsed when status is completed/failed/cancelled/timed_out, expanded for active sessions.
+2. **Summary preview when collapsed** — shows top 2–3 fields by priority as a single-line preview (e.g., `Cluster: api1.r83... · Namespace: babyzalokvich-dev · Node: ip-10-8-16-49`), truncated with ellipsis.
+3. **2-column grid for simple fields** — short string/number values render in a responsive 2-column CSS grid. Complex fields (URLs, JSON objects, multi-line text, timestamps with icons) still get full width.
+4. **Clickable header row** — the entire header is now clickable to toggle expand/collapse, not just the chevron icon.
 
-Replace alphabetical sort with importance-based ordering:
+### C. Prioritize field ordering ✅ DONE
 
-1. Cluster / environment-related fields
-2. Severity, alert type
-3. Namespace, workload
-4. Timestamps
-5. IDs and hashes (lowest priority)
+Implemented importance-based field ordering (was alphabetical):
 
-Or group into "Key Info" (always visible in collapsed summary) and "Details" (shown on expand).
+1. Cluster, environment, severity (tier 1)
+2. Alert type, namespace (tier 2)
+3. Workload name, workload CID, node (tier 3)
+4. Timestamps (tier 4)
+5. User info (tier 5)
+6. Everything else alphabetically (tier 99)
 
 ### D. Bigger idea — Sticky header + section navigation
 
@@ -121,26 +126,30 @@ Even without tabs, a sticky header + collapsed-by-default alert card is a major 
 
 ## Implementation Plan
 
-### Phase 1: Quick wins (low effort, high impact)
+### Phase 1: SessionHeader cleanup ✅ DONE
 
-| Change | Impact | Est. LOC |
-|--------|--------|----------|
-| Remove stats pills row + "Session Summary" section entirely | Eliminates biggest source of visual clutter | ~100 (delete) |
-| Remove Parallel Agents badge | One less noisy element in the title row | ~50 (delete) |
-| Remove detailed token block (SessionHeader lines 715–730) | Eliminates visual duplication | ~15 (delete) |
-| Remove stage/interaction counts from SharedHeader children | Reduces AppBar clutter | ~5 |
-| Default OriginalAlertCard to collapsed for terminal sessions | Saves 60%+ viewport on completed sessions | ~5 |
-| Truncate K8s service account author string | Cleaner metadata line | ~10 |
-| Hide UUID behind a copy-to-clipboard button | Less visual noise | ~15 |
+| Change | Status |
+|--------|--------|
+| Remove stats pills row + "Session Summary" section entirely | ✅ |
+| Remove Parallel Agents badge | ✅ |
+| Remove duplicate token displays; add single compact row at card bottom | ✅ |
+| Remove stage/interaction counts from SharedHeader children | ✅ |
+| Remove chain ID from title | ✅ |
+| Remove session UUID (available from URL) | ✅ |
+| Truncate K8s service account author string (tooltip for full path) | ✅ |
+| Move scoring trigger to actions column | ✅ |
 
-### Phase 2: Moderate effort
+Net result: `SessionHeader.tsx` reduced from 790 → ~498 lines.
 
-| Change | Impact | Est. LOC |
-|--------|--------|----------|
-| Two-column grid for alert data fields | Better space utilization | ~20 |
-| Move chain ID to subtitle/chip instead of title suffix | Shorter, scannable title | ~10 |
-| Add collapsed summary line to OriginalAlertCard | Context without expansion | ~30 |
-| Field importance ordering in OriginalAlertCard | Key info surfaces first | ~20 |
+### Phase 2: OriginalAlertCard improvements ✅ DONE
+
+| Change | Status |
+|--------|--------|
+| Default collapsed for terminal sessions | ✅ |
+| Two-column grid for simple fields | ✅ |
+| Summary preview line when collapsed | ✅ |
+| Field importance ordering | ✅ |
+| Clickable header row | ✅ |
 
 ### Phase 3: Larger redesign
 

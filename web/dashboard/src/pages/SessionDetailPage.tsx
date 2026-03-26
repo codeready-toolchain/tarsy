@@ -97,7 +97,6 @@ import {
 // ────────────────────────────────────────────────────────────
 
 const SessionHeader = lazy(() => import('../components/session/SessionHeader.tsx'));
-const OriginalAlertCard = lazy(() => import('../components/session/OriginalAlertCard.tsx'));
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
 const ExtractedLearningsCard = lazy(() => import('../components/session/ExtractedLearningsCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
@@ -1583,16 +1582,12 @@ export function SessionDetailPage() {
         {/* Session content */}
         {session && !loading && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} data-autoscroll-container>
-            {/* Session Header */}
+            {/* Session Header (with embedded alert data) */}
             <Suspense fallback={<HeaderSkeleton />}>
               <SessionHeader
                 session={session}
+                alertData={session.alert_data}
               />
-            </Suspense>
-
-            {/* Original Alert Data */}
-            <Suspense fallback={<AlertCardSkeleton />}>
-              <OriginalAlertCard alertData={session.alert_data} />
             </Suspense>
 
             {/* Jump to Summary button */}

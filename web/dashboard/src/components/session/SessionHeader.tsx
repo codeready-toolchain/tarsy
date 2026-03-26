@@ -12,13 +12,18 @@ import {
   DialogActions,
   CircularProgress,
   Tooltip,
+  Collapse,
   alpha,
 } from '@mui/material';
 import {
   CancelOutlined,
   Replay as ReplayIcon,
   GradingOutlined,
+  ExpandMore,
+  SubjectRounded,
 } from '@mui/icons-material';
+import CopyButton from '../shared/CopyButton';
+import { AlertDataContent } from './OriginalAlertCard';
 import { StatusBadge } from '../common/StatusBadge';
 import ProgressIndicator from '../common/ProgressIndicator';
 import { formatTimestamp, formatTokens } from '../../utils/format';
@@ -66,6 +71,8 @@ function extractDisplayName(author: string): string {
 
 interface SessionHeaderProps {
   session: SessionDetailResponse;
+  /** Raw alert_data string — rendered as a collapsible section inside the header card */
+  alertData?: string;
 }
 
 /**
@@ -75,6 +82,7 @@ interface SessionHeaderProps {
  */
 export default function SessionHeader({
   session,
+  alertData,
 }: SessionHeaderProps) {
   const navigate = useNavigate();
   const isActive =
@@ -82,6 +90,10 @@ export default function SessionHeader({
     session.status === SESSION_STATUS.PENDING;
   const canCancel = canCancelSession(session.status as SessionStatus);
   const isTerminal = isTerminalStatus(session.status as SessionStatus);
+
+  // Alert data — collapsed by default for terminal sessions
+  const [alertExpanded, setAlertExpanded] = useState(!isTerminal);
+
 
   // Cancel dialog
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -253,6 +265,7 @@ export default function SessionHeader({
                 </Box>
               );
             })()}
+
           </Box>
 
           {/* Right: Duration + Actions */}
@@ -357,8 +370,8 @@ export default function SessionHeader({
                 </Tooltip>
               )}
 
-              {/* Score trigger — only when not yet scored */}
-              {isTerminal && session.latest_score == null &&
+              {/* Score trigger — only for completed sessions that haven't been scored */}
+              {session.status === SESSION_STATUS.COMPLETED && session.latest_score == null &&
                 (!session.scoring_status || session.scoring_status === 'not_scored') && !scoringTriggered && (
                 <Tooltip title={scoringError || 'Run quality scoring on this session'}>
                   <Button
@@ -397,44 +410,90 @@ export default function SessionHeader({
           </Box>
         </Box>
 
-        {/* Token usage — bottom of card */}
-        {session.total_tokens > 0 && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-              pt: 1.5,
-              borderTop: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Used tokens
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.main' }}>
-                {formatTokens(session.total_tokens)}
-              </Typography>
-              <Typography variant="caption" color="text.disabled">total</Typography>
+        {/* Footer bar: token usage (left) + alert data toggle (right) */}
+        {(session.total_tokens > 0 || alertData) && (
+          <>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                pt: 1.5,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              {/* Left: tokens */}
+              {session.total_tokens > 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Used tokens
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.main' }}>
+                      {formatTokens(session.total_tokens)}
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled">total</Typography>
+                  </Box>
+                  {session.input_tokens != null && (
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'info.main' }}>
+                        {formatTokens(session.input_tokens)}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled">in</Typography>
+                    </Box>
+                  )}
+                  {session.output_tokens != null && (
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                        {formatTokens(session.output_tokens)}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled">out</Typography>
+                    </Box>
+                  )}
+                </Box>
+              ) : <Box />}
+
+              {/* Right: alert data toggle */}
+              {alertData && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    cursor: 'pointer',
+                    ml: 2,
+                  }}
+                  onClick={() => setAlertExpanded(!alertExpanded)}
+                >
+                  <SubjectRounded sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Alert data
+                  </Typography>
+                  <ExpandMore
+                    sx={{
+                      fontSize: '1rem',
+                      color: 'text.disabled',
+                      transition: 'transform 0.3s',
+                      transform: alertExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                  />
+                  <Box onClick={(e) => e.stopPropagation()}>
+                    <CopyButton text={alertData} variant="icon" size="small" tooltip="Copy raw alert data" />
+                  </Box>
+                </Box>
+              )}
             </Box>
-            {session.input_tokens != null && (
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'info.main' }}>
-                  {formatTokens(session.input_tokens)}
-                </Typography>
-                <Typography variant="caption" color="text.disabled">in</Typography>
-              </Box>
+
+            {/* Expanded alert data — full width below footer bar */}
+            {alertData && (
+              <Collapse in={alertExpanded} timeout={300}>
+                <Box sx={{ mt: 1.5 }}>
+                  <AlertDataContent alertData={alertData} />
+                </Box>
+              </Collapse>
             )}
-            {session.output_tokens != null && (
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
-                  {formatTokens(session.output_tokens)}
-                </Typography>
-                <Typography variant="caption" color="text.disabled">out</Typography>
-              </Box>
-            )}
-          </Box>
+          </>
         )}
       </Box>
 

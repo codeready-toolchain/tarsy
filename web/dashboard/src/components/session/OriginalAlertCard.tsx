@@ -13,10 +13,13 @@ import {
 import type { Theme } from '@mui/material/styles';
 import { ExpandMore, OpenInNew, AccessTime } from '@mui/icons-material';
 import ErrorBoundary from '../shared/ErrorBoundary';
+import CopyButton from '../shared/CopyButton';
 
 interface OriginalAlertCardProps {
   /** Raw alert_data string from the session (JSON or plain text) */
   alertData: string;
+  /** Session status — terminal sessions collapse the card by default */
+  sessionStatus?: string;
 }
 
 /**
@@ -66,6 +69,35 @@ function getEnvironmentColor(
 function formatKeyName(key: string): string {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+const FIELD_PRIORITY: Record<string, number> = {
+  cluster: 1, environment: 1, severity: 1,
+  alert_type: 2, namespace: 2,
+  workload_name: 3, workload_cid: 3, node: 3,
+  received_at: 4, created_at: 4, started_at: 4,
+  user_email: 5, user_sgroup: 5, user_group: 5,
+};
+
+function fieldPriority(key: string): number {
+  return FIELD_PRIORITY[key.toLowerCase()] ?? 99;
+}
+
+/**
+ * Returns true if a value renders as a short, single-line display
+ * (suitable for 2-column grid layout).
+ */
+function isSimpleValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'number' || typeof value === 'boolean') return true;
+  if (typeof value === 'string') {
+    return !value.includes('\n') && value.length < 120 &&
+      !value.startsWith('http://') && !value.startsWith('https://') &&
+      !/^\d{4}-\d{2}-\d{2}T/.test(value);
+  }
+  return false;
+}
+
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
 
 /**
  * Render a single alert field value based on its type.
@@ -275,14 +307,11 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
 }
 
 /**
- * OriginalAlertCard — collapsible card displaying the original alert data.
- * Parses JSON alert data and renders fields dynamically with type-aware formatting.
- * Wrapped in ErrorBoundary for resilience against malformed data.
+ * AlertDataContent — the rich field rendering for alert data.
+ * Parses JSON, sorts fields by priority, renders in a 2-column grid
+ * with type-aware formatting. Exported for reuse in SessionHeader.
  */
-export default function OriginalAlertCard({ alertData }: OriginalAlertCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-
-  // Parse alert data (JSON string → object, or keep as string)
+export function AlertDataContent({ alertData }: { alertData: string }) {
   const parsed = useMemo(() => {
     try {
       return JSON.parse(alertData);
@@ -292,14 +321,155 @@ export default function OriginalAlertCard({ alertData }: OriginalAlertCardProps)
   }, [alertData]);
 
   const isObject = parsed && typeof parsed === 'object' && !Array.isArray(parsed);
-  const fields = isObject
-    ? Object.entries(parsed).sort(([a], [b]) => a.localeCompare(b))
-    : [];
 
-  // Extract special fields for header chips
+  const fields = useMemo(() => {
+    if (!isObject) return [];
+    return Object.entries(parsed).sort(([a], [b]) => {
+      const pa = fieldPriority(a);
+      const pb = fieldPriority(b);
+      return pa !== pb ? pa - pb : a.localeCompare(b);
+    });
+  }, [parsed, isObject]);
+
+  const simpleFields = useMemo(() => fields.filter(([, v]) => isSimpleValue(v)), [fields]);
+  const complexFields = useMemo(() => fields.filter(([, v]) => !isSimpleValue(v)), [fields]);
+
   const severity = isObject ? parsed.severity : null;
   const environment = isObject ? parsed.environment : null;
   const alertType = isObject ? parsed.alert_type : null;
+
+  return (
+    <ErrorBoundary componentName="AlertDataContent">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {(severity || environment || alertType) && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            {severity && (
+              <Chip
+                label={String(severity).toUpperCase()}
+                color={getSeverityColor(String(severity))}
+                size="small"
+                sx={{ fontWeight: 600 }}
+              />
+            )}
+            {environment && (
+              <Chip
+                label={String(environment).toUpperCase()}
+                color={getEnvironmentColor(String(environment))}
+                size="small"
+                variant="outlined"
+              />
+            )}
+            {alertType && (
+              <Typography variant="body2" color="text.secondary">
+                {String(alertType)}
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {isObject ? (
+          <>
+            {simpleFields.length > 0 && (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gap: 2,
+                }}
+              >
+                {simpleFields.map(([key, value]) => (
+                  <ErrorBoundary
+                    key={key}
+                    componentName={`Field: ${key}`}
+                    fallback={
+                      <Box sx={(theme) => ({ p: 1, bgcolor: alpha(theme.palette.error.main, 0.05), border: '1px solid', borderColor: alpha(theme.palette.error.main, 0.2), borderRadius: 1 })}>
+                        <Typography variant="caption" color="error">Error rendering field &quot;{key}&quot;</Typography>
+                      </Box>
+                    }
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        {formatKeyName(key)}
+                      </Typography>
+                      <FieldValue fieldKey={key} value={value} />
+                    </Box>
+                  </ErrorBoundary>
+                ))}
+              </Box>
+            )}
+
+            {complexFields.map(([key, value]) => (
+              <ErrorBoundary
+                key={key}
+                componentName={`Field: ${key}`}
+                fallback={
+                  <Box sx={(theme) => ({ p: 1, bgcolor: alpha(theme.palette.error.main, 0.05), border: '1px solid', borderColor: alpha(theme.palette.error.main, 0.2), borderRadius: 1 })}>
+                    <Typography variant="caption" color="error">Error rendering field &quot;{key}&quot;: {String(value)}</Typography>
+                  </Box>
+                }
+              >
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    {formatKeyName(key)}
+                  </Typography>
+                  <FieldValue fieldKey={key} value={value} />
+                </Box>
+              </ErrorBoundary>
+            ))}
+          </>
+        ) : (
+          <Typography
+            component="pre"
+            sx={{
+              bgcolor: 'action.hover',
+              p: 2,
+              borderRadius: 1,
+              fontFamily: 'monospace',
+              fontSize: '0.825rem',
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowX: 'auto',
+              maxHeight: 500,
+              overflowY: 'auto',
+            }}
+          >
+            {alertData}
+          </Typography>
+        )}
+      </Box>
+    </ErrorBoundary>
+  );
+}
+
+/**
+ * OriginalAlertCard — collapsible card displaying the original alert data.
+ * Collapsed by default for terminal sessions. Shows a summary preview when collapsed.
+ */
+export default function OriginalAlertCard({ alertData, sessionStatus }: OriginalAlertCardProps) {
+  const isTerminal = TERMINAL_STATUSES.has(sessionStatus ?? '');
+  const [isExpanded, setIsExpanded] = useState(!isTerminal);
+
+  const parsed = useMemo(() => {
+    try {
+      const p = JSON.parse(alertData);
+      return p && typeof p === 'object' && !Array.isArray(p) ? p : null;
+    } catch {
+      return null;
+    }
+  }, [alertData]);
+
+  const fieldCount = parsed ? Object.keys(parsed).length : 0;
+
+  const summaryText = useMemo(() => {
+    if (parsed) {
+      return Object.entries(parsed)
+        .slice(0, 3)
+        .map(([key, value]) => `${formatKeyName(key)}: ${String(value)}`)
+        .join('  ·  ');
+    }
+    return alertData.split('\n')[0]?.trim() || null;
+  }, [parsed, alertData]);
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -308,21 +478,27 @@ export default function OriginalAlertCard({ alertData }: OriginalAlertCardProps)
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          mb: 2,
+          cursor: 'pointer',
+          mb: isExpanded ? 2 : 0,
         }}
+        onClick={() => setIsExpanded(!isExpanded)}
       >
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Original Alert Data
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {isObject && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Alert Data
+          </Typography>
+          {parsed && (
             <Typography variant="caption" color="text.secondary">
-              {fields.length} {fields.length === 1 ? 'field' : 'fields'}
+              {fieldCount} {fieldCount === 1 ? 'field' : 'fields'}
             </Typography>
           )}
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box onClick={(e) => e.stopPropagation()}>
+            <CopyButton text={alertData} variant="icon" size="small" tooltip="Copy raw alert data" />
+          </Box>
           <IconButton
             size="small"
-            onClick={() => setIsExpanded(!isExpanded)}
             aria-label={isExpanded ? 'Collapse alert data' : 'Expand alert data'}
             sx={{
               transition: 'transform 0.4s',
@@ -334,96 +510,18 @@ export default function OriginalAlertCard({ alertData }: OriginalAlertCardProps)
         </Box>
       </Box>
 
-      <Collapse in={isExpanded} timeout={400}>
-        <ErrorBoundary componentName="OriginalAlertCard">
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Header chips */}
-            {(severity || environment || alertType) && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {severity && (
-                  <Chip
-                    label={String(severity).toUpperCase()}
-                    color={getSeverityColor(String(severity))}
-                    size="small"
-                    sx={{ fontWeight: 600 }}
-                  />
-                )}
-                {environment && (
-                  <Chip
-                    label={String(environment).toUpperCase()}
-                    color={getEnvironmentColor(String(environment))}
-                    size="small"
-                    variant="outlined"
-                  />
-                )}
-                {alertType && (
-                  <Typography variant="body2" color="text.secondary">
-                    {String(alertType)}
-                  </Typography>
-                )}
-              </Box>
-            )}
+      {!isExpanded && summaryText && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mt: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {summaryText}
+        </Typography>
+      )}
 
-            {/* Dynamic fields */}
-            {isObject ? (
-              fields.map(([key, value]) => (
-                <ErrorBoundary
-                  key={key}
-                  componentName={`Field: ${key}`}
-                  fallback={
-                    <Box
-                      sx={(theme) => ({
-                        p: 1,
-                        bgcolor: alpha(theme.palette.error.main, 0.05),
-                        border: '1px solid',
-                        borderColor: alpha(theme.palette.error.main, 0.2),
-                        borderRadius: 1,
-                      })}
-                    >
-                      <Typography variant="caption" color="error">
-                        Error rendering field &quot;{key}&quot;: {String(value)}
-                      </Typography>
-                    </Box>
-                  }
-                >
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      {formatKeyName(key)}
-                    </Typography>
-                    <FieldValue fieldKey={key} value={value} />
-                  </Box>
-                </ErrorBoundary>
-              ))
-            ) : (
-              // Raw text fallback
-              <Typography
-                component="pre"
-                sx={{
-                  bgcolor: 'action.hover',
-                  p: 2,
-                  borderRadius: 1,
-                  fontFamily: 'monospace',
-                  fontSize: '0.825rem',
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  overflowX: 'auto',
-                  maxHeight: 500,
-                  overflowY: 'auto',
-                }}
-              >
-                {alertData}
-              </Typography>
-            )}
-          </Box>
-        </ErrorBoundary>
+      <Collapse in={isExpanded} timeout={400}>
+        <AlertDataContent alertData={alertData} />
       </Collapse>
     </Paper>
   );
