@@ -23,7 +23,11 @@ function tryParseReflectorResult(content: string | undefined): ReflectorResult |
   try {
     const parsed = JSON.parse(content);
     if (Array.isArray(parsed.create) && Array.isArray(parsed.reinforce)) {
-      return parsed as ReflectorResult;
+      return {
+        create: parsed.create,
+        reinforce: parsed.reinforce,
+        deprecate: Array.isArray(parsed.deprecate) ? parsed.deprecate : [],
+      };
     }
   } catch { /* not reflector JSON */ }
   return null;
