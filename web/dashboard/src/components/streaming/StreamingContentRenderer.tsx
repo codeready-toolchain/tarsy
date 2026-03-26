@@ -231,12 +231,24 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
   // In-progress tool call
   if (item.eventType === TIMELINE_EVENT_TYPES.LLM_TOOL_CALL) {
     const toolName = (item.metadata?.tool_name as string) || 'unknown';
-    const isSkill = (item.metadata?.tool_type as string) === TOOL_TYPE.SKILL;
-    const paletteKey = isSkill ? 'info' : 'primary';
+    const toolType = (item.metadata?.tool_type as string);
+    const isSkill = toolType === TOOL_TYPE.SKILL;
+    const isMemory = toolType === TOOL_TYPE.MEMORY;
+    const paletteKey = isMemory ? 'secondary' : isSkill ? 'info' : 'primary';
 
     let displayName = toolName;
     let statusLabel = 'Executing...';
-    if (isSkill) {
+    if (isMemory) {
+      displayName = 'Recalling Insights';
+      const query = (() => {
+        const raw = item.metadata?.arguments;
+        if (!raw) return null;
+        if (typeof raw === 'object' && !Array.isArray(raw)) return (raw as Record<string, unknown>).query as string | undefined;
+        if (typeof raw === 'string') { try { return (JSON.parse(raw) as Record<string, unknown>).query as string | undefined; } catch { return null; } }
+        return null;
+      })();
+      statusLabel = query ? String(query) : 'Searching...';
+    } else if (isSkill) {
       displayName = 'Loading Skills';
       statusLabel = getSkillNamesLabel(item.metadata?.arguments) ?? 'Loading...';
     }

@@ -24,6 +24,7 @@ const (
 	ToolTypeMCP          ToolType = "mcp"
 	ToolTypeOrchestrator ToolType = "orchestrator"
 	ToolTypeSkill        ToolType = "skill"
+	ToolTypeMemory       ToolType = "memory"
 )
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
@@ -72,6 +73,8 @@ func executeToolCall(
 			toolType = ToolTypeOrchestrator
 		} else if skill.IsSkillTool(toolName) {
 			toolType = ToolTypeSkill
+		} else if toolName == "recall_past_investigations" {
+			toolType = ToolTypeMemory
 		} else {
 			toolType = ToolTypeMCP
 		}

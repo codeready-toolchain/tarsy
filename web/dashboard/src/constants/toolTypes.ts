@@ -8,6 +8,7 @@ export const TOOL_TYPE = {
   MCP: 'mcp',
   ORCHESTRATOR: 'orchestrator',
   SKILL: 'skill',
+  MEMORY: 'memory',
 } as const;
 
 export type ToolType = (typeof TOOL_TYPE)[keyof typeof TOOL_TYPE];

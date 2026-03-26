@@ -469,7 +469,7 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
       }
       case FLOW_ITEM.MEMORY_INJECTED: {
         const count = item.metadata?.count || 0;
-        lines.push(`[Pre-loaded Memories (${count})]\n${item.content}\n`);
+        lines.push(`[Past Investigation Insights (${count})]\n${item.content}\n`);
         break;
       }
     }

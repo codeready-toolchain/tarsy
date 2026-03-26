@@ -367,6 +367,11 @@ func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
 			wantToolType: string(ToolTypeOrchestrator),
 		},
 		{
+			name:         "recall_past_investigations classified as memory",
+			toolCallName: "recall_past_investigations",
+			wantToolType: string(ToolTypeMemory),
+		},
+		{
 			name:         "malformed MCP name without server prefix stays MCP",
 			toolCallName: "resources_get",
 			wantToolType: string(ToolTypeMCP),
