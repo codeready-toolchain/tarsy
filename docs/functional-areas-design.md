@@ -594,7 +594,7 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
 - `pkg/agent/skill/tool_executor.go` -- SkillToolExecutor (intercepts `load_skill`, delegates rest to inner executor)
-- `pkg/memory/tool_executor.go` -- MemoryToolExecutor (intercepts `recall_past_investigations`, delegates rest to inner executor)
+- `pkg/memory/tool_executor.go` -- ToolExecutor (intercepts `recall_past_investigations`, delegates rest to inner executor)
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
 - `pkg/agent/prompt/skills.go` -- formatRequiredSkill(), formatSkillCatalog() for Tier 2.5/2.6
 - `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
@@ -1203,7 +1203,7 @@ graph TB
         SessionExec[SessionExecutor]
         Retriever[MemoryRetriever]
         PromptBuilder[PromptBuilder Tier 4]
-        ToolExec[MemoryToolExecutor]
+        ToolExec[ToolExecutor]
     end
 
     subgraph refinement [Human Refinement — on review]
@@ -1326,7 +1326,7 @@ defaults:
 - `pkg/memory/retriever.go` — Semantic-first retrieval (pgvector queries)
 - `pkg/memory/reflector.go` — Reflector prompt builder + response parser
 - `pkg/memory/parser.go` — Lenient JSON parser for Reflector output
-- `pkg/memory/tool_executor.go` — MemoryToolExecutor (recall_past_investigations tool)
+- `pkg/memory/tool_executor.go` — ToolExecutor (recall_past_investigations tool)
 - `pkg/queue/feedback_executor.go` — Background feedback Reflector job
 - `ent/schema/investigationmemory.go` — InvestigationMemory Ent schema
 
