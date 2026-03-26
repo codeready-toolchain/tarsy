@@ -240,6 +240,21 @@ After an investigation completes, TARSy can automatically evaluate the quality o
 
 **For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md)
 
+### 14. Investigation Memory
+
+TARSy learns from past investigations through a memory system that extracts, stores, and retrieves discrete learnings across sessions. After each scored investigation, a **Reflector** (separate LLM call within the scoring stage) analyzes the investigation and its quality evaluation to extract reusable learnings — facts about infrastructure, successful investigation strategies, and anti-patterns to avoid.
+
+- **Three memory categories** — `semantic` (infrastructure facts), `episodic` (specific investigation experiences), `procedural` (investigation strategies and anti-patterns)
+- **Semantic-first retrieval** — pgvector cosine similarity drives ranking within a project boundary. Investigation scope metadata (`alert_type`, `chain_id`) provides minor soft boosts but never hard-filters, allowing cross-cutting knowledge to surface naturally
+- **Hybrid injection** — top N memories (default: 5) auto-injected into the system prompt as Tier 4 ("Lessons from Past Investigations"). A `recall_past_investigations` tool enables deeper search when the agent needs more context
+- **In-prompt deduplication** — the Reflector sees existing memories and decides what to create, reinforce, or deprecate in one pass, avoiding separate dedup logic
+- **Human review refinement** — `quality_rating` from review adjusts memory confidence (multiplicative). `investigation_feedback` text triggers a background Reflector variant that creates corrective memories at high confidence (0.9)
+- **Embedded extraction** — runs as a separate LLM call within the scoring stage, reusing the investigation context already built for scoring. No new infrastructure needed
+- **Embedding** — configurable via `defaults.memory.embedding`. Built-in default: Google `gemini-embedding-2-preview` at 768 dimensions using the existing `GOOGLE_API_KEY`
+- **Dashboard integration** — "Injected Memories" and "Extracted Learnings" cards on the session detail page. Memory CRUD via REST API
+
+**For detailed design**: See [ADR-0014: Investigation Memory](adr/0014-investigation-memory.md)
+
 ## How It Works
 
 ### Alert Processing Flow
@@ -386,6 +401,7 @@ Each agent operates with a tiered knowledge system composed into its system prom
 3. **Required Skills** (Tier 2.5): Domain knowledge injected directly from `required_skills` — always present in the prompt
 4. **On-Demand Skill Catalog** (Tier 2.6): Available skills listed by name and description, loadable at runtime via the `load_skill` tool
 5. **Agent Custom Instructions**: Domain expertise specific to the agent's specialty area
+6. **Lessons from Past Investigations** (Tier 4): Auto-injected memories from past investigations, retrieved by semantic similarity (investigation sessions only, when memory is enabled). See [ADR-0014: Investigation Memory](adr/0014-investigation-memory.md)
 
 **Agent Skills** provide modular, reusable knowledge blocks (environment context, classification criteria, report formats) that replace duplicated `custom_instructions` content. Skills follow the industry-standard `SKILL.md` format and are discovered from `<configDir>/skills/` at startup. The `skills` field controls the on-demand catalog (nil = all, `[]` = none), while `required_skills` controls prompt injection — both fields are independent and validated against the registry separately. On-demand skills are loaded via the `load_skill` tool when the LLM determines they're relevant. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
 

@@ -45,12 +45,15 @@ TARSy is an AI-powered incident analysis system built on a Go/Python split archi
 - [10. Dashboard & Real-time Monitoring](#10-dashboard--real-time-monitoring)
 - [11. Slack Notifications](#11-slack-notifications)
 
+### Learning & Feedback
+- [12. Investigation Memory](#12-investigation-memory)
+
 ### Cross-Cutting Concerns
-- [12. Security & Data Protection](#12-security--data-protection)
-- [13. Authentication & Access Control](#13-authentication--access-control)
-- [14. Trace / Observability API](#14-trace--observability-api)
-- [15. Cleanup & Retention](#15-cleanup--retention)
-- [16. Prometheus Metrics](#16-prometheus-metrics)
+- [13. Security & Data Protection](#13-security--data-protection)
+- [14. Authentication & Access Control](#14-authentication--access-control)
+- [15. Trace / Observability API](#15-trace--observability-api)
+- [16. Cleanup & Retention](#16-cleanup--retention)
+- [17. Prometheus Metrics](#17-prometheus-metrics)
 
 ---
 
@@ -490,6 +493,7 @@ ScoringExecutor.ScoreSession(sessionID)
     → Turn 1: Outcome-first evaluation (5 dimensions → holistic score) → total_score (0–100) + score_analysis + failure_tags
     → Turn 2: Tool improvement report (missing tools + existing tool improvements) → tool_improvement_report
   → Write to session_scores table
+  → Memory extraction (if enabled): Reflector LLM call → create/reinforce/deprecate memories
   → Publish scoring stage status events
 ```
 
@@ -527,6 +531,7 @@ Tier 2:   MCP Server Instructions          (per configured server)
 Tier 2.5: Required Skill Content           (from required_skills — injected bodies)
 Tier 2.6: On-Demand Skill Catalog          (names + descriptions, with load_skill tool)
 Tier 3:   Agent Custom Instructions        (from custom_instructions)
+Tier 4:   Lessons from Past Investigations (auto-injected memories, investigation sessions only)
 ```
 
 **Agent Skills** (`pkg/agent/skill/tool_executor.go`) provide reusable domain knowledge. Required skills are injected as content (Tier 2.5); on-demand skills appear as a catalog with a `load_skill` tool (Tier 2.6). Skill resolution happens in `config_resolver.go` — the prompt builder only formats pre-resolved data from `ResolvedAgentConfig.RequiredSkillContent` and `ResolvedAgentConfig.OnDemandSkills`. `SkillToolExecutor` wraps the inner tool executor and intercepts `load_skill` calls, reading from the in-memory `SkillRegistry`. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
@@ -589,10 +594,11 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 - `pkg/agent/controller/timeline.go` -- Timeline event helpers
 - `pkg/agent/orchestrator/` -- CompositeToolExecutor, SubAgentRunner, orchestration tool handlers
 - `pkg/agent/skill/tool_executor.go` -- SkillToolExecutor (intercepts `load_skill`, delegates rest to inner executor)
+- `pkg/memory/tool_executor.go` -- MemoryToolExecutor (intercepts `recall_past_investigations`, delegates rest to inner executor)
 - `pkg/agent/prompt/` -- PromptBuilder, templates, instructions (including orchestrator + sub-agent prompts)
 - `pkg/agent/prompt/skills.go` -- formatRequiredSkill(), formatSkillCatalog() for Tier 2.5/2.6
 - `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
-- `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow orchestration, stage/execution lifecycle)
+- `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow + memory extraction orchestration)
 - `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
@@ -994,6 +1000,12 @@ AlertSession (session metadata, status, alert data)
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
 | GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, failure tags, tool improvement report) |
 | POST | `/api/v1/sessions/:id/score` | Trigger on-demand re-scoring (202 Accepted, 409 if in-progress) |
+| GET | `/api/v1/sessions/:id/memories` | Memories extracted from this session |
+| GET | `/api/v1/sessions/:id/injected-memories` | Memories auto-injected into this session |
+| GET | `/api/v1/memories` | List all memories (paginated, filterable) |
+| GET | `/api/v1/memories/:id` | Single memory detail |
+| PATCH | `/api/v1/memories/:id` | Edit memory (content, category, valence, deprecated) |
+| DELETE | `/api/v1/memories/:id` | Delete memory |
 | PATCH | `/api/v1/sessions/review` | Review workflow transition for one or more sessions (claim/unclaim/complete/reopen/update_feedback) |
 | GET | `/api/v1/sessions/:id/review-activity` | Review activity audit log |
 | GET | `/api/v1/sessions/triage/:group` | Per-group paginated triage view (investigating/needs_review/in_progress/reviewed) |
@@ -1165,7 +1177,162 @@ TARSy provides optional Slack integration for automatic notifications at two lif
 
 ---
 
-### 12. Security & Data Protection
+### 12. Investigation Memory
+**Purpose**: Cross-session learning through memory extraction, storage, and retrieval
+**Key Responsibility**: Enabling investigations to benefit from past learnings
+
+TARSy learns from past investigations through a memory system that extracts discrete learnings after each scored investigation and injects relevant memories into future sessions. The system uses pgvector cosine similarity for semantic-first retrieval within project boundaries.
+
+**For detailed design**: See [ADR-0014: Investigation Memory](adr/0014-investigation-memory.md)
+
+#### Memory Architecture
+
+```mermaid
+graph TB
+    subgraph extraction [Memory Extraction — after scoring]
+        ScoringExec[ScoringExecutor]
+        Reflector[Reflector LLM Call]
+        Embedder[Embedder — direct HTTP]
+    end
+
+    subgraph storage [Storage]
+        DB[(PostgreSQL + pgvector)]
+    end
+
+    subgraph retrieval [Memory Retrieval — at investigation start]
+        SessionExec[SessionExecutor]
+        Retriever[MemoryRetriever]
+        PromptBuilder[PromptBuilder Tier 4]
+        ToolExec[MemoryToolExecutor]
+    end
+
+    subgraph refinement [Human Refinement — on review]
+        ReviewHandler[Review Handler]
+        FeedbackJob[Feedback Reflector Job]
+    end
+
+    ScoringExec --> Reflector
+    Reflector -->|create/reinforce/deprecate| DB
+    Reflector --> Embedder
+    Embedder -->|embedding API| DB
+
+    SessionExec --> Retriever
+    Retriever -->|pgvector similarity| DB
+    Retriever --> PromptBuilder
+    ToolExec -->|recall_past_investigations| DB
+
+    ReviewHandler -->|confidence adjustment| DB
+    FeedbackJob -->|background Reflector| DB
+```
+
+#### Key Components
+
+**Memory Service** (`pkg/memory/service.go`):
+- CRUD operations for investigation memories
+- `FindSimilar()` — pgvector cosine similarity search within project boundary
+- `ApplyReflectorActions()` — processes create/reinforce/deprecate actions from the Reflector
+
+**Embedder** (`pkg/memory/embedder.go`):
+- Direct HTTP calls to embedding provider API (Google or OpenAI)
+- Dispatches to correct API format based on configured `provider`
+- Supports `EmbeddingTaskDocument` (storage) and `EmbeddingTaskQuery` (search)
+
+**Reflector** (`pkg/memory/reflector.go`):
+- Builds a separate LLM conversation with "memory extraction specialist" role
+- Receives investigation context (reused from scoring), scoring results, existing memories
+- Outputs structured JSON: create/reinforce/deprecate actions
+
+**Memory Retriever** (`pkg/memory/retriever.go`):
+- Semantic-first retrieval with soft boosts for `alert_type` (+0.05) and `chain_id` (+0.03)
+- Project is the only hard filter (security boundary)
+
+**Memory Tool Executor** (`pkg/memory/tool_executor.go`):
+- Wraps inner executor (same pattern as `SkillToolExecutor`)
+- Intercepts `recall_past_investigations` tool calls
+- Excludes already-injected memory IDs from results
+
+**Feedback Executor** (`pkg/queue/feedback_executor.go`):
+- Background job triggered when review includes `investigation_feedback` text
+- Runs Reflector variant focused on human feedback
+
+#### Data Model
+
+The `InvestigationMemory` entity stores discrete learnings with:
+- **Content + embedding** — the learning text and its pgvector embedding for similarity search
+- **Category** (`semantic`/`episodic`/`procedural`) and **valence** (`positive`/`negative`/`neutral`)
+- **Confidence** (0-1) — derived from investigation score, refined by human review
+- **Scope metadata** — `alert_type`, `chain_id` (soft boosts), `project` (hard filter)
+- **Lifecycle** — `deprecated` flag, `seen_count`, `last_seen_at`
+
+Two Ent edges connect memories to sessions:
+- `source_session` — the investigation that produced the memory (one-to-many)
+- `injected_into_sessions` — sessions where the memory was auto-injected (many-to-many)
+
+#### Memory Lifecycle
+
+```text
+1. Investigation completes → scoring runs
+2. ScoringExecutor triggers Reflector (separate LLM call)
+3. Reflector analyzes investigation + scoring results + existing memories
+4. Outputs: CREATE new memories, REINFORCE confirmed ones, DEPRECATE outdated ones
+5. Embeddings generated for new memories via Embedder (direct HTTP)
+6. Next investigation: top N memories retrieved by pgvector similarity, injected as Tier 4
+7. Agent can also call recall_past_investigations for deeper search
+8. Human review: confidence adjusted (inline) + feedback Reflector (async)
+```
+
+#### Prompt Integration
+
+Memories are injected into the system prompt as Tier 4 (after custom instructions):
+
+```text
+Tier 1:   General SRE Instructions
+Tier 2:   MCP Server Instructions
+Tier 2.5: Required Skill Content
+Tier 2.6: On-Demand Skill Catalog
+Tier 3:   Agent Custom Instructions
+Tier 4:   Lessons from Past Investigations (auto-injected memories)
+```
+
+#### Configuration
+
+```yaml
+defaults:
+  memory:
+    enabled: true
+    max_inject: 5                    # max memories auto-injected (default: 5)
+    reflector_memory_limit: 20       # max existing memories for Reflector dedup (default: 20)
+    embedding:
+      provider: "google"             # google | openai
+      model: "gemini-embedding-2-preview"
+      api_key_env: "GOOGLE_API_KEY"
+      dimensions: 768                # must match pgvector column
+```
+
+#### REST API Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/v1/sessions/:id/memories` | Memories extracted from this session |
+| GET | `/api/v1/sessions/:id/injected-memories` | Memories auto-injected into this session |
+| GET | `/api/v1/memories` | List all memories (paginated, filterable) |
+| GET | `/api/v1/memories/:id` | Single memory detail |
+| PATCH | `/api/v1/memories/:id` | Edit memory |
+| DELETE | `/api/v1/memories/:id` | Delete memory |
+
+#### Key Implementation Files
+- `pkg/memory/service.go` — MemoryService (CRUD, retrieval, refinement)
+- `pkg/memory/embedder.go` — Embedding generation (direct HTTP to provider API)
+- `pkg/memory/retriever.go` — Semantic-first retrieval (pgvector queries)
+- `pkg/memory/reflector.go` — Reflector prompt builder + response parser
+- `pkg/memory/parser.go` — Lenient JSON parser for Reflector output
+- `pkg/memory/tool_executor.go` — MemoryToolExecutor (recall_past_investigations tool)
+- `pkg/queue/feedback_executor.go` — Background feedback Reflector job
+- `ent/schema/investigationmemory.go` — InvestigationMemory Ent schema
+
+---
+
+### 13. Security & Data Protection
 **Purpose**: Sensitive data protection and secure operations
 **Key Responsibility**: Preventing sensitive data exposure to LLM providers, logs, and storage
 
@@ -1250,7 +1417,7 @@ defaults:
 
 ---
 
-### 13. Authentication & Access Control
+### 14. Authentication & Access Control
 **Purpose**: Optional authentication for enhanced security
 **Key Responsibility**: Protecting dashboard and API access
 
@@ -1296,7 +1463,7 @@ func extractAuthor(c *echo.Context) string {
 
 ---
 
-### 14. Trace / Observability API
+### 15. Trace / Observability API
 **Purpose**: Deep investigation inspection for debugging and analysis
 **Key Responsibility**: Exposing all four data layers through REST endpoints
 
@@ -1326,7 +1493,7 @@ Full MCP interaction: tool arguments, result, available tools, timing, error det
 
 ---
 
-### 15. Cleanup & Retention
+### 16. Cleanup & Retention
 **Purpose**: Data lifecycle management and storage hygiene
 **Key Responsibility**: Enforcing retention policies and preventing unbounded growth
 
@@ -1355,7 +1522,7 @@ system:
 
 ---
 
-### 16. Prometheus Metrics
+### 17. Prometheus Metrics
 **Purpose**: Runtime observability via Prometheus time-series metrics
 **Key Responsibility**: Exposing quantitative signals for capacity planning, performance monitoring, and incident detection
 

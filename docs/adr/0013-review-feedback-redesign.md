@@ -17,7 +17,7 @@ This redesign replaces those fields with three orthogonal signals:
 
 Additionally, the terminal review status is renamed from `resolved` to `reviewed` to reflect the shifted purpose — the reviewer is assessing investigation quality, not resolving an incident.
 
-This is a prerequisite for the [Investigation Memory](../proposals/investigation-memory-sketch.md) feature, which needs an unambiguous signal of investigation quality to determine whether extracted memories represent patterns to repeat or patterns to avoid.
+This is a prerequisite for the [Investigation Memory](0014-investigation-memory.md) feature, which needs an unambiguous signal of investigation quality to determine whether extracted memories represent patterns to repeat or patterns to avoid.
 
 ## Design Principles
 

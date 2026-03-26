@@ -35,7 +35,7 @@
       "is_error": false,
       "server_name": "",
       "tool_name": "recall_past_investigations",
-      "tool_type": "mcp"
+      "tool_type": "memory"
     },
     "sequence": 11,
     "status": "completed"

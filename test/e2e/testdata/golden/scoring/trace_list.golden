@@ -203,7 +203,7 @@
         }
       ],
       "stage_id": "{STAGE_ID_5}",
-      "stage_name": "Scoring",
+      "stage_name": "Reflection",
       "stage_type": "scoring"
     }
   ]

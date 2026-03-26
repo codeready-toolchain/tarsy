@@ -103,39 +103,24 @@ func TestE2E_MultiReplica(t *testing.T) {
 	// Assert: WS events received on replica 2 (cross-replica)
 	// ═══════════════════════════════════════════════════════
 
-	// Wait for the trailing "session.status completed" WS event rather than
-	// using a fixed sleep, which can be flaky under CI load.
+	// Wait for each expected cross-replica event type individually, rather
+	// than asserting their presence after a single WaitForEvent. Events may
+	// arrive via PG NOTIFY at slightly different times, so waiting only for
+	// session.status and then immediately asserting can miss events still
+	// in flight on the WS connection.
+	wsTimeout := 5 * time.Second
+
 	ws.WaitForEvent(t, func(e WSEvent) bool {
 		return e.Type == "session.status" && e.Parsed["status"] == "completed"
-	}, 5*time.Second, "replica 2 should receive session.status completed via WS")
+	}, wsTimeout, "replica 2 should receive session.status completed via WS")
 
-	// Filter out infra events for assertion.
-	var appEvents []WSEvent
-	for _, e := range ws.Events() {
-		switch e.Type {
-		case "connection.established", "subscription.confirmed", "pong":
-			continue
-		default:
-			appEvents = append(appEvents, e)
-		}
-	}
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "stage.status"
+	}, wsTimeout, "replica 2 should receive stage.status events via WS")
 
-	// We must have received at least some cross-replica events.
-	require.NotEmpty(t, appEvents,
-		"replica 2 should have received application events via NOTIFY/LISTEN")
-
-	// Verify key event types were delivered across replicas.
-	eventTypes := make(map[string]bool)
-	for _, e := range appEvents {
-		eventTypes[e.Type] = true
-	}
-
-	assert.True(t, eventTypes["session.status"],
-		"replica 2 should receive session.status events")
-	assert.True(t, eventTypes["stage.status"],
-		"replica 2 should receive stage.status events")
-	assert.True(t, eventTypes["timeline_event.created"],
-		"replica 2 should receive timeline_event.created events")
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "timeline_event.created"
+	}, wsTimeout, "replica 2 should receive timeline_event.created events via WS")
 
 	// ═══════════════════════════════════════════════════════
 	// Assert: REST API cross-replica (GET session via replica 2)

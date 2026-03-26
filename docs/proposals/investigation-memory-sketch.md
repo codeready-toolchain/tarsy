@@ -1,6 +1,6 @@
 # Investigation Memory — Cross-Session Learning for TARSy
 
-**Status:** Sketch complete — all questions decided, see [investigation-memory-questions.md](investigation-memory-questions.md)
+**Status:** Implemented — see [ADR-0014: Investigation Memory](../adr/0014-investigation-memory.md)
 
 ## Problem
 
@@ -52,9 +52,9 @@ Tier 4:  Investigation memory (from past investigations)
 
 The user message already contains: alert data → runbook → chain context → analysis task.
 
-Memory is injected via a **hybrid approach** (see [Q3 decision](investigation-memory-questions.md)):
+Memory is injected via a **hybrid approach** (see [Q3 decision](../adr/0014-investigation-memory.md)):
 
-1. **Auto-inject** the top 3-5 most semantically similar memories into the system prompt as a new Tier 4 section ("Lessons from Past Investigations"). Retrieved by pgvector cosine similarity within the current project boundary — no rigid investigation-scope filtering, just "which past learnings in this project are most relevant to what I'm looking at?" (see [Q6 decision](investigation-memory-questions.md)). This solves the cold-start problem — the agent always has critical context without needing to search.
+1. **Auto-inject** the top 3-5 most semantically similar memories into the system prompt as a new Tier 4 section ("Lessons from Past Investigations"). Retrieved by pgvector cosine similarity within the current project boundary — no rigid investigation-scope filtering, just "which past learnings in this project are most relevant to what I'm looking at?" (see [Q6 decision](../adr/0014-investigation-memory.md)). This solves the cold-start problem — the agent always has critical context without needing to search.
 2. **Provide a `recall_past_investigations` tool** (pseudo-MCP, similar to `load_skill`) for the agent to search for deeper context when the auto-injected briefing triggers further questions.
 
 The auto-injected set is the briefing; the tool is the library. Memories are framed as hints to consider, not rules to follow — preserving the LLM's investigative creativity.
@@ -69,7 +69,7 @@ Currently, after a session reaches terminal status:
 2. **Scoring stage** — multi-turn LLM evaluation producing score, analysis, failure tags, tool improvement report
 3. **Review workflow** — human claims and completes review (asynchronous, may happen hours/days later)
 
-Memory extraction is **embedded in the scoring stage** as a separate LLM conversation triggered by the `ScoringExecutor` after the scoring controller completes — see [Q5 decision](investigation-memory-questions.md). It runs for every scored investigation (see [Q8 decision](investigation-memory-questions.md)).
+Memory extraction is **embedded in the scoring stage** as a separate LLM conversation triggered by the `ScoringExecutor` after the scoring controller completes — see [Q5 decision](../adr/0014-investigation-memory.md). It runs for every scored investigation (see [Q8 decision](../adr/0014-investigation-memory.md)).
 
 ## Key Concepts
 
@@ -91,7 +91,7 @@ Based on research into production agent memory systems (ACE/ICLR 2026, Mem0, Rub
 - "Tool `monitoring.query_range` returns empty for this cluster — use `monitoring.instant_query` instead"
 - "AVOID: querying metric `container_memory_rss` — doesn't exist in this monitoring setup, use `container_memory_working_set_bytes`"
 
-These categories are stored as an explicit enum (`semantic`, `episodic`, `procedural`) in the schema. Categories enable differentiated display in the dashboard and lifecycle rules (e.g., procedural memories are more durable than episodic), but retrieval is semantic-first (Q6) — categories don't hard-filter, they provide context alongside the memory content. See [Q2 decision](investigation-memory-questions.md).
+These categories are stored as an explicit enum (`semantic`, `episodic`, `procedural`) in the schema. Categories enable differentiated display in the dashboard and lifecycle rules (e.g., procedural memories are more durable than episodic), but retrieval is semantic-first (Q6) — categories don't hard-filter, they provide context alongside the memory content. See [Q2 decision](../adr/0014-investigation-memory.md).
 
 ### What makes a memory "good" vs "bad"
 
@@ -108,7 +108,7 @@ This is the core challenge. A memory must not just capture what happened — it 
 
 **The memory itself is tagged with valence** — whether it represents a pattern to repeat or a pattern to avoid. This prevents the agent from learning the wrong lesson from a bad investigation.
 
-Memory quality is determined in two phases (see [Q4 decision](investigation-memory-questions.md)):
+Memory quality is determined in two phases (see [Q4 decision](../adr/0014-investigation-memory.md)):
 1. **Immediate**: Reflector runs after scoring, using score + failure tags to set initial valence and confidence
 2. **Refinement**: When a human completes their review, their `quality_rating` adjusts confidence (`accurate` boosts, `inaccurate` reduces/flips valence), and `investigation_feedback` can trigger targeted memory updates
 
@@ -124,7 +124,7 @@ Memory scoping has two distinct layers:
 
 **Investigation scope (soft boost — never hard-filters):**
 
-Memories are stored with investigation metadata for context, but retrieval within a project is **semantic-first** — driven by pgvector cosine similarity, not rigid scope filtering (see [Q6 decision](investigation-memory-questions.md)).
+Memories are stored with investigation metadata for context, but retrieval within a project is **semantic-first** — driven by pgvector cosine similarity, not rigid scope filtering (see [Q6 decision](../adr/0014-investigation-memory.md)).
 
 Stored investigation dimensions (metadata, soft signal only — TARSy-native fields):
 
@@ -145,7 +145,7 @@ The Reflector receives as explicit context in its user prompt:
 - The full investigation context (reused from `buildScoringContext()` — no redundant DB queries)
 - The scoring results: score, analysis, failure tags, tool improvement report
 - Alert metadata (type, chain)
-- Existing relevant memories found by pgvector similarity (for dedup, see [Q7 decision](investigation-memory-questions.md))
+- Existing relevant memories found by pgvector similarity (for dedup, see [Q7 decision](../adr/0014-investigation-memory.md))
 
 The Reflector produces structured memory entries, each with:
 - **Content** — the actual knowledge (a sentence or short paragraph)
@@ -156,7 +156,7 @@ The Reflector produces structured memory entries, each with:
 - **Confidence** — derived from investigation score and evidence quality
 - **Source** — session ID and stage that produced this memory
 
-Memory extraction is **embedded in the scoring stage** as a separate LLM conversation (see [Q5 decision](investigation-memory-questions.md)). The `ScoringExecutor` already has the full investigation context and produces the critique that extraction needs — the Reflector receives this as explicit context in a fresh conversation with its own "memory extraction specialist" system prompt. Near-zero marginal cost with zero new infrastructure.
+Memory extraction is **embedded in the scoring stage** as a separate LLM conversation (see [Q5 decision](../adr/0014-investigation-memory.md)). The `ScoringExecutor` already has the full investigation context and produces the critique that extraction needs — the Reflector receives this as explicit context in a fresh conversation with its own "memory extraction specialist" system prompt. Near-zero marginal cost with zero new infrastructure.
 
 ### Memory lifecycle
 
@@ -166,9 +166,9 @@ Memory extraction is **embedded in the scoring stage** as a separate LLM convers
 
 **Decay:** Memories not reinforced within a configurable window lose confidence. Memories about decommissioned services or changed infrastructure should eventually be pruned.
 
-**Human curation:** Admins can view memories in session detail pages and manage them via API (see [Q9 decision](investigation-memory-questions.md)). High-confidence memories can be "promoted" to permanent instructions via API (similar to "promote to agent_instructions.md" pattern, but promoting to skills or custom_instructions in TARSy's config).
+**Human curation:** Admins can view memories in session detail pages and manage them via API (see [Q9 decision](../adr/0014-investigation-memory.md)). High-confidence memories can be "promoted" to permanent instructions via API (similar to "promote to agent_instructions.md" pattern, but promoting to skills or custom_instructions in TARSy's config).
 
-**Deduplication:** Handled in-prompt by the Reflector itself (see [Q7 decision](investigation-memory-questions.md)). Existing memories (found by pgvector similarity, consistent with Q6) are included in the Reflector's context during extraction. The Reflector decides in one pass: reinforce existing memories if new evidence matches, add genuinely novel memories, and deprecate outdated ones. No separate dedup logic needed.
+**Deduplication:** Handled in-prompt by the Reflector itself (see [Q7 decision](../adr/0014-investigation-memory.md)). Existing memories (found by pgvector similarity, consistent with Q6) are included in the Reflector's context during extraction. The Reflector decides in one pass: reinforce existing memories if new evidence matches, add genuinely novel memories, and deprecate outdated ones. No separate dedup logic needed.
 
 ### Human feedback integration
 
@@ -226,7 +226,7 @@ This separation is important: `action_taken` is about the **alert** ("I scaled t
                       └──────────┘    └───────────┘    └──────────┘
 ```
 
-Storage uses **PostgreSQL with pgvector** — semantic-first retrieval driven by cosine similarity on embeddings, with scope metadata as a soft signal. No separate vector DB, no rigid scope hierarchy. See [Q1](investigation-memory-questions.md) and [Q6](investigation-memory-questions.md) decisions.
+Storage uses **PostgreSQL with pgvector** — semantic-first retrieval driven by cosine similarity on embeddings, with scope metadata as a soft signal. No separate vector DB, no rigid scope hierarchy. See [Q1](../adr/0014-investigation-memory.md) and [Q6](../adr/0014-investigation-memory.md) decisions.
 
 ## What Is Out of Scope
 
