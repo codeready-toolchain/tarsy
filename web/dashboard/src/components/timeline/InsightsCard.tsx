@@ -35,8 +35,11 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
       <Box
         sx={(theme) => ({
           display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
-          cursor: 'pointer', borderRadius: 1.5, transition: 'background-color 0.2s ease',
-          '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.2) },
+          borderRadius: 1.5, transition: 'background-color 0.2s ease',
+          ...(!expandAll && {
+            cursor: 'pointer',
+            '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.2) },
+          }),
         })}
         onClick={() => { if (!expandAll) setExpanded((prev) => !prev); }}
       >
@@ -53,7 +56,11 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
           {headerExtras}
         </Box>
-        <IconButton size="small" sx={{ p: 0.25, flexShrink: 0 }}>
+        <IconButton
+          size="small"
+          disabled={expandAll}
+          sx={{ p: 0.25, flexShrink: 0, ...(expandAll && { opacity: 0.4, cursor: 'default' }) }}
+        >
           {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </IconButton>
       </Box>

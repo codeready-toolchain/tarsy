@@ -19,19 +19,17 @@ interface ReflectorResult {
   deprecate: Array<{ memory_id: string; reason: string }>;
 }
 
-function tryParseReflectorResult(content: string | undefined): ReflectorResult | null {
-  if (!content) return null;
+function parseReflectorResult(content: string | undefined): ReflectorResult {
+  const empty: ReflectorResult = { create: [], reinforce: [], deprecate: [] };
+  if (!content) return empty;
   try {
     const parsed = JSON.parse(content);
-    if (Array.isArray(parsed.create) && Array.isArray(parsed.reinforce)) {
-      return {
-        create: parsed.create,
-        reinforce: parsed.reinforce,
-        deprecate: Array.isArray(parsed.deprecate) ? parsed.deprecate : [],
-      };
-    }
-  } catch { /* not reflector JSON */ }
-  return null;
+    return {
+      create: Array.isArray(parsed.create) ? parsed.create : [],
+      reinforce: Array.isArray(parsed.reinforce) ? parsed.reinforce : [],
+      deprecate: Array.isArray(parsed.deprecate) ? parsed.deprecate : [],
+    };
+  } catch { return empty; }
 }
 
 interface ResponseItemProps {
@@ -60,8 +58,8 @@ function ResponseItem({
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
   const isReflector = item.metadata?.interaction_type === LLM_INTERACTION_TYPE.MEMORY_EXTRACTION;
   const reflectorResult = useMemo(
-    () => (isFinalAnalysis && isReflector) ? tryParseReflectorResult(item.content) : null,
-    [isFinalAnalysis, isReflector, item.content],
+    () => isReflector ? parseReflectorResult(item.content) : null,
+    [isReflector, item.content],
   );
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
   const rehypePlugins = useMemo(
