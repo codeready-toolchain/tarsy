@@ -7,6 +7,8 @@ import {
   IconButton,
   Collapse,
   Skeleton,
+  Alert,
+  Button,
 } from '@mui/material';
 import { ExpandMore, School } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
@@ -35,7 +37,9 @@ const categoryLabel: Record<string, string> = {
 export default function ExtractedLearningsCard({ sessionId, hasScore }: ExtractedLearningsCardProps) {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<Error | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!hasScore) {
@@ -45,18 +49,19 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
 
     let cancelled = false;
     setLoading(true);
+    setFetchError(null);
     getSessionMemories(sessionId)
       .then((data) => {
         if (!cancelled) setMemories(data);
       })
-      .catch(() => {
-        if (!cancelled) setMemories([]);
+      .catch((err) => {
+        if (!cancelled) setFetchError(err instanceof Error ? err : new Error(String(err)));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [sessionId, hasScore]);
+  }, [sessionId, hasScore, retryCount]);
 
   if (!hasScore) {
     return null;
@@ -64,6 +69,21 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
 
   if (loading) {
     return <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 1 }} />;
+  }
+
+  if (fetchError) {
+    return (
+      <Alert
+        severity="warning"
+        action={
+          <Button color="inherit" size="small" onClick={() => setRetryCount((c) => c + 1)}>
+            Retry
+          </Button>
+        }
+      >
+        Failed to load extracted learnings.
+      </Alert>
+    );
   }
 
   return (

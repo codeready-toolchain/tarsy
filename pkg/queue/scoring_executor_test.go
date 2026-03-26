@@ -148,8 +148,14 @@ func TestScoringExecutor_RunFeedbackReflectorAsyncRejectedWhenStopped(t *testing
 	})
 }
 
-func TestScoringExecutor_RunFeedbackReflectorAsyncNilFields(t *testing.T) {
-	exec := &ScoringExecutor{}
+func TestScoringExecutor_RunFeedbackReflectorAsyncNilMemoryService(t *testing.T) {
+	exec := &ScoringExecutor{
+		activeCancels: make(map[string]context.CancelFunc),
+	}
+
+	assert.NotPanics(t, func() {
+		exec.RunFeedbackReflectorAsync("session-123", "great work", "accurate")
+	})
 
 	assert.NotPanics(t, func() {
 		exec.Stop()

@@ -134,10 +134,13 @@ to avoid duplicates and to decide what to reinforce or deprecate.
 
 ## Your Task
 
-For each learning from the human feedback, choose an action:
+For each learning from the human feedback, select one or more actions:
 - **CREATE**: New knowledge from the feedback not covered by existing memories.
 - **REINFORCE**: An existing memory is confirmed by the feedback — return its ID.
 - **DEPRECATE**: An existing memory is contradicted by the feedback — return its ID with a reason.
+
+When an existing memory is contradicted, emit both a DEPRECATE for the stale memory and a
+CREATE for the corrected replacement.
 
 Alert context for scoping:
 - Alert type: test-memory-reflector

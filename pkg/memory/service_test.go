@@ -93,4 +93,7 @@ func TestEntToDetail(t *testing.T) {
 	assert.Equal(t, m.AlertType, detail.AlertType)
 	assert.Equal(t, m.ChainID, detail.ChainID)
 	assert.Equal(t, m.Deprecated, detail.Deprecated)
+	assert.True(t, m.CreatedAt.Equal(detail.CreatedAt), "CreatedAt mismatch")
+	assert.True(t, m.UpdatedAt.Equal(detail.UpdatedAt), "UpdatedAt mismatch")
+	assert.True(t, m.LastSeenAt.Equal(detail.LastSeenAt), "LastSeenAt mismatch")
 }

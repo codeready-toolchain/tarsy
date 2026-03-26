@@ -314,11 +314,14 @@ to avoid creating duplicates and to decide what to reinforce or deprecate.
 
 ## Your Task
 
-For each learning you identify, choose an action:
+For each learning you identify, select one or more actions:
 - **CREATE**: Genuinely new knowledge not covered by existing memories.
 - **REINFORCE**: An existing memory is confirmed by this investigation — return its ID.
 - **DEPRECATE**: An existing memory is contradicted or proven outdated — return its ID with
   a reason.
+
+When an existing memory is contradicted, emit both a DEPRECATE for the stale memory and a
+CREATE for the corrected replacement.
 
 Alert context for scoping:
 - Alert type: test-memory-reflector

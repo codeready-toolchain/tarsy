@@ -74,10 +74,11 @@ func buildReflectorUserPrompt(input ReflectorInput) string {
 	sb.WriteString("\n</existing_memories>\n\n")
 
 	sb.WriteString("## Your Task\n\n")
-	sb.WriteString("For each learning you identify, choose an action:\n")
+	sb.WriteString("For each learning you identify, select one or more actions:\n")
 	sb.WriteString("- **CREATE**: Genuinely new knowledge not covered by existing memories.\n")
 	sb.WriteString("- **REINFORCE**: An existing memory is confirmed by this investigation — return its ID.\n")
 	sb.WriteString("- **DEPRECATE**: An existing memory is contradicted or proven outdated — return its ID with\n  a reason.\n\n")
+	sb.WriteString("When an existing memory is contradicted, emit both a DEPRECATE for the stale memory and a\nCREATE for the corrected replacement.\n\n")
 
 	sb.WriteString("Alert context for scoping:\n")
 	fmt.Fprintf(&sb, "- Alert type: %s\n", input.AlertType)
@@ -143,10 +144,11 @@ func buildFeedbackReflectorUserPrompt(input FeedbackReflectorInput) string {
 	sb.WriteString("\n</existing_memories>\n\n")
 
 	sb.WriteString("## Your Task\n\n")
-	sb.WriteString("For each learning from the human feedback, choose an action:\n")
+	sb.WriteString("For each learning from the human feedback, select one or more actions:\n")
 	sb.WriteString("- **CREATE**: New knowledge from the feedback not covered by existing memories.\n")
 	sb.WriteString("- **REINFORCE**: An existing memory is confirmed by the feedback — return its ID.\n")
 	sb.WriteString("- **DEPRECATE**: An existing memory is contradicted by the feedback — return its ID with a reason.\n\n")
+	sb.WriteString("When an existing memory is contradicted, emit both a DEPRECATE for the stale memory and a\nCREATE for the corrected replacement.\n\n")
 
 	sb.WriteString("Alert context for scoping:\n")
 	fmt.Fprintf(&sb, "- Alert type: %s\n", input.AlertType)

@@ -77,6 +77,9 @@ func (TimelineEvent) Fields() []ent.Field {
 		//   executive_summary  — High-level session summary.
 		//   final_analysis     — Agent's final conclusion (no more iterations/tool calls).
 		//   task_assigned      — Task assigned to a sub-agent by an orchestrator.
+		//   memory_injected    — Emitted when pre-loaded memories are injected into an agent's
+		//                        prompt at investigation start. Content lists the injected memories
+		//                        with category, valence, age, and text.
 		field.Enum("event_type").
 			Values(
 				"llm_thinking",

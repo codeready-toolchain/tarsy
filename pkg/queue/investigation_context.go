@@ -154,17 +154,22 @@ func (b *InvestigationContextBuilder) buildInvestigationData(ctx context.Context
 	executiveSummary := b.getExecutiveSummary(ctx, sessionID)
 	timeline = agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
 
-	seen := make(map[string]bool)
-	var sb strings.Builder
+	merged := make(map[string]string)
+	var order []string
 	for _, at := range allAgentTools {
-		if seen[at.name] {
-			continue
+		if _, exists := merged[at.name]; !exists {
+			order = append(order, at.name)
+			merged[at.name] = at.tools
+		} else {
+			merged[at.name] += at.tools
 		}
-		seen[at.name] = true
+	}
+	var sb strings.Builder
+	for _, name := range order {
 		sb.WriteString("### ")
-		sb.WriteString(at.name)
+		sb.WriteString(name)
 		sb.WriteString("\n\n")
-		sb.WriteString(at.tools)
+		sb.WriteString(merged[name])
 		sb.WriteString("\n")
 	}
 

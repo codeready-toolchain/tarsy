@@ -3476,4 +3476,23 @@ func TestWarnMemoryWithoutScoring(t *testing.T) {
 
 		assert.Contains(t, buf.String(), "Memory is enabled but no chain has scoring enabled")
 	})
+
+	t.Run("warns when defaults enabled but all chains explicitly disable scoring", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain-a": {Scoring: &ScoringConfig{Enabled: false}},
+				"chain-b": {Scoring: &ScoringConfig{Enabled: false}},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnMemoryWithoutScoring(&Defaults{
+			Memory:  &MemoryConfig{Enabled: true},
+			Scoring: &ScoringConfig{Enabled: true},
+		})
+
+		assert.Contains(t, buf.String(), "Memory is enabled but no chain has scoring enabled")
+	})
 }

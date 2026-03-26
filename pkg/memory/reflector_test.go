@@ -105,6 +105,8 @@ func TestBuildFeedbackReflectorUserPrompt(t *testing.T) {
 	// Investigation context appears before human review
 	ctxIdx := strings.Index(prompt, "investigation_context")
 	reviewIdx := strings.Index(prompt, "Human Review")
+	assert.NotEqual(t, -1, ctxIdx, "prompt must contain investigation_context")
+	assert.NotEqual(t, -1, reviewIdx, "prompt must contain Human Review")
 	assert.Greater(t, reviewIdx, ctxIdx, "investigation context should appear before human review")
 
 	assert.Contains(t, prompt, "High latency on web-01")

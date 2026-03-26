@@ -596,6 +596,10 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.
 // The execution is attached to the session's existing scoring stage so its
 // timeline events and LLM interactions are visible alongside the original score.
 func (e *ScoringExecutor) RunFeedbackReflectorAsync(sessionID, feedbackText, qualityRating string) {
+	if e.memoryService == nil {
+		return
+	}
+
 	e.mu.RLock()
 	if e.stopped {
 		e.mu.RUnlock()
@@ -604,11 +608,14 @@ func (e *ScoringExecutor) RunFeedbackReflectorAsync(sessionID, feedbackText, qua
 	e.wg.Add(1)
 	e.mu.RUnlock()
 
+	cancelKey := "feedback-" + sessionID
+
 	go func() {
 		defer e.wg.Done()
 
 		ctx, cancel := context.WithTimeout(context.Background(), feedbackReflectorTimeout)
-		defer cancel()
+		e.trackCancel(cancelKey, cancel)
+		defer e.removeCancel(cancelKey)
 
 		if err := e.runFeedbackReflector(ctx, sessionID, feedbackText, qualityRating); err != nil {
 			slog.Warn("Feedback reflector failed",
@@ -719,18 +726,20 @@ func (e *ScoringExecutor) runFeedbackReflector(ctx context.Context, sessionID, f
 		return fmt.Errorf("feedback reflector run: %w", err)
 	}
 
-	_ = e.dbClient.AgentExecution.UpdateOneID(execID).
-		SetStatus(agentexecution.StatusCompleted).
-		Exec(context.Background())
-
 	parsed, ok := memory.ParseReflectorResponse(result.FinalAnalysis)
 	if !ok {
 		logger.Warn("Feedback reflector output could not be parsed",
 			"response_length", len(result.FinalAnalysis))
+		_ = e.dbClient.AgentExecution.UpdateOneID(execID).
+			SetStatus(agentexecution.StatusCompleted).
+			Exec(context.Background())
 		return nil
 	}
 	if parsed.IsEmpty() {
 		logger.Info("Feedback reflector found no new learnings")
+		_ = e.dbClient.AgentExecution.UpdateOneID(execID).
+			SetStatus(agentexecution.StatusCompleted).
+			Exec(context.Background())
 		return nil
 	}
 
@@ -743,8 +752,16 @@ func (e *ScoringExecutor) runFeedbackReflector(ctx context.Context, sessionID, f
 	if applyErr := e.memoryService.ApplyFeedbackReflectorActions(
 		ctx, project, sessionID, alertTypePtr, chainIDPtr, parsed,
 	); applyErr != nil {
+		_ = e.dbClient.AgentExecution.UpdateOneID(execID).
+			SetStatus(agentexecution.StatusFailed).
+			SetErrorMessage(applyErr.Error()).
+			Exec(context.Background())
 		return fmt.Errorf("apply feedback reflector actions: %w", applyErr)
 	}
+
+	_ = e.dbClient.AgentExecution.UpdateOneID(execID).
+		SetStatus(agentexecution.StatusCompleted).
+		Exec(context.Background())
 
 	logger.Info("Feedback reflector completed",
 		"created", len(parsed.Create),

@@ -139,8 +139,9 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 
 	var errs []error
 
+	confidence := initialConfidence(score)
 	for _, action := range result.Create {
-		if err := s.createMemory(ctx, project, sessionID, alertType, chainID, score, action); err != nil {
+		if err := s.createMemory(ctx, project, sessionID, alertType, chainID, confidence, action); err != nil {
 			slog.Warn("Failed to create memory",
 				"session_id", sessionID, "content_prefix", truncate(action.Content, 80), "error", err)
 			errs = append(errs, err)
@@ -168,7 +169,7 @@ func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID 
 
 // createMemory uses raw SQL instead of Ent so the row and its embedding
 // (pgvector type, not managed by Ent) are written in a single atomic INSERT.
-func (s *Service) createMemory(ctx context.Context, project, sessionID string, alertType, chainID *string, score int, action ReflectorCreateAction) error {
+func (s *Service) createMemory(ctx context.Context, project, sessionID string, alertType, chainID *string, confidence float64, action ReflectorCreateAction) error {
 	if err := investigationmemory.CategoryValidator(investigationmemory.Category(action.Category)); err != nil {
 		return fmt.Errorf("invalid category %q: %w", action.Category, err)
 	}
@@ -182,7 +183,6 @@ func (s *Service) createMemory(ctx context.Context, project, sessionID string, a
 	}
 
 	memoryID := uuid.New().String()
-	confidence := initialConfidence(score)
 	vecStr := formatVector(vec)
 
 	if _, err := s.db.ExecContext(ctx,
@@ -502,7 +502,7 @@ func (s *Service) ApplyFeedbackReflectorActions(ctx context.Context, project, se
 	var errs []error
 
 	for _, action := range result.Create {
-		if err := s.createMemoryWithConfidence(ctx, project, sessionID, alertType, chainID, feedbackConfidence, action); err != nil {
+		if err := s.createMemory(ctx, project, sessionID, alertType, chainID, feedbackConfidence, action); err != nil {
 			slog.Warn("Failed to create feedback memory",
 				"session_id", sessionID, "content_prefix", truncate(action.Content, 80), "error", err)
 			errs = append(errs, err)
@@ -526,39 +526,6 @@ func (s *Service) ApplyFeedbackReflectorActions(ctx context.Context, project, se
 	}
 
 	return errors.Join(errs...)
-}
-
-// createMemoryWithConfidence is like createMemory but uses an explicit confidence value.
-// Raw SQL: same reason as createMemory — embedding (pgvector) must be written atomically.
-func (s *Service) createMemoryWithConfidence(ctx context.Context, project, sessionID string, alertType, chainID *string, confidence float64, action ReflectorCreateAction) error {
-	if err := investigationmemory.CategoryValidator(investigationmemory.Category(action.Category)); err != nil {
-		return fmt.Errorf("invalid category %q: %w", action.Category, err)
-	}
-	if err := investigationmemory.ValenceValidator(investigationmemory.Valence(action.Valence)); err != nil {
-		return fmt.Errorf("invalid valence %q: %w", action.Valence, err)
-	}
-
-	vec, err := s.embedder.Embed(ctx, action.Content, EmbeddingTaskDocument)
-	if err != nil {
-		return fmt.Errorf("embed memory content: %w", err)
-	}
-
-	memoryID := uuid.New().String()
-	vecStr := formatVector(vec)
-
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO investigation_memories
-			(memory_id, project, content, category, valence, confidence, seen_count,
-			 source_session_id, alert_type, chain_id, created_at, updated_at,
-			 last_seen_at, deprecated, embedding)
-		 VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, NOW(), NOW(), NOW(), false, $10::vector)`,
-		memoryID, project, action.Content, action.Category, action.Valence, confidence,
-		sessionID, alertType, chainID, vecStr,
-	); err != nil {
-		return fmt.Errorf("create memory: %w", err)
-	}
-
-	return nil
 }
 
 // initialConfidence derives initial confidence from the investigation's quality score.
