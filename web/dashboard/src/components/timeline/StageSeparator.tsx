@@ -22,7 +22,7 @@ function getStageTypeIcon(stageType: string | undefined) {
     case STAGE_TYPE.CHAT: return <SmsOutlined sx={sx} />;
     case STAGE_TYPE.EXEC_SUMMARY: return <AutoAwesome sx={sx} />;
     case STAGE_TYPE.ACTION: return <BuildOutlined sx={sx} />;
-    case STAGE_TYPE.SCORING: return <span style={{ fontSize: 14 }}>🧠</span>;
+    case STAGE_TYPE.SCORING: return <Box component="span" sx={{ fontSize: 14 }} aria-hidden>🧠</Box>;
     default: return <Search sx={sx} />;
   }
 }
