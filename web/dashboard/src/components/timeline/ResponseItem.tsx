@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Box, Typography, Collapse } from '@mui/material';
+import { Box, Typography, Collapse, Chip, alpha } from '@mui/material';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
@@ -10,6 +10,24 @@ import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import { highlightSearchTermNodes } from '../../utils/search';
+import { MemoryCardList, type ParsedMemory } from './MemoryCardList';
+
+interface ReflectorResult {
+  create: Array<{ content: string; category: string; valence: string }>;
+  reinforce: Array<{ memory_id: string }>;
+  deprecate: Array<{ memory_id: string; reason: string }>;
+}
+
+function tryParseReflectorResult(content: string | undefined): ReflectorResult | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed.create) && Array.isArray(parsed.reinforce)) {
+      return parsed as ReflectorResult;
+    }
+  } catch { /* not reflector JSON */ }
+  return null;
+}
 
 interface ResponseItemProps {
   item: FlowItem;
@@ -35,6 +53,7 @@ function ResponseItem({
 }: ResponseItemProps) {
   const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
+  const reflectorResult = useMemo(() => isFinalAnalysis ? tryParseReflectorResult(item.content) : null, [isFinalAnalysis, item.content]);
   const hasMarkdown = hasMarkdownSyntax(item.content || '');
   const rehypePlugins = useMemo(
     () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
@@ -72,6 +91,100 @@ function ResponseItem({
     const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
     const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
     const collapsedLeadingIconOpacity = shouldShowCollapsed ? 0.6 : 1;
+
+    if (reflectorResult) {
+      const created = reflectorResult.create || [];
+      const reinforced = reflectorResult.reinforce || [];
+      const deprecated = reflectorResult.deprecate || [];
+      const totalActions = created.length + reinforced.length + deprecated.length;
+      const tooltipText = totalActions === 0
+        ? 'No new learnings'
+        : `${created.length} new, ${reinforced.length} reinforced`;
+      const createdMemories: ParsedMemory[] = created.map((m) => ({
+        category: m.category || '',
+        valence: m.valence || '',
+        ageLabel: '',
+        content: m.content,
+      }));
+
+      return (
+        <Box
+          data-flow-item-id={item.id}
+          sx={{ mb: 3, mt: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start', ...(shouldShowCollapsed && FADE_COLLAPSE_ANIMATION) }}
+        >
+          <EmojiIcon emoji="🧠" opacity={collapsedLeadingIconOpacity} showTooltip={shouldShowCollapsed} tooltipContent={tooltipText} tooltipType="final_answer" />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <CollapsibleItemHeader
+              headerText="LEARNED"
+              headerColor="secondary.main"
+              headerTextTransform="uppercase"
+              shouldShowCollapsed={shouldShowCollapsed}
+              collapsedHeaderOpacity={collapsedHeaderOpacity}
+              onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+            />
+            <Collapse in={!shouldShowCollapsed} timeout={300}>
+              <Box sx={{ mt: 1, pb: 3 }}>
+                {totalActions === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    No new learnings extracted from this investigation.
+                  </Typography>
+                ) : (
+                  <>
+                    {created.length > 0 && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', display: 'block', mb: 0.75 }}>
+                          New Insights ({created.length})
+                        </Typography>
+                        <MemoryCardList memories={createdMemories} renderContent={(c) => c} />
+                      </Box>
+                    )}
+                    {reinforced.length > 0 && (
+                      <Box sx={(theme) => ({
+                        mb: deprecated.length > 0 ? 2 : 0,
+                        display: 'flex', alignItems: 'center', gap: 1,
+                        p: 1, borderRadius: 1,
+                        bgcolor: alpha(theme.palette.success.main, 0.06),
+                        border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
+                      })}>
+                        <Chip label={reinforced.length} size="small" color="success" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          existing {reinforced.length === 1 ? 'insight' : 'insights'} reinforced
+                        </Typography>
+                      </Box>
+                    )}
+                    {deprecated.length > 0 && (
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', display: 'block', mb: 0.75 }}>
+                          Deprecated ({deprecated.length})
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                          {deprecated.map((d, i) => (
+                            <Box key={i} sx={(theme) => ({
+                              p: 1, borderRadius: 1,
+                              bgcolor: alpha(theme.palette.error.main, 0.04),
+                              border: `1px solid ${alpha(theme.palette.error.main, 0.12)}`,
+                            })}>
+                              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                                <Typography component="span" sx={{ fontWeight: 600, fontSize: '0.7rem', color: 'text.secondary' }}>
+                                  {d.memory_id}
+                                </Typography>
+                                {' — '}{d.reason}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </>
+                )}
+                {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
+              </Box>
+            </Collapse>
+          </Box>
+        </Box>
+      );
+    }
+
     const headerText = isForcedConclusion ? 'FINAL ANSWER (⚠️Max Iterations)' : 'FINAL ANSWER';
 
     return (

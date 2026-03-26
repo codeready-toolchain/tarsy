@@ -854,7 +854,7 @@ var ScoringExpectedEvents = []ExpectedEvent{
 
 	// Session completion and scoring start race — either order is valid.
 	{Type: "session.status", Status: "completed", Group: 3},
-	{Type: "stage.status", StageName: "Scoring", Status: "started", Group: 3},
+	{Type: "stage.status", StageName: "Evaluation & Learning", Status: "started", Group: 3},
 
 	// Scoring turn 1: score evaluation.
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
@@ -864,7 +864,7 @@ var ScoringExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
 	{Type: "timeline_event.completed", EventType: "llm_response"},
 
-	{Type: "stage.status", StageName: "Scoring", Status: "completed"},
+	{Type: "stage.status", StageName: "Evaluation & Learning", Status: "completed"},
 }
 
 // ────────────────────────────────────────────────────────────

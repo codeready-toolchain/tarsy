@@ -37,7 +37,8 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   const isErrorStatus = FAILED_EXECUTION_STATUSES.has(stageStatus);
   const isCancelledStatus = CANCELLED_EXECUTION_STATUSES.has(stageStatus);
   const rawName = item.content;
-  const stageName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
+  const parsedName = rawName.includes(' - ') ? rawName.split(' - ').pop()! : rawName;
+  const stageName = stageType === STAGE_TYPE.SCORING ? 'Evaluation & Learning' : parsedName;
   const errorMessage = (item.metadata?.error_message as string) || '';
 
   const hoverColor = isErrorStatus ? 'error.main' : 'primary.main';

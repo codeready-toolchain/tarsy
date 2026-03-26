@@ -30,6 +30,7 @@ import (
 
 const scoringTimeout = 10 * time.Minute
 const feedbackReflectorTimeout = 3 * time.Minute
+const scoringStageName = "Evaluation & Learning"
 
 // ScoringExecutor orchestrates the scoring workflow: creating stage/execution
 // records, running the scoring agent, and writing results to session_scores.
@@ -217,7 +218,7 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 	_, err = tx.Stage.Create().
 		SetID(stageID).
 		SetSessionID(sessionID).
-		SetStageName("Scoring").
+		SetStageName(scoringStageName).
 		SetStageIndex(stageIndex).
 		SetExpectedAgentCount(1).
 		SetStageType(stage.StageTypeScoring).
@@ -334,7 +335,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 		logger.Warn("Failed to update agent execution to active", "error", updateErr)
 	}
 	publishExecutionStatus(ctx, e.eventPublisher, sessionID, stageID, exec.ID, 1, string(agentexecution.StatusActive), "")
-	publishStageStatus(ctx, e.eventPublisher, sessionID, stageID, "Scoring", stg.StageIndex, stage.StageTypeScoring, nil, events.StageStatusStarted)
+	publishStageStatus(ctx, e.eventPublisher, sessionID, stageID, scoringStageName, stg.StageIndex, stage.StageTypeScoring, nil, events.StageStatusStarted)
 
 	// Build investigation context (includes alert data, runbook, available tools, timeline)
 	investigationContext := e.buildScoringContext(ctx, session)
@@ -423,7 +424,7 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	}
 
 	stageEventStatus := mapScoringAgentStatus(agentStatus)
-	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, "Scoring", stg.StageIndex, stage.StageTypeScoring, nil, stageEventStatus)
+	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, scoringStageName, stg.StageIndex, stage.StageTypeScoring, nil, stageEventStatus)
 
 	if scoreCompleted {
 		logger.Info("Scoring executor: completed successfully")
@@ -826,7 +827,7 @@ func (e *ScoringExecutor) failExecution(execID, sessionID, stageID string, stage
 
 // finishScoringStage publishes terminal stage status and forces stage failure.
 func (e *ScoringExecutor) finishScoringStage(stageID, sessionID string, stageIndex int, status, errMsg string) {
-	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, "Scoring", stageIndex, stage.StageTypeScoring, nil, status)
+	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, scoringStageName, stageIndex, stage.StageTypeScoring, nil, status)
 	if updateErr := e.stageService.ForceStageFailure(context.Background(), stageID, errMsg); updateErr != nil {
 		slog.Warn("Failed to update scoring stage status",
 			"stage_id", stageID, "error", updateErr)
