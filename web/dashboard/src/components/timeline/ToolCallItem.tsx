@@ -251,17 +251,29 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
             </Box>
           )}
 
-          <Box sx={{ mb: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Arguments</Typography>
-              <CopyButton text={JSON.stringify(toolArguments, null, 2)} variant="icon" size="small" tooltip="Copy arguments" />
+          {isMemory && toolArguments.query ? (
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', mb: 0.5, display: 'block' }}>Searched for</Typography>
+              <Typography variant="body2" sx={(theme) => ({
+                fontStyle: 'italic', color: 'text.secondary', lineHeight: 1.6,
+                pl: 1.5, borderLeft: `3px solid ${alpha(theme.palette.secondary.main, 0.3)}`,
+              })}>
+                &ldquo;{String(toolArguments.query)}&rdquo;
+              </Typography>
             </Box>
-            {toolArguments && Object.keys(toolArguments).length > 0 ? (
-              isSimpleArguments(toolArguments) ? <SimpleArgumentsList args={toolArguments} /> : <JsonDisplay data={toolArguments} maxHeight={250} />
-            ) : (
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No arguments</Typography>
-            )}
-          </Box>
+          ) : (
+            <Box sx={{ mb: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Arguments</Typography>
+                <CopyButton text={JSON.stringify(toolArguments, null, 2)} variant="icon" size="small" tooltip="Copy arguments" />
+              </Box>
+              {toolArguments && Object.keys(toolArguments).length > 0 ? (
+                isSimpleArguments(toolArguments) ? <SimpleArgumentsList args={toolArguments} /> : <JsonDisplay data={toolArguments} maxHeight={250} />
+              ) : (
+                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No arguments</Typography>
+              )}
+            </Box>
+          )}
 
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
