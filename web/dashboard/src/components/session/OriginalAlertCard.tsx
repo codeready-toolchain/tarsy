@@ -14,6 +14,7 @@ import type { Theme } from '@mui/material/styles';
 import { ExpandMore, OpenInNew, AccessTime } from '@mui/icons-material';
 import ErrorBoundary from '../shared/ErrorBoundary';
 import CopyButton from '../shared/CopyButton';
+import JsonDisplay from '../shared/JsonDisplay';
 
 interface OriginalAlertCardProps {
   /** Raw alert_data string from the session (JSON or plain text) */
@@ -175,10 +176,9 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
     );
   }
 
-  // Objects / arrays — render as formatted JSON with expand/collapse
+  // Objects / arrays — render with interactive JSON viewer
   if (typeof value === 'object') {
-    const formatted = JSON.stringify(value, null, 2);
-    const isLong = formatted.split('\n').length > 8;
+    const isLong = JSON.stringify(value, null, 2).split('\n').length > 8;
     return (
       <Box>
         {isLong && (
@@ -192,24 +192,7 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
           </Button>
         )}
         <Collapse in={!isLong || isJsonExpanded} timeout={300}>
-          <Typography
-            component="pre"
-            sx={{
-              bgcolor: 'action.hover',
-              p: 2,
-              borderRadius: 1,
-              fontFamily: 'monospace',
-              fontSize: '0.825rem',
-              lineHeight: 1.6,
-              overflowX: 'auto',
-              maxHeight: 300,
-              overflowY: 'auto',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {formatted}
-          </Typography>
+          <JsonDisplay data={value} maxHeight={300} />
         </Collapse>
       </Box>
     );
