@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard theme comparison</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --page-bg: #0f1117;
+      --col-gap: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--page-bg);
+      font-family: "Inter", system-ui, sans-serif;
+      font-size: 12px;
+      line-height: 1.35;
+      color: #e8eaed;
+      padding: 20px 16px 32px;
+    }
+
+    .page-title {
+      text-align: center;
+      margin: 0 0 20px;
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: 0.02em;
+      color: #c4c9d4;
+    }
+
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--col-gap);
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+
+    /* Theme tokens */
+    .theme-col {
+      --primary: #1976d2;
+      --secondary: #424242;
+      --success: #2e7d32;
+      --error: #d32f2f;
+      --warning: #ed6c02;
+      --info: #0288d1;
+      --bg-default: #fafafa;
+      --bg-paper: #ffffff;
+      --text-primary: rgba(0, 0, 0, 0.87);
+      --text-secondary: rgba(0, 0, 0, 0.6);
+
+      width: 240px;
+      flex-shrink: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.06),
+        0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .theme-col.opt-a {
+      --primary: #1565c0;
+      --secondary: #546e7a;
+      --success: #2e7d32;
+      --error: #c62828;
+      --warning: #f57f17;
+      --info: #0277bd;
+      --bg-default: #f0f4f8;
+      --bg-paper: #f8fafc;
+      --text-primary: #1a2332;
+      --text-secondary: #4a5568;
+    }
+
+    .theme-col.opt-b {
+      --primary: #3949ab;
+      --secondary: #546e7a;
+      --success: #00796b;
+      --error: #c62828;
+      --warning: #f9a825;
+      --info: #0288d1;
+      --bg-default: #f1f3f9;
+      --bg-paper: #fafbff;
+      --text-primary: #1a1f36;
+      --text-secondary: #4a5568;
+    }
+
+    .theme-col.opt-c {
+      --primary: #01579b;
+      --secondary: #37474f;
+      --success: #00695c;
+      --error: #b71c1c;
+      --warning: #ff8f00;
+      --info: #006064;
+      --bg-default: #eef2f7;
+      --bg-paper: #f7fafc;
+      --text-primary: #0f2027;
+      --text-secondary: #455a64;
+    }
+
+    .col-head {
+      padding: 12px 12px 10px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+    }
+
+    .col-head h2 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #f0f2f6;
+      letter-spacing: -0.01em;
+    }
+
+    .col-head p {
+      margin: 0;
+      font-size: 10px;
+      color: #9aa3b2;
+      line-height: 1.4;
+    }
+
+    .swatches {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 0 2px;
+    }
+
+    .swatches span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+    }
+
+    .swatches .p {
+      background: var(--primary);
+    }
+    .swatches .s {
+      background: var(--secondary);
+    }
+    .swatches .ok {
+      background: var(--success);
+    }
+    .swatches .w {
+      background: var(--warning);
+    }
+    .swatches .e {
+      background: var(--error);
+    }
+
+    .shared-header {
+      height: 36px;
+      background: var(--primary);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .shared-header .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .shared-header .nav-pill {
+      margin-left: auto;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      font-weight: 500;
+      opacity: 0.85;
+    }
+
+    .canvas {
+      background: var(--bg-default);
+      color: var(--text-primary);
+      padding: 10px 9px 14px;
+      min-height: 620px;
+    }
+
+    .mono {
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    /* Tool row muted style */
+    .tool-bar {
+      border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+      background: rgba(0, 0, 0, 0.04);
+      border-radius: 6px;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-bar .name {
+      flex: 1;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .tool-bar .check {
+      color: var(--primary);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .card {
+      background: var(--bg-paper);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .session-card {
+      border-left: 3px solid var(--warning);
+      padding: 8px 9px;
+    }
+
+    .session-card .row-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .session-card .title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--warning);
+    }
+
+    .badge {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--success) 14%, transparent);
+      color: var(--success);
+      white-space: nowrap;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .token-row {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      color: var(--text-secondary);
+      padding-top: 4px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .agents-wrap {
+      margin-bottom: 8px;
+    }
+
+    .parallel-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 5px;
+    }
+
+    .parallel-label .fork {
+      font-size: 13px;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .agent-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .agent-mini {
+      flex: 1;
+      background: var(--bg-paper);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 6px;
+      padding: 6px 7px;
+      font-size: 10px;
+    }
+
+    .agent-mini .label {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .agent-mini .sub {
+      font-size: 9px;
+      color: var(--text-secondary);
+    }
+
+    .insights {
+      border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+      background: color-mix(in srgb, var(--success) 6%, var(--bg-paper));
+      border-radius: 8px;
+      padding: 8px 9px;
+      margin-bottom: 8px;
+    }
+
+    .insights .hdr {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--success);
+      margin-bottom: 4px;
+      letter-spacing: 0.02em;
+    }
+
+    .insights p {
+      margin: 0;
+      font-size: 10px;
+      color: var(--text-primary);
+      line-height: 1.45;
+    }
+
+    .skill-card {
+      border: 1px solid color-mix(in srgb, var(--info) 25%, transparent);
+      background: color-mix(in srgb, var(--info) 5%, var(--bg-paper));
+      border-radius: 8px;
+      padding: 8px 9px;
+      margin-bottom: 8px;
+    }
+
+    .skill-card .hdr {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--info);
+      margin-bottom: 3px;
+    }
+
+    .skill-card .path {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      color: var(--text-secondary);
+    }
+
+    .thought {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.03);
+      border: 1px dashed color-mix(in srgb, var(--secondary) 22%, transparent);
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .thought .emoji {
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .stage-sep {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .stage-sep::before,
+    .stage-sep::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        color-mix(in srgb, var(--secondary) 35%, transparent)
+      );
+    }
+
+    .stage-sep::after {
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--secondary) 35%, transparent),
+        transparent
+      );
+    }
+
+    /* Staggered load-in */
+    .animate-in {
+      opacity: 0;
+      animation: fadeSlide 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes fadeSlide {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .theme-col .d1 {
+      animation-delay: 0.04s;
+    }
+    .theme-col .d2 {
+      animation-delay: 0.1s;
+    }
+    .theme-col .d3 {
+      animation-delay: 0.16s;
+    }
+    .theme-col .d4 {
+      animation-delay: 0.22s;
+    }
+    .theme-col .d5 {
+      animation-delay: 0.28s;
+    }
+    .theme-col .d6 {
+      animation-delay: 0.34s;
+    }
+    .theme-col .d7 {
+      animation-delay: 0.4s;
+    }
+    .theme-col .d8 {
+      animation-delay: 0.46s;
+    }
+    .theme-col .d9 {
+      animation-delay: 0.52s;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="page-title">React / MUI dashboard — theme comparison</h1>
+
+  <div class="grid">
+    <!-- Current -->
+    <div class="theme-col">
+      <div class="shared-header animate-in d1">
+        <span class="dot"></span>
+        Session
+        <span class="nav-pill">/dash</span>
+      </div>
+      <div class="col-head animate-in d2">
+        <h2>Current</h2>
+        <p>Warm-neutral baseline. Classic MUI blue primary on off-white surfaces.</p>
+        <div class="swatches" aria-hidden="true">
+          <span class="p" title="primary"></span>
+          <span class="s" title="secondary"></span>
+          <span class="ok" title="success"></span>
+          <span class="w" title="warning"></span>
+          <span class="e" title="error"></span>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="card session-card animate-in d3">
+          <div class="row-top">
+            <div class="title">Alert investigation</div>
+            <span class="badge">Completed</span>
+          </div>
+          <div class="meta-row">
+            <span>Duration</span>
+            <span class="mono">4m 12s</span>
+          </div>
+          <div class="token-row">in 8.4k · out 2.1k · Σ 10.5k</div>
+        </div>
+
+        <div class="agents-wrap animate-in d4">
+          <div class="parallel-label">
+            <span class="fork" aria-hidden="true">⑂</span>
+            Parallel agents
+          </div>
+          <div class="agent-row">
+            <div class="agent-mini">
+              <div class="label">Agent A</div>
+              <div class="sub">K8s checks</div>
+            </div>
+            <div class="agent-mini">
+              <div class="label">Agent B</div>
+              <div class="sub">Logs &amp; traces</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="animate-in d5">
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">resources_get</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">pods_list</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">cluster_info</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">events_stream</span>
+          </div>
+        </div>
+
+        <div class="insights animate-in d6">
+          <div class="hdr">Past Investigation Insights</div>
+          <p>CPU spike correlated with batch job cron; not a memory leak. Review HPA thresholds.</p>
+        </div>
+
+        <div class="skill-card animate-in d7">
+          <div class="hdr">Pre-loaded Skill</div>
+          <div class="path">/skills/k8s-debug.md</div>
+        </div>
+
+        <div class="thought animate-in d8">
+          <span class="emoji" aria-hidden="true">💭</span>
+          <span>Thought for 2s...</span>
+        </div>
+
+        <div class="stage-sep animate-in d9">Investigation</div>
+      </div>
+    </div>
+
+    <!-- Option A -->
+    <div class="theme-col opt-a">
+      <div class="shared-header animate-in d1">
+        <span class="dot"></span>
+        Session
+        <span class="nav-pill">/dash</span>
+      </div>
+      <div class="col-head animate-in d2">
+        <h2>Option A — Subtle</h2>
+        <p>Blue-gray shift. Cooler chrome, slightly tinted paper for depth.</p>
+        <div class="swatches" aria-hidden="true">
+          <span class="p"></span>
+          <span class="s"></span>
+          <span class="ok"></span>
+          <span class="w"></span>
+          <span class="e"></span>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="card session-card animate-in d3">
+          <div class="row-top">
+            <div class="title">Alert investigation</div>
+            <span class="badge">Completed</span>
+          </div>
+          <div class="meta-row">
+            <span>Duration</span>
+            <span class="mono">4m 12s</span>
+          </div>
+          <div class="token-row">in 8.4k · out 2.1k · Σ 10.5k</div>
+        </div>
+
+        <div class="agents-wrap animate-in d4">
+          <div class="parallel-label">
+            <span class="fork" aria-hidden="true">⑂</span>
+            Parallel agents
+          </div>
+          <div class="agent-row">
+            <div class="agent-mini">
+              <div class="label">Agent A</div>
+              <div class="sub">K8s checks</div>
+            </div>
+            <div class="agent-mini">
+              <div class="label">Agent B</div>
+              <div class="sub">Logs &amp; traces</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="animate-in d5">
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">resources_get</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">pods_list</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">cluster_info</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">events_stream</span>
+          </div>
+        </div>
+
+        <div class="insights animate-in d6">
+          <div class="hdr">Past Investigation Insights</div>
+          <p>CPU spike correlated with batch job cron; not a memory leak. Review HPA thresholds.</p>
+        </div>
+
+        <div class="skill-card animate-in d7">
+          <div class="hdr">Pre-loaded Skill</div>
+          <div class="path">/skills/k8s-debug.md</div>
+        </div>
+
+        <div class="thought animate-in d8">
+          <span class="emoji" aria-hidden="true">💭</span>
+          <span>Thought for 2s...</span>
+        </div>
+
+        <div class="stage-sep animate-in d9">Investigation</div>
+      </div>
+    </div>
+
+    <!-- Option B -->
+    <div class="theme-col opt-b">
+      <div class="shared-header animate-in d1">
+        <span class="dot"></span>
+        Session
+        <span class="nav-pill">/dash</span>
+      </div>
+      <div class="col-head animate-in d2">
+        <h2>Option B — Indigo / Slate</h2>
+        <p>Indigo primary with teal success accents; airy paper tint.</p>
+        <div class="swatches" aria-hidden="true">
+          <span class="p"></span>
+          <span class="s"></span>
+          <span class="ok"></span>
+          <span class="w"></span>
+          <span class="e"></span>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="card session-card animate-in d3">
+          <div class="row-top">
+            <div class="title">Alert investigation</div>
+            <span class="badge">Completed</span>
+          </div>
+          <div class="meta-row">
+            <span>Duration</span>
+            <span class="mono">4m 12s</span>
+          </div>
+          <div class="token-row">in 8.4k · out 2.1k · Σ 10.5k</div>
+        </div>
+
+        <div class="agents-wrap animate-in d4">
+          <div class="parallel-label">
+            <span class="fork" aria-hidden="true">⑂</span>
+            Parallel agents
+          </div>
+          <div class="agent-row">
+            <div class="agent-mini">
+              <div class="label">Agent A</div>
+              <div class="sub">K8s checks</div>
+            </div>
+            <div class="agent-mini">
+              <div class="label">Agent B</div>
+              <div class="sub">Logs &amp; traces</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="animate-in d5">
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">resources_get</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">pods_list</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">cluster_info</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">events_stream</span>
+          </div>
+        </div>
+
+        <div class="insights animate-in d6">
+          <div class="hdr">Past Investigation Insights</div>
+          <p>CPU spike correlated with batch job cron; not a memory leak. Review HPA thresholds.</p>
+        </div>
+
+        <div class="skill-card animate-in d7">
+          <div class="hdr">Pre-loaded Skill</div>
+          <div class="path">/skills/k8s-debug.md</div>
+        </div>
+
+        <div class="thought animate-in d8">
+          <span class="emoji" aria-hidden="true">💭</span>
+          <span>Thought for 2s...</span>
+        </div>
+
+        <div class="stage-sep animate-in d9">Investigation</div>
+      </div>
+    </div>
+
+    <!-- Option C -->
+    <div class="theme-col opt-c">
+      <div class="shared-header animate-in d1">
+        <span class="dot"></span>
+        Session
+        <span class="nav-pill">/dash</span>
+      </div>
+      <div class="col-head animate-in d2">
+        <h2>Option C — Steel / Cyan</h2>
+        <p>Deep steel blue primary; cyan-teal info and success for a crisp ops feel.</p>
+        <div class="swatches" aria-hidden="true">
+          <span class="p"></span>
+          <span class="s"></span>
+          <span class="ok"></span>
+          <span class="w"></span>
+          <span class="e"></span>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="card session-card animate-in d3">
+          <div class="row-top">
+            <div class="title">Alert investigation</div>
+            <span class="badge">Completed</span>
+          </div>
+          <div class="meta-row">
+            <span>Duration</span>
+            <span class="mono">4m 12s</span>
+          </div>
+          <div class="token-row">in 8.4k · out 2.1k · Σ 10.5k</div>
+        </div>
+
+        <div class="agents-wrap animate-in d4">
+          <div class="parallel-label">
+            <span class="fork" aria-hidden="true">⑂</span>
+            Parallel agents
+          </div>
+          <div class="agent-row">
+            <div class="agent-mini">
+              <div class="label">Agent A</div>
+              <div class="sub">K8s checks</div>
+            </div>
+            <div class="agent-mini">
+              <div class="label">Agent B</div>
+              <div class="sub">Logs &amp; traces</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="animate-in d5">
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">resources_get</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">pods_list</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">cluster_info</span>
+          </div>
+          <div class="tool-bar">
+            <span class="check" aria-hidden="true">✓</span>
+            <span class="name">events_stream</span>
+          </div>
+        </div>
+
+        <div class="insights animate-in d6">
+          <div class="hdr">Past Investigation Insights</div>
+          <p>CPU spike correlated with batch job cron; not a memory leak. Review HPA thresholds.</p>
+        </div>
+
+        <div class="skill-card animate-in d7">
+          <div class="hdr">Pre-loaded Skill</div>
+          <div class="path">/skills/k8s-debug.md</div>
+        </div>
+
+        <div class="thought animate-in d8">
+          <span class="emoji" aria-hidden="true">💭</span>
+          <span>Thought for 2s...</span>
+        </div>
+
+        <div class="stage-sep animate-in d9">Investigation</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

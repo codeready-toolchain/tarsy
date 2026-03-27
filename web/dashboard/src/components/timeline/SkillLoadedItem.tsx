@@ -31,18 +31,17 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm }: SkillLoadedIte
       data-flow-item-id={item.id}
       sx={(theme) => ({
         ml: 4, my: 0.5, mr: 1,
-        border: '2px solid',
-        borderColor: alpha(theme.palette.info.main, 0.5),
+        border: '1px solid',
+        borderColor: alpha(theme.palette.info.main, 0.25),
         borderRadius: 1.5,
-        bgcolor: alpha(theme.palette.info.main, 0.08),
-        boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
+        bgcolor: alpha(theme.palette.info.main, 0.04),
       })}
     >
       <Box
         sx={(theme) => ({
           display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
           cursor: 'pointer', borderRadius: 1.5, transition: 'background-color 0.2s ease',
-          '&:hover': { bgcolor: alpha(theme.palette.info.main, 0.2) },
+          '&:hover': { bgcolor: alpha(theme.palette.info.main, 0.1) },
         })}
         onClick={() => {
           if (expandAll) return;
@@ -50,7 +49,7 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm }: SkillLoadedIte
         }}
       >
         <AutoStoriesOutlined sx={(theme) => ({ fontSize: 18, color: theme.palette.info.main })} />
-        <Typography variant="body2" sx={(theme) => ({ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem', color: theme.palette.info.main })}>
+        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.9rem', color: 'text.secondary' }}>
           Pre-loaded Skill
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>

@@ -482,11 +482,10 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
         ml: 4,
         my: 0.5,
         mr: 1,
-        border: '2px solid',
-        borderColor: alpha(boxColor, 0.5),
+        border: '1px solid',
+        borderColor: alpha(boxColor, 0.25),
         borderRadius: 1.5,
-        bgcolor: alpha(boxColor, 0.08),
-        boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
+        bgcolor: alpha(boxColor, 0.04),
       }}
     >
       <Box
@@ -499,7 +498,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
           cursor: 'pointer',
           borderRadius: 1.5,
           transition: 'background-color 0.2s ease',
-          '&:hover': { bgcolor: alpha(boxColor, 0.2) },
+          '&:hover': { bgcolor: alpha(boxColor, 0.1) },
         }}
         onClick={() => setExpanded(!expanded)}
       >
@@ -507,10 +506,10 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
         <Typography
           variant="body2"
           sx={{
-            fontFamily: 'monospace',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            color: boxColor,
+          fontFamily: 'monospace',
+          fontWeight: 500,
+          fontSize: '0.9rem',
+          color: 'text.secondary',
           }}
         >
           {getTitle()}

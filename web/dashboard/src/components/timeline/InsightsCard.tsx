@@ -24,12 +24,11 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
     <Box
       data-flow-item-id={itemId}
       sx={(theme) => ({
-        ml: 4, my: 1, mr: 1,
-        border: '2px solid',
-        borderColor: alpha(theme.palette.success.main, 0.5),
+        ml: 4, my: 0.5, mr: 1,
+        border: '1px solid',
+        borderColor: alpha(theme.palette.success.main, 0.25),
         borderRadius: 1.5,
-        bgcolor: alpha(theme.palette.success.main, 0.08),
-        boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
+        bgcolor: alpha(theme.palette.success.main, 0.04),
       })}
     >
       <Box
@@ -38,7 +37,7 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
           borderRadius: 1.5, transition: 'background-color 0.2s ease',
           ...(!expandAll && {
             cursor: 'pointer',
-            '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.2) },
+            '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.1) },
           }),
         })}
         onClick={() => { if (!expandAll) setExpanded((prev) => !prev); }}
@@ -46,10 +45,7 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
         <PsychologyOutlined sx={(theme) => ({ fontSize: 18, color: theme.palette.success.main })} />
         <Typography
           variant="body2"
-          sx={(theme) => ({
-            fontFamily: 'monospace', fontWeight: 600, fontSize: '0.9rem',
-            color: theme.palette.success.main, flexShrink: 0,
-          })}
+          sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.9rem', color: 'text.secondary', flexShrink: 0 }}
         >
           {title}
         </Typography>
