@@ -152,9 +152,9 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                       gap: 0.75,
                       bgcolor: alpha(theme.palette.warning.main, 0.08),
                       border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
-                      borderRadius: 5,
-                      px: 1.25,
-                      py: 0.25,
+                      borderRadius: '16px',
+                      px: 1,
+                      py: 0.5,
                     })}
                     onClick={(e) => e.stopPropagation()}
                   >
