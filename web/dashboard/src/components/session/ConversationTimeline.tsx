@@ -457,7 +457,7 @@ export default function ConversationTimeline({
         </IconButton>
       </Box>
 
-      <Collapse in={!timelineCollapsed} timeout={400}>
+      <Collapse in={!timelineCollapsed} timeout={400} mountOnEnter>
         {/* Toolbar: search + expand/collapse + copy */}
         <CardContent sx={{ pb: 1, pt: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

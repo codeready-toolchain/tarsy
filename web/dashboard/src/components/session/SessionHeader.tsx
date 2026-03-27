@@ -419,7 +419,7 @@ export default function SessionHeader({
 
             {/* Expanded alert data — full width below footer bar */}
             {alertData && (
-              <Collapse in={alertExpanded} timeout={300}>
+              <Collapse in={alertExpanded} timeout={300} mountOnEnter unmountOnExit>
                 <Box sx={{ mt: 1.5 }}>
                   <AlertDataContent alertData={alertData} />
                 </Box>
