@@ -165,13 +165,9 @@ This undoes the header compression — the user still can't see content without 
 
 **Suggestion:** Make stages proper section headers — left-aligned, bolder, with a subtle background strip or left border accent. Add expand/collapse per stage to skip entire sections.
 
-### E5. Surface executive summary near the top
+### E5. Surface executive summary near the top ✅
 
-The Final AI Analysis is the **most important section for completed sessions** — the user's reason for visiting the page — yet it's at the absolute bottom after every tool call, thought, and stage divider.
-
-Options:
-- Render the executive summary as a **collapsed preview immediately below the header** so users see the conclusion first, then dive into the timeline for details.
-- Or: add a **sticky mini-nav** at the top of the timeline (`Timeline | Summary | Learnings`) for direct access.
+- ✅ **"Jump to Summary" / "Final Analysis" button moved into the timeline card header** — sits inline with the expand/collapse + copy buttons. Zero layout shift during streaming (button only appears when final content exists). Removed the standalone centered button that was adding ~80px of chrome between the session header and timeline.
 
 ### E6. Compact "Have follow-up questions?"
 

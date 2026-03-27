@@ -6,11 +6,13 @@ import {
   Card,
   CardContent,
   Button,
+  Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   ExpandMore,
   ExpandLess,
+  KeyboardDoubleArrowDown,
 } from '@mui/icons-material';
 import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
@@ -80,6 +82,10 @@ interface ConversationTimelineProps {
   chatStageIds?: Set<string>;
   /** Search term for in-session search (highlights + auto-expand) */
   searchTerm?: string;
+  /** Jump-to-summary: shows button in header when provided */
+  onJumpToSummary?: () => void;
+  /** Whether the summary is an executive summary (true) or final analysis (false) */
+  hasExecutiveSummary?: boolean;
 }
 
 /**
@@ -115,6 +121,8 @@ export default function ConversationTimeline({
   chatStageInProgress,
   chatStageIds,
   searchTerm,
+  onJumpToSummary,
+  hasExecutiveSummary,
 }: ConversationTimelineProps) {
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);
@@ -383,6 +391,19 @@ export default function ConversationTimeline({
             />
           )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 'auto' }}>
+            {onJumpToSummary && (
+              <Tooltip title={hasExecutiveSummary ? 'Jump to Summary' : 'Jump to Final Analysis'}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={onJumpToSummary}
+                  endIcon={<KeyboardDoubleArrowDown sx={{ fontSize: '0.95rem' }} />}
+                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', color: 'primary.main' }}
+                >
+                  {hasExecutiveSummary ? 'Summary' : 'Final Analysis'}
+                </Button>
+              </Tooltip>
+            )}
             <Button
               variant="outlined"
               size="small"

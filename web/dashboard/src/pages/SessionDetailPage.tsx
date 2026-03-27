@@ -1589,30 +1589,6 @@ export function SessionDetailPage() {
               />
             </Suspense>
 
-            {/* Jump to Summary button */}
-            {hasFinalContent && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', my: 1.5 }}>
-                <Button
-                  variant="text"
-                  size="medium"
-                  onClick={handleJumpToSummary}
-                  startIcon={<KeyboardDoubleArrowDown />}
-                  endIcon={<KeyboardDoubleArrowDown />}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.95rem',
-                    py: 1,
-                    px: 3,
-                    color: 'primary.main',
-                    '&:hover': { backgroundColor: 'action.hover' },
-                  }}
-                >
-                  {session.executive_summary ? 'Jump to Summary' : 'Jump to Final Analysis'}
-                </Button>
-              </Box>
-            )}
-
             {/* Conversation Timeline */}
             {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
@@ -1631,6 +1607,10 @@ export function SessionDetailPage() {
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}
                   searchTerm={debouncedSearchTerm}
+                  {...(hasFinalContent ? {
+                    onJumpToSummary: handleJumpToSummary,
+                    hasExecutiveSummary: !!session.executive_summary,
+                  } : {})}
                   {...(isTerminal ? {
                     searchMatchCount: matchingItemIds.length,
                     currentSearchMatchIndex: currentMatchIndex,
