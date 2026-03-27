@@ -6,13 +6,16 @@ import {
   Card,
   CardContent,
   Button,
+  IconButton,
   Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
   ExpandMore,
   ExpandLess,
+  UnfoldMore,
   KeyboardDoubleArrowDown,
+  Forum,
 } from '@mui/icons-material';
 import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
@@ -86,6 +89,8 @@ interface ConversationTimelineProps {
   onJumpToSummary?: () => void;
   /** Whether the summary is an executive summary (true) or final analysis (false) */
   hasExecutiveSummary?: boolean;
+  /** Start with the entire timeline collapsed (for terminal sessions opened directly) */
+  defaultCollapsed?: boolean;
 }
 
 /**
@@ -123,7 +128,11 @@ export default function ConversationTimeline({
   searchTerm,
   onJumpToSummary,
   hasExecutiveSummary,
+  defaultCollapsed,
 }: ConversationTimelineProps) {
+  // --- Whole-timeline collapse (for terminal sessions opened directly) ---
+  const [timelineCollapsed, setTimelineCollapsed] = useState(defaultCollapsed ?? false);
+
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);
   const handleSelectedAgentChange = useCallback((executionId: string | null) => {
@@ -371,96 +380,129 @@ export default function ConversationTimeline({
 
   return (
     <Card>
-      {/* Card header: search (left) + expand/collapse + copy (right) */}
-      <CardContent sx={{ pb: 1, pt: 1.5, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
-          {onSearchChange && (
-            <SessionSearchBar
-              matchCount={searchMatchCount ?? 0}
-              currentMatchIndex={currentSearchMatchIndex ?? 0}
-              onSearchChange={onSearchChange}
-              onNextMatch={onNextSearchMatch ?? (() => {})}
-              onPrevMatch={onPrevSearchMatch ?? (() => {})}
-              variant="inline"
-            />
-          )}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 'auto' }}>
-            {onJumpToSummary && (
-              <Tooltip title={hasExecutiveSummary ? 'Jump to Summary' : 'Jump to Final Analysis'}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={onJumpToSummary}
-                  endIcon={<KeyboardDoubleArrowDown sx={{ fontSize: '0.95rem' }} />}
-                  sx={{ textTransform: 'none', whiteSpace: 'nowrap', color: 'primary.main' }}
-                >
-                  {hasExecutiveSummary ? 'Summary' : 'Final Analysis'}
-                </Button>
-              </Tooltip>
-            )}
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={expandAllReasoning ? <ExpandLess /> : <ExpandMore />}
-              onClick={() => {
-                setExpandAllReasoning((v) => !v);
-                setManualOverrides(new Set());
-              }}
-              sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
-            >
-              {expandAllReasoning ? 'Collapse Reasoning' : 'Expand Reasoning'}
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={expandAllToolCalls ? <ExpandLess /> : <ExpandMore />}
-              onClick={() => setExpandAllToolCalls((v) => !v)}
-              sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
-            >
-              {expandAllToolCalls ? 'Collapse Tools' : 'Expand Tools'}
-            </Button>
-            <CopyButton
-              text={plainText}
-              variant="icon"
-              size="small"
-              tooltip="Copy chat flow"
-            />
-          </Box>
-        </Box>
-      </CardContent>
-
-      {/* Blue "AI Reasoning Flow" bar */}
+      {/* Accordion header — matches ChatPanel / FinalAnalysisCard pattern */}
       <Box
+        onClick={() => setTimelineCollapsed((v) => !v)}
         sx={(theme) => ({
-          bgcolor: alpha(theme.palette.primary.main, 0.08),
-          py: 1.5,
-          px: 3,
-          mt: 1,
-          borderTop: `2px solid ${theme.palette.primary.main}`,
-          borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.25)}`,
+          p: 2.5,
+          display: 'flex',
+          alignItems: 'center',
+          cursor: 'pointer',
+          bgcolor: !timelineCollapsed
+            ? alpha(theme.palette.primary.main, 0.06)
+            : alpha(theme.palette.primary.main, 0.03),
+          transition: 'all 0.3s ease-in-out',
+          borderBottom: !timelineCollapsed ? `1px solid ${theme.palette.divider}` : 'none',
+          '&:hover': {
+            bgcolor: alpha(theme.palette.primary.main, 0.08),
+          },
         })}
       >
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 600,
-            color: 'primary.main',
-            fontSize: '0.9rem',
-            letterSpacing: 0.3,
-          }}
+        <Box
+          sx={(theme) => ({
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            bgcolor: alpha(theme.palette.primary.main, 0.15),
+            border: '2px solid',
+            borderColor: 'primary.main',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            mr: 2,
+            flexShrink: 0,
+          })}
         >
-          💬 AI Reasoning Flow
-        </Typography>
+          <Forum sx={{ fontSize: 24, color: 'primary.main' }} />
+        </Box>
+
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary' }}>
+            AI Reasoning Flow
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
+            {timelineCollapsed
+              ? `${stageGroups.length} ${stageGroups.length === 1 ? 'stage' : 'stages'} · Click to expand`
+              : `${stageGroups.length} ${stageGroups.length === 1 ? 'stage' : 'stages'}`}
+          </Typography>
+        </Box>
+
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            setTimelineCollapsed((v) => !v);
+          }}
+          sx={(theme) => ({
+            bgcolor: alpha(theme.palette.primary.main, 0.12),
+            '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.22) },
+          })}
+        >
+          {timelineCollapsed ? <UnfoldMore /> : <ExpandLess />}
+        </IconButton>
       </Box>
 
-      {/* Content area */}
-      <Box sx={{ px: 3, pt: 3, pb: 5, bgcolor: 'background.paper', minHeight: 200 }} data-autoscroll-container>
+      <Collapse in={!timelineCollapsed} timeout={400}>
+        {/* Toolbar: search + expand/collapse + copy */}
+        <CardContent sx={{ pb: 1, pt: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {onSearchChange && (
+              <SessionSearchBar
+                matchCount={searchMatchCount ?? 0}
+                currentMatchIndex={currentSearchMatchIndex ?? 0}
+                onSearchChange={onSearchChange}
+                onNextMatch={onNextSearchMatch ?? (() => {})}
+                onPrevMatch={onPrevSearchMatch ?? (() => {})}
+                variant="inline"
+              />
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 'auto' }}>
+              {onJumpToSummary && (
+                <Tooltip title={hasExecutiveSummary ? 'Jump to Summary' : 'Jump to Final Analysis'}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={onJumpToSummary}
+                    endIcon={<KeyboardDoubleArrowDown sx={{ fontSize: '0.95rem' }} />}
+                    sx={{ textTransform: 'none', whiteSpace: 'nowrap', color: 'primary.main' }}
+                  >
+                    {hasExecutiveSummary ? 'Summary' : 'Final Analysis'}
+                  </Button>
+                </Tooltip>
+              )}
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={expandAllReasoning ? <ExpandLess /> : <ExpandMore />}
+                onClick={() => {
+                  setExpandAllReasoning((v) => !v);
+                  setManualOverrides(new Set());
+                }}
+                sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+              >
+                {expandAllReasoning ? 'Collapse Reasoning' : 'Expand Reasoning'}
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={expandAllToolCalls ? <ExpandLess /> : <ExpandMore />}
+                onClick={() => setExpandAllToolCalls((v) => !v)}
+                sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+              >
+                {expandAllToolCalls ? 'Collapse Tools' : 'Expand Tools'}
+              </Button>
+              <CopyButton
+                text={plainText}
+                variant="icon"
+                size="small"
+                tooltip="Copy chat flow"
+              />
+            </Box>
+          </Box>
+        </CardContent>
+
+        {/* Content area */}
+        <Box sx={{ px: 3, pt: 3, pb: 5, bgcolor: 'background.paper', minHeight: 200 }} data-autoscroll-container>
         {stageGroups.map((group) => {
           const isCollapsed = stageCollapseOverrides.has(group.stageId)
             ? stageCollapseOverrides.get(group.stageId)!
@@ -530,6 +572,7 @@ export default function ConversationTimeline({
         {/* Processing indicator */}
         {showProcessingIndicator && <ProcessingIndicator message={displayStatus} />}
       </Box>
+      </Collapse>
     </Card>
   );
 }

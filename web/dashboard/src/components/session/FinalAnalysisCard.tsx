@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Tooltip } from '@mui/material';
-import { Psychology, ContentCopy, ExpandMore, AutoAwesome, ThumbsUpDown } from '@mui/icons-material';
+import { Psychology, ContentCopy, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
@@ -173,8 +173,8 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               >
                 Copy {isFakeAnalysis ? 'Message' : 'Analysis'}
               </Button>
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnalysisExpanded(!analysisExpanded); }} sx={{ transition: 'transform 0.4s', transform: analysisExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                <ExpandMore />
+              <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnalysisExpanded(!analysisExpanded); }} sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12), '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) } }}>
+                {analysisExpanded ? <ExpandLess /> : <UnfoldMore />}
               </IconButton>
             </Box>
           </Box>

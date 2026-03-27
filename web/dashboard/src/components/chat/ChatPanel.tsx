@@ -19,7 +19,7 @@ import {
   Alert,
   alpha,
 } from '@mui/material';
-import { AccountCircle, ExpandMore } from '@mui/icons-material';
+import { AccountCircle, ExpandLess, UnfoldMore } from '@mui/icons-material';
 import ChatInput from './ChatInput.tsx';
 
 interface ChatPanelProps {
@@ -187,11 +187,11 @@ export default function ChatPanel({
             handleToggle();
           }}
           sx={{
-            transition: 'transform 0.3s',
-            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+            '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) },
           }}
         >
-          <ExpandMore />
+          {expanded ? <ExpandLess /> : <UnfoldMore />}
         </IconButton>
       </Box>
 

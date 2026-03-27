@@ -167,9 +167,9 @@ This undoes the header compression — the user still can't see content without 
 
 ### E5. Surface executive summary near the top ✅
 
-- ✅ **Summary-first layout for completed sessions** — when navigating to an already-terminal session, `FinalAnalysisCard` + `ExtractedLearningsCard` render _above_ the timeline. The user sees the conclusion immediately without scrolling.
-- ✅ **No layout shift for live sessions** — tracked via `wasTerminalOnMount` ref. If you open a live session that then completes, the order stays timeline-first (no jarring restructure). Refresh after completion gives the summary-first view.
-- ✅ **"Jump to Summary" button in timeline header** — present only in the normal (timeline-first) layout; redundant in summary-first layout so omitted there.
+- ✅ **Auto-collapsed timeline for terminal sessions** — when navigating to an already-terminal session, the `ConversationTimeline` card starts collapsed (via `defaultCollapsed={wasTerminalOnMount}`). The user immediately sees the `FinalAnalysisCard` + `ExtractedLearningsCard` below without scrolling through the full reasoning flow. A single click on the header bar expands the timeline.
+- ✅ **No layout shift for live sessions** — tracked via `wasTerminalOnMount` ref. If you open a live session that then completes, the timeline stays expanded (no jarring restructure). Only sessions already complete on page load start collapsed.
+- ✅ **"Jump to Summary" button in timeline header** — visible when the timeline is expanded and there is final content to scroll to.
 
 ### E6. Compact "Have follow-up questions?"
 

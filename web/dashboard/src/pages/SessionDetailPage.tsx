@@ -1462,8 +1462,6 @@ export function SessionDetailPage() {
   // ────────────────────────────────────────────────────────────
 
   const hasFinalContent = session?.final_analysis || session?.executive_summary || session?.error_message;
-  // Show summary above timeline for sessions that were already complete on load.
-  const showSummaryFirst = wasTerminalOnMount && !!hasFinalContent;
 
   return (
     <>
@@ -1605,34 +1603,6 @@ export function SessionDetailPage() {
               />
             </Suspense>
 
-            {/* Summary-first layout: Final Analysis + Learnings above the timeline */}
-            {showSummaryFirst && (
-              <>
-                <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
-                  <FinalAnalysisCard
-                    ref={finalAnalysisRef}
-                    analysis={session.final_analysis}
-                    summary={session.executive_summary}
-                    sessionStatus={session.status}
-                    errorMessage={session.error_message}
-                    expandCounter={expandCounter}
-                    collapseCounter={collapseCounter}
-                    sessionId={session.id}
-                    latestScore={session.latest_score}
-                    scoringStatus={session.scoring_status}
-                    qualityRating={session.quality_rating}
-                    onReviewClick={handleReviewClick}
-                  />
-                </Suspense>
-                <Suspense fallback={null}>
-                  <ExtractedLearningsCard
-                    sessionId={session.id}
-                    hasScore={session.latest_score != null}
-                  />
-                </Suspense>
-              </>
-            )}
-
             {/* Conversation Timeline */}
             {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
@@ -1651,7 +1621,8 @@ export function SessionDetailPage() {
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}
                   searchTerm={debouncedSearchTerm}
-                  {...(!showSummaryFirst && hasFinalContent ? {
+                  defaultCollapsed={wasTerminalOnMount}
+                  {...(hasFinalContent ? {
                     onJumpToSummary: handleJumpToSummary,
                     hasExecutiveSummary: !!session.executive_summary,
                   } : {})}
@@ -1713,33 +1684,31 @@ export function SessionDetailPage() {
               </Suspense>
             )}
 
-            {/* Final AI Analysis + Learnings (normal layout: below timeline) */}
-            {!showSummaryFirst && (
-              <>
-                <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
-                  <FinalAnalysisCard
-                    ref={finalAnalysisRef}
-                    analysis={session.final_analysis}
-                    summary={session.executive_summary}
-                    sessionStatus={session.status}
-                    errorMessage={session.error_message}
-                    expandCounter={expandCounter}
-                    collapseCounter={collapseCounter}
-                    sessionId={session.id}
-                    latestScore={session.latest_score}
-                    scoringStatus={session.scoring_status}
-                    qualityRating={session.quality_rating}
-                    onReviewClick={handleReviewClick}
-                  />
-                </Suspense>
-                <Suspense fallback={null}>
-                  <ExtractedLearningsCard
-                    sessionId={session.id}
-                    hasScore={session.latest_score != null}
-                  />
-                </Suspense>
-              </>
-            )}
+            {/* Final AI Analysis */}
+            <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
+              <FinalAnalysisCard
+                ref={finalAnalysisRef}
+                analysis={session.final_analysis}
+                summary={session.executive_summary}
+                sessionStatus={session.status}
+                errorMessage={session.error_message}
+                expandCounter={expandCounter}
+                collapseCounter={collapseCounter}
+                sessionId={session.id}
+                latestScore={session.latest_score}
+                scoringStatus={session.scoring_status}
+                qualityRating={session.quality_rating}
+                onReviewClick={handleReviewClick}
+              />
+            </Suspense>
+
+            {/* Lessons learned (memories) from this investigation */}
+            <Suspense fallback={null}>
+              <ExtractedLearningsCard
+                sessionId={session.id}
+                hasScore={session.latest_score != null}
+              />
+            </Suspense>
 
             {/* Review modals */}
             <CompleteReviewModal
