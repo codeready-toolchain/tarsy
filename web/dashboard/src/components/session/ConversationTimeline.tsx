@@ -133,6 +133,11 @@ export default function ConversationTimeline({
   // --- Whole-timeline collapse (for terminal sessions opened directly) ---
   const [timelineCollapsed, setTimelineCollapsed] = useState(defaultCollapsed ?? false);
 
+  // Sync when defaultCollapsed flips to true after initial data loads
+  useEffect(() => {
+    if (defaultCollapsed) setTimelineCollapsed(true);
+  }, [defaultCollapsed]);
+
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);
   const handleSelectedAgentChange = useCallback((executionId: string | null) => {

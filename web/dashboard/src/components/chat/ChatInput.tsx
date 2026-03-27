@@ -25,6 +25,10 @@ interface ChatInputProps {
   sendingMessage?: boolean;
   canCancel?: boolean;
   canceling?: boolean;
+  /** Single-row input with tighter padding */
+  compact?: boolean;
+  /** Override the default placeholder text */
+  placeholder?: string;
 }
 
 export default function ChatInput({
@@ -34,6 +38,8 @@ export default function ChatInput({
   sendingMessage = false,
   canCancel = false,
   canceling = false,
+  compact = false,
+  placeholder: placeholderProp,
 }: ChatInputProps) {
   const [content, setContent] = useState('');
 
@@ -60,8 +66,9 @@ export default function ChatInput({
     <Box>
       <Box
         sx={{
-          p: { xs: 1, sm: 2 },
-          borderTop: 1,
+          p: compact ? 0 : { xs: 1, sm: 2 },
+          pb: compact ? 1.5 : undefined,
+          borderTop: compact ? 0 : 1,
           borderColor: 'divider',
           display: 'flex',
           gap: 1,
@@ -70,12 +77,12 @@ export default function ChatInput({
         <TextField
           fullWidth
           multiline
-          minRows={2}
-          maxRows={8}
+          minRows={compact ? 1 : 2}
+          maxRows={compact ? 4 : 8}
           placeholder={
             sendingMessage
               ? 'AI is processing...'
-              : 'Type your question... (press Enter for new line)'
+              : placeholderProp || 'Type your question... (press Enter for new line)'
           }
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -88,6 +95,10 @@ export default function ChatInput({
               : undefined
           }
           sx={{
+            '& .MuiOutlinedInput-input::placeholder': {
+              color: 'text.secondary',
+              opacity: 0.8,
+            },
             '& .MuiOutlinedInput-root': {
               fontSize: { xs: '0.875rem', sm: '1rem' },
               transition: 'all 0.3s ease',

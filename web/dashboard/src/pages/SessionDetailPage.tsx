@@ -29,7 +29,6 @@ import {
   ToggleButtonGroup,
 } from '@mui/material';
 import {
-  KeyboardDoubleArrowDown,
   Psychology,
   AccountTree,
 } from '@mui/icons-material';
@@ -263,8 +262,6 @@ export function SessionDetailPage() {
 
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
-  const [collapseCounter, setCollapseCounter] = useState(0);
-  const [chatExpandCounter, setChatExpandCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
   // --- Layout order: was the session already terminal when first loaded?
@@ -1369,14 +1366,6 @@ export function SessionDetailPage() {
     chatState.cancelExecution();
   }, [chatState.cancelExecution]);
 
-  const handleCollapseAnalysis = useCallback(() => {
-    setCollapseCounter((prev) => prev + 1);
-  }, []);
-
-  const handleJumpToChat = useCallback(() => {
-    setChatExpandCounter((prev) => prev + 1);
-  }, []);
-
   const handleReviewClick = useCallback(() => {
     if (!session) return;
     setReviewModalMode(getReviewModalMode(session.review_status));
@@ -1621,7 +1610,7 @@ export function SessionDetailPage() {
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}
                   searchTerm={debouncedSearchTerm}
-                  defaultCollapsed={wasTerminalOnMount}
+                  defaultCollapsed={wasTerminalOnMount && session.status === SESSION_STATUS.COMPLETED}
                   {...(hasFinalContent ? {
                     onJumpToSummary: handleJumpToSummary,
                     hasExecutiveSummary: !!session.executive_summary,
@@ -1678,8 +1667,6 @@ export function SessionDetailPage() {
                   canceling={chatState.canceling}
                   error={chatState.error}
                   onClearError={chatState.clearError}
-                  forceExpand={chatExpandCounter}
-                  onCollapseAnalysis={handleCollapseAnalysis}
                 />
               </Suspense>
             )}
@@ -1693,7 +1680,6 @@ export function SessionDetailPage() {
                 sessionStatus={session.status}
                 errorMessage={session.error_message}
                 expandCounter={expandCounter}
-                collapseCounter={collapseCounter}
                 sessionId={session.id}
                 latestScore={session.latest_score}
                 scoringStatus={session.scoring_status}
@@ -1736,29 +1722,6 @@ export function SessionDetailPage() {
               feedbackEdited={session.feedback_edited}
             />
 
-            {/* Jump to Chat button — after Final Analysis, at the bottom */}
-            {isChatAvailable && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                <Button
-                  variant="text"
-                  size="medium"
-                  onClick={handleJumpToChat}
-                  startIcon={<KeyboardDoubleArrowDown sx={{ transform: 'rotate(180deg)' }} />}
-                  endIcon={<KeyboardDoubleArrowDown sx={{ transform: 'rotate(180deg)' }} />}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.95rem',
-                    py: 1,
-                    px: 3,
-                    color: 'primary.main',
-                    '&:hover': { backgroundColor: 'action.hover' },
-                  }}
-                >
-                  Jump to Follow-up Chat
-                </Button>
-              </Box>
-            )}
           </Box>
         )}
         </Box>
