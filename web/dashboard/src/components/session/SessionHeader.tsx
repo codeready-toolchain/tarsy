@@ -27,7 +27,7 @@ import CopyButton from '../shared/CopyButton';
 import { AlertDataContent } from './OriginalAlertCard';
 import { StatusBadge } from '../common/StatusBadge';
 import ProgressIndicator from '../common/ProgressIndicator';
-import { formatTimestamp, formatTokens } from '../../utils/format';
+import { formatTimestamp, formatTokensCompact } from '../../utils/format';
 import { cancelSession, triggerScoring, handleAPIError } from '../../services/api';
 import {
   SESSION_STATUS,
@@ -324,14 +324,14 @@ export default function SessionHeader({
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
                     <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.main' }}>
-                      {formatTokens(session.total_tokens)}
+                      {formatTokensCompact(session.total_tokens)}
                     </Typography>
                     <Typography variant="caption" color="text.disabled">total</Typography>
                   </Box>
                   {session.input_tokens != null && (
                     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'info.main' }}>
-                        {formatTokens(session.input_tokens)}
+                        {formatTokensCompact(session.input_tokens)}
                       </Typography>
                       <Typography variant="caption" color="text.disabled">in</Typography>
                     </Box>
@@ -339,7 +339,7 @@ export default function SessionHeader({
                   {session.output_tokens != null && (
                     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
-                        {formatTokens(session.output_tokens)}
+                        {formatTokensCompact(session.output_tokens)}
                       </Typography>
                       <Typography variant="caption" color="text.disabled">out</Typography>
                     </Box>

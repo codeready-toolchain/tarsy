@@ -242,7 +242,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
     <Box
       data-flow-item-id={item.id}
       sx={(theme) => ({
-        ml: 4, my: 1, mr: 1,
+        ml: 4, my: 0.5, mr: 1,
         border: '2px solid',
         borderColor: alpha(theme.palette[accentKey].main, 0.5),
         borderRadius: 1.5,

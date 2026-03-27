@@ -480,7 +480,7 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
       data-flow-item-id={item.id}
       sx={{
         ml: 4,
-        my: 1,
+        my: 0.5,
         mr: 1,
         border: '2px solid',
         borderColor: alpha(boxColor, 0.5),

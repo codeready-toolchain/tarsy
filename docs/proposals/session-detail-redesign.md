@@ -153,14 +153,11 @@ This undoes the header compression — the user still can't see content without 
 - ✅ **Removed "PARALLEL EXECUTION" header** — the agent cards themselves make the multi-agent layout obvious.
 - ✅ **Compacted cards to 2 rows** — Row 1: name + status chip; Row 2: model info + tokens inline. Reduced vertical padding.
 
-### E3. Tighter tool call rendering
+### E3. Tighter tool call rendering (partial ✅)
 
-13+ tool calls render as full-width colored bars with nearly identical styling. Hard to scan — the eye can't differentiate them quickly.
-
-- **Group consecutive tool calls tighter** — reduce vertical gap between them.
-- **Collapse thought indicators** — "Thought for 2s..." as inline labels (`💭 2s` next to the preceding tool call) instead of separate rows.
-- **Make failed tool calls stand out more** — error icon or count badge, not just a border color change.
-- **Consider compact mode** — tool calls as a condensed list or table for sessions with many calls.
+- ✅ **Tighter vertical gaps** — reduced `my`/`mb` on tool calls (`1` → `0.5`), thoughts/summaries (`1.5` → `1`), fallback items (`2` → `1`).
+- _Skipped_: Collapse thought indicators (conflicts with streaming UX).
+- _Deferred_: Failed tool call prominence, compact mode (needs more design work).
 
 ### E4. Stronger stage dividers
 

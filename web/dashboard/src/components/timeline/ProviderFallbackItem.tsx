@@ -62,7 +62,7 @@ function ProviderFallbackItem({ item, searchTerm }: ProviderFallbackItemProps) {
   const formattedMessage = formatErrorMessage(strippedMessage);
 
   return (
-    <Box data-flow-item-id={item.id} sx={{ my: 2 }}>
+    <Box data-flow-item-id={item.id} sx={{ my: 1 }}>
       <Box sx={{ display: 'flex', alignItems: 'stretch' }}>
         <Box
           sx={(theme) => ({

@@ -44,7 +44,7 @@ function ToolSummaryItem({
     <Box
       data-flow-item-id={item.id}
       sx={{
-        mb: 1.5,
+        mb: 1,
         display: 'flex',
         gap: 1.5,
         alignItems: 'flex-start',

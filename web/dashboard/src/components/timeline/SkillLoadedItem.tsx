@@ -30,7 +30,7 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm }: SkillLoadedIte
     <Box
       data-flow-item-id={item.id}
       sx={(theme) => ({
-        ml: 4, my: 1, mr: 1,
+        ml: 4, my: 0.5, mr: 1,
         border: '2px solid',
         borderColor: alpha(theme.palette.info.main, 0.5),
         borderRadius: 1.5,
