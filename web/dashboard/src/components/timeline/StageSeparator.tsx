@@ -54,7 +54,7 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
   );
 
   return (
-    <Box sx={{ my: 1.5 }}>
+    <Box sx={{ my: isCollapsed ? 0.5 : 1.5 }}>
       <Divider
         role={onToggleCollapse ? 'button' : undefined}
         tabIndex={onToggleCollapse ? 0 : undefined}

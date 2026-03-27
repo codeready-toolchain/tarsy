@@ -14,24 +14,24 @@ export const theme = createTheme({
   colorSchemes: {
     light: {
       palette: {
-        primary: { main: '#3949AB' },
-        secondary: { main: '#546E7A' },
-        success: { main: '#00796B' },
-        error: { main: '#C62828' },
-        warning: { main: '#F9A825' },
+        primary: { main: '#1976d2' },
+        secondary: { main: '#424242' },
+        success: { main: '#2e7d32' },
+        error: { main: '#d32f2f' },
+        warning: { main: '#ed6c02' },
         info: { main: '#0288d1' },
-        background: { default: '#F1F3F9', paper: '#FAFBFF' },
+        background: { default: '#fafafa', paper: '#ffffff' },
       },
     },
     dark: {
       palette: {
-        primary: { main: '#7986CB' },
-        secondary: { main: '#90A4AE' },
-        success: { main: '#4DB6AC' },
-        error: { main: '#EF9A9A' },
-        warning: { main: '#FFD54F' },
-        info: { main: '#81D4FA' },
-        background: { default: '#0F1320', paper: '#181D2E' },
+        primary: { main: '#90caf9' },
+        secondary: { main: '#90a4ae' },
+        success: { main: '#a5d6a7' },
+        error: { main: '#ef9a9a' },
+        warning: { main: '#ffcc80' },
+        info: { main: '#81d4fa' },
+        background: { default: '#121212', paper: '#1e1e1e' },
       },
     },
   },
@@ -48,7 +48,7 @@ export const theme = createTheme({
         },
         body: {
           ...theme.applyStyles('dark', {
-            scrollbarColor: '#3949AB #181D2E',
+            scrollbarColor: '#555 #1e1e1e',
           }),
         },
         '.search-highlight': {
@@ -72,9 +72,9 @@ export const theme = createTheme({
       styleOverrides: {
         head: ({ theme }) => ({
           fontWeight: 600,
-          backgroundColor: '#E8EBF5',
+          backgroundColor: '#f5f5f5',
           ...theme.applyStyles('dark', {
-            backgroundColor: 'rgba(121, 134, 203, 0.08)',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
           }),
         }),
       },
