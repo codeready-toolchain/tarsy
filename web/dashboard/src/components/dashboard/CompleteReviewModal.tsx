@@ -46,7 +46,7 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
       setActionTaken('');
       setInvestigationFeedback('');
     }
-  }, [open]);
+  }, [open, initialRating]);
 
   const handleComplete = () => {
     if (!qualityRating) return;

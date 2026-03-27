@@ -314,8 +314,9 @@ export function AlertDataContent({ alertData }: { alertData: string }) {
     });
   }, [parsed, isObject]);
 
-  const simpleFields = useMemo(() => fields.filter(([, v]) => isSimpleValue(v)), [fields]);
-  const complexFields = useMemo(() => fields.filter(([, v]) => !isSimpleValue(v)), [fields]);
+  const headlineKeys = new Set(['severity', 'environment', 'alert_type']);
+  const simpleFields = useMemo(() => fields.filter(([k, v]) => isSimpleValue(v) && !headlineKeys.has(k)), [fields]);
+  const complexFields = useMemo(() => fields.filter(([k, v]) => !isSimpleValue(v) && !headlineKeys.has(k)), [fields]);
 
   const severity = isObject ? parsed.severity : null;
   const environment = isObject ? parsed.environment : null;

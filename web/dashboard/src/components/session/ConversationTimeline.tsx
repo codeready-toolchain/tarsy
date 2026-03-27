@@ -43,6 +43,8 @@ import { TERMINAL_EXECUTION_STATUSES, SCORING_STATUS_MESSAGE } from '../../const
  * While the session is streaming, synthesis stays expanded so the user
  * can watch the reasoning flow in real time.
  */
+const NOOP = () => {};
+
 function shouldAutoCollapseStage(group: StageGroup, isSessionActive: boolean): boolean {
   const isCollapsible = !!group.stageType && COLLAPSIBLE_STAGE_TYPES.has(group.stageType);
   if (!isCollapsible) return false;
@@ -464,8 +466,8 @@ export default function ConversationTimeline({
                 matchCount={searchMatchCount ?? 0}
                 currentMatchIndex={currentSearchMatchIndex ?? 0}
                 onSearchChange={onSearchChange}
-                onNextMatch={onNextSearchMatch ?? (() => {})}
-                onPrevMatch={onPrevSearchMatch ?? (() => {})}
+                onNextMatch={onNextSearchMatch ?? NOOP}
+                onPrevMatch={onPrevSearchMatch ?? NOOP}
                 variant="inline"
               />
             )}

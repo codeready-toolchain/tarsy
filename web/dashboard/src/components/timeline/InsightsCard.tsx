@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, memo, type ReactNode } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, PsychologyOutlined } from '@mui/icons-material';
 
@@ -69,4 +69,4 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
   );
 }
 
-export default InsightsCard;
+export default memo(InsightsCard);

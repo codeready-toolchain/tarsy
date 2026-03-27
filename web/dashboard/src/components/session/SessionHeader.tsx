@@ -161,6 +161,13 @@ export default function SessionHeader({
     }
   }, [session.id]);
 
+  useEffect(() => {
+    if (!scoringTriggered) return;
+    if (session.latest_score != null || (session.scoring_status && session.scoring_status !== 'in_progress')) {
+      setScoringTriggered(false);
+    }
+  }, [scoringTriggered, session.latest_score, session.scoring_status]);
+
   return (
     <Paper
       elevation={2}
