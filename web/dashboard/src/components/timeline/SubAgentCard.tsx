@@ -89,12 +89,11 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   return (
     <Box
       sx={{
-        ml: 4, my: 1, mr: 1,
-        border: isRunning ? '2px dashed' : '2px solid',
-        borderColor: alpha(accentColor, isRunning ? 0.4 : 0.5),
+        ml: 4, my: 0.5, mr: 1,
+        border: isRunning ? '1px dashed' : '1px solid',
+        borderColor: alpha(accentColor, 0.25),
         borderRadius: 1.5,
-        bgcolor: alpha(accentColor, isRunning ? 0.05 : 0.08),
-        boxShadow: `0 1px 3px ${alpha(theme.palette.common.black, 0.08)}`,
+        bgcolor: alpha(accentColor, 0.04),
         overflow: 'hidden',
       }}
     >
@@ -106,7 +105,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, minWidth: 0,
           cursor: hasContent ? 'pointer' : 'default',
           transition: 'background-color 0.2s ease',
-          '&:hover': hasContent ? { bgcolor: alpha(accentColor, 0.12) } : {},
+          '&:hover': hasContent ? { bgcolor: alpha(accentColor, 0.08) } : {},
         }}
       >
         <Hub sx={{
@@ -116,13 +115,13 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
         }} />
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, fontSize: '0.9rem', color: accentColor, whiteSpace: 'nowrap', flexShrink: 0 }}
+          sx={{ fontWeight: 700, fontSize: '0.9rem', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           Sub-agent
         </Typography>
         <Typography
           variant="body2"
-          sx={{ fontWeight: 400, fontSize: '0.9rem', color: accentColor, whiteSpace: 'nowrap', flexShrink: 0 }}
+          sx={{ fontWeight: 400, fontSize: '0.9rem', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           {agentName}
         </Typography>
