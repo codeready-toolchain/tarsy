@@ -167,7 +167,9 @@ This undoes the header compression — the user still can't see content without 
 
 ### E5. Surface executive summary near the top ✅
 
-- ✅ **"Jump to Summary" / "Final Analysis" button moved into the timeline card header** — sits inline with the expand/collapse + copy buttons. Zero layout shift during streaming (button only appears when final content exists). Removed the standalone centered button that was adding ~80px of chrome between the session header and timeline.
+- ✅ **Summary-first layout for completed sessions** — when navigating to an already-terminal session, `FinalAnalysisCard` + `ExtractedLearningsCard` render _above_ the timeline. The user sees the conclusion immediately without scrolling.
+- ✅ **No layout shift for live sessions** — tracked via `wasTerminalOnMount` ref. If you open a live session that then completes, the order stays timeline-first (no jarring restructure). Refresh after completion gives the summary-first view.
+- ✅ **"Jump to Summary" button in timeline header** — present only in the normal (timeline-first) layout; redundant in summary-first layout so omitted there.
 
 ### E6. Compact "Have follow-up questions?"
 

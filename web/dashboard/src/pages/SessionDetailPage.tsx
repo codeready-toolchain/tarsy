@@ -267,12 +267,26 @@ export function SessionDetailPage() {
   const [chatExpandCounter, setChatExpandCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
 
+  // --- Layout order: was the session already terminal when first loaded?
+  //     If yes, show summary above the timeline (no layout shift for live sessions).
+  const [wasTerminalOnMount, setWasTerminalOnMount] = useState(false);
+  const terminalCheckIdRef = useRef<string | null>(null);
+
   // --- Stale-fetch guard: tracks current route id so in-flight getSession
   //     calls from a previous route don't overwrite state after navigation ---
   const currentIdRef = useRef(id);
   useEffect(() => {
     currentIdRef.current = id;
   }, [id]);
+
+  // Set wasTerminalOnMount once per session load (guarded by id).
+  // Resets automatically when navigating to a different session.
+  useEffect(() => {
+    if (!session || loading) return;
+    if (terminalCheckIdRef.current === (id ?? null)) return;
+    terminalCheckIdRef.current = id ?? null;
+    setWasTerminalOnMount(isTerminalStatus(session.status as SessionStatus));
+  }, [session, loading, id]);
 
   // --- Dedup tracking ---
   const knownEventIdsRef = useRef<Set<string>>(new Set());
@@ -1447,7 +1461,9 @@ export function SessionDetailPage() {
   // Render
   // ────────────────────────────────────────────────────────────
 
-  const hasFinalContent = session?.final_analysis || session?.executive_summary;
+  const hasFinalContent = session?.final_analysis || session?.executive_summary || session?.error_message;
+  // Show summary above timeline for sessions that were already complete on load.
+  const showSummaryFirst = wasTerminalOnMount && !!hasFinalContent;
 
   return (
     <>
@@ -1589,6 +1605,34 @@ export function SessionDetailPage() {
               />
             </Suspense>
 
+            {/* Summary-first layout: Final Analysis + Learnings above the timeline */}
+            {showSummaryFirst && (
+              <>
+                <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
+                  <FinalAnalysisCard
+                    ref={finalAnalysisRef}
+                    analysis={session.final_analysis}
+                    summary={session.executive_summary}
+                    sessionStatus={session.status}
+                    errorMessage={session.error_message}
+                    expandCounter={expandCounter}
+                    collapseCounter={collapseCounter}
+                    sessionId={session.id}
+                    latestScore={session.latest_score}
+                    scoringStatus={session.scoring_status}
+                    qualityRating={session.quality_rating}
+                    onReviewClick={handleReviewClick}
+                  />
+                </Suspense>
+                <Suspense fallback={null}>
+                  <ExtractedLearningsCard
+                    sessionId={session.id}
+                    hasScore={session.latest_score != null}
+                  />
+                </Suspense>
+              </>
+            )}
+
             {/* Conversation Timeline */}
             {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
@@ -1607,7 +1651,7 @@ export function SessionDetailPage() {
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}
                   searchTerm={debouncedSearchTerm}
-                  {...(hasFinalContent ? {
+                  {...(!showSummaryFirst && hasFinalContent ? {
                     onJumpToSummary: handleJumpToSummary,
                     hasExecutiveSummary: !!session.executive_summary,
                   } : {})}
@@ -1649,7 +1693,7 @@ export function SessionDetailPage() {
               </Alert>
             )}
 
-            {/* Chat Panel — between timeline and Final Analysis */}
+            {/* Chat Panel — after timeline */}
             {isChatAvailable && (
               <Suspense fallback={null}>
                 <ChatPanel
@@ -1669,31 +1713,33 @@ export function SessionDetailPage() {
               </Suspense>
             )}
 
-            {/* Final AI Analysis */}
-            <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
-              <FinalAnalysisCard
-                ref={finalAnalysisRef}
-                analysis={session.final_analysis}
-                summary={session.executive_summary}
-                sessionStatus={session.status}
-                errorMessage={session.error_message}
-                expandCounter={expandCounter}
-                collapseCounter={collapseCounter}
-                sessionId={session.id}
-                latestScore={session.latest_score}
-                scoringStatus={session.scoring_status}
-                qualityRating={session.quality_rating}
-                onReviewClick={handleReviewClick}
-              />
-            </Suspense>
-
-            {/* Lessons learned (memories) from this investigation */}
-            <Suspense fallback={null}>
-              <ExtractedLearningsCard
-                sessionId={session.id}
-                hasScore={session.latest_score != null}
-              />
-            </Suspense>
+            {/* Final AI Analysis + Learnings (normal layout: below timeline) */}
+            {!showSummaryFirst && (
+              <>
+                <Suspense fallback={<Skeleton variant="rectangular" height={200} />}>
+                  <FinalAnalysisCard
+                    ref={finalAnalysisRef}
+                    analysis={session.final_analysis}
+                    summary={session.executive_summary}
+                    sessionStatus={session.status}
+                    errorMessage={session.error_message}
+                    expandCounter={expandCounter}
+                    collapseCounter={collapseCounter}
+                    sessionId={session.id}
+                    latestScore={session.latest_score}
+                    scoringStatus={session.scoring_status}
+                    qualityRating={session.quality_rating}
+                    onReviewClick={handleReviewClick}
+                  />
+                </Suspense>
+                <Suspense fallback={null}>
+                  <ExtractedLearningsCard
+                    sessionId={session.id}
+                    hasScore={session.latest_score != null}
+                  />
+                </Suspense>
+              </>
+            )}
 
             {/* Review modals */}
             <CompleteReviewModal
