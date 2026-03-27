@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Chip } from '@mui/material';
-import { Psychology, ContentCopy, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown, ThumbUp, ThumbDown } from '@mui/icons-material';
+import { Paper, Typography, Box, Alert, Collapse, IconButton, Tooltip } from '@mui/material';
+import { Psychology, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown, ThumbUp, ThumbDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
@@ -13,13 +13,6 @@ import { QUALITY_RATING } from '../../types/api';
 import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 import { getRatingConfig } from '../../constants/ratingConfig';
-
-/** Copy text to clipboard, using the modern Clipboard API with no legacy fallback. */
-function copyToClipboard(text: string, onSuccess: () => void) {
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(onSuccess).catch(() => { /* ignore */ });
-  }
-}
 
 interface FinalAnalysisCardProps {
   analysis: string | null;
@@ -67,7 +60,6 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
   ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, onReviewClick }, ref) => {
     const navigate = useNavigate();
     const [analysisExpanded, setAnalysisExpanded] = useState(false);
-    const [copySuccess, setCopySuccess] = useState(false);
     const [prevAnalysis, setPrevAnalysis] = useState<string | null>(null);
     const [isNewlyUpdated, setIsNewlyUpdated] = useState(false);
 
@@ -120,7 +112,6 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
     if (!displayAnalysis) return null;
 
     return (
-      <>
         <Paper ref={ref} sx={{ p: 3 }}>
           {/* Header */}
           <Box
@@ -142,15 +133,15 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 if (rating) {
                   const Icon = rating.icon;
                   return (
-                    <Chip
-                      icon={<Icon sx={{ fontSize: 16 }} />}
-                      label={rating.label}
-                      size="small"
-                      variant="outlined"
-                      color={rating.color}
-                      onClick={(e) => { e.stopPropagation(); onReviewClick(qualityRating ?? undefined); }}
-                      sx={{ cursor: 'pointer', fontWeight: 500 }}
-                    />
+                    <Tooltip title={`Reviewed as ${rating.label}`} arrow>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); onReviewClick(qualityRating ?? undefined); }}
+                        sx={{ color: `${rating.color}.main`, p: 0.5 }}
+                      >
+                        <Icon sx={{ fontSize: 20 }} />
+                      </IconButton>
+                    </Tooltip>
                   );
                 }
                 return (
@@ -189,16 +180,9 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               )}
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Button
-                startIcon={<ContentCopy />} variant="outlined" size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const text = getCombinedDocument();
-                  copyToClipboard(text, () => setCopySuccess(true));
-                }}
-              >
-                Copy {isFakeAnalysis ? 'Message' : 'Analysis'}
-              </Button>
+              <Box onClick={(e) => e.stopPropagation()}>
+                <CopyButton text={getCombinedDocument()} variant="icon" size="small" tooltip={`Copy ${isFakeAnalysis ? 'message' : 'analysis'}`} />
+              </Box>
               <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnalysisExpanded(!analysisExpanded); }} sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12), '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) } }}>
                 {analysisExpanded ? <ExpandLess /> : <UnfoldMore />}
               </IconButton>
@@ -267,14 +251,6 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
             )}
           </Collapse>
         </Paper>
-
-        <Snackbar
-          open={copySuccess} autoHideDuration={3000}
-          onClose={() => setCopySuccess(false)}
-          message="Analysis copied to clipboard"
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        />
-      </>
     );
   }
 );
