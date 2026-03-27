@@ -15,7 +15,7 @@ import {
   ExpandLess,
   UnfoldMore,
   KeyboardDoubleArrowDown,
-  Forum,
+  AccountTree,
 } from '@mui/icons-material';
 import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
@@ -418,12 +418,12 @@ export default function ConversationTimeline({
             flexShrink: 0,
           })}
         >
-          <Forum sx={{ fontSize: 24, color: 'primary.main' }} />
+          <AccountTree sx={{ fontSize: 24, color: 'primary.main' }} />
         </Box>
 
         <Box sx={{ flex: 1 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary' }}>
-            AI Reasoning Flow
+            Investigation Timeline
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
             {timelineCollapsed

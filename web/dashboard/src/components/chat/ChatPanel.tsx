@@ -13,7 +13,7 @@ import {
   Alert,
   alpha,
 } from '@mui/material';
-import { AccountCircle } from '@mui/icons-material';
+import { Forum } from '@mui/icons-material';
 import ChatInput from './ChatInput.tsx';
 
 interface ChatPanelProps {
@@ -85,7 +85,7 @@ export default function ChatPanel({
             flexShrink: 0,
           })}
         >
-          <AccountCircle sx={{ fontSize: 24, color: 'primary.main' }} />
+          <Forum sx={{ fontSize: 24, color: 'primary.main' }} />
         </Box>
 
         {/* Chat input fills the remaining space */}

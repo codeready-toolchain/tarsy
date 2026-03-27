@@ -112,7 +112,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
     if (!displayAnalysis) return null;
 
     return (
-        <Paper ref={ref} sx={{ p: 3 }}>
+        <Paper ref={ref} sx={{ p: 2.5 }}>
           {/* Header */}
           <Box
             sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: analysisExpanded ? 2 : 0, cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
