@@ -10,7 +10,7 @@ import {
   Alert,
   Button,
 } from '@mui/material';
-import { ExpandMore, School } from '@mui/icons-material';
+import { ExpandLess, UnfoldMore, School } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 
 import { getSessionMemories } from '../../services/api.ts';
@@ -20,6 +20,8 @@ interface ExtractedLearningsCardProps {
   sessionId: string;
   /** Whether the session has been scored (only show card when scored). */
   hasScore: boolean;
+  /** Increment to collapse from outside (e.g. when user starts a chat) */
+  collapseCounter?: number;
 }
 
 const valenceColor: Record<string, 'success' | 'error' | 'default'> = {
@@ -34,12 +36,16 @@ const categoryLabel: Record<string, string> = {
   procedural: 'Strategy',
 };
 
-export default function ExtractedLearningsCard({ sessionId, hasScore }: ExtractedLearningsCardProps) {
+export default function ExtractedLearningsCard({ sessionId, hasScore, collapseCounter = 0 }: ExtractedLearningsCardProps) {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<Error | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    if (collapseCounter > 0) setIsExpanded(false);
+  }, [collapseCounter]);
 
   useEffect(() => {
     if (!hasScore) {
@@ -87,20 +93,23 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
   }
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 2.5 }}>
       <Box
+        onClick={() => setIsExpanded(!isExpanded)}
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           mb: isExpanded ? 2 : 0,
+          cursor: 'pointer',
+          '&:hover': { opacity: 0.8 },
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <School fontSize="small" sx={{ color: 'info.main' }} />
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Lessons Learned
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: (theme) => alpha(theme.palette.info.main, 0.15), border: '2px solid', borderColor: 'info.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <School sx={{ fontSize: 24, color: 'info.main' }} />
+          </Box>
+          <Typography variant="h6">Lessons Learned</Typography>
           {memories.length > 0 && (
             <Chip
               label={memories.length}
@@ -112,14 +121,11 @@ export default function ExtractedLearningsCard({ sessionId, hasScore }: Extracte
         </Box>
         <IconButton
           size="small"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
           aria-label={isExpanded ? 'Collapse lessons' : 'Expand lessons'}
-          sx={{
-            transition: 'transform 0.4s',
-            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-          }}
+          sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12), '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) } }}
         >
-          <ExpandMore />
+          {isExpanded ? <ExpandLess /> : <UnfoldMore />}
         </IconButton>
       </Box>
 

@@ -17,7 +17,7 @@ import {
   alpha,
 } from '@mui/material';
 import {
-  CancelOutlined,
+  Stop,
   Replay as ReplayIcon,
   GradingOutlined,
   ExpandMore,
@@ -201,20 +201,36 @@ export default function SessionHeader({
             />
           </Box>
 
-          {/* Right: icon action buttons */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          {/* Right: action buttons */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
             {canCancel && (
               <Tooltip title={isCanceling || session.status === SESSION_STATUS.CANCELLING ? 'Canceling…' : 'Cancel session'}>
                 <span>
                   <IconButton
-                    size="small"
                     onClick={handleCancelClick}
                     disabled={isCanceling || session.status === SESSION_STATUS.CANCELLING}
-                    sx={{ color: 'error.main', '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.1) } }}
+                    sx={{
+                      color: 'error.main',
+                      border: '1px solid',
+                      borderColor: 'error.main',
+                      backgroundColor: 'transparent',
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        backgroundColor: 'error.main',
+                        borderColor: 'error.main',
+                        color: 'error.contrastText',
+                        transform: 'scale(1.05)',
+                      },
+                      '&:disabled': {
+                        borderColor: 'action.disabled',
+                        color: 'action.disabled',
+                        opacity: 0.5,
+                      },
+                    }}
                   >
                     {isCanceling || session.status === SESSION_STATUS.CANCELLING
-                      ? <CircularProgress size={18} color="inherit" />
-                      : <CancelOutlined sx={{ fontSize: '1.2rem' }} />}
+                      ? <CircularProgress size={22} color="inherit" />
+                      : <Stop />}
                   </IconButton>
                 </span>
               </Tooltip>
@@ -223,11 +239,22 @@ export default function SessionHeader({
             {isTerminal && (
               <Tooltip title="Re-submit alert">
                 <IconButton
-                  size="small"
                   onClick={handleResubmit}
-                  sx={{ color: 'info.main', '&:hover': { bgcolor: (theme) => alpha(theme.palette.info.main, 0.1) } }}
+                  sx={{
+                    color: 'info.main',
+                    border: '1px solid',
+                    borderColor: 'info.main',
+                    backgroundColor: 'transparent',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      backgroundColor: 'info.main',
+                      borderColor: 'info.main',
+                      color: 'info.contrastText',
+                      transform: 'scale(1.05)',
+                    },
+                  }}
                 >
-                  <ReplayIcon sx={{ fontSize: '1.2rem' }} />
+                  <ReplayIcon />
                 </IconButton>
               </Tooltip>
             )}

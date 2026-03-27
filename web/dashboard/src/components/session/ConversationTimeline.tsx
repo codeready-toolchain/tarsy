@@ -91,6 +91,8 @@ interface ConversationTimelineProps {
   hasExecutiveSummary?: boolean;
   /** Start with the entire timeline collapsed (for terminal sessions opened directly) */
   defaultCollapsed?: boolean;
+  /** Increment to expand the timeline from outside (e.g. when user sends a chat message) */
+  expandCounter?: number;
 }
 
 /**
@@ -129,6 +131,7 @@ export default function ConversationTimeline({
   onJumpToSummary,
   hasExecutiveSummary,
   defaultCollapsed,
+  expandCounter = 0,
 }: ConversationTimelineProps) {
   // --- Whole-timeline collapse (for terminal sessions opened directly) ---
   const [timelineCollapsed, setTimelineCollapsed] = useState(defaultCollapsed ?? false);
@@ -137,6 +140,11 @@ export default function ConversationTimeline({
   useEffect(() => {
     if (defaultCollapsed) setTimelineCollapsed(true);
   }, [defaultCollapsed]);
+
+  // Expand from outside (e.g. when user sends a chat message)
+  useEffect(() => {
+    if (expandCounter > 0) setTimelineCollapsed(false);
+  }, [expandCounter]);
 
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);

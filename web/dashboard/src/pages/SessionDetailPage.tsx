@@ -257,6 +257,10 @@ export function SessionDetailPage() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewInitialRating, setReviewInitialRating] = useState<string | undefined>(undefined);
 
+  // --- Counters for chat-triggered layout changes ---
+  const [timelineExpandCounter, setTimelineExpandCounter] = useState(0);
+  const [cardsCollapseCounter, setCardsCollapseCounter] = useState(0);
+
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -264,6 +268,7 @@ export function SessionDetailPage() {
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
   const finalAnalysisRef = useRef<HTMLDivElement>(null);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
 
   // --- Layout order: was the session already terminal when first loaded?
   //     If yes, show summary above the timeline (no layout shift for live sessions).
@@ -974,9 +979,6 @@ export function SessionDetailPage() {
               chatState.onStageStarted(payload.stage_id);
             } else if (TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
               chatState.onStageTerminal();
-              // Re-expand FinalAnalysisCard after the chat completes.
-              // It was auto-collapsed when the user opened the chat panel.
-              setExpandCounter((prev) => prev + 1);
             }
           }
 
@@ -1360,6 +1362,12 @@ export function SessionDetailPage() {
       });
       // Enable auto-scroll for chat response
       setAutoScrollEnabled(true);
+      // Expand timeline, collapse analysis/learnings cards, scroll to bottom
+      setTimelineExpandCounter((c) => c + 1);
+      setCardsCollapseCounter((c) => c + 1);
+      setTimeout(() => {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+      }, 150);
     }
   }, [chatState.sendMessage]);
 
@@ -1613,6 +1621,7 @@ export function SessionDetailPage() {
                   chatStageIds={chatStageIds}
                   searchTerm={debouncedSearchTerm}
                   defaultCollapsed={wasTerminalOnMount && session.status === SESSION_STATUS.COMPLETED}
+                  expandCounter={timelineExpandCounter}
                   {...(hasFinalContent ? {
                     onJumpToSummary: handleJumpToSummary,
                     hasExecutiveSummary: !!session.executive_summary,
@@ -1658,7 +1667,7 @@ export function SessionDetailPage() {
             {/* Chat Panel — after timeline */}
             {isChatAvailable && (
               <Suspense fallback={null}>
-                <ChatPanel
+                <ChatPanel ref={chatPanelRef}
                   isAvailable={isChatAvailable}
                   chatExists={!!session.chat_id}
                   onSendMessage={handleSendMessage}
@@ -1682,6 +1691,7 @@ export function SessionDetailPage() {
                 sessionStatus={session.status}
                 errorMessage={session.error_message}
                 expandCounter={expandCounter}
+                collapseCounter={cardsCollapseCounter}
                 sessionId={session.id}
                 latestScore={session.latest_score}
                 scoringStatus={session.scoring_status}
@@ -1695,6 +1705,7 @@ export function SessionDetailPage() {
               <ExtractedLearningsCard
                 sessionId={session.id}
                 hasScore={session.latest_score != null}
+                collapseCounter={cardsCollapseCounter}
               />
             </Suspense>
 

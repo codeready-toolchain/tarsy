@@ -82,10 +82,16 @@ export default function ChatInput({
           placeholder={
             sendingMessage
               ? 'AI is processing...'
-              : placeholderProp || 'Type your question... (press Enter for new line)'
+              : placeholderProp || 'Type your question... (Ctrl+Enter for new line)'
           }
           value={content}
           onChange={(e) => setContent(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
           disabled={isDisabled}
           size="small"
           error={isOverLimit}

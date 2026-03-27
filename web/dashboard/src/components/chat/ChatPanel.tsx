@@ -6,6 +6,7 @@
  * Chat messages themselves render in the timeline, not here.
  */
 
+import { forwardRef } from 'react';
 import {
   Box,
   Paper,
@@ -29,7 +30,7 @@ interface ChatPanelProps {
   onClearError?: () => void;
 }
 
-export default function ChatPanel({
+const ChatPanel = forwardRef<HTMLDivElement, ChatPanelProps>(function ChatPanel({
   isAvailable,
   chatExists,
   onSendMessage,
@@ -40,13 +41,14 @@ export default function ChatPanel({
   canceling = false,
   error,
   onClearError,
-}: ChatPanelProps) {
+}, ref) {
   if (!isAvailable) return null;
 
   const inputDisabled = sendingMessage || chatStageInProgress;
 
   return (
     <Paper
+      ref={ref}
       elevation={1}
       sx={(theme) => ({
         overflow: 'hidden',
@@ -108,4 +110,6 @@ export default function ChatPanel({
       </Box>
     </Paper>
   );
-}
+});
+
+export default ChatPanel;
