@@ -51,6 +51,8 @@ interface StageContentProps {
   onSelectedAgentChange?: (executionId: string | null) => void;
   /** Search term for in-session content highlighting */
   searchTerm?: string;
+  /** Parent stage type (investigation, chat, action, etc.) for context-aware labels */
+  stageType?: string;
 }
 
 interface TabPanelProps {
@@ -258,6 +260,7 @@ const StageContent: React.FC<StageContentProps> = ({
   subAgentProgressStatuses,
   onSelectedAgentChange,
   searchTerm,
+  stageType,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -543,6 +546,7 @@ const StageContent: React.FC<StageContentProps> = ({
           expandAllToolCalls={expandAllToolCalls}
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
           searchTerm={searchTerm}
+          stageType={stageType}
         />,
       );
     }
@@ -567,7 +571,7 @@ const StageContent: React.FC<StageContentProps> = ({
 
         {executionStreamingItems.map(([key, streamItem]) => (
           <Collapse key={key} in={!streamItem.collapsing} timeout={300}>
-            <StreamingContentRenderer item={streamItem} />
+            <StreamingContentRenderer item={streamItem} stageType={stageType} />
           </Collapse>
         ))}
 
@@ -603,7 +607,7 @@ const StageContent: React.FC<StageContentProps> = ({
         <Box>
           {allStreamingItems.map(([key, streamItem]) => (
             <Collapse key={key} in={!streamItem.collapsing} timeout={300}>
-              <StreamingContentRenderer item={streamItem} />
+              <StreamingContentRenderer item={streamItem} stageType={stageType} />
             </Collapse>
           ))}
         </Box>

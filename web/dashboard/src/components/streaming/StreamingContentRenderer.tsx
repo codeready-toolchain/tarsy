@@ -5,6 +5,7 @@ import TypewriterText from './TypewriterText';
 import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
+import { getFinalAnalysisPresentation } from '../timeline/ResponseItem';
 import { TOOL_TYPE } from '../../constants/toolTypes';
 import { getSkillNamesLabel } from '../../utils/format';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
@@ -22,6 +23,7 @@ export interface StreamingItem {
 
 interface StreamingContentRendererProps {
   item: StreamingItem;
+  stageType?: string;
 }
 
 // --- ThinkingBlock ---
@@ -136,7 +138,7 @@ ResponseBlock.displayName = 'ResponseBlock';
  * Renders streaming LLM content with typewriter effect.
  * Routes to appropriate visual treatment based on event_type.
  */
-const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) => {
+const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRendererProps) => {
   // Thinking (llm_thinking) — italic, secondary color
   // All thought types use the same visual treatment (matching ThinkingItem).
   // Renders immediately (showing the "Thinking..." label) even before content
@@ -201,20 +203,23 @@ const StreamingContentRenderer = memo(({ item }: StreamingContentRendererProps) 
   
   if (item.eventType === TIMELINE_EVENT_TYPES.FINAL_ANALYSIS) {
     const isReflector = item.metadata?.interaction_type === LLM_INTERACTION_TYPE.MEMORY_EXTRACTION;
+    const { label, emoji, color } = isReflector
+      ? { label: 'LESSONS LEARNED', emoji: '🧠', color: 'secondary.main' }
+      : getFinalAnalysisPresentation(item.metadata, stageType, !!item.metadata?.forced_conclusion);
     return (
       <Box sx={{ mb: 2, mt: 3 }}>
         <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5 }}>
           <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0 }}>
-            {isReflector ? '🧠' : '🎯'}
+            {emoji}
           </Typography>
           <Typography
             variant="caption"
             sx={{
               fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
-              fontSize: '0.75rem', color: isReflector ? 'secondary.main' : 'success.main', mt: 0.25
+              fontSize: '0.75rem', color, mt: 0.25
             }}
           >
-            {isReflector ? 'LESSONS LEARNED' : 'FINAL ANSWER'}
+            {label}
           </Typography>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, ml: 4, color: 'text.primary' }}>

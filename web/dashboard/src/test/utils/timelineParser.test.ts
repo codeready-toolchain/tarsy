@@ -551,7 +551,7 @@ describe('flowItemsToPlainText', () => {
     expect(text).toContain('[Tool Call: k8s.kubectl_get]\nget pods');
     expect(text).toContain('[Tool Summary]\nfound 3 pods');
     expect(text).toContain('[Response]\nall pods healthy');
-    expect(text).toContain('[Final Analysis]\nno issues');
+    expect(text).toContain('[Conclusion]\nno issues');
     expect(text).toContain('[Error]\ntimeout');
     expect(text).toContain('[User Question]\nwhat happened?');
   });

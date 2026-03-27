@@ -19,6 +19,7 @@ interface TimelineItemProps {
   expandAllToolCalls?: boolean;
   isCollapsible?: boolean;
   searchTerm?: string;
+  stageType?: string;
 }
 
 /**
@@ -33,6 +34,7 @@ function TimelineItem({
   expandAllToolCalls = false,
   isCollapsible = false,
   searchTerm,
+  stageType,
 }: TimelineItemProps) {
   const handleToggle = useCallback(() => {
     onToggleAutoCollapse?.(item.id);
@@ -78,6 +80,7 @@ function TimelineItem({
           expandAll={expandAll}
           isCollapsible={isCollapsible}
           searchTerm={searchTerm}
+          stageType={stageType}
         />
       );
 
