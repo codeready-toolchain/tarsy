@@ -205,7 +205,7 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
     const isReflector = item.metadata?.interaction_type === LLM_INTERACTION_TYPE.MEMORY_EXTRACTION;
     const { label, emoji, color } = isReflector
       ? { label: 'LESSONS LEARNED', emoji: '🧠', color: 'secondary.main' }
-      : getFinalAnalysisPresentation(item.metadata, stageType, false);
+      : getFinalAnalysisPresentation(item.metadata, stageType, !!item.metadata?.forced_conclusion);
     return (
       <Box sx={{ mb: 2, mt: 3 }}>
         <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5 }}>
