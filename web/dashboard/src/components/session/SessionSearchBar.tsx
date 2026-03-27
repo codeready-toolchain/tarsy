@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
+  Box,
   Paper,
   TextField,
   InputAdornment,
@@ -19,6 +20,8 @@ interface SessionSearchBarProps {
   onSearchChange: (debouncedTerm: string) => void;
   onNextMatch: () => void;
   onPrevMatch: () => void;
+  /** 'standalone' wraps in Paper; 'inline' renders bare for embedding in other containers */
+  variant?: 'standalone' | 'inline';
 }
 
 const DEBOUNCE_MS = 500;
@@ -30,6 +33,7 @@ export const SessionSearchBar = memo(function SessionSearchBar({
   onSearchChange,
   onNextMatch,
   onPrevMatch,
+  variant = 'standalone',
 }: SessionSearchBarProps) {
   const [inputValue, setInputValue] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,17 +74,8 @@ export const SessionSearchBar = memo(function SessionSearchBar({
 
   const hasActiveSearch = activeSearchTerm.current !== '';
 
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 2,
-        py: 1,
-      }}
-    >
+  const content = (
+    <>
       <TextField
         fullWidth
         placeholder="Search in session content (min 3 chars)..."
@@ -122,6 +117,23 @@ export const SessionSearchBar = memo(function SessionSearchBar({
           <Clear fontSize="small" />
         </IconButton>
       )}
+    </>
+  );
+
+  if (variant === 'inline') {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+        {content}
+      </Box>
+    );
+  }
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1 }}
+    >
+      {content}
     </Paper>
   );
 });

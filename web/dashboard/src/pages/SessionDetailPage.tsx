@@ -36,7 +36,6 @@ import {
 
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
-import { SessionSearchBar } from '../components/session/SessionSearchBar.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 import InitializingSpinner from '../components/common/InitializingSpinner.tsx';
 import { useAdvancedAutoScroll } from '../hooks/useAdvancedAutoScroll.ts';
@@ -1614,17 +1613,6 @@ export function SessionDetailPage() {
               </Box>
             )}
 
-            {/* In-session search bar (terminated sessions only) */}
-            {isTerminal && (
-              <SessionSearchBar
-                matchCount={matchingItemIds.length}
-                currentMatchIndex={currentMatchIndex}
-                onSearchChange={handleSearchChange}
-                onNextMatch={handleNextMatch}
-                onPrevMatch={handlePrevMatch}
-              />
-            )}
-
             {/* Conversation Timeline */}
             {(session.stages && session.stages.length > 0) || streamingEvents.size > 0 ? (
               <Suspense fallback={<TimelineSkeleton />}>
@@ -1640,10 +1628,16 @@ export function SessionDetailPage() {
                   subAgentStreamingEvents={subAgentStreamingEvents}
                   subAgentExecutionStatuses={subAgentExecutionStatuses}
                   subAgentProgressStatuses={subAgentProgressStatuses}
-                  chainId={session.chain_id}
                   chatStageInProgress={chatStageInProgress}
                   chatStageIds={chatStageIds}
                   searchTerm={debouncedSearchTerm}
+                  {...(isTerminal ? {
+                    searchMatchCount: matchingItemIds.length,
+                    currentSearchMatchIndex: currentMatchIndex,
+                    onSearchChange: handleSearchChange,
+                    onNextSearchMatch: handleNextMatch,
+                    onPrevSearchMatch: handlePrevMatch,
+                  } : {})}
                 />
               </Suspense>
             ) : isActive ? (

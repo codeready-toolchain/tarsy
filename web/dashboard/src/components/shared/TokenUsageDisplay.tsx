@@ -12,7 +12,7 @@ export interface TokenUsageData {
 
 export interface TokenUsageDisplayProps {
   tokenData: TokenUsageData;
-  variant?: 'compact' | 'detailed' | 'inline' | 'badge';
+  variant?: 'compact' | 'detailed' | 'inline' | 'labeled' | 'badge';
   size?: 'small' | 'medium' | 'large';
   showBreakdown?: boolean;
   label?: string;
@@ -148,6 +148,40 @@ function TokenUsageDisplay({
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: size === 'small' ? '0.7rem' : '0.75rem', fontWeight: 500 }}>
             —
           </Typography>
+        )}
+      </Box>
+    );
+  }
+
+  // Labeled variant - "59K total 57K in 947 out" with colored numbers and text labels
+  if (variant === 'labeled') {
+    const fs = size === 'small' ? '0.7rem' : '0.75rem';
+    const labelFs = size === 'small' ? '0.65rem' : '0.7rem';
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+        {totalTokens != null && (
+          <>
+            <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 700, color: 'warning.main' }}>
+              {formatTokensCompact(totalTokens)}
+            </Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>total</Typography>
+          </>
+        )}
+        {inputTokens != null && (
+          <>
+            <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 600, color: 'info.main' }}>
+              {formatTokensCompact(inputTokens)}
+            </Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>in</Typography>
+          </>
+        )}
+        {outputTokens != null && (
+          <>
+            <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 600, color: 'success.main' }}>
+              {formatTokensCompact(outputTokens)}
+            </Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>out</Typography>
+          </>
         )}
       </Box>
     );

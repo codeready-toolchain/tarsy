@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Box, Typography, Chip, Alert, Collapse, alpha } from '@mui/material';
+import { Box, Typography, Chip, Alert, Collapse, Tooltip, alpha } from '@mui/material';
 import {
   CheckCircle,
   Error as ErrorIcon,
@@ -625,62 +625,72 @@ const StageContent: React.FC<StageContentProps> = ({
   // ── Multi-agent: full tabbed interface with agent cards ──
   return (
     <Box>
-      {/* Parallel execution header */}
-      <Box sx={{ mb: 3, pl: 4, pr: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <CallSplit color="secondary" fontSize="small" />
-          <Typography variant="caption" color="secondary" fontWeight={600} letterSpacing={0.5}>
-            PARALLEL EXECUTION
-          </Typography>
-          <Chip
-            label={`${mergedExecutions.length} agents`}
-            size="small" color="secondary" variant="outlined"
-            sx={{ height: 20, fontSize: '0.7rem' }}
-          />
-        </Box>
+      {/* Agent Cards */}
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 3, alignItems: 'flex-start', pr: 1 }}>
+        <Tooltip title="Parallel execution">
+          <CallSplit color="secondary" sx={{ fontSize: '1.25rem', mt: 0.75, flexShrink: 0 }} />
+        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+        {mergedExecutions.map((execution, tabIndex) => {
+          const isSelected = selectedTab === tabIndex;
+          const eo = execOverviewMap.get(execution.executionId);
+          const cardWsStatus = executionStatuses?.get(execution.executionId)?.status;
+          const cardEffectiveStatus = cardWsStatus || eo?.status || execution.status;
+          const statusColor = getStatusColor(cardEffectiveStatus);
+          const statusIcon = getStatusIcon(cardEffectiveStatus);
+          const label = eo?.agent_name || `Agent ${tabIndex + 1}`;
+          const progressStatus = agentProgressStatuses.get(execution.executionId);
+          const isTerminalProgress = !progressStatus
+            || TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus);
+          const tokenData = eo
+            ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
+            : deriveTokenData(execution.items);
+          const hasTokens = tokenData && (tokenData.input_tokens > 0 || tokenData.output_tokens > 0);
 
-        {/* Agent Cards */}
-        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          {mergedExecutions.map((execution, tabIndex) => {
-            const isSelected = selectedTab === tabIndex;
-            const eo = execOverviewMap.get(execution.executionId);
-            const cardWsStatus = executionStatuses?.get(execution.executionId)?.status;
-            const cardEffectiveStatus = cardWsStatus || eo?.status || execution.status;
-            const statusColor = getStatusColor(cardEffectiveStatus);
-            const statusIcon = getStatusIcon(cardEffectiveStatus);
-            const label = eo?.agent_name || `Agent ${tabIndex + 1}`;
-            const progressStatus = agentProgressStatuses.get(execution.executionId);
-            const isTerminalProgress = !progressStatus
-              || TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus);
-            // Prefer API-level token stats, fall back to deriving from item metadata
-            const tokenData = eo
-              ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
-              : deriveTokenData(execution.items);
-            const hasTokens = tokenData && (tokenData.input_tokens > 0 || tokenData.output_tokens > 0);
-
-            return (
-              <Box
-                key={execution.executionId}
-                onClick={() => setSelectedTab(tabIndex)}
-                sx={{
-                  flex: 1, minWidth: 180, p: 1.5,
-                  border: 2, borderColor: isSelected ? 'secondary.main' : 'divider',
-                  borderRadius: 1.5,
-                  backgroundColor: isSelected ? (theme) => alpha(theme.palette.secondary.main, 0.08) : 'background.paper',
-                  cursor: 'pointer', transition: 'all 0.2s',
-                  '&:hover': {
-                    borderColor: isSelected ? 'secondary.main' : (theme) => alpha(theme.palette.secondary.main, 0.4),
-                    backgroundColor: isSelected ? (theme) => alpha(theme.palette.secondary.main, 0.08) : (theme) => alpha(theme.palette.secondary.main, 0.03),
-                  },
-                }}
-              >
-                <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
-                  <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    {statusIcon}
-                    {label}
-                  </Typography>
-                </Box>
-                <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+          return (
+            <Box
+              key={execution.executionId}
+              onClick={() => setSelectedTab(tabIndex)}
+              sx={{
+                flex: 1, minWidth: 180, px: 1.5, py: 1,
+                border: 2, borderColor: isSelected ? 'secondary.main' : 'divider',
+                borderRadius: 1.5,
+                backgroundColor: isSelected ? (theme) => alpha(theme.palette.secondary.main, 0.08) : 'background.paper',
+                cursor: 'pointer', transition: 'all 0.2s',
+                '&:hover': {
+                  borderColor: isSelected ? 'secondary.main' : (theme) => alpha(theme.palette.secondary.main, 0.4),
+                  backgroundColor: isSelected ? (theme) => alpha(theme.palette.secondary.main, 0.08) : (theme) => alpha(theme.palette.secondary.main, 0.03),
+                },
+              }}
+            >
+              {/* Row 1: name + status */}
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {statusIcon}
+                  {label}
+                </Typography>
+                <Chip
+                  label={getStatusLabel(cardEffectiveStatus)}
+                  size="small" color={statusColor}
+                  sx={{ height: 18, fontSize: '0.65rem', ml: 0.5 }}
+                />
+                {progressStatus && !isTerminalProgress ? (
+                  <Chip
+                    label={progressStatus}
+                    size="small" color="info" variant="outlined"
+                    sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
+                  />
+                ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus) ? (
+                  <Chip
+                    label="Waiting..."
+                    size="small" color="default" variant="outlined"
+                    sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
+                  />
+                ) : null}
+              </Box>
+              {/* Row 2: model info (left) + tokens (right) */}
+              <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+                <Box display="flex" alignItems="center" gap={1} flexWrap="wrap" sx={{ flex: 1, minWidth: 0 }}>
                   {eo?.llm_provider && (
                     <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
                       {eo.llm_provider}
@@ -698,49 +708,28 @@ const StageContent: React.FC<StageContentProps> = ({
                       sx={{ height: 18, fontSize: '0.6rem', fontFamily: 'monospace' }}
                     />
                   )}
-                  <Chip
-                    label={getStatusLabel(cardEffectiveStatus)}
-                    size="small" color={statusColor}
-                    sx={{ height: 18, fontSize: '0.65rem' }}
-                  />
-                  {progressStatus && !isTerminalProgress ? (
-                    <Chip
-                      label={progressStatus}
-                      size="small" color="info" variant="outlined"
-                      sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
-                    />
-                  ) : isTerminalProgress && hasOtherActiveAgents && TERMINAL_EXECUTION_STATUSES.has(cardEffectiveStatus) ? (
-                    <Chip
-                      label="Waiting..."
-                      size="small" color="default" variant="outlined"
-                      sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
-                    />
-                  ) : null}
                 </Box>
-                {/* Show streaming activity count when no execution overview yet */}
-                {!eo && !hasTokens && (() => {
+                {hasTokens && tokenData ? (
+                  <Box display="flex" alignItems="center" gap={0.5} flexShrink={0}>
+                    <TokenUsageDisplay tokenData={tokenData} variant="labeled" size="small" />
+                  </Box>
+                ) : !eo && (() => {
                   const streamCount = (streamingByExecution.get(execution.executionId) || []).length;
                   const itemCount = execution.items.length;
                   const total = streamCount + itemCount;
                   if (total > 0) {
                     return (
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 'auto' }}>
                         {streamCount > 0 ? `${total} event${total > 1 ? 's' : ''} (${streamCount} streaming)` : `${total} event${total > 1 ? 's' : ''}`}
                       </Typography>
                     );
                   }
                   return null;
                 })()}
-                {hasTokens && tokenData && (
-                  <Box mt={1} display="flex" alignItems="center" gap={0.5}>
-                    <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>🪙</Typography>
-                    <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
-                    <Typography variant="caption" color="text.secondary">tokens</Typography>
-                  </Box>
-                )}
               </Box>
-            );
-          })}
+            </Box>
+          );
+        })}
         </Box>
       </Box>
 

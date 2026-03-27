@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
-  Chip,
   Collapse,
   Card,
   CardContent,
@@ -13,13 +12,12 @@ import {
   ExpandMore,
   ExpandLess,
 } from '@mui/icons-material';
-import type { FlowItem, TimelineStats, StageGroup } from '../../utils/timelineParser';
+import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import {
   FLOW_ITEM,
   groupFlowItemsByStage,
-  getTimelineStats,
   isFlowItemCollapsible,
   isFlowItemTerminal,
   flowItemsToPlainText,
@@ -30,6 +28,7 @@ import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
+import { SessionSearchBar } from './SessionSearchBar';
 import InitializingSpinner from '../common/InitializingSpinner';
 import { TERMINAL_EXECUTION_STATUSES, SCORING_STATUS_MESSAGE } from '../../constants/sessionStatus';
 
@@ -69,8 +68,12 @@ interface ConversationTimelineProps {
   subAgentExecutionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
   /** Sub-agent progress statuses (events with parent_execution_id) */
   subAgentProgressStatuses?: Map<string, string>;
-  /** Chain ID for the header display */
-  chainId?: string;
+  /** Search bar props (only rendered when onSearchChange is provided, i.e. terminal sessions) */
+  searchMatchCount?: number;
+  currentSearchMatchIndex?: number;
+  onSearchChange?: (term: string) => void;
+  onNextSearchMatch?: () => void;
+  onPrevSearchMatch?: () => void;
   /** Whether a chat stage is currently in progress (session may be terminal) */
   chatStageInProgress?: boolean;
   /** Set of stage IDs that are chat stages (for suppressing auto-collapse) */
@@ -104,7 +107,11 @@ export default function ConversationTimeline({
   subAgentStreamingEvents,
   subAgentExecutionStatuses,
   subAgentProgressStatuses,
-  chainId,
+  searchMatchCount,
+  currentSearchMatchIndex,
+  onSearchChange,
+  onNextSearchMatch,
+  onPrevSearchMatch,
   chatStageInProgress,
   chatStageIds,
   searchTerm,
@@ -240,9 +247,6 @@ export default function ConversationTimeline({
     return [...groupsFromItems, ...emptyGroups].sort((a, b) => a.stageIndex - b.stageIndex);
   }, [items, stages]);
 
-  // --- Stats ---
-  const stats: TimelineStats = useMemo(() => getTimelineStats(items, stages), [items, stages]);
-
   // --- Copy ---
   const plainText = useMemo(() => flowItemsToPlainText(items), [items]);
 
@@ -359,21 +363,26 @@ export default function ConversationTimeline({
 
   return (
     <Card>
-      {/* Card header with chain ID, expand/collapse, and copy */}
-      <CardContent sx={{ pb: 0, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+      {/* Card header: search (left) + expand/collapse + copy (right) */}
+      <CardContent sx={{ pb: 1, pt: 1.5, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
         <Box
           sx={{
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            flexWrap: 'wrap',
             gap: 1,
           }}
         >
-          <Typography variant="h6" color="primary.main">
-            Chain: {chainId || '—'}
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {onSearchChange && (
+            <SessionSearchBar
+              matchCount={searchMatchCount ?? 0}
+              currentMatchIndex={currentSearchMatchIndex ?? 0}
+              onSearchChange={onSearchChange}
+              onNextMatch={onNextSearchMatch ?? (() => {})}
+              onPrevMatch={onPrevSearchMatch ?? (() => {})}
+              variant="inline"
+            />
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 'auto' }}>
             <Button
               variant="outlined"
               size="small"
@@ -382,76 +391,26 @@ export default function ConversationTimeline({
                 setExpandAllReasoning((v) => !v);
                 setManualOverrides(new Set());
               }}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
             >
-              {expandAllReasoning ? 'Collapse All Reasoning' : 'Expand All Reasoning'}
+              {expandAllReasoning ? 'Collapse Reasoning' : 'Expand Reasoning'}
             </Button>
             <Button
               variant="outlined"
               size="small"
               startIcon={expandAllToolCalls ? <ExpandLess /> : <ExpandMore />}
               onClick={() => setExpandAllToolCalls((v) => !v)}
+              sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
             >
-              {expandAllToolCalls ? 'Collapse All Tools' : 'Expand All Tools'}
+              {expandAllToolCalls ? 'Collapse Tools' : 'Expand Tools'}
             </Button>
             <CopyButton
               text={plainText}
-              variant="button"
-              buttonVariant="outlined"
+              variant="icon"
               size="small"
-              label="Copy Chat Flow"
+              tooltip="Copy chat flow"
             />
           </Box>
-        </Box>
-
-        {/* Stats chips bar */}
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1.5, alignItems: 'center' }}>
-          {stats.totalStages > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`${stats.totalStages} stages`}
-              color="primary"
-            />
-          )}
-          {stats.completedStages > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`${stats.completedStages} completed`}
-              color="success"
-            />
-          )}
-          {stats.failedStages > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`${stats.failedStages} failed`}
-              color="error"
-            />
-          )}
-          {stats.toolCallCount > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`${stats.successfulToolCalls ?? stats.toolCallCount}/${stats.toolCallCount} tool calls`}
-              color={stats.successfulToolCalls === stats.toolCallCount ? 'success' : 'warning'}
-            />
-          )}
-          {stats.thoughtCount > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`${stats.thoughtCount} thoughts`}
-            />
-          )}
-          {stats.finalAnswerCount > 0 && (
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`${stats.finalAnswerCount} analyses`}
-              color="success"
-            />
-          )}
         </Box>
       </CardContent>
 

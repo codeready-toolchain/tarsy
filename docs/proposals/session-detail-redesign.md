@@ -128,6 +128,71 @@ Even without tabs, a sticky header + collapsed-by-default alert card is a major 
 
 ---
 
+## E. Timeline & Below-the-Header Improvements
+
+### Problems
+
+Between the header and the first tool call, there are **4 layers of navigation/meta** (~150px of chrome):
+
+1. "Jump to Summary" button
+2. Search bar
+3. Chain header with 3 action buttons + 5 stat chips
+4. "AI Reasoning Flow" tab
+
+This undoes the header compression — the user still can't see content without scrolling.
+
+### E1. Compress pre-timeline chrome ✅ (partial)
+
+- ✅ **Move search into the chain header bar** — combined into one row with expand/collapse + copy buttons.
+- **Remove "Jump to Summary" button** — replace with a keyboard shortcut, a sticky FAB, or integrate into a mini-nav.
+- ✅ **Remove stat chips entirely** — removed all stat chips (stages, completed, failed, tool calls, thoughts, analyses).
+- ✅ **Remove chain name** — alert type in the session header is sufficient; no need for "Chain: xxx" duplication.
+
+### E2. Compact parallel execution agent cards ✅
+
+- ✅ **Removed "PARALLEL EXECUTION" header** — the agent cards themselves make the multi-agent layout obvious.
+- ✅ **Compacted cards to 2 rows** — Row 1: name + status chip; Row 2: model info + tokens inline. Reduced vertical padding.
+
+### E3. Tighter tool call rendering
+
+13+ tool calls render as full-width colored bars with nearly identical styling. Hard to scan — the eye can't differentiate them quickly.
+
+- **Group consecutive tool calls tighter** — reduce vertical gap between them.
+- **Collapse thought indicators** — "Thought for 2s..." as inline labels (`💭 2s` next to the preceding tool call) instead of separate rows.
+- **Make failed tool calls stand out more** — error icon or count badge, not just a border color change.
+- **Consider compact mode** — tool calls as a condensed list or table for sessions with many calls.
+
+### E4. Stronger stage dividers
+
+"INVESTIGATION", "SYNTHESIS", "VM-REMEDIATION" etc. appear as centered faded text — the primary navigation landmarks in the timeline, yet they barely stand out from tool call bars.
+
+**Suggestion:** Make stages proper section headers — left-aligned, bolder, with a subtle background strip or left border accent. Add expand/collapse per stage to skip entire sections.
+
+### E5. Surface executive summary near the top
+
+The Final AI Analysis is the **most important section for completed sessions** — the user's reason for visiting the page — yet it's at the absolute bottom after every tool call, thought, and stage divider.
+
+Options:
+- Render the executive summary as a **collapsed preview immediately below the header** so users see the conclusion first, then dive into the timeline for details.
+- Or: add a **sticky mini-nav** at the top of the timeline (`Timeline | Summary | Learnings`) for direct access.
+
+### E6. Compact "Have follow-up questions?"
+
+A full-width card with subtitle for an occasionally-used feature. Could be a compact inline element or a floating action button.
+
+### Priority
+
+| # | Change | Impact |
+|---|--------|--------|
+| 1 | Surface executive summary near top | Most users want the conclusion, not the raw timeline |
+| 2 | Compress pre-timeline chrome | Reduces scroll-to-content distance |
+| 3 | Compact parallel execution cards | Saves vertical space |
+| 4 | Stronger stage dividers | Better timeline navigation |
+| 5 | Tighter tool call rendering | Less visual monotony |
+| 6 | Compact "follow-up questions" | Minor space savings |
+
+---
+
 ## Guiding Principle
 
 > For completed sessions, the user opened this page to see **what the AI did**, not to re-read the raw alert input. The current layout gives equal or greater weight to metadata and input data over the actual AI reasoning — which should be the star of the show.
