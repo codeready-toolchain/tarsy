@@ -16,6 +16,7 @@ import {
   UnfoldMore,
   KeyboardDoubleArrowDown,
   AccountTree,
+  Forum,
 } from '@mui/icons-material';
 import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
@@ -432,9 +433,33 @@ export default function ConversationTimeline({
         </Box>
 
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary' }}>
-            Investigation Timeline
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary' }}>
+              Investigation Timeline
+            </Typography>
+            {chatStageIds && chatStageIds.size > 0 && (
+              <Tooltip title={`${chatStageIds.size} follow-up ${chatStageIds.size === 1 ? 'chat' : 'chats'}`}>
+                <Box
+                  sx={(theme) => ({
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    px: 1,
+                    py: 0.5,
+                    backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                    borderRadius: '16px',
+                    border: '1px solid',
+                    borderColor: alpha(theme.palette.primary.main, 0.25),
+                  })}
+                >
+                  <Forum sx={{ fontSize: 16, color: 'primary.main' }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main', minWidth: '1ch', textAlign: 'center' }}>
+                    {chatStageIds.size}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            )}
+          </Box>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
             {timelineCollapsed
               ? `${stageGroups.length} ${stageGroups.length === 1 ? 'stage' : 'stages'} · Click to expand`
