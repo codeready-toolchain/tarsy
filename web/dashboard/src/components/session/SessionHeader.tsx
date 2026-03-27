@@ -31,6 +31,7 @@ import { formatTimestamp, formatTokensCompact } from '../../utils/format';
 import { cancelSession, triggerScoring, handleAPIError } from '../../services/api';
 import {
   SESSION_STATUS,
+  SCORING_STATUS,
   isTerminalStatus,
   canCancelSession,
   type SessionStatus,
@@ -163,9 +164,10 @@ export default function SessionHeader({
 
   useEffect(() => {
     if (!scoringTriggered) return;
-    if (session.latest_score != null || (session.scoring_status && session.scoring_status !== 'in_progress')) {
-      setScoringTriggered(false);
-    }
+    const done = session.latest_score != null
+      || session.scoring_status === SCORING_STATUS.COMPLETED
+      || session.scoring_status === SCORING_STATUS.FAILED;
+    if (done) setScoringTriggered(false);
   }, [scoringTriggered, session.latest_score, session.scoring_status]);
 
   return (
