@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Tooltip } from '@mui/material';
-import { Psychology, ContentCopy, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown } from '@mui/icons-material';
+import { Paper, Typography, Box, Button, Alert, Snackbar, Collapse, IconButton, Chip } from '@mui/material';
+import { Psychology, ContentCopy, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown, ThumbUp, ThumbDown } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
@@ -141,19 +141,44 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 if (rating) {
                   const Icon = rating.icon;
                   return (
-                    <Tooltip title={`Reviewed: ${rating.label} — click to edit`}>
-                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); onReviewClick(); }} sx={{ color: `${rating.color}.main` }}>
-                        <Icon sx={{ fontSize: 20 }} />
-                      </IconButton>
-                    </Tooltip>
+                    <Chip
+                      icon={<Icon sx={{ fontSize: 16 }} />}
+                      label={rating.label}
+                      size="small"
+                      variant="outlined"
+                      color={rating.color}
+                      onClick={(e) => { e.stopPropagation(); onReviewClick(); }}
+                      sx={{ cursor: 'pointer', fontWeight: 500 }}
+                    />
                   );
                 }
                 return (
-                  <Tooltip title="Add review">
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); onReviewClick(); }} sx={{ color: 'text.disabled' }}>
-                      <ThumbsUpDown sx={{ fontSize: 20 }} />
+                  <Box
+                    sx={(theme) => ({
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      bgcolor: alpha(theme.palette.warning.main, 0.08),
+                      border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
+                      borderRadius: 5,
+                      px: 1.25,
+                      py: 0.25,
+                    })}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                      Helpful?
+                    </Typography>
+                    <IconButton size="small" onClick={onReviewClick} sx={{ color: 'success.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.success.main, 0.15) } }}>
+                      <ThumbUp sx={{ fontSize: 16 }} />
                     </IconButton>
-                  </Tooltip>
+                    <IconButton size="small" onClick={onReviewClick} sx={{ color: 'warning.dark', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.warning.main, 0.15) } }}>
+                      <ThumbsUpDown sx={{ fontSize: 16 }} />
+                    </IconButton>
+                    <IconButton size="small" onClick={onReviewClick} sx={{ color: 'error.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.15) } }}>
+                      <ThumbDown sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Box>
                 );
               })()}
               {isNewlyUpdated && (
@@ -191,7 +216,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
 
           {/* Executive Summary — always visible */}
           {summary && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 2 }} data-executive-summary>
               <Box sx={{ bgcolor: (theme) => alpha(theme.palette.success.main, 0.10), border: '1px solid', borderColor: (theme) => alpha(theme.palette.success.main, 0.35), borderRadius: 2, p: 2.5, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, bgcolor: 'success.main', borderRadius: '4px 0 0 4px' } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

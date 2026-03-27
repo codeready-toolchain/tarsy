@@ -989,10 +989,10 @@ export function SessionDetailPage() {
             });
             setExpandCounter((prev) => prev + 1);
             setTimeout(() => {
-              if (finalAnalysisRef.current) {
+              const target = document.querySelector('[data-executive-summary]') ?? finalAnalysisRef.current;
+              if (target) {
                 const yOffset = -20;
-                const y =
-                  finalAnalysisRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+                const y = target.getBoundingClientRect().top + window.pageYOffset + yOffset;
                 window.scrollTo({ top: y, behavior: 'smooth' });
               }
             }, 500);
@@ -1307,10 +1307,10 @@ export function SessionDetailPage() {
   const handleJumpToSummary = useCallback(() => {
     setExpandCounter((prev) => prev + 1);
     setTimeout(() => {
-      if (finalAnalysisRef.current) {
+      const target = document.querySelector('[data-executive-summary]') ?? finalAnalysisRef.current;
+      if (target) {
         const yOffset = -20;
-        const y =
-          finalAnalysisRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        const y = target.getBoundingClientRect().top + window.pageYOffset + yOffset;
         window.scrollTo({ top: y, behavior: 'smooth' });
       }
     }, 500);
