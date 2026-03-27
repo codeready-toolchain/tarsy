@@ -255,6 +255,7 @@ export function SessionDetailPage() {
   const [reviewModalMode, setReviewModalMode] = useState<ReviewModalMode | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewInitialRating, setReviewInitialRating] = useState<string | undefined>(undefined);
 
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -1366,8 +1367,9 @@ export function SessionDetailPage() {
     chatState.cancelExecution();
   }, [chatState.cancelExecution]);
 
-  const handleReviewClick = useCallback(() => {
+  const handleReviewClick = useCallback((initialRating?: string) => {
     if (!session) return;
+    setReviewInitialRating(initialRating);
     setReviewModalMode(getReviewModalMode(session.review_status));
   }, [session]);
 
@@ -1707,6 +1709,7 @@ export function SessionDetailPage() {
               executiveSummary={session.executive_summary}
               assignee={session.assignee}
               feedbackEdited={session.feedback_edited}
+              initialRating={reviewInitialRating}
             />
             <EditFeedbackModal
               open={reviewModalMode === REVIEW_MODAL_MODE.EDIT}

@@ -9,6 +9,7 @@ import CopyButton from '../shared/CopyButton';
 import ErrorCard from '../timeline/ErrorCard';
 import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
+import { QUALITY_RATING } from '../../types/api';
 import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 import { getRatingConfig } from '../../constants/ratingConfig';
@@ -37,8 +38,8 @@ interface FinalAnalysisCardProps {
   scoringStatus?: string | null;
   /** Current quality rating (if reviewed) */
   qualityRating?: string | null;
-  /** Callback when user clicks the review chip */
-  onReviewClick?: () => void;
+  /** Callback when user clicks a review icon; optional rating pre-selects in the modal */
+  onReviewClick?: (initialRating?: string) => void;
 }
 
 /**
@@ -147,7 +148,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                       size="small"
                       variant="outlined"
                       color={rating.color}
-                      onClick={(e) => { e.stopPropagation(); onReviewClick(); }}
+                      onClick={(e) => { e.stopPropagation(); onReviewClick(qualityRating ?? undefined); }}
                       sx={{ cursor: 'pointer', fontWeight: 500 }}
                     />
                   );
@@ -169,13 +170,13 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                     <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
                       Helpful?
                     </Typography>
-                    <IconButton size="small" onClick={onReviewClick} sx={{ color: 'success.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.success.main, 0.15) } }}>
+                    <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.ACCURATE)} sx={{ color: 'success.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.success.main, 0.15) } }}>
                       <ThumbUp sx={{ fontSize: 16 }} />
                     </IconButton>
-                    <IconButton size="small" onClick={onReviewClick} sx={{ color: 'warning.dark', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.warning.main, 0.15) } }}>
+                    <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.PARTIALLY_ACCURATE)} sx={{ color: 'warning.dark', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.warning.main, 0.15) } }}>
                       <ThumbsUpDown sx={{ fontSize: 16 }} />
                     </IconButton>
-                    <IconButton size="small" onClick={onReviewClick} sx={{ color: 'error.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.15) } }}>
+                    <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.INACCURATE)} sx={{ color: 'error.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.15) } }}>
                       <ThumbDown sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>

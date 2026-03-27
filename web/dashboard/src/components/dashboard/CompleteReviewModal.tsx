@@ -31,16 +31,18 @@ export interface CompleteReviewModalProps {
   assignee?: string | null;
   feedbackEdited?: boolean;
   error?: string | null;
+  /** Pre-select a rating when the modal opens (e.g. from inline thumbs) */
+  initialRating?: string;
 }
 
-export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, assignee, feedbackEdited, error }: CompleteReviewModalProps) {
+export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, assignee, feedbackEdited, error, initialRating }: CompleteReviewModalProps) {
   const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
 
   useEffect(() => {
     if (open) {
-      setQualityRating(QUALITY_RATING.ACCURATE);
+      setQualityRating(initialRating || QUALITY_RATING.ACCURATE);
       setActionTaken('');
       setInvestigationFeedback('');
     }
