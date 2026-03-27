@@ -11,6 +11,7 @@ import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import { highlightSearchTermNodes } from '../../utils/search';
 import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
+import { STAGE_TYPE } from '../../constants/eventTypes';
 import { MemoryCardList, type ParsedMemory } from './MemoryCardList';
 
 interface ReflectorResult {
@@ -32,6 +33,38 @@ function parseReflectorResult(content: string | undefined): ReflectorResult {
   } catch { return empty; }
 }
 
+interface FinalAnalysisPresentation {
+  label: string;
+  emoji: string;
+  color: string;
+}
+
+/**
+ * Returns context-aware label, emoji, and color for a final_analysis timeline event.
+ * Handles synthesis (from metadata), then stage type (chat, action), defaulting to
+ * investigation/conclusion. Does NOT handle reflector/memory_extraction — callers
+ * branch on that separately since it uses a completely different UI.
+ */
+export function getFinalAnalysisPresentation(
+  metadata: Record<string, unknown> | undefined,
+  stageType: string | undefined,
+  isForcedConclusion: boolean,
+): FinalAnalysisPresentation {
+  if ((metadata?.interaction_type as string | undefined) === LLM_INTERACTION_TYPE.SYNTHESIS) {
+    return { label: 'SYNTHESIS', emoji: '🔀', color: 'success.main' };
+  }
+
+  const suffix = isForcedConclusion ? ' (⚠️Max Iterations)' : '';
+  switch (stageType) {
+    case STAGE_TYPE.CHAT:
+      return { label: `ANSWER${suffix}`, emoji: '🎯', color: 'success.main' };
+    case STAGE_TYPE.ACTION:
+      return { label: `RESULT${suffix}`, emoji: '🎯', color: 'success.main' };
+    default:
+      return { label: `CONCLUSION${suffix}`, emoji: '🎯', color: 'success.main' };
+  }
+}
+
 interface ResponseItemProps {
   item: FlowItem;
   isAutoCollapsed?: boolean;
@@ -39,11 +72,12 @@ interface ResponseItemProps {
   expandAll?: boolean;
   isCollapsible?: boolean;
   searchTerm?: string;
+  stageType?: string;
 }
 
 /**
  * ResponseItem - renders llm_response and final_analysis timeline events.
- * For final_analysis: green "FINAL ANSWER" header with target emoji.
+ * For final_analysis: context-aware header (CONCLUSION / ANSWER / RESULT / SYNTHESIS).
  * For llm_response: simple message bubble with speech emoji.
  */
 function ResponseItem({
@@ -53,6 +87,7 @@ function ResponseItem({
   expandAll = false,
   isCollapsible = false,
   searchTerm,
+  stageType,
 }: ResponseItemProps) {
   const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
@@ -194,7 +229,7 @@ function ResponseItem({
       );
     }
 
-    const headerText = isForcedConclusion ? 'FINAL ANSWER (⚠️Max Iterations)' : 'FINAL ANSWER';
+    const presentation = getFinalAnalysisPresentation(item.metadata, stageType, isForcedConclusion);
 
     return (
       <Box
@@ -209,7 +244,7 @@ function ResponseItem({
         }}
       >
         <EmojiIcon
-          emoji="🎯"
+          emoji={presentation.emoji}
           opacity={collapsedLeadingIconOpacity}
           showTooltip={shouldShowCollapsed}
           tooltipContent={item.content || ''}
@@ -217,8 +252,8 @@ function ResponseItem({
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <CollapsibleItemHeader
-            headerText={headerText}
-            headerColor="success.main"
+            headerText={presentation.label}
+            headerColor={presentation.color}
             headerTextTransform="uppercase"
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}

@@ -596,6 +596,7 @@ export default function ConversationTimeline({
                   subAgentProgressStatuses={subAgentProgressStatuses}
                   onSelectedAgentChange={handleSelectedAgentChange}
                   searchTerm={searchTerm}
+                  stageType={group.stageType}
                 />
               </Collapse>
             </Box>

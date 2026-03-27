@@ -439,7 +439,7 @@ export function flowItemsToPlainText(items: FlowItem[]): string {
         lines.push(`[Tool Summary]\n${item.content}\n`);
         break;
       case FLOW_ITEM.FINAL_ANALYSIS:
-        lines.push(`[Final Analysis]\n${item.content}\n`);
+        lines.push(`[Conclusion]\n${item.content}\n`);
         break;
       case FLOW_ITEM.EXECUTIVE_SUMMARY:
         lines.push(`[Executive Summary]\n${item.content}\n`);
