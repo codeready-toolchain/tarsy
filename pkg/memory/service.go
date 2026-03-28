@@ -129,7 +129,6 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	rows, err := s.db.QueryContext(ctx, `
 		WITH vector_candidates AS (
 			SELECT memory_id,
-			       (1 - (embedding <=> $2::vector)) AS similarity,
 			       ROW_NUMBER() OVER (ORDER BY embedding <=> $2::vector) AS pos
 			FROM investigation_memories
 			WHERE project = $1
