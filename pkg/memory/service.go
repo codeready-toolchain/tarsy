@@ -38,6 +38,10 @@ func NewService(entClient *ent.Client, db *sql.DB, embedder Embedder, cfg *confi
 // benefits from seeing broadly similar memories), but temporal decay is applied
 // so stale memories rank lower.
 // Raw SQL: pgvector's cosine distance operator (<=>) is not supported by Ent.
+//
+// Like FindSimilarWithBoosts, a two-step CTE is used so the inner ORDER BY
+// uses the raw distance operator, allowing pgvector's HNSW/IVFFlat ANN index.
+// The outer query applies temporal decay for the final ranking.
 func (s *Service) FindSimilar(ctx context.Context, project, queryText string, limit int) ([]Memory, error) {
 	queryVec, err := s.embedder.Embed(ctx, queryText, EmbeddingTaskQuery)
 	if err != nil {
@@ -45,23 +49,32 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 	}
 
 	vecStr := formatVector(queryVec)
+	candidates := max(limit*candidateMultiplier, 20)
 
 	// No similarity threshold: the Reflector needs broad context (including
 	// loosely related memories) to detect near-duplicates and decide what to
 	// reinforce or deprecate. Temporal decay still down-ranks stale entries.
 	// See FindSimilarWithBoosts for the threshold-filtered variant.
 	rows, err := s.db.QueryContext(ctx, `
+		WITH candidates AS (
+			SELECT memory_id, content, category, valence, confidence, seen_count,
+			       created_at, updated_at,
+			       (embedding <=> $2::vector) AS distance
+			FROM investigation_memories
+			WHERE project = $1
+			  AND deprecated = false
+			  AND embedding IS NOT NULL
+			ORDER BY embedding <=> $2::vector
+			LIMIT $3
+		)
 		SELECT memory_id, content, category, valence, confidence, seen_count,
 		       created_at, updated_at
-		FROM investigation_memories
-		WHERE project = $1
-		  AND deprecated = false
-		  AND embedding IS NOT NULL
-		ORDER BY (1 - (embedding <=> $2::vector))
+		FROM candidates
+		ORDER BY (1 - distance)
 		       * EXP(-0.0077 * EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400.0)
 		  DESC
-		LIMIT $3
-	`, project, vecStr, limit)
+		LIMIT $4
+	`, project, vecStr, candidates, limit)
 	if err != nil {
 		return nil, fmt.Errorf("similarity search: %w", err)
 	}
@@ -437,31 +450,11 @@ type UpdateInput struct {
 }
 
 // Update applies a partial update to a memory. When content changes, the
-// embedding vector is regenerated to stay consistent with the new text.
-// The embedding is generated before any DB writes so that an embedding API
-// failure cannot leave content and embedding out of sync.
+// embedding vector is regenerated and both the field updates and the embedding
+// write are performed in a single atomic SQL statement. When content does not
+// change, the update goes through Ent normally.
 func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*Detail, error) {
-	u := s.entClient.InvestigationMemory.UpdateOneID(memoryID)
-	changed := false
-
-	if input.Content != nil {
-		u.SetContent(*input.Content)
-		changed = true
-	}
-	if input.Category != nil {
-		u.SetCategory(investigationmemory.Category(*input.Category))
-		changed = true
-	}
-	if input.Valence != nil {
-		u.SetValence(investigationmemory.Valence(*input.Valence))
-		changed = true
-	}
-	if input.Deprecated != nil {
-		u.SetDeprecated(*input.Deprecated)
-		changed = true
-	}
-
-	if !changed {
+	if input.Content == nil && input.Category == nil && input.Valence == nil && input.Deprecated == nil {
 		return s.GetByID(ctx, memoryID)
 	}
 
@@ -476,6 +469,24 @@ func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput
 		newEmbedding = vec
 	}
 
+	if newEmbedding != nil {
+		// Content changed: use a single raw SQL UPDATE so field values and
+		// the embedding vector are committed atomically.
+		return s.updateContentAndEmbedding(ctx, memoryID, input, newEmbedding)
+	}
+
+	// No content change: Ent handles the field update (no embedding concern).
+	u := s.entClient.InvestigationMemory.UpdateOneID(memoryID)
+	if input.Category != nil {
+		u.SetCategory(investigationmemory.Category(*input.Category))
+	}
+	if input.Valence != nil {
+		u.SetValence(investigationmemory.Valence(*input.Valence))
+	}
+	if input.Deprecated != nil {
+		u.SetDeprecated(*input.Deprecated)
+	}
+
 	m, err := u.Save(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -483,17 +494,68 @@ func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput
 		}
 		return nil, fmt.Errorf("update memory %s: %w", memoryID, err)
 	}
+	return entToDetail(m), nil
+}
 
-	if newEmbedding != nil {
-		if _, err := s.db.ExecContext(ctx,
-			`UPDATE investigation_memories SET embedding = $1::vector WHERE memory_id = $2`,
-			formatVector(newEmbedding), memoryID,
-		); err != nil {
-			return nil, fmt.Errorf("update embedding for %s: %w", memoryID, err)
+// updateContentAndEmbedding writes all changed fields plus the new embedding
+// in a single UPDATE statement, keeping them atomically consistent.
+func (s *Service) updateContentAndEmbedding(ctx context.Context, memoryID string, input UpdateInput, embedding []float32) (*Detail, error) {
+	// Validate enums before bypassing Ent's built-in validators.
+	if input.Category != nil {
+		if err := investigationmemory.CategoryValidator(investigationmemory.Category(*input.Category)); err != nil {
+			return nil, err
+		}
+	}
+	if input.Valence != nil {
+		if err := investigationmemory.ValenceValidator(investigationmemory.Valence(*input.Valence)); err != nil {
+			return nil, err
 		}
 	}
 
-	return entToDetail(m), nil
+	setClauses := []string{"updated_at = NOW()"}
+	args := []any{}
+	argIdx := 1
+
+	setClauses = append(setClauses, fmt.Sprintf("content = $%d", argIdx))
+	args = append(args, *input.Content)
+	argIdx++
+
+	setClauses = append(setClauses, fmt.Sprintf("embedding = $%d::vector", argIdx))
+	args = append(args, formatVector(embedding))
+	argIdx++
+
+	if input.Category != nil {
+		setClauses = append(setClauses, fmt.Sprintf("category = $%d", argIdx))
+		args = append(args, *input.Category)
+		argIdx++
+	}
+	if input.Valence != nil {
+		setClauses = append(setClauses, fmt.Sprintf("valence = $%d", argIdx))
+		args = append(args, *input.Valence)
+		argIdx++
+	}
+	if input.Deprecated != nil {
+		setClauses = append(setClauses, fmt.Sprintf("deprecated = $%d", argIdx))
+		args = append(args, *input.Deprecated)
+		argIdx++
+	}
+
+	args = append(args, memoryID)
+	query := fmt.Sprintf(
+		`UPDATE investigation_memories SET %s WHERE memory_id = $%d`,
+		strings.Join(setClauses, ", "), argIdx,
+	)
+
+	result, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("update memory %s: %w", memoryID, err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return nil, ErrMemoryNotFound
+	}
+
+	return s.GetByID(ctx, memoryID)
 }
 
 // Delete permanently removes a memory.
