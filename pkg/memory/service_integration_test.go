@@ -338,6 +338,157 @@ func TestService_FindSimilarWithBoosts_CandidateReranking(t *testing.T) {
 	assert.Equal(t, "Close but no boost", memories[1].Content)
 }
 
+// TestService_FindSimilarWithBoosts_SimilarityThreshold verifies that memories
+// below the similarity threshold are filtered out, even when the database has
+// matching rows.
+func TestService_FindSimilarWithBoosts_SimilarityThreshold(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	sessionID := uuid.New().String()
+	_, err = entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	// Query vector: [1, 0, 0]
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	// Memory 1: identical to query → cosine similarity = 1.0 (well above 0.45 threshold).
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Very relevant', 'semantic', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	// Memory 2: nearly orthogonal → cosine similarity ≈ 0.27 (below 0.45 threshold).
+	// [0.27, 0.96, 0] is unit-length, cosine_sim([1,0,0], [0.27,0.96,0]) ≈ 0.27.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Irrelevant', 'semantic', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[0.27,0.96,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	t.Run("filters below threshold", func(t *testing.T) {
+		memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+		require.NoError(t, err)
+		require.Len(t, memories, 1, "only the memory above threshold should be returned")
+		assert.Equal(t, "Very relevant", memories[0].Content)
+	})
+
+	t.Run("all below threshold returns empty", func(t *testing.T) {
+		// Query vector: [0, 0, 1] — orthogonal to both memories.
+		orthogonalSvc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 0, 1}}, cfg)
+		memories, err := orthogonalSvc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+		require.NoError(t, err)
+		assert.Empty(t, memories)
+	})
+}
+
+// TestService_FindSimilarWithBoosts_TemporalDecay verifies that newer memories
+// rank higher than older ones when embeddings and confidence are identical.
+func TestService_FindSimilarWithBoosts_TemporalDecay(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	sessionID := uuid.New().String()
+	_, err = entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	// Both memories have identical embeddings and confidence, only updated_at differs.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Old memory', 'semantic', 'positive', 0.7, 1,
+			 $2, NOW() - INTERVAL '180 days', NOW() - INTERVAL '180 days',
+			 NOW() - INTERVAL '180 days', false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Fresh memory', 'semantic', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 2)
+
+	assert.Equal(t, "Fresh memory", memories[0].Content, "newer memory should rank first")
+	assert.Equal(t, "Old memory", memories[1].Content)
+	assert.Greater(t, memories[0].Score, memories[1].Score,
+		"fresh memory score should be higher due to temporal decay")
+}
+
+// TestService_FindSimilarWithBoosts_ConfidenceRanking verifies that higher-confidence
+// memories rank higher when embeddings and age are identical.
+func TestService_FindSimilarWithBoosts_ConfidenceRanking(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	sessionID := uuid.New().String()
+	_, err = entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	// Both memories have identical embeddings and updated_at, only confidence differs.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Low confidence', 'semantic', 'positive', 0.3, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'High confidence', 'semantic', 'positive', 0.95, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 2)
+
+	assert.Equal(t, "High confidence", memories[0].Content, "higher confidence should rank first")
+	assert.Equal(t, "Low confidence", memories[1].Content)
+	assert.Greater(t, memories[0].Score, memories[1].Score)
+}
+
 func TestService_CreateMemory_PersistsAllColumns(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()

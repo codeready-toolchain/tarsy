@@ -114,6 +114,57 @@ func TestService_Update(t *testing.T) {
 	})
 }
 
+// TestService_Update_RefreshesEmbedding verifies that updating a memory's
+// content regenerates the embedding vector, making the memory findable via a
+// query vector matching the new (not old) content.
+func TestService_Update_RefreshesEmbedding(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+
+	sessionID := uuid.New().String()
+	_, err = entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	memID := uuid.New().String()
+
+	// Insert memory with embedding [1, 0, 0] via raw SQL.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Original content', 'semantic', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		memID, sessionID)
+	require.NoError(t, err)
+
+	// Service embedder returns [0, 1, 0]. After content update, the memory's
+	// embedding will be refreshed to [0, 1, 0].
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 1, 0}}, cfg)
+
+	// Before update: query [0, 1, 0] vs stored [1, 0, 0] → cosine sim ≈ 0 → below threshold.
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	require.NoError(t, err)
+	assert.Empty(t, memories, "orthogonal embedding should be below similarity threshold")
+
+	// Update content — triggers embedding regeneration.
+	newContent := "Completely new content"
+	updated, err := svc.Update(ctx, memID, memory.UpdateInput{Content: &newContent})
+	require.NoError(t, err)
+	assert.Equal(t, "Completely new content", updated.Content)
+
+	// After update: query [0, 1, 0] vs refreshed [0, 1, 0] → cosine sim = 1.0 → found.
+	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 1, "memory should be findable after embedding refresh")
+	assert.Equal(t, memID, memories[0].ID)
+}
+
 func TestService_Delete(t *testing.T) {
 	svc, _, memID := seedMemory(t)
 	ctx := t.Context()
