@@ -61,11 +61,11 @@ Consider them as hints — they may or may not apply to your current investigati
 Do not treat them as rules.
 
 <memory_data>
-- [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
+- [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup
 
 - [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
 
-- [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup
+- [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
 </memory_data>
 
 Focus on investigation and providing recommendations for human operators to execute.

@@ -204,8 +204,8 @@ func TestE2E_MemoryInjectionAndRecall(t *testing.T) {
 		"Lessons from Past Investigations",
 		"Tier 4 memory section should be in investigation system prompt")
 	assertSystemPromptContains(t, investigatorInput,
-		"[procedural, positive, learned",
-		"seeded procedural memory should be in investigation prompt with age label")
+		"[procedural, positive, score:",
+		"seeded procedural memory should be in investigation prompt with score")
 	assertSystemPromptContains(t, investigatorInput,
 		"Check PgBouncer connection pool health",
 		"seeded procedural memory content should be in investigation prompt")

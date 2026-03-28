@@ -15,6 +15,6 @@
 
 === TOOL_RESULT ===
 {
-  "content": "Found 3 relevant memories:\n\n1. [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency\n2. [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup",
+  "content": "Found 3 relevant memories:\n\n1. [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup\n2. [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency",
   "is_error": false
 }
