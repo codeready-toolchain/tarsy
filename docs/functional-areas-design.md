@@ -514,7 +514,7 @@ The orchestrator agent (`type: orchestrator`) uses the same `IteratingController
 - **`SubAgentRunner`** (`pkg/agent/orchestrator/runner.go`) — manages sub-agent goroutine lifecycle. Push-based result delivery via buffered channel. Sub-agent contexts derive from session-level context (survive across orchestrator iterations).
 - **`SubAgentRegistry`** (`pkg/config/sub_agent_registry.go`) — agents with a `description` field, filtered by optional `sub_agents` override at chain/stage/agent level.
 
-**Result flow**: `dispatch_agent` returns immediately → sub-agent runs in goroutine → result sent to channel → controller drains before next LLM call → injected as `[Sub-agent completed]` user-role message.
+**Result flow**: `dispatch_agent` returns immediately → sub-agent runs in goroutine → result sent to channel → controller drains before next LLM call → injected as user-role message (injection format is internal to `FormatSubAgentResult` and intentionally not disclosed in the orchestrator prompt).
 
 **DB model**: Sub-agents create real `AgentExecution` records with `parent_execution_id` linking to the orchestrator, plus a `task` field for the dispatch description.
 

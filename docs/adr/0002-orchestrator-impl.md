@@ -125,7 +125,7 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 4. Returns immediately: `{ execution_id: "sub-exec-123", status: "accepted" }`
 5. When sub-agent finishes, result is sent to a shared results channel
 6. Controller drains results before each LLM call (non-blocking) and waits when idle (blocking)
-7. Results are injected as user-role messages: `[Sub-agent completed] LogAnalyzer (exec-abc): ...`
+7. Results are injected as user-role messages (format is internal and not disclosed to the LLM to prevent hallucination)
 
 ### Push-Based Result Collection
 
@@ -400,7 +400,7 @@ Rules:
 - If you have tools available, use them. If not, use reasoning alone.
 ```
 
-Sub-agent results are injected into the orchestrator's conversation as user-role messages with a `[Sub-agent completed]` or `[Sub-agent failed]` prefix.
+Sub-agent results are injected into the orchestrator's conversation as user-role messages. The injection format is internal to `FormatSubAgentResult` and is intentionally not disclosed in the orchestrator's system prompt to prevent the LLM from hallucinating results using the same format.
 
 ## Cancellation Cascade
 
