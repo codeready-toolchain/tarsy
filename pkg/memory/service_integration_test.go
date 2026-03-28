@@ -634,13 +634,14 @@ func TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding(t *testing.
 
 	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
 	// Simulate embedding drift: query "quantiaia coolify VM" produces an
-	// embedding that is far from the Coolify memory's embedding. In the
-	// fakeEmbedder, query returns [0.5, 0.5, 0.71] (shifted away from [1,0,0]).
-	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0.5, 0.5, 0.71}}, cfg)
+	// embedding orthogonal to the Coolify memory. cosine_sim([0,0,1],[1,0,0])=0
+	// which is well below the 0.45 threshold, so vector search fails entirely.
+	// The keyword path must find "coolify" via OR-matched full-text search.
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 0, 1}}, cfg)
 
 	// Coolify memory with embedding [1, 0, 0]. Cosine similarity with
-	// query [0.5, 0.5, 0.71] ≈ 0.5 — right around threshold, may or may not
-	// pass vector search. But keyword "coolify" is an exact match.
+	// query [0, 0, 1] = 0 — well below 0.45 threshold, so vector path
+	// returns nothing. Keyword "coolify" in the query is an exact match.
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
 			(memory_id, project, content, category, valence, confidence, seen_count,

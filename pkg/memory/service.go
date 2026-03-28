@@ -110,7 +110,9 @@ const similarityThreshold = 0.45
 // chain_id scope metadata. The returned Memory.Score reflects the final
 // ranking score.
 //
-// The query uses three CTEs:
+// The query uses four CTEs:
+//  0. kw_tsq — converts queryText to an OR-joined tsquery so any individual
+//     term can match (plainto_tsquery uses AND which is too strict for hybrid).
 //  1. vector_candidates — ANN search via pgvector HNSW, filtered by similarityThreshold.
 //  2. keyword_candidates — full-text search via tsvector/GIN with 'simple' config.
 //  3. fused — RRF merge (k=60) of both candidate sets.
@@ -132,7 +134,11 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	candidates := max(limit*candidateMultiplier, 20)
 
 	rows, err := s.db.QueryContext(ctx, `
-		WITH vector_candidates AS (
+		WITH kw_tsq AS (
+			SELECT (regexp_replace(plainto_tsquery('simple', $8)::text, ' & ', ' | ', 'g'))::tsquery AS q
+			WHERE numnode(plainto_tsquery('simple', $8)) > 0
+		),
+		vector_candidates AS (
 			SELECT memory_id,
 			       ROW_NUMBER() OVER (ORDER BY embedding <=> $2::vector) AS pos
 			FROM investigation_memories
@@ -144,14 +150,14 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 			LIMIT $3
 		),
 		keyword_candidates AS (
-			SELECT memory_id,
-			       ROW_NUMBER() OVER (
-			           ORDER BY ts_rank(search_vector, plainto_tsquery('simple', $8)) DESC
-			       ) AS pos
-			FROM investigation_memories
-			WHERE project = $1
-			  AND deprecated = false
-			  AND search_vector @@ plainto_tsquery('simple', $8)
+			SELECT im.memory_id,
+			       ROW_NUMBER() OVER (ORDER BY ts_rank(im.search_vector, kw.q) DESC) AS pos
+			FROM investigation_memories im
+			CROSS JOIN kw_tsq kw
+			WHERE im.project = $1
+			  AND im.deprecated = false
+			  AND im.search_vector @@ kw.q
+			ORDER BY ts_rank(im.search_vector, kw.q) DESC
 			LIMIT $3
 		),
 		fused AS (
