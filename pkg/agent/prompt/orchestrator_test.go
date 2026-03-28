@@ -97,7 +97,7 @@ func TestBuildOrchestratorMessages_SystemIncludesCatalog(t *testing.T) {
 	assert.Contains(t, system.Content, "GeneralWorker")
 	assert.Contains(t, system.Content, "dispatch_agent")
 	assert.Contains(t, system.Content, "Sub-agent results are delivered to you automatically")
-	assert.Contains(t, system.Content, "[Sub-agent completed]")
+	assert.Contains(t, system.Content, "NEVER predict, fabricate, or speculate")
 	assert.Contains(t, system.Content, orchestratorTaskFocus)
 	// Tier 1 instructions
 	assert.Contains(t, system.Content, "General SRE Agent Instructions")

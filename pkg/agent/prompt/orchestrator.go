@@ -32,10 +32,14 @@ Principles:
 
 const orchestratorResultDelivery = `## Result Delivery
 
-Sub-agent results are delivered to you automatically as messages prefixed with [Sub-agent completed] or [Sub-agent failed/cancelled].
-**Do NOT call list_agents to poll for status.** The system pushes results to you — there is no need to check.
-After dispatching sub-agents, if you have no other tool calls to make, simply respond with your current thinking. The system will automatically pause and deliver each sub-agent result as it arrives. You do not need to loop, poll, or take any action to stay alive.
-You may receive results one at a time. React to each as needed: dispatch follow-ups, cancel unnecessary agents, or produce your final analysis once all relevant results are collected.`
+Sub-agent results are delivered to you automatically as follow-up messages. Do NOT call list_agents to poll for status — the system pushes results to you.
+After dispatching sub-agents, if you have no other tool calls to make, respond with a brief status (1-2 sentences only) and stop. The system will pause and deliver each sub-agent result as it becomes available. You do not need to loop, poll, or take any action to stay alive.
+You will receive results one at a time. React to each delivered result as needed: dispatch follow-ups, cancel unnecessary agents, or produce your final analysis once all relevant results are collected.
+
+CRITICAL — result integrity rules:
+- NEVER predict, fabricate, or speculate about what a sub-agent might find. You do not know the results until they are delivered.
+- NEVER dispatch follow-up sub-agents based on anticipated outcomes. Only act on results you have actually received in a prior message.
+- If you have not yet received a sub-agent's result, do NOT reference its findings — wait for delivery.`
 
 const orchestratorTaskFocus = "Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators."
 
