@@ -43,6 +43,17 @@ has verified findings against reality. Pay close attention to:
 - **negative** — A mistake, dead end, or anti-pattern to avoid.
 - **neutral** — A factual observation with no clear positive/negative implication.
 
+## Extraction Boundaries
+
+The following do NOT belong in memories even when mentioned in feedback:
+
+- **Tool limitations, bugs, and workarounds.** If the reviewer notes a tool failure or
+  workaround, that is a tooling issue — not a learning for future investigations.
+- **Domain-generic procedures.** General investigation steps that apply to every alert of a
+  given type belong in skills or runbooks, not memories.
+- **Speculative findings.** Only extract learnings the reviewer confirmed with evidence or
+  domain expertise. Do not extract unverified theories.
+
 ## Guidelines
 
 - Extract only learnings that would **concretely help** a future investigation.

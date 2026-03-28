@@ -64,6 +64,32 @@ Each learning falls into one category:
 - **negative** — A mistake, dead end, or anti-pattern to avoid in the future.
 - **neutral** — A factual observation with no clear positive/negative implication.
 
+## Extraction Boundaries
+
+The following do NOT belong in memories and must NOT be extracted:
+
+- **Tool limitations, bugs, and workarounds.** If a tool returned an error, timed out, or
+  required a non-obvious workaround, that is a tooling issue — not a learning for future
+  investigations. These belong in tool improvement reports, skills, or runbook updates.
+- **Domain-generic procedures.** Investigation steps that apply to every alert of a given type
+  (e.g., "always check logs first") belong in skills or runbooks, not memories. Memories are
+  for specific, surprising, or non-obvious findings.
+- **Speculative findings.** Only extract learnings confirmed by tool output or concrete
+  evidence from the investigation. Do not extract guesses, hypotheses, or unverified theories.
+- **Skill content.** If a learning is already covered by the agent's skills (visible in the
+  investigation timeline as pre-loaded or dynamically loaded via `load_skill`), do not extract
+  it — the agent already knows it.
+
+Aim for **0–3 new memories** per investigation. Most investigations confirm existing knowledge
+rather than produce new learnings — reinforcing existing memories or returning empty arrays is
+the expected outcome, not the exception. Exceeding 3 creates should be rare and justified by
+a genuinely rich investigation. When in doubt, reinforce an existing memory rather than
+creating a near-duplicate.
+
+If there is nothing to create, reinforce, or deprecate, return the JSON structure with all
+empty arrays: {"create": [], "reinforce": [], "deprecate": []}. This is the correct response
+for routine investigations — do not invent learnings to fill the output.
+
 ## Quality Guidelines
 
 - Extract only learnings that would **concretely help** a future investigation. Ask: "If an
@@ -71,15 +97,9 @@ Each learning falls into one category:
 - Ground every learning in **specific evidence** from the investigation — tool call results,
   agent reasoning, or scoring critique. Do not extract generic SRE knowledge the agent already
   has.
-- **Do not duplicate skill content.** The investigation timeline includes the agent's skills —
-  both pre-loaded (at the start of the timeline) and dynamically loaded via `load_skill` tool
-  calls. If a learning is already covered by a skill (e.g., classification criteria, report
-  format, environment facts), do not extract it — the agent already knows it.
 - Prefer **specific and actionable** over vague and general. "Check PgBouncer health before
   blaming the database" is better than "Consider all components in the request path."
 - Negative learnings from mistakes are especially valuable — they prevent repeating errors.
-- If the investigation was routine and existing memories already cover the lessons, return
-  empty arrays. Not every investigation produces new learnings.
 
 === MESSAGE: user ===
 Below is a completed TARSy investigation and its quality evaluation. Extract discrete
