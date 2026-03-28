@@ -300,6 +300,63 @@ for routine investigations — do not invent learnings to fill the output.
 | Tests | Update existing tests for new ranking behavior, add threshold tests, hybrid search tests, session search tests |
 | `docs/adr/0014-investigation-memory.md` | Update retrieval query shape, confidence model, Reflector guidelines, new tool |
 
+## Implementation Plan
+
+Four phases, each a separate PR. Ordered by dependency chain and risk: lowest-risk/highest-immediate-impact first.
+
+### Phase 1 — Reflector Extraction Selectivity (change 9)
+
+Prompt-only change. Reduces noise at the source before we improve retrieval.
+
+| File | What changes |
+|------|-------------|
+| `pkg/memory/reflector.go` | Insert `## Extraction Boundaries` section into `reflectorSystemPrompt`, trim `## Quality Guidelines` (see change #9 for exact text) |
+| `pkg/memory/reflector.go` | Analogous Extraction Boundaries for `feedbackReflectorSystemPrompt` |
+
+No code logic changes, no migrations, no test changes. Can be verified by inspecting Reflector output on subsequent investigations.
+
+### Phase 2 — Ranking & Filtering Overhaul (changes 1, 2, 3, 4, 5)
+
+All modifications to `FindSimilarWithBoosts` in one PR — threshold, confidence, decay, score exposure. Also includes the embedding refresh fix and flat initial confidence.
+
+| File | What changes |
+|------|-------------|
+| `pkg/memory/service.go` | `FindSimilarWithBoosts`: add `WHERE (1 - distance) >= $threshold`, confidence multiplier `(0.7 + 0.3 * confidence)`, temporal decay `EXP(...)` in `ORDER BY`, return similarity score to callers |
+| `pkg/memory/service.go` | `FindSimilar`: add temporal decay to `ORDER BY` |
+| `pkg/memory/service.go` | `initialConfidence(score int)` → `const initialConfidence = 0.7` |
+| `pkg/memory/service.go` | `Update`: regenerate embedding when content changes |
+| `pkg/memory/types.go` | Add `Score` field to `Memory` struct |
+| `pkg/memory/tool_executor.go` | Include score in `executeRecall` output format, update `recall_past_investigations` description |
+| `pkg/queue/executor_memory.go` | Pass similarity threshold to auto-injection retrieval |
+| `pkg/queue/scoring_executor.go` | Drop `score` parameter from `ApplyReflectorActions` call |
+| Tests | Update existing ranking/recall tests, add threshold edge cases (all above threshold, none above, mixed) |
+
+No migrations. Biggest behavioral change — test with production-like memory sets before merge.
+
+### Phase 3 — Hybrid Search (change 8)
+
+Replaces pure vector search with vector + keyword RRF. Depends on phase 2 (the query it extends).
+
+| File | What changes |
+|------|-------------|
+| DB migration | `tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED` + GIN index on `investigation_memories` |
+| `pkg/memory/service.go` | `FindSimilarWithBoosts`: replace single-CTE query with dual-CTE (vector + keyword) + RRF fusion (see change #8 pseudo-SQL) |
+| Tests | Hybrid search tests: keyword-only match, vector-only match, both match (RRF boost), query with extra terms that shift embedding |
+
+### Phase 4 — Entity-Level Recall (changes 6, 7)
+
+New `search_past_sessions` tool with LLM summarization. Finalize both tool descriptions.
+
+| File | What changes |
+|------|-------------|
+| DB migration | `tsvector GENERATED ALWAYS AS (to_tsvector('simple', alert_data)) STORED` + GIN index on `alert_sessions` |
+| `pkg/memory/tool_executor.go` | Register `search_past_sessions` tool, finalize `search_past_sessions` description (see change #7) |
+| `pkg/memory/service.go` | Session search query (`plainto_tsquery` + AND logic, completed sessions only, ordered by `created_at DESC`) |
+| `pkg/memory/service.go` (or new file) | LLM summarization: build prompt from matched sessions, single call using current agent model, error on failure |
+| Tests | Session search tests: single-term match, multi-term AND, no matches, LLM summarization mock, failure behavior |
+
+After phase 4: update `docs/adr/0014-investigation-memory.md` to reflect the new retrieval query shape, confidence model, Reflector guidelines, and both tools.
+
 ## Out of Scope
 
 - New storage backends or vector databases
