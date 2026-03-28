@@ -315,7 +315,7 @@ Prompt-only change. Reduces noise at the source before we improve retrieval.
 
 No code logic changes, no migrations. Prompt assertion tests and e2e golden fixtures updated to match the new prompt text. Verify by running `go test ./pkg/memory/... -run Reflector` and the e2e golden-fixture suite, plus inspecting Reflector output on subsequent investigations.
 
-### Phase 2 — Ranking & Filtering Overhaul (changes 1, 2, 3, 4, 5)
+### Phase 2 — Ranking & Filtering Overhaul (changes 1, 2, 3, 4, 5) - DONE
 
 All modifications to `FindSimilarWithBoosts` in one PR — threshold, confidence, decay, score exposure. Also includes the embedding refresh fix and flat initial confidence.
 

@@ -71,9 +71,9 @@ No runbook available.
 
 **Pre-loaded Memories (3):**
 
-- [procedural, positive, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
-- [semantic, neutral, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
-- [procedural, negative, learned {AGE}] container_memory_rss metric does not exist in this setup
+- [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
+- [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
+- [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup
 
 **Internal Reasoning:**
 
@@ -120,9 +120,9 @@ Searching past investigations.
 === MESSAGE: tool (recall-1, recall_past_investigations) ===
 Found 3 relevant memories:
 
-1. [procedural, positive, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
-2. [semantic, neutral, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
-3. [procedural, negative, learned {AGE}] container_memory_rss metric does not exist in this setup
+1. [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
+2. [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
+3. [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup
 
 === MESSAGE: assistant ===
 Based on past investigations, check PgBouncer connection pool health.

@@ -22,7 +22,7 @@ func seedMemory(t *testing.T) (*memory.Service, string, string) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80, &memory.ReflectorResult{
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
 		Create: []memory.ReflectorCreateAction{
 			{Content: "Always check logs", Category: "procedural", Valence: "positive"},
 		},
@@ -59,7 +59,7 @@ func TestService_GetBySessionID(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80, &memory.ReflectorResult{
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
 		Create: []memory.ReflectorCreateAction{
 			{Content: "First learning", Category: "procedural", Valence: "positive"},
 			{Content: "Second learning", Category: "semantic", Valence: "neutral"},
@@ -140,7 +140,7 @@ func TestService_List(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80, &memory.ReflectorResult{
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
 		Create: []memory.ReflectorCreateAction{
 			{Content: "Memory A", Category: "procedural", Valence: "positive"},
 			{Content: "Memory B", Category: "semantic", Valence: "negative"},
@@ -359,7 +359,7 @@ func TestService_GetInjectedBySessionID(t *testing.T) {
 	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
 
-	err = svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80, &memory.ReflectorResult{
+	err = svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
 		Create: []memory.ReflectorCreateAction{
 			{Content: "Injected memory", Category: "procedural", Valence: "positive"},
 		},

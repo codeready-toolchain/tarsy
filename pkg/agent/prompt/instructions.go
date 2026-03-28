@@ -253,9 +253,9 @@ func appendMemorySection(sections []string, execCtx *agent.ExecutionContext) []s
 			sb.WriteByte('\n')
 		}
 		if m.AgeLabel != "" {
-			sb.WriteString(fmt.Sprintf("- [%s, %s, %s] %s\n", m.Category, m.Valence, m.AgeLabel, m.Content))
+			sb.WriteString(fmt.Sprintf("- [%s, %s, score: %.2f, %s] %s\n", m.Category, m.Valence, m.Score, m.AgeLabel, m.Content))
 		} else {
-			sb.WriteString(fmt.Sprintf("- [%s, %s] %s\n", m.Category, m.Valence, m.Content))
+			sb.WriteString(fmt.Sprintf("- [%s, %s, score: %.2f] %s\n", m.Category, m.Valence, m.Score, m.Content))
 		}
 	}
 	sb.WriteString("</memory_data>")

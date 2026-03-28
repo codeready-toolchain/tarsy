@@ -119,9 +119,9 @@ func emitMemoryInjectedEvent(ctx context.Context, execCtx *agent.ExecutionContex
 			sb.WriteByte('\n')
 		}
 		if m.AgeLabel != "" {
-			sb.WriteString(fmt.Sprintf("- [%s, %s, %s] %s", m.Category, m.Valence, m.AgeLabel, m.Content))
+			sb.WriteString(fmt.Sprintf("- [%s, %s, score: %.2f, %s] %s", m.Category, m.Valence, m.Score, m.AgeLabel, m.Content))
 		} else {
-			sb.WriteString(fmt.Sprintf("- [%s, %s] %s", m.Category, m.Valence, m.Content))
+			sb.WriteString(fmt.Sprintf("- [%s, %s, score: %.2f] %s", m.Category, m.Valence, m.Score, m.Content))
 		}
 	}
 

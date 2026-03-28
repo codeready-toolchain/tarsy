@@ -509,7 +509,7 @@ func (e *ScoringExecutor) runMemoryExtraction(
 	chainIDPtr := &session.ChainID
 
 	if applyErr := e.memoryService.ApplyReflectorActions(
-		ctx, project, session.ID, alertTypePtr, chainIDPtr, parsedScore.TotalScore, parsed,
+		ctx, project, session.ID, alertTypePtr, chainIDPtr, parsed,
 	); applyErr != nil {
 		logger.Warn("Failed to apply reflector actions",
 			"error", applyErr, "project", project, "session_id", session.ID)

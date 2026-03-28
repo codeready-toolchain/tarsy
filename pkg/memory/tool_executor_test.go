@@ -138,7 +138,7 @@ func TestToolExecutor_ListTools_RecallToolDefinition(t *testing.T) {
 	require.Len(t, tools, 1)
 
 	assert.Equal(t, ToolRecallPastInvestigations, tools[0].Name)
-	assert.Contains(t, tools[0].Description, "Search learnings from past investigations")
+	assert.Contains(t, tools[0].Description, "Search distilled knowledge from past investigations")
 	assert.Contains(t, tools[0].ParametersSchema, `"query"`)
 	assert.Contains(t, tools[0].ParametersSchema, `"limit"`)
 }

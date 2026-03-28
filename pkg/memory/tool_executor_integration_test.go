@@ -30,7 +30,7 @@ func TestToolExecutor_Recall_FormattedResults(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80,
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
 			{Content: "Check PgBouncer health first", Category: "procedural", Valence: "positive"},
 			{Content: "OOMKill uses working_set_bytes", Category: "episodic", Valence: "neutral"},
@@ -44,15 +44,17 @@ func TestToolExecutor_Recall_FormattedResults(t *testing.T) {
 	assert.False(t, result.IsError)
 	assert.Equal(t, "call-1", result.CallID)
 	assert.Contains(t, result.Content, "Found 2 relevant memories")
-	assert.Contains(t, result.Content, "[procedural, positive, learned just now] Check PgBouncer health first")
-	assert.Contains(t, result.Content, "[episodic, neutral, learned just now] OOMKill uses working_set_bytes")
+	assert.Contains(t, result.Content, "procedural, positive, score:")
+	assert.Contains(t, result.Content, "Check PgBouncer health first")
+	assert.Contains(t, result.Content, "episodic, neutral, score:")
+	assert.Contains(t, result.Content, "OOMKill uses working_set_bytes")
 }
 
 func TestToolExecutor_Recall_ExcludesInjectedIDs(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80,
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
 			{Content: "Memory A", Category: "procedural", Valence: "positive"},
 			{Content: "Memory B", Category: "semantic", Valence: "neutral"},
@@ -79,7 +81,7 @@ func TestToolExecutor_Recall_AllExcluded(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80,
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
 			{Content: "Only memory", Category: "procedural", Valence: "positive"},
 		}})
@@ -103,7 +105,7 @@ func TestToolExecutor_Recall_LimitApplied(t *testing.T) {
 	svc, sessionID := newTestService(t, []float32{1, 0, 0})
 	ctx := t.Context()
 
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80,
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
 			{Content: "Memory 1", Category: "procedural", Valence: "positive"},
 			{Content: "Memory 2", Category: "procedural", Valence: "positive"},
@@ -139,7 +141,7 @@ func TestToolExecutor_Recall_DefaultLimit(t *testing.T) {
 	ctx := t.Context()
 
 	// Seed 3 memories, request with no limit → default 10 → returns all 3.
-	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, 80,
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
 			{Content: "A", Category: "procedural", Valence: "positive"},
 			{Content: "B", Category: "semantic", Valence: "neutral"},

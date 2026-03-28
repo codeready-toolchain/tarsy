@@ -86,6 +86,7 @@ func (e *RealSessionExecutor) retrieveMemories(ctx context.Context, session *ent
 			Content:  m.Content,
 			Category: m.Category,
 			Valence:  m.Valence,
+			Score:    m.Score,
 			AgeLabel: memory.FormatMemoryAge(m.CreatedAt, m.UpdatedAt),
 		}
 		briefing.InjectedIDs[i] = m.ID

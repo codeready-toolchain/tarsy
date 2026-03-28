@@ -265,7 +265,7 @@ func TestChatExecutor_MemoryEnabled_RecallToolPresent_NoAutoInjection(t *testing
 	require.NoError(t, err)
 
 	alertType := "test-alert"
-	err = memSvc.ApplyReflectorActions(ctx, "default", sourceSession.ID, &alertType, &chainID, 80,
+	err = memSvc.ApplyReflectorActions(ctx, "default", sourceSession.ID, &alertType, &chainID,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
 			{Content: "Check PgBouncer connection pool health", Category: "procedural", Valence: "positive"},
 		}})

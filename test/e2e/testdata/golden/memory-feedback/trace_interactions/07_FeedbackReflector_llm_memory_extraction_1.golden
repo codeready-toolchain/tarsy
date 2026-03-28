@@ -79,7 +79,7 @@ Pod OOMKilled in production
 
 ### Investigator
 
-- .recall_past_investigations — Search learnings from past investigations of similar alerts. Use when you suspect a pattern you may have seen before, or want to check if previous investigations found useful context for this type of issue.
+- .recall_past_investigations — Search distilled knowledge from past investigations — reusable patterns, procedures, environment quirks, and anti-patterns. Use for situational questions like 'what do we know about this type of workload?', 'how should I handle this category of alert?', or 'what are common false positives here?'. Returns generalized learnings, NOT specific investigation history — will not find particular users, namespaces, or session details.
 - test-mcp.get_pods — test tool: get_pods
 
 ## INVESTIGATION TIMELINE
@@ -140,7 +140,7 @@ These memories were previously extracted from this and past investigations. Use 
 to avoid duplicates and to decide what to reinforce or deprecate.
 
 <existing_memories>
-[{"id":"{UUID}","content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive","confidence":0.36,"seen_count":1,"created_at":"{TIMESTAMP}","updated_at":"{TIMESTAMP}"}]
+[{"id":"{UUID}","content":"OOMKilled pods need memory metrics verification","category":"procedural","valence":"positive","confidence":0.42,"seen_count":1,"created_at":"{TIMESTAMP}","updated_at":"{TIMESTAMP}"}]
 </existing_memories>
 
 ## Your Task

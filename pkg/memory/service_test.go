@@ -9,30 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestInitialConfidence(t *testing.T) {
-	tests := []struct {
-		name  string
-		score int
-		want  float64
-	}{
-		{"excellent score", 95, 0.8},
-		{"high score", 80, 0.8},
-		{"good score", 70, 0.6},
-		{"medium score", 60, 0.6},
-		{"mediocre score", 50, 0.4},
-		{"low score", 40, 0.4},
-		{"poor score", 30, 0.3},
-		{"zero score", 0, 0.3},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := initialConfidence(tt.score)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestFormatVector(t *testing.T) {
 	tests := []struct {
 		name string

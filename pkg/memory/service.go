@@ -34,6 +34,9 @@ func NewService(entClient *ent.Client, db *sql.DB, embedder Embedder, cfg *confi
 }
 
 // FindSimilar returns the top-N memories most similar to queryText within a project.
+// Used by the Reflector for dedup context — no similarity threshold (the Reflector
+// benefits from seeing broadly similar memories), but temporal decay is applied
+// so stale memories rank lower.
 // Raw SQL: pgvector's cosine distance operator (<=>) is not supported by Ent.
 func (s *Service) FindSimilar(ctx context.Context, project, queryText string, limit int) ([]Memory, error) {
 	queryVec, err := s.embedder.Embed(ctx, queryText, EmbeddingTaskQuery)
@@ -50,7 +53,9 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 		WHERE project = $1
 		  AND deprecated = false
 		  AND embedding IS NOT NULL
-		ORDER BY (embedding <=> $2::vector)
+		ORDER BY (1 - (embedding <=> $2::vector))
+		       * EXP(-0.0077 * EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400.0)
+		  DESC
 		LIMIT $3
 	`, project, vecStr, limit)
 	if err != nil {
@@ -74,14 +79,22 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 // fetches before the boost re-ranking narrows to the final limit.
 const candidateMultiplier = 3
 
+// similarityThreshold is the minimum (1 - cosine_distance) for a memory to
+// be considered relevant. Candidates below this floor are discarded before
+// the final LIMIT. Reviewed when the embedding model changes.
+const similarityThreshold = 0.45
+
+// Temporal decay rate 0.0077 (≈ ln(2)/90) is hardcoded in the SQL queries
+// for FindSimilar and FindSimilarWithBoosts, giving a 90-day half-life.
+
 // FindSimilarWithBoosts returns the top-N memories using cosine similarity
-// with soft boosts for alert_type and chain_id scope metadata.
-// Raw SQL: pgvector's cosine distance operator (<=>) and the CTE-based
-// re-ranking are not expressible in Ent.
+// with confidence weighting, temporal decay, and soft boosts for alert_type
+// and chain_id scope metadata. Candidates below similarityThreshold are
+// discarded. The returned Memory.Score reflects the final ranking score.
 //
 // The query uses a two-step approach so pgvector's HNSW index is utilised:
-//  1. Inner CTE fetches a larger candidate set ordered by raw cosine distance.
-//  2. Outer query re-ranks candidates with scope boosts and returns the final limit.
+//  1. Inner CTE fetches a larger candidate set filtered by similarity threshold.
+//  2. Outer query re-ranks with confidence, decay, and scope boosts.
 func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText string, alertType, chainID *string, limit int) ([]Memory, error) {
 	queryVec, err := s.embedder.Embed(ctx, queryText, EmbeddingTaskQuery)
 	if err != nil {
@@ -100,19 +113,22 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 			WHERE project = $1
 			  AND deprecated = false
 			  AND embedding IS NOT NULL
+			  AND (1 - (embedding <=> $2::vector)) >= $7
 			ORDER BY embedding <=> $2::vector
 			LIMIT $3
 		)
 		SELECT memory_id, content, category, valence, confidence, seen_count,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       (1 - distance)
+		         * (0.7 + 0.3 * confidence)
+		         * EXP(-0.0077 * EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400.0)
+		         + CASE WHEN alert_type = $4 THEN 0.05 ELSE 0 END
+		         + CASE WHEN chain_id  = $5 THEN 0.03 ELSE 0 END
+		         AS score
 		FROM candidates
-		ORDER BY
-		  (1 - distance)
-		  + CASE WHEN alert_type = $4 THEN 0.05 ELSE 0 END
-		  + CASE WHEN chain_id  = $5 THEN 0.03 ELSE 0 END
-		  DESC
+		ORDER BY score DESC
 		LIMIT $6
-	`, project, vecStr, candidates, alertType, chainID, limit)
+	`, project, vecStr, candidates, alertType, chainID, limit, similarityThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("similarity search with boosts: %w", err)
 	}
@@ -122,7 +138,7 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	for rows.Next() {
 		var m Memory
 		if err := rows.Scan(&m.ID, &m.Content, &m.Category, &m.Valence, &m.Confidence, &m.SeenCount,
-			&m.CreatedAt, &m.UpdatedAt); err != nil {
+			&m.CreatedAt, &m.UpdatedAt, &m.Score); err != nil {
 			return nil, fmt.Errorf("scan memory row: %w", err)
 		}
 		memories = append(memories, m)
@@ -132,16 +148,15 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 
 // ApplyReflectorActions processes the Reflector's output: creates new memories,
 // reinforces confirmed ones, and deprecates contradicted ones.
-func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID string, alertType, chainID *string, score int, result *ReflectorResult) error {
+func (s *Service) ApplyReflectorActions(ctx context.Context, project, sessionID string, alertType, chainID *string, result *ReflectorResult) error {
 	if result == nil || result.IsEmpty() {
 		return nil
 	}
 
 	var errs []error
 
-	confidence := initialConfidence(score)
 	for _, action := range result.Create {
-		if err := s.createMemory(ctx, project, sessionID, alertType, chainID, confidence, action); err != nil {
+		if err := s.createMemory(ctx, project, sessionID, alertType, chainID, initialConfidence, action); err != nil {
 			slog.Warn("Failed to create memory",
 				"session_id", sessionID, "content_prefix", truncate(action.Content, 80), "error", err)
 			errs = append(errs, err)
@@ -417,7 +432,8 @@ type UpdateInput struct {
 	Deprecated *bool
 }
 
-// Update applies a partial update to a memory.
+// Update applies a partial update to a memory. When content changes, the
+// embedding vector is regenerated to stay consistent with the new text.
 func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*Detail, error) {
 	u := s.entClient.InvestigationMemory.UpdateOneID(memoryID)
 	changed := false
@@ -450,6 +466,20 @@ func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput
 		}
 		return nil, fmt.Errorf("update memory %s: %w", memoryID, err)
 	}
+
+	if input.Content != nil {
+		vec, err := s.embedder.Embed(ctx, *input.Content, EmbeddingTaskDocument)
+		if err != nil {
+			return nil, fmt.Errorf("re-embed updated content for %s: %w", memoryID, err)
+		}
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE investigation_memories SET embedding = $1::vector WHERE memory_id = $2`,
+			formatVector(vec), memoryID,
+		); err != nil {
+			return nil, fmt.Errorf("update embedding for %s: %w", memoryID, err)
+		}
+	}
+
 	return entToDetail(m), nil
 }
 
@@ -528,19 +558,10 @@ func (s *Service) ApplyFeedbackReflectorActions(ctx context.Context, project, se
 	return errors.Join(errs...)
 }
 
-// initialConfidence derives initial confidence from the investigation's quality score.
-func initialConfidence(score int) float64 {
-	switch {
-	case score >= 80:
-		return 0.8
-	case score >= 60:
-		return 0.6
-	case score >= 40:
-		return 0.4
-	default:
-		return 0.3
-	}
-}
+// initialConfidence is the fixed confidence for all auto-extracted memories.
+// Confidence is a pure human/reinforcement signal — the Reflector is trusted
+// as the quality gate at extraction time.
+const initialConfidence = 0.7
 
 // ValidateDimensions checks that the configured embedding dimensions match the
 // pgvector column size. Returns an error on mismatch.

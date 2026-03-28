@@ -23,7 +23,7 @@ func IsMemoryTool(name string) bool {
 // recallTool is the tool definition exposed to the LLM.
 var recallTool = agent.ToolDefinition{
 	Name:        ToolRecallPastInvestigations,
-	Description: "Search learnings from past investigations of similar alerts. Use when you suspect a pattern you may have seen before, or want to check if previous investigations found useful context for this type of issue.",
+	Description: "Search distilled knowledge from past investigations — reusable patterns, procedures, environment quirks, and anti-patterns. Use for situational questions like 'what do we know about this type of workload?', 'how should I handle this category of alert?', or 'what are common false positives here?'. Returns generalized learnings, NOT specific investigation history — will not find particular users, namespaces, or session details.",
 	ParametersSchema: `{
   "type": "object",
   "properties": {
@@ -190,7 +190,7 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 	sb.WriteString(fmt.Sprintf("Found %d relevant memories:\n", len(filtered)))
 	for i, m := range filtered {
 		age := FormatMemoryAge(m.CreatedAt, m.UpdatedAt)
-		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, %s] %s", i+1, m.Category, m.Valence, age, m.Content))
+		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, score: %.2f, %s] %s", i+1, m.Category, m.Valence, m.Score, age, m.Content))
 	}
 
 	return &agent.ToolResult{

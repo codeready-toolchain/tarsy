@@ -36,6 +36,7 @@ var (
 	durationMsRe      = regexp.MustCompile(`"duration_ms":\s*\d+`)
 	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
 	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
+	memoryScoreRe     = regexp.MustCompile(`score: \d+\.\d+`)
 )
 
 // NewNormalizer creates a normalizer that knows the session ID to replace.
@@ -139,28 +140,31 @@ func (n *Normalizer) Normalize(data string) string {
 	// 7. Replace "Current time:" line (varies every run).
 	data = currentTimeLineRe.ReplaceAllString(data, "Current time: {CURRENT_TIME}")
 
-	// 8. Replace memory age labels (vary based on when memories were created).
+	// 8. Replace memory score values (vary based on ranking computation).
+	data = memoryScoreRe.ReplaceAllString(data, "score: {SCORE}")
+
+	// 9. Replace memory age labels (vary based on when memories were created).
 	data = memoryAgeRe.ReplaceAllString(data, "${1} {AGE}")
 
-	// 9. Replace any remaining UUIDs.
+	// 10. Replace any remaining UUIDs.
 	data = uuidRe.ReplaceAllString(data, "{UUID}")
 
-	// 10. Replace RFC3339 timestamps.
+	// 11. Replace RFC3339 timestamps.
 	data = timestampRe.ReplaceAllString(data, "{TIMESTAMP}")
 
-	// 11. Replace Unix timestamps in known fields.
+	// 12. Replace Unix timestamps in known fields.
 	data = unixTSRe.ReplaceAllStringFunc(data, func(match string) string {
 		idx := strings.Index(match, ":")
 		return match[:idx+1] + " {UNIX_TS}"
 	})
 
-	// 12. Replace db_event_id.
+	// 13. Replace db_event_id.
 	data = dbEventIDRe.ReplaceAllString(data, `"db_event_id": {DB_EVENT_ID}`)
 
-	// 13. Replace connection_id.
+	// 14. Replace connection_id.
 	data = connIDRe.ReplaceAllString(data, `"connection_id": "{CONN_ID}"`)
 
-	// 14. Replace duration_ms (non-deterministic timing).
+	// 15. Replace duration_ms (non-deterministic timing).
 	data = durationMsRe.ReplaceAllString(data, `"duration_ms": {DURATION_MS}`)
 
 	return data
