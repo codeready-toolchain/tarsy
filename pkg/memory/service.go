@@ -118,6 +118,11 @@ const similarityThreshold = 0.45
 // The outer query joins back to the table for full columns, applies confidence
 // and decay multipliers plus scope boosts, and returns the final ranked results.
 func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText string, alertType, chainID *string, limit int) ([]Memory, error) {
+	queryText = strings.TrimSpace(queryText)
+	if queryText == "" {
+		return nil, nil
+	}
+
 	queryVec, err := s.embedder.Embed(ctx, queryText, EmbeddingTaskQuery)
 	if err != nil {
 		return nil, fmt.Errorf("embed query text: %w", err)
@@ -151,8 +156,8 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 		),
 		fused AS (
 			SELECT COALESCE(v.memory_id, k.memory_id) AS memory_id,
-			       1.0 / (60 + COALESCE(v.pos, $3)) +
-			       1.0 / (60 + COALESCE(k.pos, $3)) AS rrf_score
+			       COALESCE(1.0 / (60 + v.pos), 0.0) +
+			       COALESCE(1.0 / (60 + k.pos), 0.0) AS rrf_score
 			FROM vector_candidates v
 			FULL OUTER JOIN keyword_candidates k ON v.memory_id = k.memory_id
 		)

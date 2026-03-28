@@ -3,6 +3,7 @@ package memory_test
 import (
 	"context"
 	stdsql "database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
@@ -737,6 +738,28 @@ func TestService_FindSimilarWithBoosts_ProjectIsolationKeywordPath(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, memories, 1)
 	assert.Contains(t, memories[0].Content, "Coolify")
+}
+
+// TestService_FindSimilarWithBoosts_EmptyQueryText verifies that empty or
+// whitespace-only queryText short-circuits without hitting the embedder or DB.
+func TestService_FindSimilarWithBoosts_EmptyQueryText(t *testing.T) {
+	svc, sessionID := newTestService(t, []float32{1, 0, 0})
+	ctx := t.Context()
+
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
+		Create: []memory.ReflectorCreateAction{
+			{Content: "Memory that would match via vector", Category: "semantic", Valence: "positive"},
+		},
+	})
+	require.NoError(t, err)
+
+	for _, queryText := range []string{"", " ", "\t\n "} {
+		t.Run("query="+fmt.Sprintf("%q", queryText), func(t *testing.T) {
+			memories, err := svc.FindSimilarWithBoosts(ctx, "default", queryText, nil, nil, 10)
+			require.NoError(t, err)
+			assert.Empty(t, memories, "empty/whitespace query should return no results")
+		})
+	}
 }
 
 func TestService_CreateMemory_PersistsAllColumns(t *testing.T) {
