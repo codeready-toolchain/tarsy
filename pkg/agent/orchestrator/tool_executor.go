@@ -154,7 +154,9 @@ func (c *CompositeToolExecutor) handleDispatch(ctx context.Context, call agent.T
 	note := fmt.Sprintf(
 		"Agent %q dispatched (execution: %s). "+
 			"Its result will be delivered automatically as a follow-up message. "+
-			"Do NOT predict or fabricate what this agent will find — wait for the actual delivered result.",
+			"Do NOT predict or fabricate what this agent will find — memory from past incidents is NOT a substitute. "+
+			"Wait for the actual delivered result. "+
+			"Track this agent in your checklist — do not finalize until all dispatched agents report back.",
 		args.Name, execID,
 	)
 	return &agent.ToolResult{

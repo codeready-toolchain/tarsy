@@ -273,7 +273,7 @@ describe('Sub-agent partitioning', () => {
       '{"execution_id":"sub-exec-123","status":"accepted"}\n\n' +
       'Agent "LogAnalyzer" dispatched (execution: sub-exec-123). ' +
       'Its result will be delivered automatically as a follow-up message. ' +
-      'Do NOT predict or fabricate what this agent will find — wait for the actual delivered result.';
+      'Do NOT predict or fabricate what this agent will find — memory from past incidents is NOT a substitute. Wait for the actual delivered result. Track this agent in your checklist — do not finalize until all dispatched agents report back.';
     let execId: string | null = null;
     try {
       const parsed = JSON.parse(content);

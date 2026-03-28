@@ -370,6 +370,7 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 	assert.Contains(t, result, "<memory_data>")
 	assert.Contains(t, result, "</memory_data>")
 	assert.Contains(t, result, "Consider them as hints")
+	assert.Contains(t, result, "Never present memory content as current findings or sub-agent results")
 	assert.Contains(t, result, "[procedural, positive, score: 0.85, learned 3 days ago] Check PgBouncer health first")
 	assert.Contains(t, result, "[semantic, neutral, score: 0.72] Normal error rate is 200/hr")
 	assert.Contains(t, result, "[episodic, negative, score: 0.70, learned 1 week ago] Batch jobs timeout after 30m")

@@ -246,7 +246,8 @@ func appendMemorySection(sections []string, execCtx *agent.ExecutionContext) []s
 	sb.WriteString("## Lessons from Past Investigations\n\n")
 	sb.WriteString("The following are learnings from previous investigations of similar alerts.\n")
 	sb.WriteString("Consider them as hints — they may or may not apply to your current investigation.\n")
-	sb.WriteString("Do not treat them as rules.\n\n")
+	sb.WriteString("Do not treat them as rules.\n")
+	sb.WriteString("IMPORTANT: Memory is context from PAST incidents. It tells you where to look, not what you will find NOW. Never present memory content as current findings or sub-agent results.\n\n")
 	sb.WriteString("<memory_data>\n")
 	for i, m := range execCtx.MemoryBriefing.Memories {
 		if i > 0 {
