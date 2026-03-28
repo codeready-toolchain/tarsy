@@ -68,6 +68,9 @@ func setupMemoryService(t *testing.T, dbClient *database.Client, dims int) (*mem
 	_, err := dbClient.DB().ExecContext(ctx,
 		`ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
 	require.NoError(t, err)
+	_, err = dbClient.DB().ExecContext(ctx,
+		`ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED`)
+	require.NoError(t, err)
 
 	memCfg := &config.MemoryConfig{
 		Enabled:   true,

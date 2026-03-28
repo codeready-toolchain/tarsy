@@ -2725,6 +2725,8 @@ func TestExecutor_MemoryEnabled_BriefingAndRecallTool(t *testing.T) {
 
 	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
 	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED`)
+	require.NoError(t, err)
 
 	memCfg := &config.MemoryConfig{
 		Enabled:   true,

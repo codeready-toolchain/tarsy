@@ -102,7 +102,7 @@ func TestMigrations_EntParity(t *testing.T) {
 		entCols := queryColumnTypes(t, dbEnt, schemaEnt, table)
 
 		if table == "investigation_memories" {
-			migCols = filterColumns(migCols, "embedding")
+			migCols = filterColumns(migCols, "embedding", "search_vector")
 		}
 
 		assert.Equal(t, entCols, migCols,

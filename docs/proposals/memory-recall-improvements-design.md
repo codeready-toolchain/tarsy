@@ -333,7 +333,7 @@ All modifications to `FindSimilarWithBoosts` in one PR — threshold, confidence
 
 No migrations. Biggest behavioral change — test with production-like memory sets before merge.
 
-### Phase 3 — Hybrid Search (change 8)
+### Phase 3 — Hybrid Search (change 8) - DONE
 
 Replaces pure vector search with vector + keyword RRF. Depends on phase 2 (the query it extends).
 

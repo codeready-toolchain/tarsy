@@ -134,7 +134,7 @@ func TestService_Update_RefreshesEmbedding(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	addMemorySearchColumns(t, ctx, db)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
 	_, err := entClient.AlertSession.Create().
@@ -410,7 +410,7 @@ func TestService_GetInjectedBySessionID(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	addMemorySearchColumns(t, ctx, db)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
 	_, err := entClient.AlertSession.Create().
