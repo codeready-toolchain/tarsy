@@ -18,7 +18,8 @@ func TestBuildReflectorSystemPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "positive")
 	assert.Contains(t, prompt, "negative")
 	assert.Contains(t, prompt, "neutral")
-	assert.Contains(t, prompt, "Do not duplicate skill content")
+	assert.Contains(t, prompt, "Extraction Boundaries")
+	assert.Contains(t, prompt, "Skill content")
 }
 
 func TestBuildReflectorUserPrompt(t *testing.T) {
@@ -158,4 +159,5 @@ func TestFeedbackReflectorSystemPrompt(t *testing.T) {
 	assert.Contains(t, feedbackReflectorSystemPrompt, "semantic")
 	assert.Contains(t, feedbackReflectorSystemPrompt, "episodic")
 	assert.Contains(t, feedbackReflectorSystemPrompt, "procedural")
+	assert.Contains(t, feedbackReflectorSystemPrompt, "Extraction Boundaries")
 }
