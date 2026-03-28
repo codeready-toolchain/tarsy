@@ -453,9 +453,37 @@ type UpdateInput struct {
 // embedding vector is regenerated and both the field updates and the embedding
 // write are performed in a single atomic SQL statement. When content does not
 // change, the update goes through Ent normally.
+//
+// The existing record is loaded first so we can skip the (expensive) embedding
+// API call and DB write when the provided values are identical to what is
+// already stored.
 func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*Detail, error) {
 	if input.Content == nil && input.Category == nil && input.Valence == nil && input.Deprecated == nil {
 		return s.GetByID(ctx, memoryID)
+	}
+
+	existing, err := s.GetByID(ctx, memoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Strip inputs that match the persisted values so we only write
+	// fields that actually differ, and avoid a needless re-embed.
+	if input.Content != nil && *input.Content == existing.Content {
+		input.Content = nil
+	}
+	if input.Category != nil && *input.Category == existing.Category {
+		input.Category = nil
+	}
+	if input.Valence != nil && *input.Valence == existing.Valence {
+		input.Valence = nil
+	}
+	if input.Deprecated != nil && *input.Deprecated == existing.Deprecated {
+		input.Deprecated = nil
+	}
+
+	if input.Content == nil && input.Category == nil && input.Valence == nil && input.Deprecated == nil {
+		return existing, nil
 	}
 
 	// Generate embedding before any DB writes so a network failure here

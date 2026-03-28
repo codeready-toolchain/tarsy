@@ -102,6 +102,19 @@ func TestService_Update(t *testing.T) {
 		assert.True(t, m.Deprecated)
 	})
 
+	t.Run("same content skips re-embed", func(t *testing.T) {
+		before, err := svc.GetByID(ctx, memID)
+		require.NoError(t, err)
+
+		same := before.Content
+		result, err := svc.Update(ctx, memID, memory.UpdateInput{Content: &same})
+		require.NoError(t, err)
+
+		assert.Equal(t, before.Content, result.Content)
+		assert.Equal(t, before.UpdatedAt, result.UpdatedAt,
+			"updated_at should not change when content is identical")
+	})
+
 	t.Run("no-op returns current state", func(t *testing.T) {
 		m, err := svc.Update(ctx, memID, memory.UpdateInput{})
 		require.NoError(t, err)
