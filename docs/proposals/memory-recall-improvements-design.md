@@ -191,41 +191,52 @@ ALTER TABLE investigation_memories ADD COLUMN search_vector tsvector
 CREATE INDEX idx_memories_search ON investigation_memories USING gin(search_vector);
 ```
 
-**Query change in `FindSimilarWithBoosts`:** Two inner CTEs fetch candidates — one by vector similarity, one by keyword match — then merge using RRF before applying the confidence multiplier (from change #3) and scope boosts in the final `ORDER BY`.
+**Query change in `FindSimilarWithBoosts`:** Four CTEs: (0) convert query terms to an OR-joined tsquery, (1) vector candidates via ANN, (2) keyword candidates via tsvector/GIN, (3) RRF fusion. The outer query applies confidence, decay, and scope boosts for the final ranking.
 
-Pseudo-SQL (actual implementation will use `ROW_NUMBER()` for positional ranks):
+**Keyword matching uses OR, not AND.** Unlike `search_past_sessions` (change #6) which uses AND for precise entity matching, hybrid search uses OR so that any individual query term can surface a keyword match. With AND, querying "quantiaia coolify VM" would require all three terms in a single memory — the Coolify memory would be missed (the exact production failure this change fixes). OR lets "coolify" alone match, and RRF fusion handles the ranking.
+
+Pseudo-SQL (reflects the actual implementation):
 
 ```sql
-WITH vector_candidates AS (
-  SELECT id, (1 - embedding <=> $query_vec) AS similarity,
+WITH kw_tsq AS (
+  -- Convert AND-joined plainto_tsquery to OR so any term can match.
+  SELECT (regexp_replace(
+    plainto_tsquery('simple', $query_text)::text, ' & ', ' | ', 'g'
+  ))::tsquery AS q
+  WHERE numnode(plainto_tsquery('simple', $query_text)) > 0
+),
+vector_candidates AS (
+  SELECT memory_id,
          ROW_NUMBER() OVER (ORDER BY embedding <=> $query_vec) AS pos
   FROM investigation_memories
   WHERE project = $1 AND deprecated = false AND embedding IS NOT NULL
-    AND (1 - embedding <=> $query_vec) >= $threshold
-  ORDER BY similarity DESC LIMIT $candidate_pool
+    AND (1 - (embedding <=> $query_vec)) >= $threshold
+  ORDER BY embedding <=> $query_vec LIMIT $candidate_pool
 ),
 keyword_candidates AS (
-  SELECT id, ts_rank(search_vector, plainto_tsquery('simple', $query_terms)) AS kw_rank,
-         ROW_NUMBER() OVER (ORDER BY ts_rank(search_vector, plainto_tsquery('simple', $query_terms)) DESC) AS pos
-  FROM investigation_memories
-  WHERE project = $1 AND deprecated = false
-    AND search_vector @@ plainto_tsquery('simple', $query_terms)
+  SELECT im.memory_id,
+         ROW_NUMBER() OVER (ORDER BY ts_rank(im.search_vector, kw.q) DESC) AS pos
+  FROM investigation_memories im
+  CROSS JOIN kw_tsq kw
+  WHERE im.project = $1 AND im.deprecated = false
+    AND im.search_vector @@ kw.q
+  ORDER BY ts_rank(im.search_vector, kw.q) DESC
   LIMIT $candidate_pool
 ),
 fused AS (
-  SELECT COALESCE(v.id, k.id) AS id,
-    1.0 / (60 + COALESCE(v.pos, $candidate_pool)) +
-    1.0 / (60 + COALESCE(k.pos, $candidate_pool)) AS rrf_score
-  FROM vector_candidates v FULL OUTER JOIN keyword_candidates k ON v.id = k.id
+  SELECT COALESCE(v.memory_id, k.memory_id) AS memory_id,
+    COALESCE(1.0 / (60 + v.pos), 0.0) +
+    COALESCE(1.0 / (60 + k.pos), 0.0) AS rrf_score
+  FROM vector_candidates v FULL OUTER JOIN keyword_candidates k ON v.memory_id = k.memory_id
 )
 SELECT m.*, f.rrf_score
-FROM fused f JOIN investigation_memories m ON f.id = m.id
-ORDER BY f.rrf_score
   * (0.7 + 0.3 * m.confidence)
   * EXP(-0.0077 * EXTRACT(EPOCH FROM (NOW() - m.updated_at)) / 86400.0)
   + CASE WHEN m.alert_type = $alert_type THEN 0.05 ELSE 0 END
   + CASE WHEN m.chain_id = $chain_id THEN 0.03 ELSE 0 END
-  DESC
+  AS score
+FROM fused f JOIN investigation_memories m ON f.memory_id = m.memory_id
+ORDER BY score DESC
 LIMIT $limit
 ```
 
@@ -327,13 +338,13 @@ All modifications to `FindSimilarWithBoosts` in one PR — threshold, confidence
 | `pkg/memory/service.go` | `Update`: regenerate embedding when content changes |
 | `pkg/memory/types.go` | Add `Score` field to `Memory` struct |
 | `pkg/memory/tool_executor.go` | Include score in `executeRecall` output format, update `recall_past_investigations` description |
-| `pkg/queue/executor_memory.go` | Pass similarity threshold to auto-injection retrieval |
+| `pkg/queue/executor_memory.go` | Threshold applied automatically via `FindSimilarWithBoosts` (no parameter change needed) |
 | `pkg/queue/scoring_executor.go` | Drop `score` parameter from `ApplyReflectorActions` call |
 | Tests | Update existing ranking/recall tests, add threshold edge cases (all above threshold, none above, mixed) |
 
 No migrations. Biggest behavioral change — test with production-like memory sets before merge.
 
-### Phase 3 — Hybrid Search (change 8)
+### Phase 3 — Hybrid Search (change 8) - DONE
 
 Replaces pure vector search with vector + keyword RRF. Depends on phase 2 (the query it extends).
 

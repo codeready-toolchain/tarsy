@@ -134,11 +134,10 @@ func TestService_Update_RefreshesEmbedding(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -411,11 +410,10 @@ func TestService_GetInjectedBySessionID(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)

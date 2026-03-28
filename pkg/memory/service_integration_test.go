@@ -2,6 +2,8 @@ package memory_test
 
 import (
 	"context"
+	stdsql "database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
@@ -23,19 +25,27 @@ func (f *fakeEmbedder) Embed(_ context.Context, _ string, _ memory.EmbeddingTask
 	return f.vec, nil
 }
 
+// addMemorySearchColumns adds the pgvector and tsvector columns that Ent
+// cannot manage. Mirrors the production migration columns with dim=3 for tests.
+func addMemorySearchColumns(t *testing.T, db *stdsql.DB) {
+	t.Helper()
+	ctx := t.Context()
+	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED`)
+	require.NoError(t, err)
+}
+
 func newTestService(t *testing.T, vec []float32) (*memory.Service, string) {
 	t.Helper()
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	// Add the embedding column — Ent can't manage pgvector types, so this
-	// column is handled via raw SQL in production migrations.
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	// Create a source session (FK target).
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).
 		SetAlertData("test alert").
 		SetAgentType("test").
@@ -187,11 +197,10 @@ func TestService_ApplyReflectorActions_WithScopeMetadata(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("infra").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -223,11 +232,10 @@ func TestService_FindSimilarWithBoosts(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -284,11 +292,10 @@ func TestService_FindSimilarWithBoosts_CandidateReranking(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -345,11 +352,10 @@ func TestService_FindSimilarWithBoosts_SimilarityThreshold(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -401,11 +407,10 @@ func TestService_FindSimilarWithBoosts_TemporalDecay(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -449,11 +454,10 @@ func TestService_FindSimilarWithBoosts_ConfidenceRanking(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)
@@ -489,15 +493,284 @@ func TestService_FindSimilarWithBoosts_ConfidenceRanking(t *testing.T) {
 	assert.Greater(t, memories[0].Score, memories[1].Score)
 }
 
+// TestService_FindSimilarWithBoosts_KeywordOnlyMatch verifies that a memory
+// whose embedding is below the vector similarity threshold can still be found
+// via the keyword search path of hybrid retrieval.
+func TestService_FindSimilarWithBoosts_KeywordOnlyMatch(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	addMemorySearchColumns(t, db)
+
+	sessionID := uuid.New().String()
+	_, err := entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	// Query embedding: [1, 0, 0]
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	// Memory with content containing "coolify" but embedding orthogonal to
+	// query → vector similarity = 0, below threshold. Keyword path should
+	// still find it because content contains the query term.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Coolify deployment requires special port config', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[0,1,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 1, "keyword-only match should be returned via hybrid search")
+	assert.Contains(t, memories[0].Content, "Coolify")
+	assert.Greater(t, memories[0].Score, 0.0)
+}
+
+// TestService_FindSimilarWithBoosts_VectorOnlyMatch verifies that a memory
+// found via vector similarity but not matching any query keywords is still
+// returned through the hybrid search path.
+func TestService_FindSimilarWithBoosts_VectorOnlyMatch(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	addMemorySearchColumns(t, db)
+
+	sessionID := uuid.New().String()
+	_, err := entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	// Query embedding: [1, 0, 0]
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	// Memory with embedding identical to query (cosine sim = 1.0) but content
+	// shares no keywords with the query text "xyzzyplugh".
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Check PgBouncer health before blaming the database', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "xyzzyplugh", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 1, "vector-only match should be returned via hybrid search")
+	assert.Contains(t, memories[0].Content, "PgBouncer")
+}
+
+// TestService_FindSimilarWithBoosts_BothMatchRRFBoost verifies that a memory
+// matching both vector and keyword paths ranks higher (via RRF fusion) than
+// memories matching only one path.
+func TestService_FindSimilarWithBoosts_BothMatchRRFBoost(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	addMemorySearchColumns(t, db)
+
+	sessionID := uuid.New().String()
+	_, err := entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	// Query embedding: [1, 0, 0]; query text: "coolify"
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	// Memory A: matches both vector (identical embedding) AND keyword ("coolify" in content).
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Coolify needs special port configuration', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	// Memory B: matches vector only (identical embedding, no "coolify" in content).
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Check PgBouncer health before blaming the database', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 2)
+
+	assert.Contains(t, memories[0].Content, "Coolify",
+		"memory matching both vector+keyword should rank first due to RRF boost")
+	assert.Contains(t, memories[1].Content, "PgBouncer")
+	assert.Greater(t, memories[0].Score, memories[1].Score,
+		"dual-match should have higher score than vector-only match")
+}
+
+// TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding reproduces
+// the production failure: querying "quantiaia coolify VM" shifts the embedding
+// vector away from "coolify", but keyword search catches the exact term match.
+func TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	addMemorySearchColumns(t, db)
+
+	sessionID := uuid.New().String()
+	_, err := entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	// Simulate embedding drift: query "quantiaia coolify VM" produces an
+	// embedding orthogonal to the Coolify memory. cosine_sim([0,0,1],[1,0,0])=0
+	// which is well below the 0.45 threshold, so vector search fails entirely.
+	// The keyword path must find "coolify" via OR-matched full-text search.
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 0, 1}}, cfg)
+
+	// Coolify memory with embedding [1, 0, 0]. Cosine similarity with
+	// query [0, 0, 1] = 0 — well below 0.45 threshold, so vector path
+	// returns nothing. Keyword "coolify" in the query is an exact match.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Coolify deployments on this host use non-standard ports', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "quantiaia coolify VM", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 1, "keyword match should find coolify memory despite embedding drift")
+	assert.Contains(t, memories[0].Content, "Coolify")
+}
+
+// TestService_FindSimilarWithBoosts_DeprecatedExcludedFromKeywordPath verifies
+// that deprecated memories are excluded from both the vector and keyword CTEs,
+// so a deprecated memory cannot leak through keyword matching alone.
+func TestService_FindSimilarWithBoosts_DeprecatedExcludedFromKeywordPath(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	addMemorySearchColumns(t, db)
+
+	sessionID := uuid.New().String()
+	_, err := entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
+
+	memID := uuid.New().String()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Coolify needs special port config', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
+		memID, sessionID)
+	require.NoError(t, err)
+
+	// Verify findable before deprecation (both vector + keyword match).
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 1)
+
+	// Deprecate.
+	_, err = db.ExecContext(ctx,
+		`UPDATE investigation_memories SET deprecated = true WHERE memory_id = $1`, memID)
+	require.NoError(t, err)
+
+	// After deprecation: neither vector nor keyword path should return it.
+	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	require.NoError(t, err)
+	assert.Empty(t, memories, "deprecated memory must not leak through keyword search path")
+}
+
+// TestService_FindSimilarWithBoosts_ProjectIsolationKeywordPath verifies that
+// keyword matches in one project do not leak into queries for a different project.
+func TestService_FindSimilarWithBoosts_ProjectIsolationKeywordPath(t *testing.T) {
+	entClient, db := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	addMemorySearchColumns(t, db)
+
+	sessionID := uuid.New().String()
+	_, err := entClient.AlertSession.Create().
+		SetID(sessionID).SetAlertData("test").SetAgentType("test").
+		SetChainID("test-chain").SetStatus("completed").Save(ctx)
+	require.NoError(t, err)
+
+	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
+	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 1, 0}}, cfg)
+
+	// Memory in project "alpha" — embedding orthogonal to query, keyword matches.
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO investigation_memories
+			(memory_id, project, content, category, valence, confidence, seen_count,
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'alpha', 'Coolify deployment requires special ports', 'procedural', 'positive', 0.7, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[0,1,0]'::vector)`,
+		uuid.New().String(), sessionID)
+	require.NoError(t, err)
+
+	// Query project "beta" — keyword "coolify" matches the alpha memory's content
+	// but must not cross the project boundary.
+	memories, err := svc.FindSimilarWithBoosts(ctx, "beta", "coolify", nil, nil, 10)
+	require.NoError(t, err)
+	assert.Empty(t, memories, "keyword match from another project must not leak across project boundary")
+
+	// Sanity: same keyword query against "alpha" should find it.
+	memories, err = svc.FindSimilarWithBoosts(ctx, "alpha", "coolify", nil, nil, 10)
+	require.NoError(t, err)
+	require.Len(t, memories, 1)
+	assert.Contains(t, memories[0].Content, "Coolify")
+}
+
+// TestService_FindSimilarWithBoosts_EmptyQueryText verifies that empty or
+// whitespace-only queryText short-circuits without hitting the embedder or DB.
+func TestService_FindSimilarWithBoosts_EmptyQueryText(t *testing.T) {
+	svc, sessionID := newTestService(t, []float32{1, 0, 0})
+	ctx := t.Context()
+
+	err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
+		Create: []memory.ReflectorCreateAction{
+			{Content: "Memory that would match via vector", Category: "semantic", Valence: "positive"},
+		},
+	})
+	require.NoError(t, err)
+
+	for _, queryText := range []string{"", " ", "\t\n "} {
+		t.Run("query="+fmt.Sprintf("%q", queryText), func(t *testing.T) {
+			memories, err := svc.FindSimilarWithBoosts(ctx, "default", queryText, nil, nil, 10)
+			require.NoError(t, err)
+			assert.Empty(t, memories, "empty/whitespace query should return no results")
+		})
+	}
+}
+
 func TestService_CreateMemory_PersistsAllColumns(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
-	_, err := db.ExecContext(ctx, `ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS embedding vector(3)`)
-	require.NoError(t, err)
+	addMemorySearchColumns(t, db)
 
 	sessionID := uuid.New().String()
-	_, err = entClient.AlertSession.Create().
+	_, err := entClient.AlertSession.Create().
 		SetID(sessionID).SetAlertData("test").SetAgentType("test").
 		SetChainID("test-chain").SetStatus("completed").Save(ctx)
 	require.NoError(t, err)

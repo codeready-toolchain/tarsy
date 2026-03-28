@@ -62,11 +62,11 @@ Do not treat them as rules.
 IMPORTANT: Memory is context from PAST incidents. It tells you where to look, not what you will find NOW. Never present memory content as current findings or sub-agent results.
 
 <memory_data>
+- [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
+
 - [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup
 
 - [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
-
-- [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
 </memory_data>
 
 Focus on investigation and providing recommendations for human operators to execute.
