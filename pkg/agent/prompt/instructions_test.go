@@ -358,8 +358,9 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 			Memories: []agent.MemoryHint{
 				{ID: "m1", Content: "Check PgBouncer health first", Category: "procedural", Valence: "positive", Score: 0.85, AgeLabel: "learned 3 days ago"},
 				{ID: "m2", Content: "Normal error rate is 200/hr", Category: "semantic", Valence: "neutral", Score: 0.72},
+				{ID: "m3", Content: "Batch jobs timeout after 30m", Category: "episodic", Valence: "negative", Score: 0.7, AgeLabel: "learned 1 week ago"},
 			},
-			InjectedIDs: []string{"m1", "m2"},
+			InjectedIDs: []string{"m1", "m2", "m3"},
 		},
 	}
 
@@ -371,6 +372,7 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 	assert.Contains(t, result, "Consider them as hints")
 	assert.Contains(t, result, "[procedural, positive, score: 0.85, learned 3 days ago] Check PgBouncer health first")
 	assert.Contains(t, result, "[semantic, neutral, score: 0.72] Normal error rate is 200/hr")
+	assert.Contains(t, result, "[episodic, negative, score: 0.70, learned 1 week ago] Batch jobs timeout after 30m")
 }
 
 func TestComposeInstructions_MemoryTier4Ordering(t *testing.T) {

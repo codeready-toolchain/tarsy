@@ -36,7 +36,7 @@ var (
 	durationMsRe      = regexp.MustCompile(`"duration_ms":\s*\d+`)
 	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
 	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
-	memoryScoreRe     = regexp.MustCompile(`score: \d+\.\d+`)
+	memoryScoreRe     = regexp.MustCompile(`, score: -?\d+\.\d+`)
 )
 
 // NewNormalizer creates a normalizer that knows the session ID to replace.
@@ -141,7 +141,7 @@ func (n *Normalizer) Normalize(data string) string {
 	data = currentTimeLineRe.ReplaceAllString(data, "Current time: {CURRENT_TIME}")
 
 	// 8. Replace memory score values (vary based on ranking computation).
-	data = memoryScoreRe.ReplaceAllString(data, "score: {SCORE}")
+	data = memoryScoreRe.ReplaceAllString(data, ", score: {SCORE}")
 
 	// 9. Replace memory age labels (vary based on when memories were created).
 	data = memoryAgeRe.ReplaceAllString(data, "${1} {AGE}")

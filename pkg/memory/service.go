@@ -46,6 +46,10 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 
 	vecStr := formatVector(queryVec)
 
+	// No similarity threshold: the Reflector needs broad context (including
+	// loosely related memories) to detect near-duplicates and decide what to
+	// reinforce or deprecate. Temporal decay still down-ranks stale entries.
+	// See FindSimilarWithBoosts for the threshold-filtered variant.
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT memory_id, content, category, valence, confidence, seen_count,
 		       created_at, updated_at
@@ -434,6 +438,8 @@ type UpdateInput struct {
 
 // Update applies a partial update to a memory. When content changes, the
 // embedding vector is regenerated to stay consistent with the new text.
+// The embedding is generated before any DB writes so that an embedding API
+// failure cannot leave content and embedding out of sync.
 func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput) (*Detail, error) {
 	u := s.entClient.InvestigationMemory.UpdateOneID(memoryID)
 	changed := false
@@ -459,6 +465,17 @@ func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput
 		return s.GetByID(ctx, memoryID)
 	}
 
+	// Generate embedding before any DB writes so a network failure here
+	// doesn't leave committed content with a stale embedding vector.
+	var newEmbedding []float32
+	if input.Content != nil {
+		vec, err := s.embedder.Embed(ctx, *input.Content, EmbeddingTaskDocument)
+		if err != nil {
+			return nil, fmt.Errorf("re-embed updated content for %s: %w", memoryID, err)
+		}
+		newEmbedding = vec
+	}
+
 	m, err := u.Save(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -467,14 +484,10 @@ func (s *Service) Update(ctx context.Context, memoryID string, input UpdateInput
 		return nil, fmt.Errorf("update memory %s: %w", memoryID, err)
 	}
 
-	if input.Content != nil {
-		vec, err := s.embedder.Embed(ctx, *input.Content, EmbeddingTaskDocument)
-		if err != nil {
-			return nil, fmt.Errorf("re-embed updated content for %s: %w", memoryID, err)
-		}
+	if newEmbedding != nil {
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE investigation_memories SET embedding = $1::vector WHERE memory_id = $2`,
-			formatVector(vec), memoryID,
+			formatVector(newEmbedding), memoryID,
 		); err != nil {
 			return nil, fmt.Errorf("update embedding for %s: %w", memoryID, err)
 		}
