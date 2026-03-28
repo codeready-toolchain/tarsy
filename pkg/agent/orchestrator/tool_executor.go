@@ -151,10 +151,16 @@ func (c *CompositeToolExecutor) handleDispatch(ctx context.Context, call agent.T
 		"execution_id": execID,
 		"status":       "accepted",
 	})
+	note := fmt.Sprintf(
+		"Agent %q dispatched (execution: %s). "+
+			"Its result will be delivered automatically as a follow-up message. "+
+			"Do NOT predict or fabricate what this agent will find — wait for the actual delivered result.",
+		args.Name, execID,
+	)
 	return &agent.ToolResult{
 		CallID:  call.ID,
 		Name:    call.Name,
-		Content: string(resp),
+		Content: string(resp) + "\n\n" + note,
 	}, nil
 }
 

@@ -293,7 +293,7 @@ for routine investigations — do not invent learnings to fill the output.
 | `pkg/memory/service.go` | Threshold filter, confidence boost, flat initial confidence, temporal decay, score in return type, embedding refresh, hybrid search (RRF), session search query |
 | `pkg/memory/types.go` | Add `Score` field to `Memory` struct |
 | `pkg/memory/tool_executor.go` | Score in output format, updated tool descriptions, new `search_past_sessions` tool |
-| `pkg/memory/reflector.go` | Tighter extraction criteria in Reflector prompt, `initialConfidence` simplified to constant |
+| `pkg/memory/reflector.go` | Tighter extraction criteria in Reflector prompt |
 | `pkg/queue/executor_memory.go` | Pass threshold to auto-injection retrieval |
 | `pkg/queue/scoring_executor.go` | Drop `score` parameter from `ApplyReflectorActions` call |
 | Database migration | `tsvector` + GIN index on `alert_sessions.alert_data`, `tsvector` + GIN index on `investigation_memories.content` |
@@ -304,7 +304,7 @@ for routine investigations — do not invent learnings to fill the output.
 
 Four phases, each a separate PR. Ordered by dependency chain and risk: lowest-risk/highest-immediate-impact first.
 
-### Phase 1 — Reflector Extraction Selectivity (change 9)
+### Phase 1 — Reflector Extraction Selectivity (change 9) - DONE
 
 Prompt-only change. Reduces noise at the source before we improve retrieval.
 
@@ -313,7 +313,7 @@ Prompt-only change. Reduces noise at the source before we improve retrieval.
 | `pkg/memory/reflector.go` | Insert `## Extraction Boundaries` section into `reflectorSystemPrompt`, trim `## Quality Guidelines` (see change #9 for exact text) |
 | `pkg/memory/reflector.go` | Analogous Extraction Boundaries for `feedbackReflectorSystemPrompt` |
 
-No code logic changes, no migrations, no test changes. Can be verified by inspecting Reflector output on subsequent investigations.
+No code logic changes, no migrations. Prompt assertion tests and e2e golden fixtures updated to match the new prompt text. Verify by running `go test ./pkg/memory/... -run Reflector` and the e2e golden-fixture suite, plus inspecting Reflector output on subsequent investigations.
 
 ### Phase 2 — Ranking & Filtering Overhaul (changes 1, 2, 3, 4, 5)
 

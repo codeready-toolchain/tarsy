@@ -165,9 +165,9 @@ Production data reveals a specific, dominant noise pattern: **tool-bug and tool-
 
 These don't belong in memories. They belong in **skills or custom instructions** — always available without consuming retrieval slots.
 
-**Decision:** Option C — prompt guidance + soft cap communicated to the Reflector. The Reflector prompt gets tighter extraction criteria (Option A guidelines) plus a soft cap: "Aim for 1–3 memories per investigation. Exceeding 3 is acceptable for genuinely exceptional investigations but should be rare." No code-level enforcement — the Reflector exercises judgment.
+**Decision:** Option C — prompt guidance + soft cap communicated to the Reflector. The Reflector prompt gets tighter extraction criteria (Option A guidelines) plus a soft cap: "Aim for 0–3 new memories per investigation. Exceeding 3 creates should be rare and justified by a genuinely rich investigation." No code-level enforcement — the Reflector exercises judgment.
 
-**Important:** The prompt changes must not disrupt the Reflector's JSON output format. The extraction criteria and soft cap should be added to the guidelines section of the prompt, clearly separated from the output format specification. Do not interleave quality criteria with format instructions — keep them in distinct sections so the LLM doesn't conflate "what to extract" with "how to format the response."
+**Important:** The prompt changes must not disrupt the Reflector's JSON output format. The extraction criteria and soft cap are placed in a dedicated `## Extraction Boundaries` section, clearly separated from both the `## Quality Guidelines` (which cover how to judge extraction-worthy learnings) and the output format specification (which lives in the user prompt, not the system prompt). This keeps "what not to extract" distinct from "how to judge quality" and "how to format the response" so the LLM doesn't conflate them.
 
 **Default recall limit stays at 10.** With the similarity threshold (Q1), confidence in ranking (Q2), hybrid search (change #8), and tighter Reflector extraction (this change), the quality of returned results improves enough that artificially capping at 5 would cut off genuinely relevant memories. The threshold is the real quality gate — the limit is just a cap.
 

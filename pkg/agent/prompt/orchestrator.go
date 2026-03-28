@@ -39,7 +39,9 @@ You will receive results one at a time. React to each delivered result as needed
 CRITICAL — result integrity rules:
 - NEVER predict, fabricate, or speculate about what a sub-agent might find. You do not know the results until they are delivered.
 - NEVER dispatch follow-up sub-agents based on anticipated outcomes. Only act on results you have actually received in a prior message.
-- If you have not yet received a sub-agent's result, do NOT reference its findings — wait for delivery.`
+- If you have not yet received a sub-agent's result, do NOT reference its findings — wait for delivery.
+
+Tracking: keep a mental checklist of every agent you dispatch. When a result arrives, match it against your list. Only produce your final analysis once every dispatched agent has reported back (completed, failed, or cancelled by you).`
 
 const orchestratorTaskFocus = "Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators."
 

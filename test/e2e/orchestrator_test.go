@@ -1492,7 +1492,13 @@ func findDispatchedExecID(messages []agent.ConversationMessage, agentName string
 			var result struct {
 				ExecutionID string `json:"execution_id"`
 			}
-			if json.Unmarshal([]byte(msg.Content), &result) == nil {
+			// Tool result may be JSON + instruction text; try first line if full parse fails.
+			content := msg.Content
+			if json.Unmarshal([]byte(content), &result) == nil && result.ExecutionID != "" {
+				return result.ExecutionID
+			}
+			firstLine, _, _ := strings.Cut(content, "\n")
+			if json.Unmarshal([]byte(firstLine), &result) == nil {
 				return result.ExecutionID
 			}
 		}

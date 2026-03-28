@@ -268,6 +268,26 @@ describe('Sub-agent partitioning', () => {
     expect(parsed.status).toBe('accepted');
   });
 
+  it('extracts execution_id from dispatch result with instruction text', () => {
+    const content =
+      '{"execution_id":"sub-exec-123","status":"accepted"}\n\n' +
+      'Agent "LogAnalyzer" dispatched (execution: sub-exec-123). ' +
+      'Its result will be delivered automatically as a follow-up message. ' +
+      'Do NOT predict or fabricate what this agent will find — wait for the actual delivered result.';
+    let execId: string | null = null;
+    try {
+      const parsed = JSON.parse(content);
+      execId = parsed?.execution_id ?? null;
+    } catch {
+      const firstLine = content.split('\n')[0];
+      try {
+        const parsed = JSON.parse(firstLine);
+        execId = parsed?.execution_id ?? null;
+      } catch { /* ignore */ }
+    }
+    expect(execId).toBe('sub-exec-123');
+  });
+
   it('handles non-JSON dispatch result gracefully', () => {
     const content = 'dispatch failed: agent not found';
     let execId: string | null = null;

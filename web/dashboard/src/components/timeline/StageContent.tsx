@@ -217,7 +217,12 @@ const extractDispatchExecId = (content: string): string | null => {
   try {
     const parsed = JSON.parse(content);
     if (parsed?.execution_id) return parsed.execution_id;
-  } catch { /* not JSON, ignore */ }
+  } catch { /* not pure JSON — tool result may contain JSON + instruction text */ }
+  const firstLine = content.split('\n')[0];
+  try {
+    const parsed = JSON.parse(firstLine);
+    if (parsed?.execution_id) return parsed.execution_id;
+  } catch { /* ignore */ }
   return null;
 };
 
@@ -514,9 +519,9 @@ const StageContent: React.FC<StageContentProps> = ({
     const elements: React.ReactNode[] = [];
     for (const item of execution.items) {
       // dispatch_agent tool call — replace with SubAgentCard.
-      // The llm_tool_call content is the result JSON after completion
-      // (e.g. {"execution_id":"...","status":"accepted"}). No mcp_tool_summary
-      // is created because the result is too short for summarization.
+      // The llm_tool_call content is JSON + instruction text
+      // (e.g. {"execution_id":"...","status":"accepted"}\n\nAgent "X" dispatched...).
+      // extractDispatchExecId handles both pure-JSON and multi-line formats.
       if (item.type === FLOW_ITEM.TOOL_CALL && isOrchestrationTool(item, 'dispatch_agent')) {
         const subExecId = extractDispatchExecId(item.content);
         if (subExecId) {

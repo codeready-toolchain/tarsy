@@ -15,6 +15,6 @@
 
 === TOOL_RESULT ===
 {
-  "content": "{\"execution_id\":\"{EXEC_ID_2}\",\"status\":\"accepted\"}",
+  "content": "{\"execution_id\":\"{EXEC_ID_2}\",\"status\":\"accepted\"}\n\nAgent \"LogAnalyzer\" dispatched (execution: {EXEC_ID_2}). Its result will be delivered automatically as a follow-up message. Do NOT predict or fabricate what this agent will find — wait for the actual delivered result.",
   "is_error": false
 }
