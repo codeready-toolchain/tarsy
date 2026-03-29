@@ -96,30 +96,38 @@ func (s *Service) FindSimilar(ctx context.Context, project, queryText string, li
 // fetches before the boost re-ranking narrows to the final limit.
 const candidateMultiplier = 3
 
-// similarityThreshold is the minimum (1 - cosine_distance) for a memory to
-// be considered relevant. Candidates below this floor are discarded before
-// the final LIMIT. Reviewed when the embedding model changes.
-const similarityThreshold = 0.45
+// similarityThreshold is the minimum cosine similarity (1 - distance) for a
+// memory to be considered relevant. At 0.6, memories must be topically related
+// — not just in the same domain. "Same Kubernetes cluster" is not enough;
+// the content must address a similar type of issue or entity.
+const similarityThreshold = 0.7
 
 // Temporal decay rate 0.0077 (≈ ln(2)/90) is hardcoded in the SQL queries
 // for FindSimilar and FindSimilarWithBoosts, giving a 90-day half-life.
 
 // FindSimilarWithBoosts returns the top-N memories using hybrid search
 // (vector similarity + keyword matching) with Reciprocal Rank Fusion (RRF),
-// confidence weighting, temporal decay, and soft boosts for alert_type and
-// chain_id scope metadata. The returned Memory.Score reflects the final
-// ranking score.
+// confidence weighting, and temporal decay. The returned Memory.Score
+// reflects the final ranking score.
+//
+// Design principle: it is better to return nothing than to return low-relevance
+// or irrelevant memories. Noisy memories mislead the agent and waste context
+// window. Every result must have passed the vector similarity threshold (0.7)
+// — keyword matches only boost already-relevant results via RRF, they cannot
+// create standalone results. This is enforced by a LEFT JOIN from
+// vector_candidates to keyword_candidates (not FULL OUTER).
 //
 // The query uses four CTEs:
 //  0. kw_tsq — converts queryText to an OR-joined tsquery so any individual
 //     term can match (plainto_tsquery uses AND which is too strict for hybrid).
 //  1. vector_candidates — ANN search via pgvector HNSW, filtered by similarityThreshold.
 //  2. keyword_candidates — full-text search via tsvector/GIN with 'simple' config.
-//  3. fused — RRF merge (k=60) of both candidate sets.
+//  3. fused — LEFT JOIN merge with RRF (k=60). Only vector-matched memories
+//     appear; keyword hits re-rank but don't introduce new results.
 //
 // The outer query joins back to the table for full columns, applies confidence
-// and decay multipliers plus scope boosts, and returns the final ranked results.
-func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText string, alertType, chainID *string, limit int) ([]Memory, error) {
+// and decay multipliers, and returns the final ranked results.
+func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText string, limit int) ([]Memory, error) {
 	queryText = strings.TrimSpace(queryText)
 	if queryText == "" {
 		return nil, nil
@@ -135,8 +143,8 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 
 	rows, err := s.db.QueryContext(ctx, `
 		WITH kw_tsq AS (
-			SELECT (regexp_replace(plainto_tsquery('simple', $8)::text, ' & ', ' | ', 'g'))::tsquery AS q
-			WHERE numnode(plainto_tsquery('simple', $8)) > 0
+			SELECT (regexp_replace(plainto_tsquery('simple', $6)::text, ' & ', ' | ', 'g'))::tsquery AS q
+			WHERE numnode(plainto_tsquery('simple', $6)) > 0
 		),
 		vector_candidates AS (
 			SELECT memory_id,
@@ -145,7 +153,7 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 			WHERE project = $1
 			  AND deprecated = false
 			  AND embedding IS NOT NULL
-			  AND (1 - (embedding <=> $2::vector)) >= $7
+			  AND (1 - (embedding <=> $2::vector)) >= $5
 			ORDER BY embedding <=> $2::vector
 			LIMIT $3
 		),
@@ -161,27 +169,26 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 			LIMIT $3
 		),
 		fused AS (
-			SELECT COALESCE(v.memory_id, k.memory_id) AS memory_id,
-			       COALESCE(1.0 / (60 + v.pos), 0.0) +
+			SELECT v.memory_id,
+			       1.0 / (60 + v.pos) +
 			       COALESCE(1.0 / (60 + k.pos), 0.0) AS rrf_score
 			FROM vector_candidates v
-			FULL OUTER JOIN keyword_candidates k ON v.memory_id = k.memory_id
+			LEFT JOIN keyword_candidates k ON v.memory_id = k.memory_id
 		)
 		SELECT m.memory_id, m.content, m.category, m.valence, m.confidence,
 		       m.seen_count, m.created_at, m.updated_at,
 		       f.rrf_score
 		         * (0.7 + 0.3 * m.confidence)
 		         * EXP(-0.0077 * EXTRACT(EPOCH FROM (NOW() - m.updated_at)) / 86400.0)
-		         + CASE WHEN m.alert_type = $4 THEN 0.05 ELSE 0 END
-		         + CASE WHEN m.chain_id  = $5 THEN 0.03 ELSE 0 END
-		         AS score
+		         AS score,
+		       (1 - (m.embedding <=> $2::vector)) AS similarity
 		FROM fused f
 		JOIN investigation_memories m ON f.memory_id = m.memory_id
 		ORDER BY score DESC
-		LIMIT $6
-	`, project, vecStr, candidates, alertType, chainID, limit, similarityThreshold, queryText)
+		LIMIT $4
+	`, project, vecStr, candidates, limit, similarityThreshold, queryText)
 	if err != nil {
-		return nil, fmt.Errorf("hybrid search with boosts: %w", err)
+		return nil, fmt.Errorf("hybrid search: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -189,7 +196,7 @@ func (s *Service) FindSimilarWithBoosts(ctx context.Context, project, queryText 
 	for rows.Next() {
 		var m Memory
 		if err := rows.Scan(&m.ID, &m.Content, &m.Category, &m.Valence, &m.Confidence, &m.SeenCount,
-			&m.CreatedAt, &m.UpdatedAt, &m.Score); err != nil {
+			&m.CreatedAt, &m.UpdatedAt, &m.Score, &m.Similarity); err != nil {
 			return nil, fmt.Errorf("scan memory row: %w", err)
 		}
 		memories = append(memories, m)

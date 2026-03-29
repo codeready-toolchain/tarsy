@@ -31,14 +31,9 @@ func (e *RealSessionExecutor) memoryToolWrapper(session *ent.AlertSession) func(
 	if e.memoryService == nil || e.memoryConfig == nil {
 		return nil
 	}
-	var alertTypePtr *string
-	if session.AlertType != "" {
-		alertTypePtr = &session.AlertType
-	}
-	chainID := session.ChainID
 	sessionID := session.ID
 	return func(inner agent.ToolExecutor) agent.ToolExecutor {
-		return memory.NewToolExecutor(inner, e.memoryService, sessionID, "default", alertTypePtr, &chainID, nil)
+		return memory.NewToolExecutor(inner, e.memoryService, sessionID, "default", nil)
 	}
 }
 
@@ -55,43 +50,51 @@ func memoryExcludeIDs(briefing *agent.MemoryBriefing) map[string]struct{} {
 	return ids
 }
 
+// minInjectionScore is the minimum composite score (RRF × confidence × decay)
+// for a memory to be auto-injected. Filters very-low-ranked or heavily-decayed
+// matches (e.g. a single keyword hit at rank 40+ with 90+ day decay). This is
+// a conservative floor; the primary noise control is the similarity threshold
+// (0.7) on vector candidates in FindSimilarWithBoosts.
+const minInjectionScore = 0.01
+
 // retrieveMemories fetches the top memories for auto-injection into the agent prompt.
 // Returns nil if retrieval fails (best-effort — never blocks the investigation).
 func (e *RealSessionExecutor) retrieveMemories(ctx context.Context, session *ent.AlertSession, logger *slog.Logger) *agent.MemoryBriefing {
 	project := "default"
 
-	var alertTypePtr *string
-	if session.AlertType != "" {
-		alertTypePtr = &session.AlertType
-	}
-	chainIDPtr := &session.ChainID
-
 	memories, err := e.memoryService.FindSimilarWithBoosts(
-		ctx, project, session.AlertData, alertTypePtr, chainIDPtr, e.memoryConfig.MaxInject,
+		ctx, project, session.AlertData, e.memoryConfig.MaxInject,
 	)
 	if err != nil {
 		logger.Warn("Failed to retrieve memories for injection", "error", err)
 		return nil
 	}
-	if len(memories) == 0 {
+
+	var filtered []memory.Memory
+	for _, m := range memories {
+		if m.Score >= minInjectionScore {
+			filtered = append(filtered, m)
+		}
+	}
+	if len(filtered) == 0 {
 		return nil
 	}
 
 	briefing := &agent.MemoryBriefing{
-		Memories:    make([]agent.MemoryHint, len(memories)),
-		InjectedIDs: make([]string, len(memories)),
+		Memories:    make([]agent.MemoryHint, len(filtered)),
+		InjectedIDs: make([]string, len(filtered)),
 	}
-	for i, m := range memories {
+	for i, m := range filtered {
 		briefing.Memories[i] = agent.MemoryHint{
 			ID:       m.ID,
 			Content:  m.Content,
 			Category: m.Category,
 			Valence:  m.Valence,
-			Score:    m.Score,
+			Score:    m.Similarity,
 			AgeLabel: memory.FormatMemoryAge(m.CreatedAt, m.UpdatedAt),
 		}
 		briefing.InjectedIDs[i] = m.ID
 	}
-	logger.Info("Retrieved memories for injection", "count", len(memories))
+	logger.Info("Retrieved memories for injection", "count", len(filtered))
 	return briefing
 }

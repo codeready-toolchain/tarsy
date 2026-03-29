@@ -93,8 +93,6 @@ type ToolExecutor struct {
 	service    *Service
 	sessionID  string
 	project    string
-	alertType  *string
-	chainID    *string
 	excludeIDs map[string]struct{}
 }
 
@@ -108,8 +106,6 @@ func NewToolExecutor(
 	service *Service,
 	sessionID string,
 	project string,
-	alertType *string,
-	chainID *string,
 	excludeIDs map[string]struct{},
 ) *ToolExecutor {
 	return &ToolExecutor{
@@ -117,8 +113,6 @@ func NewToolExecutor(
 		service:    service,
 		sessionID:  sessionID,
 		project:    project,
-		alertType:  alertType,
-		chainID:    chainID,
 		excludeIDs: excludeIDs,
 	}
 }
@@ -214,7 +208,7 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 	// Fetch extra candidates so we can filter out already-injected IDs
 	fetchLimit := limit + len(te.excludeIDs)
 	memories, err := te.service.FindSimilarWithBoosts(
-		ctx, te.project, args.Query, te.alertType, te.chainID, fetchLimit,
+		ctx, te.project, args.Query, fetchLimit,
 	)
 	if err != nil {
 		return &agent.ToolResult{
@@ -250,7 +244,7 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 	sb.WriteString(fmt.Sprintf("Found %d relevant memories:\n", len(filtered)))
 	for i, m := range filtered {
 		age := FormatMemoryAge(m.CreatedAt, m.UpdatedAt)
-		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, score: %.2f, %s] %s", i+1, m.Category, m.Valence, m.Score, age, m.Content))
+		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, score: %.2f, %s] %s", i+1, m.Category, m.Valence, m.Similarity, age, m.Content))
 	}
 	sb.WriteString("\n\nThese are learnings from PAST incidents — they suggest where to look, not what you will find NOW.\n</historical_context>")
 

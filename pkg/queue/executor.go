@@ -724,14 +724,9 @@ func (e *RealSessionExecutor) executeAgent(
 
 	// Wrap with memory tool executor (outermost layer — same agent-type guard)
 	if e.memoryService != nil && e.memoryConfig != nil && agentTypeSupportsMemory(resolvedConfig.Type) {
-		var alertTypePtr *string
-		if input.session.AlertType != "" {
-			alertTypePtr = &input.session.AlertType
-		}
 		excludeIDs := memoryExcludeIDs(memoryBriefing)
 		toolExecutor = memory.NewToolExecutor(
-			toolExecutor, e.memoryService, input.session.ID, "default",
-			alertTypePtr, &input.session.ChainID, excludeIDs,
+			toolExecutor, e.memoryService, input.session.ID, "default", excludeIDs,
 		)
 	}
 

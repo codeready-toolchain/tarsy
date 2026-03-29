@@ -352,13 +352,8 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 
 	// Wrap with memory tool executor (chat gets the tool but no auto-injection)
 	if e.memoryService != nil && e.memoryConfig != nil {
-		var alertTypePtr *string
-		if input.Session.AlertType != "" {
-			alertTypePtr = &input.Session.AlertType
-		}
 		toolExecutor = memory.NewToolExecutor(
-			toolExecutor, e.memoryService, input.Session.ID, "default",
-			alertTypePtr, &input.Session.ChainID, nil,
+			toolExecutor, e.memoryService, input.Session.ID, "default", nil,
 		)
 	}
 

@@ -244,51 +244,35 @@ func TestService_FindSimilarWithBoosts(t *testing.T) {
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
 
 	alertType := "cpu_high"
-	chainID := "infra"
 
-	// Create memories with different scope metadata.
-	// Identical embeddings → cosine distance is the same; ranking
-	// differences come exclusively from the scope boosts.
-	err = svc.ApplyReflectorActions(ctx, "default", sessionID, &alertType, &chainID,
-		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
-			{Content: "Both scopes", Category: "semantic", Valence: "positive"},
-		}})
-	require.NoError(t, err)
-
+	// Create memories with different scope metadata but identical embeddings.
+	// Without scope boosts, ranking depends on RRF position (arbitrary for
+	// identical embeddings) — we only verify all are returned with positive scores.
 	err = svc.ApplyReflectorActions(ctx, "default", sessionID, &alertType, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
-			{Content: "Alert only", Category: "semantic", Valence: "positive"},
+			{Content: "Memory A", Category: "semantic", Valence: "positive"},
 		}})
 	require.NoError(t, err)
 
 	err = svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil,
 		&memory.ReflectorResult{Create: []memory.ReflectorCreateAction{
-			{Content: "No scopes", Category: "semantic", Valence: "positive"},
+			{Content: "Memory B", Category: "semantic", Valence: "positive"},
 		}})
 	require.NoError(t, err)
 
-	// Query with both boosts. alert_type match → +0.05, chain_id match → +0.03.
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", &alertType, &chainID, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 	require.NoError(t, err)
-	require.Len(t, memories, 3)
+	require.Len(t, memories, 2)
 
-	assert.Equal(t, "Both scopes", memories[0].Content)
-	assert.Equal(t, "Alert only", memories[1].Content)
-	assert.Equal(t, "No scopes", memories[2].Content)
-
-	// Score should be populated and positive for all results.
 	for _, m := range memories {
 		assert.Greater(t, m.Score, 0.0, "Score should be populated")
 	}
-	// Boosted memories should have higher scores.
-	assert.Greater(t, memories[0].Score, memories[1].Score)
-	assert.Greater(t, memories[1].Score, memories[2].Score)
 }
 
-// TestService_FindSimilarWithBoosts_CandidateReranking verifies the two-step
-// CTE approach: a memory with worse cosine distance but matching scope boosts
-// can outrank a closer memory after re-ranking.
-func TestService_FindSimilarWithBoosts_CandidateReranking(t *testing.T) {
+// TestService_FindSimilarWithBoosts_CloserMemoryRanksHigher verifies that
+// a memory with better cosine similarity ranks higher than a farther one
+// (all else being equal).
+func TestService_FindSimilarWithBoosts_CloserMemoryRanksHigher(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
@@ -301,48 +285,34 @@ func TestService_FindSimilarWithBoosts_CandidateReranking(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
-	// Query embedding: [1, 0, 0]
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
 
-	alertType := "cpu_high"
-	chainID := "infra"
-
-	// Memory 1: identical to query (cosine distance=0), no scope match.
-	// Score ≈ 1.0 * (0.7 + 0.3*0.8) * 1.0 = 0.94
+	// Memory 1: identical to query (cosine distance=0).
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
 			(memory_id, project, content, category, valence, confidence, seen_count,
 			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
-		VALUES ($1, 'default', 'Close but no boost', 'semantic', 'positive', 0.8, 1,
+		VALUES ($1, 'default', 'Exact match', 'semantic', 'positive', 0.8, 1,
 			 $2, NOW(), NOW(), NOW(), false, '[1,0,0]'::vector)`,
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	// Memory 2: farther from query (cosine distance≈0.04), both scopes match.
-	// [0.96, 0.28, 0] has |v|=1.0, so cosine_sim=0.96, distance=0.04.
-	// Score ≈ 0.96 * (0.7 + 0.3*0.8) * 1.0 + 0.05 + 0.03 ≈ 0.98 → wins.
+	// Memory 2: farther from query (cosine_sim ≈ 0.96).
+	// [0.96, 0.28, 0] has |v|=1.0, cosine_sim=0.96, distance≈0.04.
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
 			(memory_id, project, content, category, valence, confidence, seen_count,
-			 source_session_id, alert_type, chain_id,
-			 created_at, updated_at, last_seen_at, deprecated, embedding)
-		VALUES ($1, 'default', 'Farther with boosts', 'semantic', 'positive', 0.8, 1,
-			 $2, $3, $4, NOW(), NOW(), NOW(), false, '[0.96,0.28,0]'::vector)`,
-		uuid.New().String(), sessionID, alertType, chainID)
+			 source_session_id, created_at, updated_at, last_seen_at, deprecated, embedding)
+		VALUES ($1, 'default', 'Slightly off', 'semantic', 'positive', 0.8, 1,
+			 $2, NOW(), NOW(), NOW(), false, '[0.96,0.28,0]'::vector)`,
+		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	// limit=1: the boosted memory should rank first despite worse cosine distance.
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", &alertType, &chainID, 1)
-	require.NoError(t, err)
-	require.Len(t, memories, 1)
-	assert.Equal(t, "Farther with boosts", memories[0].Content)
-
-	// limit=2: boosted first, then the closer one.
-	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "anything", &alertType, &chainID, 2)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", 2)
 	require.NoError(t, err)
 	require.Len(t, memories, 2)
-	assert.Equal(t, "Farther with boosts", memories[0].Content)
-	assert.Equal(t, "Close but no boost", memories[1].Content)
+	assert.Equal(t, "Exact match", memories[0].Content)
+	assert.Equal(t, "Slightly off", memories[1].Content)
 }
 
 // TestService_FindSimilarWithBoosts_SimilarityThreshold verifies that memories
@@ -364,7 +334,7 @@ func TestService_FindSimilarWithBoosts_SimilarityThreshold(t *testing.T) {
 	// Query vector: [1, 0, 0]
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
 
-	// Memory 1: identical to query → cosine similarity = 1.0 (well above 0.45 threshold).
+	// Memory 1: identical to query → cosine similarity = 1.0 (well above 0.7 threshold).
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
 			(memory_id, project, content, category, valence, confidence, seen_count,
@@ -374,7 +344,7 @@ func TestService_FindSimilarWithBoosts_SimilarityThreshold(t *testing.T) {
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	// Memory 2: nearly orthogonal → cosine similarity ≈ 0.27 (below 0.45 threshold).
+	// Memory 2: nearly orthogonal → cosine similarity ≈ 0.27 (below 0.7 threshold).
 	// [0.27, 0.96, 0] is unit-length, cosine_sim([1,0,0], [0.27,0.96,0]) ≈ 0.27.
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
@@ -386,7 +356,7 @@ func TestService_FindSimilarWithBoosts_SimilarityThreshold(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("filters below threshold", func(t *testing.T) {
-		memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+		memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 		require.NoError(t, err)
 		require.Len(t, memories, 1, "only the memory above threshold should be returned")
 		assert.Equal(t, "Very relevant", memories[0].Content)
@@ -395,7 +365,7 @@ func TestService_FindSimilarWithBoosts_SimilarityThreshold(t *testing.T) {
 	t.Run("all below threshold returns empty", func(t *testing.T) {
 		// Query vector: [0, 0, 1] — orthogonal to both memories.
 		orthogonalSvc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 0, 1}}, cfg)
-		memories, err := orthogonalSvc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+		memories, err := orthogonalSvc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 		require.NoError(t, err)
 		assert.Empty(t, memories)
 	})
@@ -438,7 +408,7 @@ func TestService_FindSimilarWithBoosts_TemporalDecay(t *testing.T) {
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 2)
 
@@ -484,7 +454,7 @@ func TestService_FindSimilarWithBoosts_ConfidenceRanking(t *testing.T) {
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 2)
 
@@ -493,10 +463,11 @@ func TestService_FindSimilarWithBoosts_ConfidenceRanking(t *testing.T) {
 	assert.Greater(t, memories[0].Score, memories[1].Score)
 }
 
-// TestService_FindSimilarWithBoosts_KeywordOnlyMatch verifies that a memory
-// whose embedding is below the vector similarity threshold can still be found
-// via the keyword search path of hybrid retrieval.
-func TestService_FindSimilarWithBoosts_KeywordOnlyMatch(t *testing.T) {
+// TestService_FindSimilarWithBoosts_KeywordOnlyMatchFiltered verifies that a
+// memory whose embedding is below the vector similarity threshold is NOT
+// returned, even if it matches query keywords. Principle: better to return
+// nothing than surface noise.
+func TestService_FindSimilarWithBoosts_KeywordOnlyMatchFiltered(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
@@ -509,12 +480,10 @@ func TestService_FindSimilarWithBoosts_KeywordOnlyMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
-	// Query embedding: [1, 0, 0]
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
 
-	// Memory with content containing "coolify" but embedding orthogonal to
-	// query → vector similarity = 0, below threshold. Keyword path should
-	// still find it because content contains the query term.
+	// Memory with keyword "coolify" but embedding orthogonal to query →
+	// vector similarity = 0, below threshold. Must not appear in results.
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
 			(memory_id, project, content, category, valence, confidence, seen_count,
@@ -524,11 +493,9 @@ func TestService_FindSimilarWithBoosts_KeywordOnlyMatch(t *testing.T) {
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", 10)
 	require.NoError(t, err)
-	require.Len(t, memories, 1, "keyword-only match should be returned via hybrid search")
-	assert.Contains(t, memories[0].Content, "Coolify")
-	assert.Greater(t, memories[0].Score, 0.0)
+	assert.Empty(t, memories, "keyword-only match without vector similarity must be excluded")
 }
 
 // TestService_FindSimilarWithBoosts_VectorOnlyMatch verifies that a memory
@@ -561,7 +528,7 @@ func TestService_FindSimilarWithBoosts_VectorOnlyMatch(t *testing.T) {
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "xyzzyplugh", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "xyzzyplugh", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 1, "vector-only match should be returned via hybrid search")
 	assert.Contains(t, memories[0].Content, "PgBouncer")
@@ -606,7 +573,7 @@ func TestService_FindSimilarWithBoosts_BothMatchRRFBoost(t *testing.T) {
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 2)
 
@@ -617,10 +584,10 @@ func TestService_FindSimilarWithBoosts_BothMatchRRFBoost(t *testing.T) {
 		"dual-match should have higher score than vector-only match")
 }
 
-// TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding reproduces
-// the production failure: querying "quantiaia coolify VM" shifts the embedding
-// vector away from "coolify", but keyword search catches the exact term match.
-func TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding(t *testing.T) {
+// TestService_FindSimilarWithBoosts_KeywordOnlyMatchExcluded verifies the
+// principle: keyword-only matches (no vector similarity) are excluded.
+// It is better to return nothing than to surface low-relevance noise.
+func TestService_FindSimilarWithBoosts_KeywordOnlyMatchExcluded(t *testing.T) {
 	entClient, db := util.SetupTestDatabase(t)
 	ctx := t.Context()
 
@@ -633,15 +600,11 @@ func TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding(t *testing.
 	require.NoError(t, err)
 
 	cfg := &config.MemoryConfig{Enabled: true, Embedding: config.EmbeddingConfig{Dimensions: 3}}
-	// Simulate embedding drift: query "quantiaia coolify VM" produces an
-	// embedding orthogonal to the Coolify memory. cosine_sim([0,0,1],[1,0,0])=0
-	// which is well below the 0.45 threshold, so vector search fails entirely.
-	// The keyword path must find "coolify" via OR-matched full-text search.
+	// Query embedding orthogonal to the memory: cosine_sim = 0 → below threshold.
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 0, 1}}, cfg)
 
-	// Coolify memory with embedding [1, 0, 0]. Cosine similarity with
-	// query [0, 0, 1] = 0 — well below 0.45 threshold, so vector path
-	// returns nothing. Keyword "coolify" in the query is an exact match.
+	// Memory with embedding [1, 0, 0]. Keyword "coolify" matches, but
+	// vector similarity is 0 — well below the 0.7 threshold.
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO investigation_memories
 			(memory_id, project, content, category, valence, confidence, seen_count,
@@ -651,10 +614,9 @@ func TestService_FindSimilarWithBoosts_ExtraQueryTermsShiftEmbedding(t *testing.
 		uuid.New().String(), sessionID)
 	require.NoError(t, err)
 
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "quantiaia coolify VM", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", 10)
 	require.NoError(t, err)
-	require.Len(t, memories, 1, "keyword match should find coolify memory despite embedding drift")
-	assert.Contains(t, memories[0].Content, "Coolify")
+	assert.Empty(t, memories, "keyword-only match without vector similarity must not be returned")
 }
 
 // TestService_FindSimilarWithBoosts_DeprecatedExcludedFromKeywordPath verifies
@@ -686,7 +648,7 @@ func TestService_FindSimilarWithBoosts_DeprecatedExcludedFromKeywordPath(t *test
 	require.NoError(t, err)
 
 	// Verify findable before deprecation (both vector + keyword match).
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "coolify", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 1)
 
@@ -696,7 +658,7 @@ func TestService_FindSimilarWithBoosts_DeprecatedExcludedFromKeywordPath(t *test
 	require.NoError(t, err)
 
 	// After deprecation: neither vector nor keyword path should return it.
-	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "coolify", nil, nil, 10)
+	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "coolify", 10)
 	require.NoError(t, err)
 	assert.Empty(t, memories, "deprecated memory must not leak through keyword search path")
 }
@@ -730,12 +692,12 @@ func TestService_FindSimilarWithBoosts_ProjectIsolationKeywordPath(t *testing.T)
 
 	// Query project "beta" — keyword "coolify" matches the alpha memory's content
 	// but must not cross the project boundary.
-	memories, err := svc.FindSimilarWithBoosts(ctx, "beta", "coolify", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "beta", "coolify", 10)
 	require.NoError(t, err)
 	assert.Empty(t, memories, "keyword match from another project must not leak across project boundary")
 
 	// Sanity: same keyword query against "alpha" should find it.
-	memories, err = svc.FindSimilarWithBoosts(ctx, "alpha", "coolify", nil, nil, 10)
+	memories, err = svc.FindSimilarWithBoosts(ctx, "alpha", "coolify", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 1)
 	assert.Contains(t, memories[0].Content, "Coolify")
@@ -756,7 +718,7 @@ func TestService_FindSimilarWithBoosts_EmptyQueryText(t *testing.T) {
 
 	for _, queryText := range []string{"", " ", "\t\n "} {
 		t.Run("query="+fmt.Sprintf("%q", queryText), func(t *testing.T) {
-			memories, err := svc.FindSimilarWithBoosts(ctx, "default", queryText, nil, nil, 10)
+			memories, err := svc.FindSimilarWithBoosts(ctx, "default", queryText, 10)
 			require.NoError(t, err)
 			assert.Empty(t, memories, "empty/whitespace query should return no results")
 		})

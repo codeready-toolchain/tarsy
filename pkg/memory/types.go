@@ -18,6 +18,7 @@ type Memory struct {
 	Confidence float64   `json:"confidence"`
 	SeenCount  int       `json:"seen_count"`
 	Score      float64   `json:"score,omitempty"`
+	Similarity float64   `json:"similarity,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

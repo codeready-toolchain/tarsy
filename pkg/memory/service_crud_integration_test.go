@@ -160,7 +160,7 @@ func TestService_Update_RefreshesEmbedding(t *testing.T) {
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{0, 1, 0}}, cfg)
 
 	// Before update: query [0, 1, 0] vs stored [1, 0, 0] → cosine sim ≈ 0 → below threshold.
-	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	memories, err := svc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 	require.NoError(t, err)
 	assert.Empty(t, memories, "orthogonal embedding should be below similarity threshold")
 
@@ -171,7 +171,7 @@ func TestService_Update_RefreshesEmbedding(t *testing.T) {
 	assert.Equal(t, "Completely new content", updated.Content)
 
 	// After update: query [0, 1, 0] vs refreshed [0, 1, 0] → cosine sim = 1.0 → found.
-	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "anything", nil, nil, 10)
+	memories, err = svc.FindSimilarWithBoosts(ctx, "default", "anything", 10)
 	require.NoError(t, err)
 	require.Len(t, memories, 1, "memory should be findable after embedding refresh")
 	assert.Equal(t, memID, memories[0].ID)

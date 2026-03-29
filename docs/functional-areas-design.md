@@ -1230,7 +1230,7 @@ graph TB
 
 **Memory Service** (`pkg/memory/service.go`):
 - CRUD operations for investigation memories
-- `FindSimilarWithBoosts()` — hybrid search (vector + keyword with RRF), similarity threshold (0.45), confidence weighting, temporal decay (90-day half-life), scope boosts (`alert_type`, `chain_id`)
+- `FindSimilarWithBoosts()` — hybrid search (vector + keyword with RRF), similarity threshold (0.7), confidence weighting, temporal decay (90-day half-life)
 - `FindSimilar()` — pgvector similarity search for Reflector dedup context (broader threshold)
 - `SearchSessions()` — full-text search on `alert_sessions.alert_data` via tsvector/GIN for entity-level recall
 - `ApplyReflectorActions()` — processes create/reinforce/deprecate actions from the Reflector
@@ -1247,10 +1247,11 @@ graph TB
 
 **Memory Retriever** (`pkg/memory/retriever.go`):
 - Hybrid retrieval: vector candidates (pgvector HNSW) + keyword candidates (tsvector/GIN) fused via Reciprocal Rank Fusion (RRF, k=60)
-- Similarity threshold (0.45) — candidates below the floor are discarded
+- Similarity threshold (0.7) — the quality gate; every result must have a vector match above this floor
+- Vector-required: keyword matches only boost vector-matched results (LEFT JOIN, not FULL OUTER) — keyword-only matches excluded to prevent common-term noise
 - Confidence weighting: `(0.7 + 0.3 × confidence)` — human-reviewed memories rank higher
 - Temporal decay: `EXP(-0.0077 × age_in_days)` — 90-day half-life, reinforcement resets the clock
-- Soft boosts for `alert_type` (+0.05) and `chain_id` (+0.03); project is the hard security filter
+- Project is the hard security filter; minimum injection score (0.01) as conservative floor
 
 **Memory Tool Executor** (`pkg/memory/tool_executor.go`):
 - Wraps inner executor (same pattern as `SkillToolExecutor`)

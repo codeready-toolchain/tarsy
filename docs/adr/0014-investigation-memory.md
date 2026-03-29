@@ -34,11 +34,12 @@ TARSy already produces the raw material for memory extraction:
 ## Design Principles
 
 1. **Memory is a light touch.** Complementary hints for specific/repeating situations, not a playbook. The LLM's investigative creativity is preserved.
-2. **Semantic-first retrieval.** pgvector cosine similarity drives ranking. Investigation scope metadata (`alert_type`, `chain_id`) is a soft boost, never a hard filter. Infrastructure-specific context (service names, clusters, regions) lives in the memory content itself and is matched via semantic search. Project is the only hard filter (security boundary).
-3. **Zero manual tuning.** No thresholds, no fallback levels, no scoring weights to calibrate. The `max_inject` cap (default: 5) is the noise control. Scope metadata soft boosts (`+0.05` for alert_type, `+0.03` for chain_id) are fixed implementation constants — negligible tiebreakers, not weights to tune.
-4. **Embedded extraction.** Memory extraction runs as a separate LLM call within the scoring stage — triggered by the `ScoringExecutor` after the scoring controller completes. No new infrastructure, near-zero marginal cost.
-5. **In-prompt dedup.** The Reflector sees existing memories and decides what to create, reinforce, or deprecate in one pass.
-6. **Future-proof for multi-tenancy.** `project` field from day one, hard-filtered on every query.
+2. **Precision over recall.** It is better to return no memories than to return low-relevance or irrelevant ones. Noisy memories mislead the agent, waste context window, and erode trust. Every returned memory must pass the vector similarity threshold (0.7); keyword matches only boost already-relevant results via RRF, they cannot create standalone results.
+3. **Semantic-first retrieval.** pgvector cosine similarity drives ranking. Infrastructure-specific context (service names, clusters, regions) lives in the memory content itself and is matched via semantic search. Project is the only hard filter (security boundary).
+4. **Minimal tuning surface.** The `max_inject` cap (default: 5) and the similarity threshold (0.7) are the primary controls. A conservative injection score floor (0.01) catches very-low-ranked or heavily-decayed matches. Scope boosts for `alert_type`/`chain_id` were removed — the few alert types made them nearly universal and non-discriminating.
+5. **Embedded extraction.** Memory extraction runs as a separate LLM call within the scoring stage — triggered by the `ScoringExecutor` after the scoring controller completes. No new infrastructure, near-zero marginal cost.
+6. **In-prompt dedup.** The Reflector sees existing memories and decides what to create, reinforce, or deprecate in one pass.
+7. **Future-proof for multi-tenancy.** `project` field from day one, hard-filtered on every query.
 
 ## Decisions
 
@@ -229,22 +230,23 @@ At investigation start, the session executor retrieves the top `max_inject` memo
 
 **Retrieval query shape (hybrid search):**
 
-The query uses four CTEs: (0) convert query terms to an OR-joined tsquery, (1) vector candidates via pgvector HNSW with a similarity threshold `(1 - distance) >= 0.45`, (2) keyword candidates via tsvector/GIN with `'simple'` config, (3) RRF fusion (k=60). The outer query applies confidence weighting, temporal decay, and scope boosts:
+The query uses four CTEs: (0) convert query terms to an OR-joined tsquery, (1) vector candidates via pgvector HNSW with a similarity threshold `(1 - distance) >= 0.7`, (2) keyword candidates via tsvector/GIN with `'simple'` config, (3) RRF fusion via LEFT JOIN (k=60). The outer query applies confidence weighting and temporal decay:
 
 ```text
 final_score = rrf_score
   × (0.7 + 0.3 × confidence)
   × EXP(-0.0077 × age_in_days)
-  + CASE WHEN alert_type = $alert_type THEN 0.05 ELSE 0 END
-  + CASE WHEN chain_id  = $chain_id  THEN 0.03 ELSE 0 END
 ```
 
-- **Similarity threshold (0.45):** Candidates below the floor are discarded. Better to return nothing than noise.
+Scope boosts for `alert_type` and `chain_id` were removed: there are only a few alert types and chain_id almost always follows alert_type, so the boosts were nearly always "on" and didn't meaningfully discriminate. Content similarity (RRF), confidence, and temporal decay are sufficient.
+
+- **Similarity threshold (0.7):** The quality gate — every result must pass this cosine similarity floor. At 0.7, memories must be topically related, not just "same Kubernetes domain." Better to return nothing than noise.
+- **Vector-required results:** Keyword matches only boost vector-matched memories via RRF (LEFT JOIN, not FULL OUTER). Keyword-only matches (no vector relevance) are excluded entirely. This prevents common-term keyword noise (e.g. "namespace", "pod") from surfacing irrelevant memories.
+- **Minimum injection score (0.01):** Conservative floor for auto-injection — catches very-low-ranked or heavily-decayed matches that slipped past the similarity threshold.
 - **Confidence weighting:** Human-reviewed memories rank higher at similar semantic distances.
 - **Temporal decay (90-day half-life):** Unreinforced memories fade naturally. Reinforcement via the Reflector resets the clock (`updated_at`).
-- **Hybrid search (OR keywords):** Any individual query term can surface a keyword match, preventing extra terms from shifting the embedding away from a valid match.
 
-Project is the hard security filter. `alert_type` and `chain_id` are minor soft boosts.
+Project is the hard security filter.
 
 **Prompt injection (Tier 4):** After Tier 3 (custom instructions), a "Lessons from Past Investigations" section is appended with category/valence tags:
 
