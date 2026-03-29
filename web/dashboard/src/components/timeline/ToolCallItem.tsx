@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
+import { Box, Typography, Collapse, IconButton, alpha, type Theme } from '@mui/material';
 import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined, AutoStoriesOutlined, HistoryOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import JsonDisplay from '../shared/JsonDisplay';
@@ -81,6 +81,36 @@ function stripHistoricalContext(content: string): string {
     .replace(/\n?<\/historical_context>$/, '')
     .replace(/\n{1,2}(?:REMINDER|These are learnings from PAST)[^\n]*$/, '');
 }
+
+const markdownContainerSx = (accentColor: 'success' | 'info', maxHeight: number) =>
+  (theme: Theme) => ({
+    maxHeight, overflow: 'auto',
+    p: 1.5, borderRadius: 1,
+    bgcolor: '#fff',
+    border: `1px solid ${theme.palette.divider}`,
+    fontSize: '0.85rem',
+    ...theme.applyStyles('dark', {
+      bgcolor: 'rgba(255, 255, 255, 0.06)',
+    }),
+    '& h1': { fontSize: '1.1rem', mt: 0, mb: 1 },
+    '& h2': { fontSize: '1rem', mt: 1.5, mb: 0.75 },
+    '& h3': { fontSize: '0.9rem', mt: 1, mb: 0.5 },
+    '& p': { my: 0.5, lineHeight: 1.6 },
+    '& ul, & ol': { pl: 2.5, my: 0.5 },
+    '& li': { my: 0.25 },
+    '& code': {
+      fontFamily: 'monospace', fontSize: '0.8rem',
+      bgcolor: alpha(theme.palette[accentColor].main, 0.08),
+      px: 0.5, py: 0.25, borderRadius: 0.5,
+    },
+    '& pre': { my: 1, p: 1.5, borderRadius: 1, bgcolor: theme.palette.action.selected, overflow: 'auto' },
+    '& pre code': { bgcolor: 'transparent', px: 0, py: 0 },
+    '& table': { borderCollapse: 'collapse', width: '100%', my: 1, fontSize: '0.8rem' },
+    '& th, & td': { border: `1px solid ${theme.palette.divider}`, px: 1, py: 0.5, textAlign: 'left' },
+    '& th': { bgcolor: theme.palette.action.selected, fontWeight: 600 },
+    '& hr': { my: 1.5, borderColor: theme.palette.divider },
+    '& strong': { fontWeight: 600 },
+  });
 
 const RECALLED_MEMORY_RE = /^\d+\.\s*\[([^,\]]+),\s*([^,\]]+)(?:,\s*([^\]]+))?\]\s*(.+)$/;
 
@@ -213,34 +243,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
             <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
           </Box>
           {toolResult && typeof toolResult === 'string' ? (
-            <Box sx={(theme) => ({
-              maxHeight: 600, overflow: 'auto',
-              p: 1.5, borderRadius: 1,
-              bgcolor: '#fff',
-              border: `1px solid ${theme.palette.divider}`,
-              fontSize: '0.85rem',
-              ...theme.applyStyles('dark', {
-                bgcolor: 'rgba(255, 255, 255, 0.06)',
-              }),
-              '& h1': { fontSize: '1.1rem', mt: 0, mb: 1 },
-              '& h2': { fontSize: '1rem', mt: 1.5, mb: 0.75 },
-              '& h3': { fontSize: '0.9rem', mt: 1, mb: 0.5 },
-              '& p': { my: 0.5, lineHeight: 1.6 },
-              '& ul, & ol': { pl: 2.5, my: 0.5 },
-              '& li': { my: 0.25 },
-              '& code': {
-                fontFamily: 'monospace', fontSize: '0.8rem',
-                bgcolor: alpha(theme.palette.success.main, 0.08),
-                px: 0.5, py: 0.25, borderRadius: 0.5,
-              },
-              '& pre': { my: 1, p: 1.5, borderRadius: 1, bgcolor: theme.palette.action.selected, overflow: 'auto' },
-              '& pre code': { bgcolor: 'transparent', px: 0, py: 0 },
-              '& table': { borderCollapse: 'collapse', width: '100%', my: 1, fontSize: '0.8rem' },
-              '& th, & td': { border: `1px solid ${theme.palette.divider}`, px: 1, py: 0.5, textAlign: 'left' },
-              '& th': { bgcolor: theme.palette.action.selected, fontWeight: 600 },
-              '& hr': { my: 1.5, borderColor: theme.palette.divider },
-              '& strong': { fontWeight: 600 },
-            })}>
+            <Box sx={markdownContainerSx('success', 600)}>
               <ReactMarkdown
                 components={thoughtMarkdownComponents}
                 remarkPlugins={remarkPlugins}
@@ -415,34 +418,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
             </Box>
             {toolResult ? (
               isSkill && typeof toolResult === 'string' ? (
-                <Box sx={(theme) => ({
-                  maxHeight: 400, overflow: 'auto',
-                  p: 1.5, borderRadius: 1,
-                  bgcolor: '#fff',
-                  border: `1px solid ${theme.palette.divider}`,
-                  fontSize: '0.85rem',
-                  ...theme.applyStyles('dark', {
-                    bgcolor: 'rgba(255, 255, 255, 0.06)',
-                  }),
-                  '& h1': { fontSize: '1.1rem', mt: 0, mb: 1 },
-                  '& h2': { fontSize: '1rem', mt: 1.5, mb: 0.75 },
-                  '& h3': { fontSize: '0.9rem', mt: 1, mb: 0.5 },
-                  '& p': { my: 0.5, lineHeight: 1.6 },
-                  '& ul, & ol': { pl: 2.5, my: 0.5 },
-                  '& li': { my: 0.25 },
-                  '& code': {
-                    fontFamily: 'monospace', fontSize: '0.8rem',
-                    bgcolor: alpha(theme.palette.info.main, 0.08),
-                    px: 0.5, py: 0.25, borderRadius: 0.5,
-                  },
-                  '& pre': { my: 1, p: 1.5, borderRadius: 1, bgcolor: theme.palette.action.selected, overflow: 'auto' },
-                  '& pre code': { bgcolor: 'transparent', px: 0, py: 0 },
-                  '& table': { borderCollapse: 'collapse', width: '100%', my: 1, fontSize: '0.8rem' },
-                  '& th, & td': { border: `1px solid ${theme.palette.divider}`, px: 1, py: 0.5, textAlign: 'left' },
-                  '& th': { bgcolor: theme.palette.action.selected, fontWeight: 600 },
-                  '& hr': { my: 1.5, borderColor: theme.palette.divider },
-                  '& strong': { fontWeight: 600 },
-                })}>
+                <Box sx={markdownContainerSx('info', 400)}>
                   <ReactMarkdown
                     components={thoughtMarkdownComponents}
                     remarkPlugins={remarkPlugins}
