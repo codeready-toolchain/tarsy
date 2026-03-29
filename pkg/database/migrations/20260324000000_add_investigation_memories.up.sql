@@ -1,5 +1,5 @@
 -- ============================================================
--- Investigation Memory — Phase 1
+-- Investigation Memory
 --
 -- Enables pgvector, creates the investigation_memories table
 -- (with embedding column + HNSW index), the M2M join table

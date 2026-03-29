@@ -117,6 +117,10 @@ Pod OOMKilled in production
 ### Investigator
 
 - .recall_past_investigations — Search distilled knowledge from past investigations — reusable patterns, procedures, environment quirks, and anti-patterns. Use for situational questions like 'what do we know about this type of workload?', 'how should I handle this category of alert?', or 'what are common false positives here?'. Returns generalized learnings, NOT specific investigation history — will not find particular users, namespaces, or session details.
+- .search_past_sessions — Search past investigation sessions by keywords in alert data. Use to check if a specific entity (e.g. user, namespace, workload, IP, service) was investigated before — critical for escalation and pattern-of-behavior decisions. Pass specific identifiers as the query — one or a few key terms per call. For unrelated identifiers, make separate calls. Do NOT pass natural language sentences. Returns a focused summary of matching investigations including conclusions, quality assessments, and human review corrections.
+
+Good queries: 'john-doe' (single identifier), 'john-doe my-namespace' (both must match — narrows results), 'nginx-proxy', 'coolify'
+Bad queries: 'check if user john-doe was investigated before in my-namespace' (natural language — every word must match, will return nothing)
 - test-mcp.get_pods — test tool: get_pods
 
 ## INVESTIGATION TIMELINE

@@ -26,8 +26,10 @@ const (
 	ToolTypeSkill        ToolType = "skill"
 	ToolTypeMemory       ToolType = "memory"
 
-	// mirrors memory.ToolRecallPastInvestigations (can't import due to cycle)
+	// mirrors memory.ToolRecallPastInvestigations / ToolSearchPastSessions
+	// (can't import due to cycle)
 	toolNameRecallPastInvestigations = "recall_past_investigations"
+	toolNameSearchPastSessions       = "search_past_sessions"
 )
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
@@ -76,7 +78,7 @@ func executeToolCall(
 			toolType = ToolTypeOrchestrator
 		} else if skill.IsSkillTool(toolName) {
 			toolType = ToolTypeSkill
-		} else if toolName == toolNameRecallPastInvestigations {
+		} else if toolName == toolNameRecallPastInvestigations || toolName == toolNameSearchPastSessions {
 			toolType = ToolTypeMemory
 		} else {
 			toolType = ToolTypeMCP
@@ -123,10 +125,32 @@ func executeToolCall(
 	storageTruncated := mcp.TruncateForStorage(result.Content)
 	completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
 
-	// Step 5: Summarize if applicable (non-error results only)
+	// Step 5a: Handle required summarization (e.g. search_past_sessions).
+	// The tool returned raw data + prompts; we call the LLM via the standard
+	// summarization infrastructure to get timeline events, interaction
+	// recording, and metrics for free.
 	content := result.Content
 	var usage *agent.TokenUsage
-	if !result.IsError {
+	if !result.IsError && result.RequiredSummarization != nil {
+		estimatedTokens := mcp.EstimateTokens(result.Content)
+		summary, sumUsage, sumErr := callSummarizationLLM(ctx, execCtx,
+			result.RequiredSummarization.SystemPrompt,
+			result.RequiredSummarization.UserPrompt,
+			serverID, toolName, estimatedTokens, eventSeq)
+		if sumErr != nil {
+			slog.Warn("Required summarization failed",
+				"server", serverID, "tool", toolName, "error", sumErr)
+			content = "Unable to retrieve session history — summarization failed."
+			result.IsError = true
+		} else {
+			content = summary
+			usage = sumUsage
+		}
+	}
+
+	// Step 5b: Summarize if applicable (non-error, large results only).
+	// Skipped when required summarization already ran.
+	if !result.IsError && result.RequiredSummarization == nil {
 		convContext := buildConversationContext(messages)
 		sumResult, sumErr := maybeSummarize(ctx, execCtx, serverID, toolName,
 			result.Content, convContext, eventSeq)

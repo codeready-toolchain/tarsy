@@ -354,7 +354,7 @@ Replaces pure vector search with vector + keyword RRF. Depends on phase 2 (the q
 | `pkg/memory/service.go` | `FindSimilarWithBoosts`: replace single-CTE query with dual-CTE (vector + keyword) + RRF fusion (see change #8 pseudo-SQL) |
 | Tests | Hybrid search tests: keyword-only match, vector-only match, both match (RRF boost), query with extra terms that shift embedding |
 
-### Phase 4 — Entity-Level Recall (changes 6, 7)
+### Phase 4 — Entity-Level Recall (changes 6, 7) - DONE
 
 New `search_past_sessions` tool with LLM summarization. Finalize both tool descriptions.
 

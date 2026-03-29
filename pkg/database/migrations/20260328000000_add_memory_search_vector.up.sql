@@ -1,5 +1,5 @@
 -- ============================================================
--- Hybrid Search — Phase 3
+-- Hybrid Search
 --
 -- Adds a stored tsvector column to investigation_memories for
 -- keyword-based full-text search. Used alongside the existing

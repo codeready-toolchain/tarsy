@@ -26,6 +26,20 @@ type ToolResult struct {
 	Name    string // Tool name (server.tool format)
 	Content string // Tool output (text)
 	IsError bool   // Whether the tool returned an error
+
+	// RequiredSummarization, when non-nil, instructs the controller to
+	// summarize Content via an LLM call before feeding it back to the agent.
+	// Content holds the raw data (stored in trace); the summary replaces it
+	// in the conversation. Uses the same infrastructure as MCP tool
+	// summarization (timeline events, LLM interaction recording, metrics).
+	RequiredSummarization *SummarizationRequest
+}
+
+// SummarizationRequest carries prompts for a required LLM summarization
+// of a tool result. The controller calls callSummarizationLLM with these.
+type SummarizationRequest struct {
+	SystemPrompt string
+	UserPrompt   string
 }
 
 // StubToolExecutor returns canned responses for testing.

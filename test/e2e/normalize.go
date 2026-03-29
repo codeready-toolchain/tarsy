@@ -37,6 +37,7 @@ var (
 	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
 	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
 	memoryScoreRe     = regexp.MustCompile(`, score: -?\d+\.\d+`)
+	shortTimestampRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
 )
 
 // NewNormalizer creates a normalizer that knows the session ID to replace.
@@ -151,6 +152,9 @@ func (n *Normalizer) Normalize(data string) string {
 
 	// 11. Replace RFC3339 timestamps.
 	data = timestampRe.ReplaceAllString(data, "{TIMESTAMP}")
+
+	// 11b. Replace short "YYYY-MM-DD HH:MM" timestamps (used in session search prompts).
+	data = shortTimestampRe.ReplaceAllString(data, "{SHORT_TIMESTAMP}")
 
 	// 12. Replace Unix timestamps in known fields.
 	data = unixTSRe.ReplaceAllStringFunc(data, func(match string) string {

@@ -1,0 +1,50 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_8}",
+  "input_tokens": 300,
+  "interaction_type": "summarization",
+  "llm_request": {
+    "iteration": 0,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 200,
+    "tool_calls_count": 0
+  },
+  "model_name": "test-model",
+  "output_tokens": 60,
+  "total_tokens": 360
+}
+
+=== MESSAGE: system ===
+You are a summarization assistant for TARSy, an automated incident investigation platform. You are given a set of past investigation sessions that matched a keyword search, along with the original search query.
+
+Produce a focused digest covering:
+- Whether the searched entity (e.g. user, workload, service, IP) was investigated before
+- What the conclusions were for each matching investigation
+- Any human review corrections or quality assessments
+- Patterns across multiple investigations of the same entity
+
+Preserve entity identifiers exactly as they appear — do not paraphrase names, namespaces, or IPs. Silently omit sessions that matched coincidentally but involve a different entity than the one queried.
+
+Be concise but complete. Present the findings; do not interpret them or suggest next steps.
+
+=== MESSAGE: user ===
+Search query: nginx-proxy
+
+Matched sessions (1):
+
+--- Session 1 (ID: {UUID}, {SHORT_TIMESTAMP}) ---
+Alert type: pod-restart
+Alert data:
+nginx-proxy pod restarting in namespace coolify with CrashLoopBackOff
+Investigation conclusions:
+nginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold.
+Quality assessment: accurate
+Human review feedback: Good investigation. Probe fix was correct.
+
+
+=== MESSAGE: assistant ===
+nginx-proxy was previously investigated for CrashLoopBackOff in namespace coolify. The root cause was a misconfigured liveness probe, resolved by adjusting the threshold. Investigation rated accurate.
+

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -70,6 +71,9 @@ func setupMemoryService(t *testing.T, dbClient *database.Client, dims int) (*mem
 	require.NoError(t, err)
 	_, err = dbClient.DB().ExecContext(ctx,
 		`ALTER TABLE investigation_memories ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED`)
+	require.NoError(t, err)
+	_, err = dbClient.DB().ExecContext(ctx,
+		`ALTER TABLE alert_sessions ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', alert_data)) STORED`)
 	require.NoError(t, err)
 
 	memCfg := &config.MemoryConfig{
@@ -1037,6 +1041,526 @@ func TestE2E_MemoryDisabled(t *testing.T) {
 
 	// recall_past_investigations tool should NOT be in the tool list.
 	assertDoesNotHaveTool(t, captured[0], "recall_past_investigations")
+}
+
+// ────────────────────────────────────────────────────────────
+// TestE2E_SearchPastSessionsInChat — full search_past_sessions pipeline.
+//
+// Pre-seeds a completed+reviewed session, then runs:
+//   1. Investigation: tool call + final answer (2 LLM calls)
+//   2. Executive summary (1 LLM call)
+//   3. Chat: agent calls search_past_sessions (1 LLM call)
+//   4. Summarization: internal LLM call by search_past_sessions (1 LLM call)
+//   5. Chat: final answer after seeing search result (1 LLM call)
+//
+// Verifies:
+//   - search_past_sessions tool in investigation and chat tool lists
+//   - Summarization LLM call receives correct system prompt and session data
+//   - Chat receives the summary as tool result
+//   - Golden files capture the full trace
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_SearchPastSessionsInChat(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	memSvc, memCfg := setupMemoryService(t, dbClient, 3)
+	ctx := t.Context()
+
+	// Pre-seed a completed session with searchable alert_data and review metadata.
+	// The search_vector column (GENERATED STORED) auto-computes from alert_data.
+	seedSessionID := uuid.New().String()
+	finalAnalysis := "nginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold."
+	feedback := "Good investigation. Probe fix was correct."
+	_, err := dbClient.Client.AlertSession.Create().
+		SetID(seedSessionID).
+		SetAlertData("nginx-proxy pod restarting in namespace coolify with CrashLoopBackOff").
+		SetAgentType("test").
+		SetAlertType("pod-restart").
+		SetChainID("memory-chain").
+		SetStatus("completed").
+		SetFinalAnalysis(finalAnalysis).
+		SetQualityRating(alertsession.QualityRatingAccurate).
+		SetInvestigationFeedback(feedback).
+		Save(ctx)
+	require.NoError(t, err)
+
+	llm := NewScriptedLLMClient()
+
+	// Investigation: tool call + final answer.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me check pod status."},
+			&agent.TextChunk{Content: "Checking pod status."},
+			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_pods", Arguments: `{"namespace":"default"}`},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Pods are healthy."},
+			&agent.TextChunk{Content: "Investigation complete: all pods running normally."},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 50, TotalTokens: 250},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{Text: "All pods healthy. No issues detected."})
+
+	// Chat iteration 1: agent calls search_past_sessions.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me search for past investigations involving nginx-proxy."},
+			&agent.TextChunk{Content: "Searching past sessions for nginx-proxy."},
+			&agent.ToolCallChunk{
+				CallID:    "search-1",
+				Name:      "search_past_sessions",
+				Arguments: `{"query":"nginx-proxy"}`,
+			},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+
+	// Summarization: internal LLM call triggered by search_past_sessions.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "nginx-proxy was previously investigated for CrashLoopBackOff in namespace coolify. The root cause was a misconfigured liveness probe, resolved by adjusting the threshold. Investigation rated accurate."},
+			&agent.UsageChunk{InputTokens: 300, OutputTokens: 60, TotalTokens: 360},
+		},
+	})
+
+	// Chat iteration 2: final answer after seeing search result.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Past investigation shows nginx-proxy had a liveness probe issue."},
+			&agent.TextChunk{Content: "nginx-proxy was previously investigated. The issue was a misconfigured liveness probe in namespace coolify, fixed by adjusting the threshold."},
+			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
+		},
+	})
+
+	podsResult := `[{"name":"pod-1","status":"Running","restarts":0}]`
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "memory")),
+		WithDBClient(dbClient),
+		WithLLMClient(llm),
+		WithMemoryService(memSvc, memCfg),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"get_pods": StaticToolHandler(podsResult),
+			},
+		}),
+	)
+
+	// Submit alert and wait for completion.
+	resp := app.SubmitAlert(t, "memory-test", "High latency alert for web service")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// Chat follow-up: triggers search_past_sessions.
+	chatResp := app.SendChatMessage(t, sessionID, "Has nginx-proxy been investigated before?")
+	chatStageID := chatResp["stage_id"].(string)
+	require.NotEmpty(t, chatStageID)
+	app.WaitForStageStatus(t, chatStageID, "completed")
+
+	// ════════════════════════════════════════════════════════════
+	// A. Behavioral assertions via CapturedInputs
+	// ════════════════════════════════════════════════════════════
+
+	captured := llm.CapturedInputs()
+	// Investigation: 2 + exec_summary: 1 + chat: 1 + summarization: 1 + chat: 1 = 6
+	require.Equal(t, 6, llm.CallCount(), "expected 6 LLM calls total")
+
+	// A1. Investigation: both memory tools in tool list.
+	investigatorInput := captured[0]
+	assertHasTool(t, investigatorInput, "search_past_sessions")
+	assertHasTool(t, investigatorInput, "recall_past_investigations")
+
+	// A2. Chat: search_past_sessions in tool list.
+	chatInput := captured[3]
+	assertHasTool(t, chatInput, "search_past_sessions")
+
+	// A3. Summarization call: correct system prompt.
+	summarizationInput := captured[4]
+	assertSystemPromptContains(t, summarizationInput,
+		"summarization assistant for TARSy",
+		"summarization call should have the correct system prompt")
+
+	// A4. Summarization user prompt contains seeded session data.
+	var summarizationUserPrompt string
+	for _, m := range summarizationInput.Messages {
+		if m.Role == agent.RoleUser {
+			summarizationUserPrompt = m.Content
+			break
+		}
+	}
+	require.NotEmpty(t, summarizationUserPrompt, "summarization should have a user prompt")
+	assert.Contains(t, summarizationUserPrompt, "nginx-proxy",
+		"summarization prompt should contain the search query")
+	assert.Contains(t, summarizationUserPrompt, "nginx-proxy pod restarting in namespace coolify",
+		"summarization prompt should contain seeded alert_data")
+	assert.Contains(t, summarizationUserPrompt, "misconfigured liveness probe",
+		"summarization prompt should contain final_analysis")
+	assert.Contains(t, summarizationUserPrompt, "accurate",
+		"summarization prompt should contain quality_rating")
+	assert.Contains(t, summarizationUserPrompt, "Good investigation",
+		"summarization prompt should contain investigation_feedback")
+
+	// A5. Chat iteration 2: search_past_sessions tool result in conversation.
+	chatIter2 := captured[5]
+	searchResult := findToolResultMessage(chatIter2, "search_past_sessions")
+	require.NotNil(t, searchResult, "chat iter 2 should have search_past_sessions tool result")
+	assert.Contains(t, searchResult.Content, "nginx-proxy was previously investigated",
+		"search result should contain the LLM summary")
+
+	// ════════════════════════════════════════════════════════════
+	// B. Golden files: timeline + trace
+	// ════════════════════════════════════════════════════════════
+
+	const goldenScenario = "memory-session-search"
+
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages, ok := traceList["stages"].([]interface{})
+	require.True(t, ok, "stages should be an array")
+	require.NotEmpty(t, traceStages)
+
+	normalizer := NewNormalizer(sessionID)
+	for _, rawStage := range traceStages {
+		stg, _ := rawStage.(map[string]interface{})
+		stageID, _ := stg["stage_id"].(string)
+		normalizer.RegisterStageID(stageID)
+
+		executions, _ := stg["executions"].([]interface{})
+		for _, rawExec := range executions {
+			exec, _ := rawExec.(map[string]interface{})
+			execID, _ := exec["execution_id"].(string)
+			normalizer.RegisterExecutionID(execID)
+
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				if id, ok := li["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				if id, ok := mi["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
+			}
+		}
+	}
+
+	traceSessionInteractions, _ := traceList["session_interactions"].([]interface{})
+	for _, rawLI := range traceSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		normalizer.RegisterInteractionID(li["id"].(string))
+	}
+
+	// Timeline golden.
+	execs := app.QueryExecutions(t, sessionID)
+	agentIndex := BuildAgentNameIndex(execs)
+
+	timeline := app.QueryTimeline(t, sessionID)
+	projectedTimeline := make([]map[string]interface{}, len(timeline))
+	for i, te := range timeline {
+		projectedTimeline[i] = ProjectTimelineForGolden(te)
+	}
+	AnnotateTimelineWithAgent(projectedTimeline, timeline, agentIndex)
+	SortTimelineProjection(projectedTimeline)
+	AssertGoldenJSON(t, GoldenPath(goldenScenario, "timeline.golden"), projectedTimeline, normalizer)
+
+	// Trace list golden.
+	AssertGoldenJSON(t, GoldenPath(goldenScenario, "trace_list.golden"), traceList, normalizer)
+
+	// Per-interaction golden files.
+	type interactionEntry struct {
+		Kind, ID, AgentName, CreatedAt, Label, ServerName string
+	}
+
+	var allInteractions []interactionEntry
+	for _, rawStage := range traceStages {
+		stg, _ := rawStage.(map[string]interface{})
+		for _, rawExec := range stg["executions"].([]interface{}) {
+			exec, _ := rawExec.(map[string]interface{})
+			agentName, _ := exec["agent_name"].(string)
+
+			var execInteractions []interactionEntry
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind: "llm", ID: li["id"].(string), AgentName: agentName,
+					CreatedAt: li["created_at"].(string), Label: li["interaction_type"].(string),
+				})
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				label := mi["interaction_type"].(string)
+				if tn, ok := mi["tool_name"].(string); ok && tn != "" {
+					label = tn
+				}
+				sn, _ := mi["server_name"].(string)
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind: "mcp", ID: mi["id"].(string), AgentName: agentName,
+					CreatedAt: mi["created_at"].(string), Label: label, ServerName: sn,
+				})
+			}
+			sort.SliceStable(execInteractions, func(i, j int) bool {
+				a, b := execInteractions[i], execInteractions[j]
+				if a.CreatedAt != b.CreatedAt {
+					return a.CreatedAt < b.CreatedAt
+				}
+				return a.ServerName < b.ServerName
+			})
+			allInteractions = append(allInteractions, execInteractions...)
+		}
+	}
+
+	for _, rawLI := range traceSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		allInteractions = append(allInteractions, interactionEntry{
+			Kind: "llm", ID: li["id"].(string), AgentName: "Session",
+			CreatedAt: li["created_at"].(string), Label: li["interaction_type"].(string),
+		})
+	}
+
+	iterationCounters := make(map[string]int)
+	for idx, entry := range allInteractions {
+		counterKey := entry.AgentName + "_" + entry.Label
+		iterationCounters[counterKey]++
+		count := iterationCounters[counterKey]
+
+		label := strings.ReplaceAll(entry.Label, " ", "_")
+		filename := fmt.Sprintf("%02d_%s_%s_%s_%d.golden", idx+1, entry.AgentName, entry.Kind, label, count)
+		goldenPath := GoldenPath(goldenScenario, filepath.Join("trace_interactions", filename))
+
+		if entry.Kind == "llm" {
+			detail := app.GetLLMInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenLLMInteraction(t, goldenPath, detail, normalizer)
+		} else {
+			detail := app.GetMCPInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenMCPInteraction(t, goldenPath, detail, normalizer)
+		}
+	}
+}
+
+// ────────────────────────────────────────────────────────────
+// TestE2E_SearchPastSessionsNoMatches — search_past_sessions returns no hits.
+//
+// No matching sessions in the DB. Chat agent calls search_past_sessions,
+// which returns "No matching sessions found" without triggering summarization.
+//
+// LLM call sequence:
+//   1. Investigation: final answer (1 call)
+//   2. Executive summary (1 call)
+//   3. Chat: agent calls search_past_sessions (1 call)
+//   4. Chat: final answer (1 call)
+//   No summarization call — no matches to summarize.
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_SearchPastSessionsNoMatches(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	memSvc, memCfg := setupMemoryService(t, dbClient, 3)
+
+	llm := NewScriptedLLMClient()
+
+	// Investigation: single iteration, no tool calls.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Quick investigation."},
+			&agent.TextChunk{Content: "Investigation complete: no issues found."},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+
+	// Executive summary.
+	llm.AddSequential(LLMScriptEntry{Text: "No issues found."})
+
+	// Chat iteration 1: agent calls search_past_sessions with non-matching query.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me search for past investigations involving nonexistent-service."},
+			&agent.TextChunk{Content: "Searching for nonexistent-service."},
+			&agent.ToolCallChunk{
+				CallID:    "search-1",
+				Name:      "search_past_sessions",
+				Arguments: `{"query":"nonexistent-service-xyz"}`,
+			},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+
+	// Chat iteration 2: agent responds after seeing "no matches" result.
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "No past sessions found."},
+			&agent.TextChunk{Content: "No previous investigations found for nonexistent-service-xyz."},
+			&agent.UsageChunk{InputTokens: 150, OutputTokens: 30, TotalTokens: 180},
+		},
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "memory")),
+		WithDBClient(dbClient),
+		WithLLMClient(llm),
+		WithMemoryService(memSvc, memCfg),
+	)
+
+	resp := app.SubmitAlert(t, "memory-test", "Test alert for no-match scenario")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// Chat follow-up: search_past_sessions with no matching data.
+	chatResp := app.SendChatMessage(t, sessionID, "Was nonexistent-service-xyz investigated before?")
+	chatStageID := chatResp["stage_id"].(string)
+	require.NotEmpty(t, chatStageID)
+	app.WaitForStageStatus(t, chatStageID, "completed")
+
+	// ════════════════════════════════════════════════════════════
+	// A. Behavioral assertions via CapturedInputs
+	// ════════════════════════════════════════════════════════════
+
+	captured := llm.CapturedInputs()
+	// Investigation: 1 + exec_summary: 1 + chat: 1 + chat: 1 = 4 (no summarization)
+	require.Equal(t, 4, llm.CallCount(), "expected 4 LLM calls total (no summarization)")
+
+	// Chat iteration 2 should have the "no matches" tool result.
+	chatIter2 := captured[3]
+	searchResult := findToolResultMessage(chatIter2, "search_past_sessions")
+	require.NotNil(t, searchResult, "chat iter 2 should have search_past_sessions tool result")
+	assert.Equal(t, "No matching sessions found for this query.", searchResult.Content,
+		"should get the exact no-matches message")
+
+	// ════════════════════════════════════════════════════════════
+	// B. Golden files: timeline + trace
+	// ════════════════════════════════════════════════════════════
+
+	const goldenScenario = "memory-session-search-no-match"
+
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages, ok := traceList["stages"].([]interface{})
+	require.True(t, ok, "stages should be an array")
+	require.NotEmpty(t, traceStages)
+
+	normalizer := NewNormalizer(sessionID)
+	for _, rawStage := range traceStages {
+		stg, _ := rawStage.(map[string]interface{})
+		stageID, _ := stg["stage_id"].(string)
+		normalizer.RegisterStageID(stageID)
+
+		executions, _ := stg["executions"].([]interface{})
+		for _, rawExec := range executions {
+			exec, _ := rawExec.(map[string]interface{})
+			execID, _ := exec["execution_id"].(string)
+			normalizer.RegisterExecutionID(execID)
+
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				if id, ok := li["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				if id, ok := mi["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
+			}
+		}
+	}
+
+	traceSessionInteractions, _ := traceList["session_interactions"].([]interface{})
+	for _, rawLI := range traceSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		normalizer.RegisterInteractionID(li["id"].(string))
+	}
+
+	// Timeline golden.
+	execs := app.QueryExecutions(t, sessionID)
+	agentIndex := BuildAgentNameIndex(execs)
+
+	timeline := app.QueryTimeline(t, sessionID)
+	projectedTimeline := make([]map[string]interface{}, len(timeline))
+	for i, te := range timeline {
+		projectedTimeline[i] = ProjectTimelineForGolden(te)
+	}
+	AnnotateTimelineWithAgent(projectedTimeline, timeline, agentIndex)
+	SortTimelineProjection(projectedTimeline)
+	AssertGoldenJSON(t, GoldenPath(goldenScenario, "timeline.golden"), projectedTimeline, normalizer)
+
+	// Trace list golden.
+	AssertGoldenJSON(t, GoldenPath(goldenScenario, "trace_list.golden"), traceList, normalizer)
+
+	// Per-interaction golden files.
+	type interactionEntry struct {
+		Kind, ID, AgentName, CreatedAt, Label, ServerName string
+	}
+
+	var allInteractions []interactionEntry
+	for _, rawStage := range traceStages {
+		stg, _ := rawStage.(map[string]interface{})
+		for _, rawExec := range stg["executions"].([]interface{}) {
+			exec, _ := rawExec.(map[string]interface{})
+			agentName, _ := exec["agent_name"].(string)
+
+			var execInteractions []interactionEntry
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind: "llm", ID: li["id"].(string), AgentName: agentName,
+					CreatedAt: li["created_at"].(string), Label: li["interaction_type"].(string),
+				})
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				label := mi["interaction_type"].(string)
+				if tn, ok := mi["tool_name"].(string); ok && tn != "" {
+					label = tn
+				}
+				sn, _ := mi["server_name"].(string)
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind: "mcp", ID: mi["id"].(string), AgentName: agentName,
+					CreatedAt: mi["created_at"].(string), Label: label, ServerName: sn,
+				})
+			}
+			sort.SliceStable(execInteractions, func(i, j int) bool {
+				a, b := execInteractions[i], execInteractions[j]
+				if a.CreatedAt != b.CreatedAt {
+					return a.CreatedAt < b.CreatedAt
+				}
+				return a.ServerName < b.ServerName
+			})
+			allInteractions = append(allInteractions, execInteractions...)
+		}
+	}
+
+	for _, rawLI := range traceSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		allInteractions = append(allInteractions, interactionEntry{
+			Kind: "llm", ID: li["id"].(string), AgentName: "Session",
+			CreatedAt: li["created_at"].(string), Label: li["interaction_type"].(string),
+		})
+	}
+
+	iterationCounters := make(map[string]int)
+	for idx, entry := range allInteractions {
+		counterKey := entry.AgentName + "_" + entry.Label
+		iterationCounters[counterKey]++
+		count := iterationCounters[counterKey]
+
+		label := strings.ReplaceAll(entry.Label, " ", "_")
+		filename := fmt.Sprintf("%02d_%s_%s_%s_%d.golden", idx+1, entry.AgentName, entry.Kind, label, count)
+		goldenPath := GoldenPath(goldenScenario, filepath.Join("trace_interactions", filename))
+
+		if entry.Kind == "llm" {
+			detail := app.GetLLMInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenLLMInteraction(t, goldenPath, detail, normalizer)
+		} else {
+			detail := app.GetMCPInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenMCPInteraction(t, goldenPath, detail, normalizer)
+		}
+	}
 }
 
 // ────────────────────────────────────────────────────────────

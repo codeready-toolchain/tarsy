@@ -1,0 +1,100 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_4}",
+  "input_tokens": 100,
+  "interaction_type": "iteration",
+  "llm_request": {
+    "iteration": 1,
+    "messages_count": 2
+  },
+  "llm_response": {
+    "text_length": 34,
+    "tool_calls_count": 1
+  },
+  "model_name": "test-model",
+  "output_tokens": 30,
+  "thinking_content": "Let me search for past investigations involving nonexistent-service.",
+  "total_tokens": 130
+}
+
+=== MESSAGE: system ===
+## Context
+
+Current time: {CURRENT_TIME}
+
+## Chat Assistant Instructions
+
+You are an expert Site Reliability Engineer (SRE) assistant helping with follow-up questions about a completed alert investigation.
+
+The user has reviewed the investigation results and has follow-up questions. Your role is to:
+- Provide clear, actionable answers based on the investigation history
+- Use available tools to gather fresh, real-time data when needed
+- Reference specific findings from the original investigation when relevant
+- Maintain the same professional SRE communication style
+- Be concise but thorough in your responses
+
+You have access to the same tools and systems that were used in the original investigation.
+
+## Response Guidelines
+
+1. **Context Awareness**: Reference the investigation history when it provides relevant context
+2. **Fresh Data**: Use tools to gather current system state if the question requires up-to-date information
+3. **Clarity**: If the question is ambiguous or unclear, ask for clarification in your Final Answer
+4. **Specificity**: Always reference actual data and observations, not assumptions
+5. **Brevity**: Be concise but complete - users have already read the full investigation
+
+Focus on answering follow-up questions about a completed investigation for human operators to execute.
+
+=== MESSAGE: user ===
+## Alert Details
+
+### Alert Metadata
+**Alert Type:** memory-test
+
+### Alert Data
+<!-- ALERT_DATA_START -->
+Test alert for no-match scenario
+<!-- ALERT_DATA_END -->
+
+## Runbook Content
+No runbook available.
+
+═══════════════════════════════════════════════════════════════════════════════
+📋 INVESTIGATION HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+## Stage 1: investigation
+
+**Agent:** MemoryInvestigator (google-native, test-provider)
+**Status**: completed
+
+**Internal Reasoning:**
+
+Quick investigation.
+
+**Agent Response:**
+
+Investigation complete: no issues found.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+🎯 CURRENT TASK
+═══════════════════════════════════════════════════════════════════════════════
+
+**Question:** Was nonexistent-service-xyz investigated before?
+
+**Your Task:**
+Answer the user's question based on the investigation context above.
+- Reference investigation history when relevant
+- Use tools to get fresh data if needed
+- Provide clear, actionable responses
+
+Begin your response:
+
+
+=== MESSAGE: assistant ===
+Searching for nonexistent-service.
+--- TOOL_CALLS ---
+[search-1] search_past_sessions({"query":"nonexistent-service-xyz"})
+

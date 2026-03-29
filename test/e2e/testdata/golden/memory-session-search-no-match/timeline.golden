@@ -1,0 +1,108 @@
+[
+  {
+    "agent": "ChatAgent",
+    "content": "Was nonexistent-service-xyz investigated before?",
+    "event_type": "user_question",
+    "metadata": {
+      "author": "api-client"
+    },
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Let me search for past investigations involving nonexistent-service.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Searching for nonexistent-service.",
+    "event_type": "llm_response",
+    "sequence": 6,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "No matching sessions found for this query.",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"query\":\"nonexistent-service-xyz\"}",
+      "is_error": false,
+      "server_name": "",
+      "tool_name": "search_past_sessions",
+      "tool_type": "memory"
+    },
+    "sequence": 7,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "No past sessions found.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 8,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "No previous investigations found for nonexistent-service-xyz.",
+    "event_type": "llm_response",
+    "sequence": 9,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "No previous investigations found for nonexistent-service-xyz.",
+    "event_type": "final_analysis",
+    "sequence": 10,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "No issues found.",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "No issues found.",
+    "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "executive_summary"
+    },
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Quick investigation.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Investigation complete: no issues found.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Investigation complete: no issues found.",
+    "event_type": "final_analysis",
+    "sequence": 3,
+    "status": "completed"
+  }
+]

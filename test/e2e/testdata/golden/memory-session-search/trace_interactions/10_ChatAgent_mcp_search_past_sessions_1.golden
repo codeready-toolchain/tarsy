@@ -1,0 +1,19 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_12}",
+  "interaction_type": "tool_call",
+  "server_name": "",
+  "tool_name": "search_past_sessions"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "query": "nginx-proxy"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "Search query: nginx-proxy\n\nMatched sessions (1):\n\n--- Session 1 (ID: {UUID}, {SHORT_TIMESTAMP}) ---\nAlert type: pod-restart\nAlert data:\nnginx-proxy pod restarting in namespace coolify with CrashLoopBackOff\nInvestigation conclusions:\nnginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold.\nQuality assessment: accurate\nHuman review feedback: Good investigation. Probe fix was correct.\n",
+  "is_error": false
+}

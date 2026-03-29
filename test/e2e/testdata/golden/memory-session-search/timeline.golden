@@ -1,0 +1,152 @@
+[
+  {
+    "agent": "ChatAgent",
+    "content": "Has nginx-proxy been investigated before?",
+    "event_type": "user_question",
+    "metadata": {
+      "author": "api-client"
+    },
+    "sequence": 7,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Let me search for past investigations involving nginx-proxy.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 8,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Searching past sessions for nginx-proxy.",
+    "event_type": "llm_response",
+    "sequence": 9,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Search query: nginx-proxy\n\nMatched sessions (1):\n\n--- Session 1 (ID: {UUID}, {SHORT_TIMESTAMP}) ---\nAlert type: pod-restart\nAlert data:\nnginx-proxy pod restarting in namespace coolify with CrashLoopBackOff\nInvestigation conclusions:\nnginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold.\nQuality assessment: accurate\nHuman review feedback: Good investigation. Probe fix was correct.\n",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"query\":\"nginx-proxy\"}",
+      "is_error": false,
+      "server_name": "",
+      "tool_name": "search_past_sessions",
+      "tool_type": "memory"
+    },
+    "sequence": 10,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "nginx-proxy was previously investigated for CrashLoopBackOff in namespace coolify. The root cause was a misconfigured liveness probe, resolved by adjusting the threshold. Investigation rated accurate.",
+    "event_type": "mcp_tool_summary",
+    "metadata": {
+      "original_tokens": 116,
+      "server_name": "",
+      "summarization_model": "test-model",
+      "tool_name": "search_past_sessions"
+    },
+    "sequence": 11,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "Past investigation shows nginx-proxy had a liveness probe issue.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 12,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "nginx-proxy was previously investigated. The issue was a misconfigured liveness probe in namespace coolify, fixed by adjusting the threshold.",
+    "event_type": "llm_response",
+    "sequence": 13,
+    "status": "completed"
+  },
+  {
+    "agent": "ChatAgent",
+    "content": "nginx-proxy was previously investigated. The issue was a misconfigured liveness probe in namespace coolify, fixed by adjusting the threshold.",
+    "event_type": "final_analysis",
+    "sequence": 14,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "All pods healthy. No issues detected.",
+    "event_type": "llm_response",
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "ExecSummaryAgent",
+    "content": "All pods healthy. No issues detected.",
+    "event_type": "final_analysis",
+    "metadata": {
+      "interaction_type": "executive_summary"
+    },
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Let me check pod status.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 1,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Checking pod status.",
+    "event_type": "llm_response",
+    "sequence": 2,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "[{\"name\":\"pod-1\",\"status\":\"Running\",\"restarts\":0}]",
+    "event_type": "llm_tool_call",
+    "metadata": {
+      "arguments": "{\"namespace\":\"default\"}",
+      "is_error": false,
+      "server_name": "test-mcp",
+      "tool_name": "get_pods",
+      "tool_type": "mcp"
+    },
+    "sequence": 3,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Pods are healthy.",
+    "event_type": "llm_thinking",
+    "metadata": {
+      "source": "native"
+    },
+    "sequence": 4,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Investigation complete: all pods running normally.",
+    "event_type": "llm_response",
+    "sequence": 5,
+    "status": "completed"
+  },
+  {
+    "agent": "MemoryInvestigator",
+    "content": "Investigation complete: all pods running normally.",
+    "event_type": "final_analysis",
+    "sequence": 6,
+    "status": "completed"
+  }
+]

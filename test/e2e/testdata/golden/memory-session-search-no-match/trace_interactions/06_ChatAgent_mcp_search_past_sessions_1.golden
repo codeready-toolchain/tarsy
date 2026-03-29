@@ -1,0 +1,19 @@
+{
+  "created_at": "{TIMESTAMP}",
+  "duration_ms": {DURATION_MS},
+  "id": "{INTERACTION_ID_7}",
+  "interaction_type": "tool_call",
+  "server_name": "",
+  "tool_name": "search_past_sessions"
+}
+
+=== TOOL_ARGUMENTS ===
+{
+  "query": "nonexistent-service-xyz"
+}
+
+=== TOOL_RESULT ===
+{
+  "content": "No matching sessions found for this query.",
+  "is_error": false
+}

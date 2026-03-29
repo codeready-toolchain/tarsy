@@ -92,6 +92,25 @@ func pluralize(n int, unit string) string {
 	return fmt.Sprintf("%d %ss ago", n, unit)
 }
 
+// SessionSearchParams holds the parameters for searching past sessions.
+type SessionSearchParams struct {
+	Query     string
+	AlertType *string
+	DaysBack  int
+	Limit     int
+}
+
+// SessionSearchResult holds a single matched session from a keyword search.
+type SessionSearchResult struct {
+	SessionID             string
+	AlertData             string
+	AlertType             string
+	FinalAnalysis         *string
+	QualityRating         *string
+	InvestigationFeedback *string
+	CreatedAt             time.Time
+}
+
 // ReflectorResult holds the parsed output from a Reflector LLM call.
 type ReflectorResult struct {
 	Create    []ReflectorCreateAction    `json:"create"`

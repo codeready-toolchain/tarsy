@@ -724,6 +724,63 @@ func (s *Service) ValidateDimensions(ctx context.Context) error {
 	return nil
 }
 
+// SearchSessions finds completed alert sessions matching a keyword query against
+// alert_data using PostgreSQL full-text search with AND logic (all query terms
+// must be present). Returns raw session data for downstream LLM summarization.
+//
+// Raw SQL because Ent has no support for the tsvector @@ plainto_tsquery
+// operator or the GENERATED ALWAYS STORED search_vector column.
+func (s *Service) SearchSessions(ctx context.Context, params SessionSearchParams) ([]SessionSearchResult, error) {
+	if params.Query == "" {
+		return nil, fmt.Errorf("search query is required")
+	}
+	if params.DaysBack <= 0 {
+		params.DaysBack = 30
+	}
+	if params.Limit <= 0 {
+		params.Limit = 5
+	}
+
+	query := `
+		SELECT session_id, alert_data, alert_type, final_analysis,
+		       quality_rating, investigation_feedback, created_at
+		FROM alert_sessions
+		WHERE search_vector @@ plainto_tsquery('simple', $1)
+		  AND status = 'completed'
+		  AND created_at > NOW() - make_interval(days => $2)
+	`
+	args := []any{params.Query, params.DaysBack}
+	argIdx := 3
+
+	if params.AlertType != nil {
+		query += fmt.Sprintf("  AND alert_type = $%d\n", argIdx)
+		args = append(args, *params.AlertType)
+		argIdx++
+	}
+
+	query += fmt.Sprintf("ORDER BY created_at DESC\nLIMIT $%d", argIdx)
+	args = append(args, params.Limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("session search query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []SessionSearchResult
+	for rows.Next() {
+		var r SessionSearchResult
+		if err := rows.Scan(
+			&r.SessionID, &r.AlertData, &r.AlertType, &r.FinalAnalysis,
+			&r.QualityRating, &r.InvestigationFeedback, &r.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan session row: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // formatVector converts a float32 slice to the pgvector string format: [1.0,2.0,3.0]
 func formatVector(v []float32) string {
 	var sb strings.Builder
