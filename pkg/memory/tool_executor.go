@@ -79,11 +79,11 @@ Bad queries: 'check if user john-doe was investigated before in my-namespace' (n
 }
 
 const (
-	recallDefaultLimit         = 10
-	recallMaxLimit             = 20
-	sessionSearchDefaultLimit  = 5
-	sessionSearchMaxLimit      = 10
-	sessionSearchDefaultDays   = 30
+	recallDefaultLimit        = 10
+	recallMaxLimit            = 20
+	sessionSearchDefaultLimit = 5
+	sessionSearchMaxLimit     = 10
+	sessionSearchDefaultDays  = 30
 )
 
 // ToolExecutor wraps an inner agent.ToolExecutor and intercepts
