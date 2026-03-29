@@ -1217,9 +1217,10 @@ graph TB
     Embedder -->|embedding API| DB
 
     SessionExec --> Retriever
-    Retriever -->|pgvector similarity| DB
+    Retriever -->|hybrid search: vector + keyword RRF| DB
     Retriever --> PromptBuilder
     ToolExec -->|recall_past_investigations| DB
+    ToolExec -->|search_past_sessions| DB
 
     ReviewHandler -->|confidence adjustment| DB
     FeedbackJob -->|background Reflector| DB
@@ -1229,7 +1230,9 @@ graph TB
 
 **Memory Service** (`pkg/memory/service.go`):
 - CRUD operations for investigation memories
-- `FindSimilar()` — pgvector cosine similarity search within project boundary
+- `FindSimilarWithBoosts()` — hybrid search (vector + keyword with RRF), similarity threshold (0.45), confidence weighting, temporal decay (90-day half-life), scope boosts (`alert_type`, `chain_id`)
+- `FindSimilar()` — pgvector similarity search for Reflector dedup context (broader threshold)
+- `SearchSessions()` — full-text search on `alert_sessions.alert_data` via tsvector/GIN for entity-level recall
 - `ApplyReflectorActions()` — processes create/reinforce/deprecate actions from the Reflector
 
 **Embedder** (`pkg/memory/embedder.go`):
@@ -1243,13 +1246,17 @@ graph TB
 - Outputs structured JSON: create/reinforce/deprecate actions
 
 **Memory Retriever** (`pkg/memory/retriever.go`):
-- Semantic-first retrieval with soft boosts for `alert_type` (+0.05) and `chain_id` (+0.03)
-- Project is the only hard filter (security boundary)
+- Hybrid retrieval: vector candidates (pgvector HNSW) + keyword candidates (tsvector/GIN) fused via Reciprocal Rank Fusion (RRF, k=60)
+- Similarity threshold (0.45) — candidates below the floor are discarded
+- Confidence weighting: `(0.7 + 0.3 × confidence)` — human-reviewed memories rank higher
+- Temporal decay: `EXP(-0.0077 × age_in_days)` — 90-day half-life, reinforcement resets the clock
+- Soft boosts for `alert_type` (+0.05) and `chain_id` (+0.03); project is the hard security filter
 
 **Memory Tool Executor** (`pkg/memory/tool_executor.go`):
 - Wraps inner executor (same pattern as `SkillToolExecutor`)
-- Intercepts `recall_past_investigations` tool calls
-- Excludes already-injected memory IDs from results
+- Intercepts `recall_past_investigations` (hybrid memory search) and `search_past_sessions` (entity-level session search with LLM summarization)
+- Excludes already-injected memory IDs from recall results; excludes current session from session search results
+- Memory tools only registered when the memory service is available (nil-safe)
 
 **Feedback Executor** (`pkg/queue/feedback_executor.go`):
 - Background job triggered when review includes `investigation_feedback` text
@@ -1260,7 +1267,7 @@ graph TB
 The `InvestigationMemory` entity stores discrete learnings with:
 - **Content + embedding** — the learning text and its pgvector embedding for similarity search
 - **Category** (`semantic`/`episodic`/`procedural`) and **valence** (`positive`/`negative`/`neutral`)
-- **Confidence** (0-1) — derived from investigation score, refined by human review
+- **Confidence** (0-1) — flat initial 0.7 (Reflector is the quality gate), refined by human review and reinforcement
 - **Scope metadata** — `alert_type`, `chain_id` (soft boosts), `project` (hard filter)
 - **Lifecycle** — `deprecated` flag, `seen_count`, `last_seen_at`
 
@@ -1276,8 +1283,8 @@ Two Ent edges connect memories to sessions:
 3. Reflector analyzes investigation + scoring results + existing memories
 4. Outputs: CREATE new memories, REINFORCE confirmed ones, DEPRECATE outdated ones
 5. Embeddings generated for new memories via Embedder (direct HTTP)
-6. Next investigation: top N memories retrieved by pgvector similarity, injected as Tier 4
-7. Agent can also call recall_past_investigations for deeper search
+6. Next investigation: top N memories retrieved by hybrid search (vector + keyword RRF), injected as Tier 4
+7. Agent can call recall_past_investigations for deeper memory search, or search_past_sessions for entity-level session history
 8. Human review: confidence adjusted (inline) + feedback Reflector (async)
 ```
 
@@ -1321,12 +1328,13 @@ defaults:
 | DELETE | `/api/v1/memories/:id` | Delete memory |
 
 #### Key Implementation Files
-- `pkg/memory/service.go` — MemoryService (CRUD, retrieval, refinement)
+- `pkg/memory/service.go` — MemoryService (CRUD, hybrid retrieval, session search, refinement)
+- `pkg/memory/types.go` — Memory, SessionSearchParams, SessionSearchResult types
 - `pkg/memory/embedder.go` — Embedding generation (direct HTTP to provider API)
-- `pkg/memory/retriever.go` — Semantic-first retrieval (pgvector queries)
+- `pkg/memory/retriever.go` — Hybrid retrieval (vector + keyword RRF, pgvector queries)
 - `pkg/memory/reflector.go` — Reflector prompt builder + response parser
 - `pkg/memory/parser.go` — Lenient JSON parser for Reflector output
-- `pkg/memory/tool_executor.go` — ToolExecutor (recall_past_investigations tool)
+- `pkg/memory/tool_executor.go` — ToolExecutor (recall_past_investigations + search_past_sessions)
 - `pkg/queue/feedback_executor.go` — Background feedback Reflector job
 - `ent/schema/investigationmemory.go` — InvestigationMemory Ent schema
 

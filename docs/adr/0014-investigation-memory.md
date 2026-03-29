@@ -270,7 +270,7 @@ A pseudo-MCP tool for entity-level recall: searches `alert_sessions` by keywords
 
 **Parameters:** `query` (string, required), `alert_type` (string, optional), `days_back` (integer, optional, default 30), `limit` (integer, optional, default 5, max 10).
 
-**Execution flow:** tsvector query finds matching completed sessions → session data (alert_data, final_analysis, quality_rating, investigation_feedback) bundled into a single LLM summarization call → focused digest returned to the agent. The summarization LLM uses the same model as the current agent. On LLM failure, returns an error (no fallback to raw data).
+**Execution flow:** tsvector query finds matching completed sessions (excluding the current session via `ExcludeSessionID` to avoid returning itself) → session data (alert_data, final_analysis, quality_rating, investigation_feedback) bundled into a summarization request. The tool returns raw data with a `RequiredSummarization` flag; the agent controller runs the LLM call via `callSummarizationLLM`, records the `LLMInteraction`, and replaces the tool result content with the summary. The dashboard shows a single tool call card with the summary (no separate `mcp_tool_summary` event). On LLM failure, returns an error (no fallback to raw data).
 
 **Database:** `search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', alert_data)) STORED` with GIN index. The `'simple'` config preserves identifiers without stemming.
 

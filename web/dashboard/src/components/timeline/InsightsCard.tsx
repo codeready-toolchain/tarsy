@@ -5,6 +5,7 @@ import { ExpandMore, ExpandLess, PsychologyOutlined } from '@mui/icons-material'
 interface InsightsCardProps {
   itemId: string;
   title: ReactNode;
+  icon?: ReactNode;
   headerExtras?: ReactNode;
   expandAll?: boolean;
   children: ReactNode;
@@ -12,10 +13,10 @@ interface InsightsCardProps {
 
 /**
  * Shared expandable card for memory/insights items (both preloaded and
- * dynamically recalled). Provides the green-accent shell with
- * PsychologyOutlined icon; callers supply header extras and body content.
+ * dynamically recalled). Provides the green-accent shell with a brain icon
+ * by default; callers can override with a custom icon prop.
  */
-function InsightsCard({ itemId, title, headerExtras, expandAll = false, children }: InsightsCardProps) {
+function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, children }: InsightsCardProps) {
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { setExpanded(expandAll); }, [expandAll]);
   const isExpanded = expandAll || expanded;
@@ -42,7 +43,7 @@ function InsightsCard({ itemId, title, headerExtras, expandAll = false, children
         })}
         onClick={() => { if (!expandAll) setExpanded((prev) => !prev); }}
       >
-        <PsychologyOutlined sx={(theme) => ({ fontSize: 18, color: theme.palette.success.main })} />
+        {icon ?? <PsychologyOutlined sx={(theme) => ({ fontSize: 18, color: theme.palette.success.main })} />}
         <Typography
           variant="body2"
           sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.9rem', color: 'text.secondary', flexShrink: 0 }}
