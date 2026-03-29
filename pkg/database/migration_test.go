@@ -101,8 +101,11 @@ func TestMigrations_EntParity(t *testing.T) {
 		migCols := queryColumnTypes(t, dbMig, "public", table)
 		entCols := queryColumnTypes(t, dbEnt, schemaEnt, table)
 
-		if table == "investigation_memories" {
+		switch table {
+		case "investigation_memories":
 			migCols = filterColumns(migCols, "embedding", "search_vector")
+		case "alert_sessions":
+			migCols = filterColumns(migCols, "search_vector")
 		}
 
 		assert.Equal(t, entCols, migCols,
