@@ -165,7 +165,8 @@ func TestToolExecutor_Close_NilInner(t *testing.T) {
 }
 
 func TestToolExecutor_ListTools_RecallToolDefinition(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
@@ -177,8 +178,22 @@ func TestToolExecutor_ListTools_RecallToolDefinition(t *testing.T) {
 	assert.Contains(t, tools[0].ParametersSchema, `"limit"`)
 }
 
-func TestToolExecutor_Execute_SessionSearchEmptyQuery(t *testing.T) {
+func TestToolExecutor_Execute_SessionSearchNilService(t *testing.T) {
 	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
+
+	result, err := te.Execute(t.Context(), agent.ToolCall{
+		ID:        "call-1",
+		Name:      ToolSearchPastSessions,
+		Arguments: `{"query": "test"}`,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "memory service is not available")
+}
+
+func TestToolExecutor_Execute_SessionSearchEmptyQuery(t *testing.T) {
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -191,7 +206,8 @@ func TestToolExecutor_Execute_SessionSearchEmptyQuery(t *testing.T) {
 }
 
 func TestToolExecutor_Execute_SessionSearchInvalidJSON(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -204,7 +220,8 @@ func TestToolExecutor_Execute_SessionSearchInvalidJSON(t *testing.T) {
 }
 
 func TestToolExecutor_ListTools_SearchSessionsToolDefinition(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
