@@ -36,8 +36,9 @@ func (e *RealSessionExecutor) memoryToolWrapper(session *ent.AlertSession) func(
 		alertTypePtr = &session.AlertType
 	}
 	chainID := session.ChainID
+	sessionID := session.ID
 	return func(inner agent.ToolExecutor) agent.ToolExecutor {
-		return memory.NewToolExecutor(inner, e.memoryService, "default", alertTypePtr, &chainID, nil)
+		return memory.NewToolExecutor(inner, e.memoryService, sessionID, "default", alertTypePtr, &chainID, nil)
 	}
 }
 

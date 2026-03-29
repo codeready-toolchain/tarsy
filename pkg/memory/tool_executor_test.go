@@ -33,7 +33,8 @@ func TestToolExecutor_ListTools_PrependToInner(t *testing.T) {
 		{Name: "server1.read_file", Description: "Reads a file"},
 		{Name: "server1.write_file", Description: "Writes a file"},
 	})
-	te := NewToolExecutor(inner, nil, "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(inner, svc, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
@@ -45,8 +46,18 @@ func TestToolExecutor_ListTools_PrependToInner(t *testing.T) {
 	assert.Equal(t, "server1.write_file", tools[3].Name)
 }
 
+func TestToolExecutor_ListTools_NilService(t *testing.T) {
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
+
+	tools, err := te.ListTools(t.Context())
+	require.NoError(t, err)
+
+	assert.Empty(t, tools, "no memory tools when service is nil")
+}
+
 func TestToolExecutor_ListTools_NilInner(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
@@ -62,7 +73,8 @@ func TestToolExecutor_ListTools_DeduplicatesInner(t *testing.T) {
 		{Name: ToolSearchPastSessions, Description: "should also be filtered out"},
 		{Name: "server1.read_file", Description: "Reads a file"},
 	})
-	te := NewToolExecutor(inner, nil, "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(inner, svc, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
@@ -76,7 +88,7 @@ func TestToolExecutor_ListTools_DeduplicatesInner(t *testing.T) {
 
 func TestToolExecutor_Execute_DelegatesToInner(t *testing.T) {
 	inner := agent.NewStubToolExecutor(nil)
-	te := NewToolExecutor(inner, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(inner, nil, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -89,7 +101,7 @@ func TestToolExecutor_Execute_DelegatesToInner(t *testing.T) {
 }
 
 func TestToolExecutor_Execute_UnknownToolNilInner(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:   "call-1",
@@ -100,8 +112,22 @@ func TestToolExecutor_Execute_UnknownToolNilInner(t *testing.T) {
 	assert.Contains(t, result.Content, "unknown tool")
 }
 
+func TestToolExecutor_Execute_RecallNilService(t *testing.T) {
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
+
+	result, err := te.Execute(t.Context(), agent.ToolCall{
+		ID:        "call-1",
+		Name:      ToolRecallPastInvestigations,
+		Arguments: `{"query": "test"}`,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "memory service is not available")
+}
+
 func TestToolExecutor_Execute_RecallEmptyQuery(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -114,7 +140,8 @@ func TestToolExecutor_Execute_RecallEmptyQuery(t *testing.T) {
 }
 
 func TestToolExecutor_Execute_RecallInvalidJSON(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	svc := &Service{}
+	te := NewToolExecutor(nil, svc, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -128,17 +155,17 @@ func TestToolExecutor_Execute_RecallInvalidJSON(t *testing.T) {
 
 func TestToolExecutor_Close_DelegatesToInner(t *testing.T) {
 	inner := agent.NewStubToolExecutor(nil)
-	te := NewToolExecutor(inner, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(inner, nil, "", "default", nil, nil, nil)
 	assert.NoError(t, te.Close())
 }
 
 func TestToolExecutor_Close_NilInner(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
 	assert.NoError(t, te.Close())
 }
 
 func TestToolExecutor_ListTools_RecallToolDefinition(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
@@ -151,7 +178,7 @@ func TestToolExecutor_ListTools_RecallToolDefinition(t *testing.T) {
 }
 
 func TestToolExecutor_Execute_SessionSearchEmptyQuery(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -164,7 +191,7 @@ func TestToolExecutor_Execute_SessionSearchEmptyQuery(t *testing.T) {
 }
 
 func TestToolExecutor_Execute_SessionSearchInvalidJSON(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(t.Context(), agent.ToolCall{
 		ID:        "call-1",
@@ -177,7 +204,7 @@ func TestToolExecutor_Execute_SessionSearchInvalidJSON(t *testing.T) {
 }
 
 func TestToolExecutor_ListTools_SearchSessionsToolDefinition(t *testing.T) {
-	te := NewToolExecutor(nil, nil, "default", nil, nil, nil)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, nil)
 
 	tools, err := te.ListTools(t.Context())
 	require.NoError(t, err)
@@ -254,7 +281,7 @@ func TestToolExecutor_ExcludeIDs(t *testing.T) {
 		"mem-1": {},
 		"mem-3": {},
 	}
-	te := NewToolExecutor(nil, nil, "default", nil, nil, excludeIDs)
+	te := NewToolExecutor(nil, nil, "", "default", nil, nil, excludeIDs)
 
 	// Verify exclude IDs are stored
 	assert.Len(t, te.excludeIDs, 2)

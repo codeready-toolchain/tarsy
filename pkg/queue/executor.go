@@ -730,7 +730,7 @@ func (e *RealSessionExecutor) executeAgent(
 		}
 		excludeIDs := memoryExcludeIDs(memoryBriefing)
 		toolExecutor = memory.NewToolExecutor(
-			toolExecutor, e.memoryService, "default",
+			toolExecutor, e.memoryService, input.session.ID, "default",
 			alertTypePtr, &input.session.ChainID, excludeIDs,
 		)
 	}

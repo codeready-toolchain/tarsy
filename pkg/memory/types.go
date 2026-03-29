@@ -94,10 +94,11 @@ func pluralize(n int, unit string) string {
 
 // SessionSearchParams holds the parameters for searching past sessions.
 type SessionSearchParams struct {
-	Query     string
-	AlertType *string
-	DaysBack  int
-	Limit     int
+	Query            string
+	AlertType        *string
+	DaysBack         int
+	Limit            int
+	ExcludeSessionID string // Omit this session from results (avoids returning the current session).
 }
 
 // SessionSearchResult holds a single matched session from a keyword search.

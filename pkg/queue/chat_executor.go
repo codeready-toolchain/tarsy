@@ -357,7 +357,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 			alertTypePtr = &input.Session.AlertType
 		}
 		toolExecutor = memory.NewToolExecutor(
-			toolExecutor, e.memoryService, "default",
+			toolExecutor, e.memoryService, input.Session.ID, "default",
 			alertTypePtr, &input.Session.ChainID, nil,
 		)
 	}

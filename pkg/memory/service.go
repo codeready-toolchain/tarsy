@@ -752,6 +752,12 @@ func (s *Service) SearchSessions(ctx context.Context, params SessionSearchParams
 	args := []any{params.Query, params.DaysBack}
 	argIdx := 3
 
+	if params.ExcludeSessionID != "" {
+		query += fmt.Sprintf("  AND session_id <> $%d\n", argIdx)
+		args = append(args, params.ExcludeSessionID)
+		argIdx++
+	}
+
 	if params.AlertType != nil {
 		query += fmt.Sprintf("  AND alert_type = $%d\n", argIdx)
 		args = append(args, *params.AlertType)

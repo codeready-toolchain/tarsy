@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -189,6 +190,138 @@ func AssertGoldenMCPInteraction(t *testing.T, goldenPath string, detail map[stri
 	}
 
 	AssertGolden(t, goldenPath, data)
+}
+
+// AssertSessionTraceGoldens performs the full golden file assertion sequence
+// for a session: normalizer registration, timeline projection, trace list,
+// and per-interaction golden files. Extracts the pattern shared across
+// multiple e2e tests to avoid duplication.
+func AssertSessionTraceGoldens(t *testing.T, app *TestApp, sessionID, goldenScenario string) {
+	t.Helper()
+
+	traceList := app.GetTraceList(t, sessionID)
+	traceStages, ok := traceList["stages"].([]interface{})
+	require.True(t, ok, "stages should be an array")
+	require.NotEmpty(t, traceStages)
+
+	normalizer := NewNormalizer(sessionID)
+	for _, rawStage := range traceStages {
+		stg, _ := rawStage.(map[string]interface{})
+		stageID, _ := stg["stage_id"].(string)
+		normalizer.RegisterStageID(stageID)
+
+		executions, _ := stg["executions"].([]interface{})
+		for _, rawExec := range executions {
+			exec, _ := rawExec.(map[string]interface{})
+			execID, _ := exec["execution_id"].(string)
+			normalizer.RegisterExecutionID(execID)
+
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				if id, ok := li["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				if id, ok := mi["id"].(string); ok {
+					normalizer.RegisterInteractionID(id)
+				}
+			}
+		}
+	}
+
+	traceSessionInteractions, _ := traceList["session_interactions"].([]interface{})
+	for _, rawLI := range traceSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		normalizer.RegisterInteractionID(li["id"].(string))
+	}
+
+	// Timeline golden.
+	execs := app.QueryExecutions(t, sessionID)
+	agentIndex := BuildAgentNameIndex(execs)
+
+	timeline := app.QueryTimeline(t, sessionID)
+	projectedTimeline := make([]map[string]interface{}, len(timeline))
+	for i, te := range timeline {
+		projectedTimeline[i] = ProjectTimelineForGolden(te)
+	}
+	AnnotateTimelineWithAgent(projectedTimeline, timeline, agentIndex)
+	SortTimelineProjection(projectedTimeline)
+	AssertGoldenJSON(t, GoldenPath(goldenScenario, "timeline.golden"), projectedTimeline, normalizer)
+
+	// Trace list golden.
+	AssertGoldenJSON(t, GoldenPath(goldenScenario, "trace_list.golden"), traceList, normalizer)
+
+	// Per-interaction golden files.
+	type interactionEntry struct {
+		Kind, ID, AgentName, CreatedAt, Label, ServerName string
+	}
+
+	var allInteractions []interactionEntry
+	for _, rawStage := range traceStages {
+		stg, _ := rawStage.(map[string]interface{})
+		for _, rawExec := range stg["executions"].([]interface{}) {
+			exec, _ := rawExec.(map[string]interface{})
+			agentName, _ := exec["agent_name"].(string)
+
+			var execInteractions []interactionEntry
+			for _, rawLI := range exec["llm_interactions"].([]interface{}) {
+				li, _ := rawLI.(map[string]interface{})
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind: "llm", ID: li["id"].(string), AgentName: agentName,
+					CreatedAt: li["created_at"].(string), Label: li["interaction_type"].(string),
+				})
+			}
+			for _, rawMI := range exec["mcp_interactions"].([]interface{}) {
+				mi, _ := rawMI.(map[string]interface{})
+				label := mi["interaction_type"].(string)
+				if tn, ok := mi["tool_name"].(string); ok && tn != "" {
+					label = tn
+				}
+				sn, _ := mi["server_name"].(string)
+				execInteractions = append(execInteractions, interactionEntry{
+					Kind: "mcp", ID: mi["id"].(string), AgentName: agentName,
+					CreatedAt: mi["created_at"].(string), Label: label, ServerName: sn,
+				})
+			}
+			sort.SliceStable(execInteractions, func(i, j int) bool {
+				a, b := execInteractions[i], execInteractions[j]
+				if a.CreatedAt != b.CreatedAt {
+					return a.CreatedAt < b.CreatedAt
+				}
+				return a.ServerName < b.ServerName
+			})
+			allInteractions = append(allInteractions, execInteractions...)
+		}
+	}
+
+	for _, rawLI := range traceSessionInteractions {
+		li, _ := rawLI.(map[string]interface{})
+		allInteractions = append(allInteractions, interactionEntry{
+			Kind: "llm", ID: li["id"].(string), AgentName: "Session",
+			CreatedAt: li["created_at"].(string), Label: li["interaction_type"].(string),
+		})
+	}
+
+	iterationCounters := make(map[string]int)
+	for idx, entry := range allInteractions {
+		counterKey := entry.AgentName + "_" + entry.Label
+		iterationCounters[counterKey]++
+		count := iterationCounters[counterKey]
+
+		label := strings.ReplaceAll(entry.Label, " ", "_")
+		filename := fmt.Sprintf("%02d_%s_%s_%s_%d.golden", idx+1, entry.AgentName, entry.Kind, label, count)
+		goldenPath := GoldenPath(goldenScenario, filepath.Join("trace_interactions", filename))
+
+		if entry.Kind == "llm" {
+			detail := app.GetLLMInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenLLMInteraction(t, goldenPath, detail, normalizer)
+		} else {
+			detail := app.GetMCPInteractionDetail(t, sessionID, entry.ID)
+			AssertGoldenMCPInteraction(t, goldenPath, detail, normalizer)
+		}
+	}
 }
 
 // serializeLLMMessages renders a slice of ConversationMessage into a

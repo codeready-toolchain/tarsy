@@ -91,6 +91,7 @@ const (
 type ToolExecutor struct {
 	inner      agent.ToolExecutor
 	service    *Service
+	sessionID  string
 	project    string
 	alertType  *string
 	chainID    *string
@@ -98,11 +99,14 @@ type ToolExecutor struct {
 }
 
 // NewToolExecutor creates a memory tool executor.
-// inner may be nil (safely handled). excludeIDs contains memory IDs already
-// auto-injected into the prompt — they are filtered from tool results.
+// inner may be nil (safely handled). sessionID is the current session
+// (excluded from search_past_sessions results to avoid returning itself).
+// excludeIDs contains memory IDs already auto-injected into the prompt —
+// they are filtered from recall tool results.
 func NewToolExecutor(
 	inner agent.ToolExecutor,
 	service *Service,
+	sessionID string,
 	project string,
 	alertType *string,
 	chainID *string,
@@ -111,6 +115,7 @@ func NewToolExecutor(
 	return &ToolExecutor{
 		inner:      inner,
 		service:    service,
+		sessionID:  sessionID,
 		project:    project,
 		alertType:  alertType,
 		chainID:    chainID,
@@ -119,8 +124,12 @@ func NewToolExecutor(
 }
 
 // ListTools returns the combined tool set: memory tools + inner tools.
+// Memory tools are only included when the service is available.
 func (te *ToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefinition, error) {
-	tools := []agent.ToolDefinition{recallTool, searchSessionsTool}
+	var tools []agent.ToolDefinition
+	if te.service != nil {
+		tools = append(tools, recallTool, searchSessionsTool)
+	}
 
 	if te.inner != nil {
 		innerTools, err := te.inner.ListTools(ctx)
@@ -166,6 +175,13 @@ func (te *ToolExecutor) Close() error {
 }
 
 func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+	if te.service == nil {
+		return &agent.ToolResult{
+			CallID: call.ID, Name: call.Name,
+			Content: "memory service is not available", IsError: true,
+		}, nil
+	}
+
 	var args struct {
 		Query string `json:"query"`
 		Limit int    `json:"limit"`
@@ -244,6 +260,13 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 }
 
 func (te *ToolExecutor) executeSessionSearch(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+	if te.service == nil {
+		return &agent.ToolResult{
+			CallID: call.ID, Name: call.Name,
+			Content: "memory service is not available", IsError: true,
+		}, nil
+	}
+
 	var args struct {
 		Query     string `json:"query"`
 		AlertType string `json:"alert_type"`
@@ -284,10 +307,11 @@ func (te *ToolExecutor) executeSessionSearch(ctx context.Context, call agent.Too
 	}
 
 	sessions, err := te.service.SearchSessions(ctx, SessionSearchParams{
-		Query:     args.Query,
-		AlertType: alertTypePtr,
-		DaysBack:  args.DaysBack,
-		Limit:     limit,
+		Query:            args.Query,
+		AlertType:        alertTypePtr,
+		DaysBack:         args.DaysBack,
+		Limit:            limit,
+		ExcludeSessionID: te.sessionID,
 	})
 	if err != nil {
 		return &agent.ToolResult{

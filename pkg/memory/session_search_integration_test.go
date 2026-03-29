@@ -256,7 +256,7 @@ func TestToolExecutor_SessionSearch_ReturnsSummarizationRequest(t *testing.T) {
 	analysis := "User john-doe created an unauthorized deployment"
 	env.createSession(t, "Alert: user john-doe triggered policy violation", "security", "completed", &analysis)
 
-	te := memory.NewToolExecutor(nil, env.svc, "default", nil, nil, nil)
+	te := memory.NewToolExecutor(nil, env.svc, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(ctx, sessionSearchToolCall(t, "john-doe", 0))
 	require.NoError(t, err)
@@ -276,7 +276,7 @@ func TestToolExecutor_SessionSearch_NoMatches(t *testing.T) {
 
 	env.createSession(t, "Alert: high CPU on worker node", "resource", "completed", nil)
 
-	te := memory.NewToolExecutor(nil, env.svc, "default", nil, nil, nil)
+	te := memory.NewToolExecutor(nil, env.svc, "", "default", nil, nil, nil)
 
 	result, err := te.Execute(ctx, sessionSearchToolCall(t, "nonexistent-entity", 0))
 	require.NoError(t, err)
@@ -292,7 +292,7 @@ func TestToolExecutor_SessionSearch_WithAlertTypeParam(t *testing.T) {
 	env.createSession(t, "Alert: nginx-proxy latency spike in prod", "performance", "completed", nil)
 	env.createSession(t, "Alert: nginx-proxy CVE detected", "security", "completed", nil)
 
-	te := memory.NewToolExecutor(nil, env.svc, "default", nil, nil, nil)
+	te := memory.NewToolExecutor(nil, env.svc, "", "default", nil, nil, nil)
 
 	args, err := json.Marshal(map[string]any{
 		"query":      "nginx-proxy",
@@ -321,7 +321,7 @@ func TestToolExecutor_SessionSearch_LimitClampedToMax(t *testing.T) {
 			"performance", "completed", nil)
 	}
 
-	te := memory.NewToolExecutor(nil, env.svc, "default", nil, nil, nil)
+	te := memory.NewToolExecutor(nil, env.svc, "", "default", nil, nil, nil)
 
 	args, err := json.Marshal(map[string]any{
 		"query": "webapp",
