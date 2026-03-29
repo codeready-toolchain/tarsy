@@ -246,11 +246,13 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 	}
 
 	var sb strings.Builder
+	sb.WriteString("<historical_context>\n")
 	sb.WriteString(fmt.Sprintf("Found %d relevant memories:\n", len(filtered)))
 	for i, m := range filtered {
 		age := FormatMemoryAge(m.CreatedAt, m.UpdatedAt)
 		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, score: %.2f, %s] %s", i+1, m.Category, m.Valence, m.Score, age, m.Content))
 	}
+	sb.WriteString("\n\nThese are learnings from PAST incidents — they suggest where to look, not what you will find NOW.\n</historical_context>")
 
 	return &agent.ToolResult{
 		CallID:  call.ID,
@@ -337,8 +339,9 @@ func (te *ToolExecutor) executeSessionSearch(ctx context.Context, call agent.Too
 		Name:    call.Name,
 		Content: userPrompt,
 		RequiredSummarization: &agent.SummarizationRequest{
-			SystemPrompt: sessionSummarizationSystemPrompt,
-			UserPrompt:   userPrompt,
+			SystemPrompt:    sessionSummarizationSystemPrompt,
+			UserPrompt:      userPrompt,
+			TransformResult: wrapHistoricalContext("REMINDER: The above is HISTORICAL data from past sessions — it describes what was found THEN, not what is happening NOW. Use it for context and pattern recognition only. Your current investigation must rely on live tool results and sub-agent findings."),
 		},
 	}, nil
 }
@@ -354,6 +357,14 @@ Produce a focused digest covering:
 Preserve entity identifiers exactly as they appear — do not paraphrase names, namespaces, or IPs. Silently omit sessions that matched coincidentally but involve a different entity than the one queried.
 
 Be concise but complete. Present the findings; do not interpret them or suggest next steps.`
+
+// wrapHistoricalContext returns a TransformResult function that wraps content
+// in <historical_context> tags with the given reminder text.
+func wrapHistoricalContext(reminder string) func(string) string {
+	return func(content string) string {
+		return "<historical_context>\n" + content + "\n\n" + reminder + "\n</historical_context>"
+	}
+}
 
 func buildSessionSummarizationPrompt(query string, sessions []SessionSearchResult) string {
 	var sb strings.Builder

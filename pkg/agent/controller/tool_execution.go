@@ -148,6 +148,9 @@ func executeToolCall(
 			result.IsError = true
 		} else {
 			content = summary
+			if result.RequiredSummarization.TransformResult != nil {
+				content = result.RequiredSummarization.TransformResult(content)
+			}
 			usage = sumUsage
 		}
 		completeToolCallEvent(ctx, execCtx, toolCallEvent, content, result.IsError)

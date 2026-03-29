@@ -43,11 +43,14 @@ func TestToolExecutor_Recall_FormattedResults(t *testing.T) {
 
 	assert.False(t, result.IsError)
 	assert.Equal(t, "call-1", result.CallID)
+	assert.Contains(t, result.Content, "<historical_context>")
+	assert.Contains(t, result.Content, "</historical_context>")
 	assert.Contains(t, result.Content, "Found 2 relevant memories")
 	assert.Contains(t, result.Content, "procedural, positive, score:")
 	assert.Contains(t, result.Content, "Check PgBouncer health first")
 	assert.Contains(t, result.Content, "episodic, neutral, score:")
 	assert.Contains(t, result.Content, "OOMKill uses working_set_bytes")
+	assert.Contains(t, result.Content, "learnings from PAST incidents")
 }
 
 func TestToolExecutor_Recall_ExcludesInjectedIDs(t *testing.T) {

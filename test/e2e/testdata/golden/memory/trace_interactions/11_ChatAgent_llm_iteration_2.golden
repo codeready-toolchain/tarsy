@@ -118,11 +118,15 @@ Searching past investigations.
 [recall-1] recall_past_investigations({"query":"pod health check patterns","limit":10})
 
 === MESSAGE: tool (recall-1, recall_past_investigations) ===
+<historical_context>
 Found 3 relevant memories:
 
 1. [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency
 2. [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr
 3. [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup
+
+These are learnings from PAST incidents — they suggest where to look, not what you will find NOW.
+</historical_context>
 
 === MESSAGE: assistant ===
 Based on past investigations, check PgBouncer connection pool health.

@@ -267,6 +267,12 @@ func TestToolExecutor_SessionSearch_ReturnsSummarizationRequest(t *testing.T) {
 	assert.Contains(t, result.RequiredSummarization.SystemPrompt, "summarization assistant for TARSy")
 	assert.Contains(t, result.RequiredSummarization.UserPrompt, "john-doe")
 	assert.Contains(t, result.RequiredSummarization.UserPrompt, "unauthorized deployment")
+	require.NotNil(t, result.RequiredSummarization.TransformResult, "should have a result transformer")
+	transformed := result.RequiredSummarization.TransformResult("test summary")
+	assert.Contains(t, transformed, "<historical_context>")
+	assert.Contains(t, transformed, "</historical_context>")
+	assert.Contains(t, transformed, "HISTORICAL data from past sessions")
+	assert.Contains(t, transformed, "test summary")
 	assert.Contains(t, result.Content, "john-doe")
 }
 

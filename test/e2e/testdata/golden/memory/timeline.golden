@@ -28,7 +28,7 @@
   },
   {
     "agent": "ChatAgent",
-    "content": "Found 3 relevant memories:\n\n1. [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency\n2. [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup",
+    "content": "\u003chistorical_context\u003e\nFound 3 relevant memories:\n\n1. [procedural, positive, score: {SCORE}, learned {AGE}] Check PgBouncer connection pool health before investigating query latency\n2. [semantic, neutral, score: {SCORE}, learned {AGE}] Normal error rate for batch-processor during 2-4am is ~200/hr\n3. [procedural, negative, score: {SCORE}, learned {AGE}] container_memory_rss metric does not exist in this setup\n\nThese are learnings from PAST incidents — they suggest where to look, not what you will find NOW.\n\u003c/historical_context\u003e",
     "event_type": "llm_tool_call",
     "metadata": {
       "arguments": "{\"query\":\"pod health check patterns\",\"limit\":10}",

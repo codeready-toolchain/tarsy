@@ -52,8 +52,9 @@ type ToolResult struct {
 // SummarizationRequest carries the LLM prompts for a required summarization.
 // The controller passes these to callSummarizationLLM.
 type SummarizationRequest struct {
-	SystemPrompt string
-	UserPrompt   string
+	SystemPrompt    string
+	UserPrompt      string
+	TransformResult func(summary string) string // Post-processes summarized output; nil = use as-is
 }
 
 // StubToolExecutor returns canned responses for testing.
