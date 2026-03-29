@@ -118,25 +118,29 @@ func executeToolCall(
 		metrics.MCPErrorsTotal.WithLabelValues(serverID, toolName).Inc()
 	}
 
-	// Record MCP interaction
+	// Record MCP interaction (raw data preserved in trace for debugging)
 	recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, result, startTime, nil)
 
-	// Step 4: Complete tool call event with storage-truncated result
-	storageTruncated := mcp.TruncateForStorage(result.Content)
-	completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
-
-	// Step 5a: Handle required summarization (e.g. search_past_sessions).
-	// The tool returned raw data + prompts; we call the LLM via the standard
-	// summarization infrastructure to get timeline events, interaction
-	// recording, and metrics for free.
 	content := result.Content
 	var usage *agent.TokenUsage
+
+	// Step 4–5: Complete tool call event and optionally summarize.
+	//
+	// RequiredSummarization (e.g. search_past_sessions): the tool returned raw
+	// DB data that isn't useful in the dashboard. Run the LLM summarization
+	// first, then complete the tool call event with the summary so the
+	// dashboard shows a single card with the digest. The separate
+	// mcp_tool_summary timeline event is skipped (createTimelineEvent=false)
+	// but the LLM interaction is still recorded for observability.
+	//
+	// Regular tools: complete with the raw result, then optionally summarize
+	// large results via maybeSummarize (creates a separate mcp_tool_summary).
 	if !result.IsError && result.RequiredSummarization != nil {
 		estimatedTokens := mcp.EstimateTokens(result.Content)
 		summary, sumUsage, sumErr := callSummarizationLLM(ctx, execCtx,
 			result.RequiredSummarization.SystemPrompt,
 			result.RequiredSummarization.UserPrompt,
-			serverID, toolName, estimatedTokens, eventSeq)
+			serverID, toolName, estimatedTokens, eventSeq, false)
 		if sumErr != nil {
 			slog.Warn("Required summarization failed",
 				"server", serverID, "tool", toolName, "error", sumErr)
@@ -146,17 +150,19 @@ func executeToolCall(
 			content = summary
 			usage = sumUsage
 		}
-	}
+		completeToolCallEvent(ctx, execCtx, toolCallEvent, content, result.IsError)
+	} else {
+		storageTruncated := mcp.TruncateForStorage(result.Content)
+		completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
 
-	// Step 5b: Summarize if applicable (non-error, large results only).
-	// Skipped when required summarization already ran.
-	if !result.IsError && result.RequiredSummarization == nil {
-		convContext := buildConversationContext(messages)
-		sumResult, sumErr := maybeSummarize(ctx, execCtx, serverID, toolName,
-			result.Content, convContext, eventSeq)
-		if sumErr == nil && sumResult.WasSummarized {
-			content = sumResult.Content
-			usage = sumResult.Usage
+		if !result.IsError {
+			convContext := buildConversationContext(messages)
+			sumResult, sumErr := maybeSummarize(ctx, execCtx, serverID, toolName,
+				result.Content, convContext, eventSeq)
+			if sumErr == nil && sumResult.WasSummarized {
+				content = sumResult.Content
+				usage = sumResult.Usage
+			}
 		}
 	}
 

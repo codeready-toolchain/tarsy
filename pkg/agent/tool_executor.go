@@ -27,16 +27,30 @@ type ToolResult struct {
 	Content string // Tool output (text)
 	IsError bool   // Whether the tool returned an error
 
-	// RequiredSummarization, when non-nil, instructs the controller to
-	// summarize Content via an LLM call before feeding it back to the agent.
-	// Content holds the raw data (stored in trace); the summary replaces it
-	// in the conversation. Uses the same infrastructure as MCP tool
-	// summarization (timeline events, LLM interaction recording, metrics).
+	// RequiredSummarization signals that the tool's raw result must always
+	// be summarized by an LLM before being returned to the agent.
+	//
+	// This is different from auto-summarization of regular MCP tools:
+	//
+	//   Auto-summarization (maybeSummarize): triggered only when a regular
+	//   MCP tool result exceeds a token threshold. The dashboard shows two
+	//   events — the tool call with the raw result, and a separate
+	//   mcp_tool_summary card underneath with the condensed version.
+	//
+	//   Required summarization: always triggered regardless of size (e.g.
+	//   search_past_sessions returns raw DB rows that need LLM distillation).
+	//   The dashboard shows a single tool call card with the summary as its
+	//   content — no separate summary event. The raw data is preserved only
+	//   in the trace (MCP interaction record) for debugging.
+	//
+	// When set, Content holds the raw data for trace storage. The controller
+	// runs the LLM call, records the interaction, and replaces Content with
+	// the summary in both the timeline event and the agent conversation.
 	RequiredSummarization *SummarizationRequest
 }
 
-// SummarizationRequest carries prompts for a required LLM summarization
-// of a tool result. The controller calls callSummarizationLLM with these.
+// SummarizationRequest carries the LLM prompts for a required summarization.
+// The controller passes these to callSummarizationLLM.
 type SummarizationRequest struct {
 	SystemPrompt string
 	UserPrompt   string

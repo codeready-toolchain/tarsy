@@ -97,7 +97,7 @@ func maybeSummarize(
 	userPrompt := execCtx.PromptBuilder.BuildMCPSummarizationUserPrompt(conversationContext, serverID, toolName, truncatedForLLM)
 
 	// 6. Perform summarization LLM call with streaming
-	summary, usage, err := callSummarizationLLM(ctx, execCtx, systemPrompt, userPrompt, serverID, toolName, estimatedTokens, eventSeq)
+	summary, usage, err := callSummarizationLLM(ctx, execCtx, systemPrompt, userPrompt, serverID, toolName, estimatedTokens, eventSeq, true)
 	if err != nil {
 		slog.Warn("Summarization LLM call failed, using raw result",
 			"server", serverID, "tool", toolName, "error", err)
@@ -118,8 +118,11 @@ func maybeSummarize(
 }
 
 // callSummarizationLLM performs the summarization LLM call with streaming.
-// Creates an mcp_tool_summary timeline event and streams chunks to WebSocket clients.
-// Records an LLMInteraction with type "summarization".
+// When createTimelineEvent is true, creates an mcp_tool_summary timeline event
+// and streams chunks to WebSocket clients. When false, only performs the LLM
+// call and records the interaction (used by RequiredSummarization where the
+// summary is shown directly in the tool call event instead).
+// Always records an LLMInteraction with type "summarization".
 func callSummarizationLLM(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -127,6 +130,7 @@ func callSummarizationLLM(
 	serverID, toolName string,
 	estimatedTokens int,
 	eventSeq *int,
+	createTimelineEvent bool,
 ) (string, *agent.TokenUsage, error) {
 	startTime := time.Now()
 
@@ -144,8 +148,7 @@ func callSummarizationLLM(
 		Backend:     execCtx.Config.LLMBackend,
 	}
 
-	// Use dedicated summarization streaming (creates mcp_tool_summary events, not llm_response)
-	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq)
+	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq, createTimelineEvent)
 	metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
 		time.Since(startTime), metricsTokens(streamed, err), err)
 	if err != nil {
@@ -171,6 +174,10 @@ func callSummarizationLLM(
 // creates mcp_tool_summary timeline events instead of llm_response events.
 // The streaming pattern is identical (create event -> stream chunks -> finalize).
 // Simpler than callLLMWithStreaming: no thinking event (summarization has no thinking stream).
+//
+// When createTimelineEvent is false, the LLM call is still made and the stream
+// collected, but no timeline event is created or streamed. This is used for
+// RequiredSummarization where the summary becomes the tool call event content.
 func callSummarizationLLMWithStreaming(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -178,6 +185,7 @@ func callSummarizationLLMWithStreaming(
 	serverID, toolName string,
 	estimatedTokens int,
 	eventSeq *int,
+	createTimelineEvent bool,
 ) (*StreamedResponse, error) {
 	llmCtx, llmCancel := context.WithCancel(ctx)
 	defer llmCancel()
@@ -187,8 +195,7 @@ func callSummarizationLLMWithStreaming(
 		return nil, fmt.Errorf("summarization LLM Generate failed: %w", err)
 	}
 
-	// If no EventPublisher, use simple collection (no streaming events)
-	if execCtx.EventPublisher == nil {
+	if !createTimelineEvent || execCtx.EventPublisher == nil {
 		resp, err := collectStream(stream)
 		if err != nil {
 			return nil, err

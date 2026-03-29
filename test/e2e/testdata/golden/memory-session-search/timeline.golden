@@ -28,7 +28,7 @@
   },
   {
     "agent": "ChatAgent",
-    "content": "Search query: nginx-proxy\n\nMatched sessions (1):\n\n--- Session 1 (ID: {UUID}, {SHORT_TIMESTAMP}) ---\nAlert type: pod-restart\nAlert data:\nnginx-proxy pod restarting in namespace coolify with CrashLoopBackOff\nInvestigation conclusions:\nnginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold.\nQuality assessment: accurate\nHuman review feedback: Good investigation. Probe fix was correct.\n",
+    "content": "nginx-proxy was previously investigated for CrashLoopBackOff in namespace coolify. The root cause was a misconfigured liveness probe, resolved by adjusting the threshold. Investigation rated accurate.",
     "event_type": "llm_tool_call",
     "metadata": {
       "arguments": "{\"query\":\"nginx-proxy\"}",
@@ -42,39 +42,26 @@
   },
   {
     "agent": "ChatAgent",
-    "content": "nginx-proxy was previously investigated for CrashLoopBackOff in namespace coolify. The root cause was a misconfigured liveness probe, resolved by adjusting the threshold. Investigation rated accurate.",
-    "event_type": "mcp_tool_summary",
+    "content": "Past investigation shows nginx-proxy had a liveness probe issue.",
+    "event_type": "llm_thinking",
     "metadata": {
-      "original_tokens": 116,
-      "server_name": "",
-      "summarization_model": "test-model",
-      "tool_name": "search_past_sessions"
+      "source": "native"
     },
     "sequence": 11,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
-    "content": "Past investigation shows nginx-proxy had a liveness probe issue.",
-    "event_type": "llm_thinking",
-    "metadata": {
-      "source": "native"
-    },
+    "content": "nginx-proxy was previously investigated. The issue was a misconfigured liveness probe in namespace coolify, fixed by adjusting the threshold.",
+    "event_type": "llm_response",
     "sequence": 12,
     "status": "completed"
   },
   {
     "agent": "ChatAgent",
     "content": "nginx-proxy was previously investigated. The issue was a misconfigured liveness probe in namespace coolify, fixed by adjusting the threshold.",
-    "event_type": "llm_response",
-    "sequence": 13,
-    "status": "completed"
-  },
-  {
-    "agent": "ChatAgent",
-    "content": "nginx-proxy was previously investigated. The issue was a misconfigured liveness probe in namespace coolify, fixed by adjusting the threshold.",
     "event_type": "final_analysis",
-    "sequence": 14,
+    "sequence": 13,
     "status": "completed"
   },
   {
