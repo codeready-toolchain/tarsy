@@ -40,7 +40,7 @@ export default function ExtractedLearningsCard({ sessionId, hasScore, collapseCo
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<Error | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {

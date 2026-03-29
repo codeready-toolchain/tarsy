@@ -2,6 +2,7 @@ import { TableCell, Tooltip, Chip } from '@mui/material';
 import { ThumbsUpDown } from '@mui/icons-material';
 import { qualityReviewBodySx } from './qualityGroupSx.ts';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
+import { isTerminalStatus, type SessionStatus } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 const iconOnlyChipSx = {
@@ -20,10 +21,12 @@ interface ReviewCellProps {
  * Shared review cell for both sessions list and triage tables.
  * Shows a colored thumb chip when reviewed, a ghost thumb on hover when not.
  * When onReviewClick is falsy the cell is read-only (no click, no hover affordance).
+ * Review is only available for terminal sessions (completed, failed, cancelled, timed_out).
  */
 export function ReviewCell({ session, onReviewClick }: ReviewCellProps) {
   const cfg = getRatingConfig(session.quality_rating);
-  const interactive = !!onReviewClick;
+  const terminal = isTerminalStatus(session.status as SessionStatus);
+  const interactive = !!onReviewClick && terminal;
 
   return (
     <TableCell sx={qualityReviewBodySx}>
