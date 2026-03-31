@@ -110,7 +110,15 @@ type SessionSearchResult struct {
 	FinalAnalysis         *string
 	QualityRating         *string
 	InvestigationFeedback *string
+	ChatExchanges         []ChatExchange
 	CreatedAt             time.Time
+}
+
+// ChatExchange holds a single follow-up chat question and the agent's answer.
+type ChatExchange struct {
+	Question  string
+	Answer    string
+	CreatedAt time.Time
 }
 
 // ReflectorResult holds the parsed output from a Reflector LLM call.

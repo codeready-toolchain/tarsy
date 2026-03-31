@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/memory"
@@ -25,8 +26,9 @@ func addSessionSearchColumn(t *testing.T, db *stdsql.DB) {
 }
 
 type sessionSearchTestEnv struct {
-	svc *memory.Service
-	db  *stdsql.DB
+	svc       *memory.Service
+	db        *stdsql.DB
+	entClient *ent.Client
 }
 
 func newSessionSearchEnv(t *testing.T) *sessionSearchTestEnv {
@@ -44,7 +46,7 @@ func newSessionSearchEnv(t *testing.T) *sessionSearchTestEnv {
 	}
 	svc := memory.NewService(entClient, db, &fakeEmbedder{vec: []float32{1, 0, 0}}, cfg)
 
-	return &sessionSearchTestEnv{svc: svc, db: db}
+	return &sessionSearchTestEnv{svc: svc, db: db, entClient: entClient}
 }
 
 func (env *sessionSearchTestEnv) createSession(t *testing.T, alertData, alertType, status string, analysis *string) string {
@@ -344,4 +346,220 @@ func TestToolExecutor_SessionSearch_LimitClampedToMax(t *testing.T) {
 	assert.False(t, result.IsError)
 	require.NotNil(t, result.RequiredSummarization)
 	assert.Contains(t, result.RequiredSummarization.UserPrompt, "Matched sessions (10)")
+}
+
+// createChatStage creates a chat stage with an agent execution and timeline
+// events for user_question and final_analysis. Returns the stage ID.
+func (env *sessionSearchTestEnv) createChatStage(t *testing.T, sessionID string, stageIndex int, question, answer string) string {
+	t.Helper()
+	ctx := t.Context()
+
+	stageID := uuid.New().String()
+	stg, err := env.entClient.Stage.Create().
+		SetID(stageID).
+		SetSessionID(sessionID).
+		SetStageName("Chat").
+		SetStageIndex(stageIndex).
+		SetExpectedAgentCount(1).
+		SetStageType("chat").
+		SetStatus("completed").
+		SetStartedAt(time.Now()).
+		Save(ctx)
+	require.NoError(t, err)
+
+	execID := uuid.New().String()
+	exec, err := env.entClient.AgentExecution.Create().
+		SetID(execID).
+		SetStage(stg).
+		SetSessionID(sessionID).
+		SetAgentName("ChatAgent").
+		SetAgentIndex(1).
+		SetStatus("completed").
+		SetLlmBackend("test").
+		Save(ctx)
+	require.NoError(t, err)
+
+	now := time.Now()
+	_, err = env.entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stageID).
+		SetExecutionID(execID).
+		SetAgentExecution(exec).
+		SetSequenceNumber(1).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		SetEventType("user_question").
+		SetStatus("completed").
+		SetContent(question).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = env.entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stageID).
+		SetExecutionID(execID).
+		SetAgentExecution(exec).
+		SetSequenceNumber(2).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		SetEventType("final_analysis").
+		SetStatus("completed").
+		SetContent(answer).
+		Save(ctx)
+	require.NoError(t, err)
+
+	return stageID
+}
+
+func TestFetchChatExchanges_WithChatStages(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	sessionID := env.createSession(t, "Alert: user alice triggered policy violation", "security", "completed", nil)
+	env.createChatStage(t, sessionID, 1, "What namespace was alice active in?", "alice was active in namespace prod")
+	env.createChatStage(t, sessionID, 2, "Any related deployments?", "No deployments found in the last 24h")
+
+	exchanges, err := env.svc.FetchChatExchanges(ctx, []string{sessionID})
+	require.NoError(t, err)
+
+	require.Len(t, exchanges[sessionID], 2)
+	assert.Equal(t, "What namespace was alice active in?", exchanges[sessionID][0].Question)
+	assert.Equal(t, "alice was active in namespace prod", exchanges[sessionID][0].Answer)
+	assert.Equal(t, "Any related deployments?", exchanges[sessionID][1].Question)
+	assert.Equal(t, "No deployments found in the last 24h", exchanges[sessionID][1].Answer)
+}
+
+func TestFetchChatExchanges_NoChatStages(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	sessionID := env.createSession(t, "Alert: high CPU on node worker-1", "resource", "completed", nil)
+
+	exchanges, err := env.svc.FetchChatExchanges(ctx, []string{sessionID})
+	require.NoError(t, err)
+	assert.Empty(t, exchanges[sessionID])
+}
+
+func TestFetchChatExchanges_EmptySessionIDs(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	exchanges, err := env.svc.FetchChatExchanges(ctx, nil)
+	require.NoError(t, err)
+	assert.Nil(t, exchanges)
+}
+
+func TestFetchChatExchanges_MultipleSessionsMixed(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	sess1 := env.createSession(t, "Alert: user bob triggered restart", "security", "completed", nil)
+	env.createChatStage(t, sess1, 1, "What pod restarted?", "Pod nginx-abc restarted 3 times")
+
+	sess2 := env.createSession(t, "Alert: high memory on node-5", "resource", "completed", nil)
+	// sess2 has no chat stages
+
+	exchanges, err := env.svc.FetchChatExchanges(ctx, []string{sess1, sess2})
+	require.NoError(t, err)
+
+	require.Len(t, exchanges[sess1], 1)
+	assert.Equal(t, "What pod restarted?", exchanges[sess1][0].Question)
+	assert.Empty(t, exchanges[sess2])
+}
+
+func TestToolExecutor_SessionSearch_IncludesChatExchanges(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	analysis := "User john-doe deployed unauthorized workload"
+	sessionID := env.createSession(t, "Alert: user john-doe triggered policy violation", "security", "completed", &analysis)
+	env.createChatStage(t, sessionID, 1, "What namespace was affected?", "namespace prod was affected with 3 unauthorized pods")
+
+	te := memory.NewToolExecutor(nil, env.svc, "", "default", nil)
+
+	result, err := te.Execute(ctx, sessionSearchToolCall(t, "john-doe", 0))
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	require.NotNil(t, result.RequiredSummarization)
+
+	prompt := result.RequiredSummarization.UserPrompt
+	assert.Contains(t, prompt, "john-doe")
+	assert.Contains(t, prompt, "unauthorized workload")
+	assert.Contains(t, prompt, "Follow-up conversations (1):")
+	assert.Contains(t, prompt, "Q1: What namespace was affected?")
+	assert.Contains(t, prompt, "A1: namespace prod was affected with 3 unauthorized pods")
+}
+
+func TestFetchChatExchanges_CappedAtMaxPerSession(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	sessionID := env.createSession(t, "Alert: user eve triggered many follow-ups", "security", "completed", nil)
+	for i := range 7 {
+		env.createChatStage(t, sessionID, i+1,
+			"Question "+uuid.New().String()[:8],
+			"Answer "+uuid.New().String()[:8])
+	}
+
+	exchanges, err := env.svc.FetchChatExchanges(ctx, []string{sessionID})
+	require.NoError(t, err)
+	assert.Len(t, exchanges[sessionID], 5, "should cap at maxChatExchangesPerSession")
+}
+
+func TestFetchChatExchanges_QuestionOnlyNoAnswer(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	sessionID := env.createSession(t, "Alert: user dave triggered restart", "security", "completed", nil)
+
+	// Create a chat stage with only a user_question event (no final_analysis).
+	stageID := uuid.New().String()
+	stg, err := env.entClient.Stage.Create().
+		SetID(stageID).
+		SetSessionID(sessionID).
+		SetStageName("Chat").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStageType("chat").
+		SetStatus("completed").
+		SetStartedAt(time.Now()).
+		Save(ctx)
+	require.NoError(t, err)
+
+	execID := uuid.New().String()
+	exec, err := env.entClient.AgentExecution.Create().
+		SetID(execID).
+		SetStage(stg).
+		SetSessionID(sessionID).
+		SetAgentName("ChatAgent").
+		SetAgentIndex(1).
+		SetStatus("completed").
+		SetLlmBackend("test").
+		Save(ctx)
+	require.NoError(t, err)
+
+	now := time.Now()
+	_, err = env.entClient.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stageID).
+		SetExecutionID(execID).
+		SetAgentExecution(exec).
+		SetSequenceNumber(1).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		SetEventType("user_question").
+		SetStatus("completed").
+		SetContent("What happened to the pod?").
+		Save(ctx)
+	require.NoError(t, err)
+
+	exchanges, err := env.svc.FetchChatExchanges(ctx, []string{sessionID})
+	require.NoError(t, err)
+
+	require.Len(t, exchanges[sessionID], 1)
+	assert.Equal(t, "What happened to the pod?", exchanges[sessionID][0].Question)
+	assert.Empty(t, exchanges[sessionID][0].Answer, "answer should be empty when no final_analysis event exists")
 }

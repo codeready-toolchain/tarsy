@@ -248,7 +248,11 @@ func TestBuildSessionSummarizationPrompt(t *testing.T) {
 			FinalAnalysis:         &analysis,
 			QualityRating:         &quality,
 			InvestigationFeedback: &feedback,
-			CreatedAt:             time.Date(2026, 3, 15, 10, 30, 0, 0, time.UTC),
+			ChatExchanges: []ChatExchange{
+				{Question: "What namespace was john-doe active in?", Answer: "john-doe was active in namespace prod with 3 failed deployments"},
+				{Question: "Was this correlated with the outage?", Answer: "No direct correlation found"},
+			},
+			CreatedAt: time.Date(2026, 3, 15, 10, 30, 0, 0, time.UTC),
 		},
 		{
 			SessionID: "sess-002",
@@ -269,6 +273,12 @@ func TestBuildSessionSummarizationPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "Root cause: unauthorized deployment")
 	assert.Contains(t, prompt, "Quality assessment: accurate")
 	assert.Contains(t, prompt, "Human review feedback: Good investigation")
+
+	assert.Contains(t, prompt, "Follow-up conversations (2):")
+	assert.Contains(t, prompt, "Q1: What namespace was john-doe active in?")
+	assert.Contains(t, prompt, "A1: john-doe was active in namespace prod with 3 failed deployments")
+	assert.Contains(t, prompt, "Q2: Was this correlated with the outage?")
+	assert.Contains(t, prompt, "A2: No direct correlation found")
 
 	assert.Contains(t, prompt, "Session 2 (ID: sess-002, 2026-03-14 08:00)")
 	assert.Contains(t, prompt, "Alert type: resource")
@@ -291,6 +301,26 @@ func TestBuildSessionSummarizationPrompt_NilOptionalFields(t *testing.T) {
 	assert.Contains(t, prompt, "(none recorded)")
 	assert.NotContains(t, prompt, "Quality assessment:")
 	assert.NotContains(t, prompt, "Human review feedback:")
+	assert.NotContains(t, prompt, "Follow-up conversations")
+}
+
+func TestBuildSessionSummarizationPrompt_EmptyChatAnswer(t *testing.T) {
+	sessions := []SessionSearchResult{
+		{
+			SessionID: "sess-004",
+			AlertData: "Alert: test",
+			AlertType: "test",
+			ChatExchanges: []ChatExchange{
+				{Question: "Any follow-up?", Answer: ""},
+			},
+			CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	prompt := buildSessionSummarizationPrompt("test", sessions)
+
+	assert.Contains(t, prompt, "Q1: Any follow-up?")
+	assert.Contains(t, prompt, "A1: (no response recorded)")
 }
 
 func TestToolExecutor_ExcludeIDs(t *testing.T) {

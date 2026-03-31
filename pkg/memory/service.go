@@ -11,6 +11,8 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/investigationmemory"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/google/uuid"
 )
@@ -792,6 +794,67 @@ func (s *Service) SearchSessions(ctx context.Context, params SessionSearchParams
 		results = append(results, r)
 	}
 	return results, rows.Err()
+}
+
+const maxChatExchangesPerSession = 5
+
+// FetchChatExchanges retrieves follow-up chat Q&A for a set of session IDs.
+// Returns a map from session ID to chat exchanges (question + answer pairs),
+// capped at maxChatExchangesPerSession per session.
+func (s *Service) FetchChatExchanges(ctx context.Context, sessionIDs []string) (map[string][]ChatExchange, error) {
+	if len(sessionIDs) == 0 {
+		return nil, nil
+	}
+
+	stages, err := s.entClient.Stage.Query().
+		Where(
+			stage.SessionIDIn(sessionIDs...),
+			stage.StageTypeEQ(stage.StageTypeChat),
+		).
+		WithAgentExecutions(func(q *ent.AgentExecutionQuery) {
+			q.WithTimelineEvents(func(tq *ent.TimelineEventQuery) {
+				tq.Where(timelineevent.EventTypeIn(
+					timelineevent.EventTypeUserQuestion,
+					timelineevent.EventTypeFinalAnalysis,
+				))
+			})
+		}).
+		Order(ent.Asc(stage.FieldSessionID), ent.Asc(stage.FieldStageIndex)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query chat stages: %w", err)
+	}
+
+	result := make(map[string][]ChatExchange, len(sessionIDs))
+	for _, stg := range stages {
+		if exchanges := result[stg.SessionID]; len(exchanges) >= maxChatExchangesPerSession {
+			continue
+		}
+
+		execs := stg.Edges.AgentExecutions
+		if len(execs) == 0 {
+			continue
+		}
+
+		var ce ChatExchange
+		for _, evt := range execs[0].Edges.TimelineEvents {
+			switch evt.EventType {
+			case timelineevent.EventTypeUserQuestion:
+				ce.Question = evt.Content
+			case timelineevent.EventTypeFinalAnalysis:
+				ce.Answer = evt.Content
+			}
+		}
+		if ce.Question == "" {
+			continue
+		}
+		if stg.StartedAt != nil {
+			ce.CreatedAt = *stg.StartedAt
+		}
+		result[stg.SessionID] = append(result[stg.SessionID], ce)
+	}
+
+	return result, nil
 }
 
 // formatVector converts a float32 slice to the pgvector string format: [1.0,2.0,3.0]
