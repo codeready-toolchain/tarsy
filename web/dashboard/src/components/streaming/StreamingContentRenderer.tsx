@@ -6,7 +6,7 @@ import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
 import { getFinalAnalysisPresentation } from '../timeline/ResponseItem';
-import { TOOL_TYPE } from '../../constants/toolTypes';
+import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
 import { getSkillNamesLabel } from '../../utils/format';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
@@ -246,7 +246,8 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
     let displayName = toolName;
     let statusLabel = 'Executing...';
     if (isMemory) {
-      displayName = 'Recalling Insights';
+      const isSessionSearch = toolName === MEMORY_TOOL_NAME.SEARCH_PAST_SESSIONS;
+      displayName = isSessionSearch ? 'Searching Past Sessions' : 'Recalling Insights';
       const query = (() => {
         const raw = item.metadata?.arguments;
         if (!raw) return null;
