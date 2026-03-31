@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -326,6 +327,18 @@ func (te *ToolExecutor) executeSessionSearch(ctx context.Context, call agent.Too
 		}, nil
 	}
 
+	sessionIDs := make([]string, len(sessions))
+	for i, s := range sessions {
+		sessionIDs[i] = s.SessionID
+	}
+	chatMap, err := te.service.FetchChatExchanges(ctx, sessionIDs)
+	if err != nil {
+		slog.Warn("Failed to fetch chat exchanges for session search", "error", err)
+	}
+	for i := range sessions {
+		sessions[i].ChatExchanges = chatMap[sessions[i].SessionID]
+	}
+
 	userPrompt := buildSessionSummarizationPrompt(args.Query, sessions)
 
 	return &agent.ToolResult{
@@ -346,6 +359,7 @@ Produce a focused digest covering:
 - Whether the searched entity (e.g. user, workload, service, IP) was investigated before
 - What the conclusions were for each matching investigation
 - Any human review corrections or quality assessments
+- Key findings from follow-up conversations (if any)
 - Patterns across multiple investigations of the same entity
 
 Preserve entity identifiers exactly as they appear — do not paraphrase names, namespaces, or IPs. Silently omit sessions that matched coincidentally but involve a different entity than the one queried.
@@ -380,6 +394,18 @@ func buildSessionSummarizationPrompt(query string, sessions []SessionSearchResul
 		}
 		if s.InvestigationFeedback != nil {
 			sb.WriteString(fmt.Sprintf("Human review feedback: %s\n", *s.InvestigationFeedback))
+		}
+
+		if len(s.ChatExchanges) > 0 {
+			sb.WriteString(fmt.Sprintf("Follow-up conversations (%d):\n", len(s.ChatExchanges)))
+			for j, ce := range s.ChatExchanges {
+				sb.WriteString(fmt.Sprintf("  Q%d: %s\n", j+1, ce.Question))
+				answer := ce.Answer
+				if answer == "" {
+					answer = "(no response recorded)"
+				}
+				sb.WriteString(fmt.Sprintf("  A%d: %s\n", j+1, answer))
+			}
 		}
 	}
 

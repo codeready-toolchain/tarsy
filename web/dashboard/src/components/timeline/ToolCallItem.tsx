@@ -12,7 +12,7 @@ import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import InsightsCard from './InsightsCard';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
-import { TOOL_TYPE } from '../../constants/toolTypes';
+import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
 
 interface ToolCallItemProps {
   item: FlowItem;
@@ -201,7 +201,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
     [searchTerm],
   );
 
-  const isSessionSearch = isMemory && toolName === 'search_past_sessions';
+  const isSessionSearch = isMemory && toolName === MEMORY_TOOL_NAME.SEARCH_PAST_SESSIONS;
 
   // Successful session search — markdown-rendered InsightsCard with history icon
   if (isSessionSearch && !isMcpFailure && !isToolResultError) {
@@ -313,7 +313,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
   }
 
   const skillNamesLabel = isSkill ? getSkillNamesLabel(toolArguments) : null;
-  const displayName = isMemory ? 'Recalled Insights' : isSkill ? 'Loaded Skills' : toolName;
+  const displayName = isSessionSearch ? 'Session Search' : isMemory ? 'Recalled Insights' : isSkill ? 'Loaded Skills' : toolName;
 
   const getArgumentsPreview = (): string => {
     if (isMemory && toolArguments.query) return String(toolArguments.query);

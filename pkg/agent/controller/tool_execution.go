@@ -137,10 +137,15 @@ func executeToolCall(
 	// large results via maybeSummarize (creates a separate mcp_tool_summary).
 	if !result.IsError && result.RequiredSummarization != nil {
 		estimatedTokens := mcp.EstimateTokens(result.Content)
+		var streamEventID string
+		if toolCallEvent != nil {
+			streamEventID = toolCallEvent.ID
+		}
 		summary, sumUsage, sumErr := callSummarizationLLM(ctx, execCtx,
 			result.RequiredSummarization.SystemPrompt,
 			result.RequiredSummarization.UserPrompt,
-			serverID, toolName, estimatedTokens, eventSeq, false)
+			serverID, toolName, estimatedTokens, eventSeq,
+			summarizationStreamTarget{existingEventID: streamEventID})
 		if sumErr != nil {
 			slog.Warn("Required summarization failed",
 				"server", serverID, "tool", toolName, "error", sumErr)

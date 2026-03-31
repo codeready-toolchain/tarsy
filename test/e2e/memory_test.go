@@ -1065,8 +1065,9 @@ func TestE2E_SearchPastSessionsInChat(t *testing.T) {
 	memSvc, memCfg := setupMemoryService(t, dbClient, 3)
 	ctx := t.Context()
 
-	// Pre-seed a completed session with searchable alert_data and review metadata.
-	// The search_vector column (GENERATED STORED) auto-computes from alert_data.
+	// Pre-seed a completed session with searchable alert_data, review metadata,
+	// and a follow-up chat exchange. The search_vector column (GENERATED STORED)
+	// auto-computes from alert_data.
 	seedSessionID := uuid.New().String()
 	finalAnalysis := "nginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold."
 	feedback := "Good investigation. Probe fix was correct."
@@ -1080,6 +1081,59 @@ func TestE2E_SearchPastSessionsInChat(t *testing.T) {
 		SetFinalAnalysis(finalAnalysis).
 		SetQualityRating(alertsession.QualityRatingAccurate).
 		SetInvestigationFeedback(feedback).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Seed a follow-up chat stage on the previous session so
+	// FetchChatExchanges includes it in the search results.
+	seedChatStage, err := dbClient.Client.Stage.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(seedSessionID).
+		SetStageName("Chat").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeChat).
+		SetStatus(stage.StatusCompleted).
+		SetStartedAt(time.Now()).
+		Save(ctx)
+	require.NoError(t, err)
+	seedExec, err := dbClient.Client.AgentExecution.Create().
+		SetID(uuid.New().String()).
+		SetStage(seedChatStage).
+		SetSessionID(seedSessionID).
+		SetAgentName("ChatAgent").
+		SetAgentIndex(1).
+		SetStatus(agentexecution.StatusCompleted).
+		SetLlmBackend("test").
+		Save(ctx)
+	require.NoError(t, err)
+	now := time.Now()
+	_, err = dbClient.Client.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(seedSessionID).
+		SetStageID(seedChatStage.ID).
+		SetExecutionID(seedExec.ID).
+		SetAgentExecution(seedExec).
+		SetSequenceNumber(1).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		SetEventType("user_question").
+		SetStatus("completed").
+		SetContent("Which namespace was the liveness probe misconfigured in?").
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = dbClient.Client.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(seedSessionID).
+		SetStageID(seedChatStage.ID).
+		SetExecutionID(seedExec.ID).
+		SetAgentExecution(seedExec).
+		SetSequenceNumber(2).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		SetEventType("final_analysis").
+		SetStatus("completed").
+		SetContent("The liveness probe was misconfigured in namespace coolify on the nginx-proxy deployment.").
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -1204,6 +1258,12 @@ func TestE2E_SearchPastSessionsInChat(t *testing.T) {
 		"summarization prompt should contain quality_rating")
 	assert.Contains(t, summarizationUserPrompt, "Good investigation",
 		"summarization prompt should contain investigation_feedback")
+	assert.Contains(t, summarizationUserPrompt, "Follow-up conversations (1):",
+		"summarization prompt should contain follow-up chat exchange count")
+	assert.Contains(t, summarizationUserPrompt, "Which namespace was the liveness probe misconfigured in?",
+		"summarization prompt should contain the follow-up question")
+	assert.Contains(t, summarizationUserPrompt, "misconfigured in namespace coolify on the nginx-proxy deployment",
+		"summarization prompt should contain the follow-up answer")
 
 	// A5. Chat iteration 2: search_past_sessions tool result in conversation.
 	chatIter2 := captured[5]
