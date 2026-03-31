@@ -836,6 +836,7 @@ func (s *Service) FetchChatExchanges(ctx context.Context, sessionIDs []string) (
 			continue
 		}
 
+		// Chat stages always have exactly one agent execution.
 		var ce ChatExchange
 		for _, evt := range execs[0].Edges.TimelineEvents {
 			switch evt.EventType {
