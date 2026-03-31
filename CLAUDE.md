@@ -108,4 +108,4 @@ Tests in `test/e2e/` use a `TestApp` harness that boots a complete TARSy instanc
 2. All `.cursor/skills/<language>-*/SKILL.md` matching the language you're working in (e.g., `golang-*` for Go)
 3. `.cursor/skills/db-migration-review/SKILL.md` after every `make migrate-create`
 
-Current Go skills: `golang-context-patterns`, `golang-error-handling`, `golang-testing-patterns`, `golang-type-safety`, `golang-service-repository-pattern`, `use-modern-go`. Scan `.cursor/skills/` for the latest set.
+Current Go skills: `golang-context-patterns`, `golang-error-handling`, `golang-testing-patterns`, `golang-type-safety`, `use-modern-go`. Scan `.cursor/skills/` for the latest set.
