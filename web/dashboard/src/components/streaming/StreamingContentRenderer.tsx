@@ -130,6 +130,41 @@ const ResponseBlock = memo(({ content }: { content: string }) => {
 
 ResponseBlock.displayName = 'ResponseBlock';
 
+// --- StreamingToolContent ---
+// Auto-scrolling markdown block for streamed tool result content (e.g. session search summary).
+
+const StreamingToolContent = memo(({ content }: { content: string }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [content]);
+
+  return (
+    <ContentCard ref={scrollRef} maxHeight="150px">
+      <Box sx={{
+        fontSize: '0.85rem',
+        '& p': { my: 0.5, lineHeight: 1.6 },
+        '& ul, & ol': { pl: 2.5, my: 0.5 },
+        '& li': { my: 0.25 },
+        '& h1, & h2, & h3, & h4': { mt: 1, mb: 0.5, fontSize: '0.9rem', fontWeight: 600 },
+      }}>
+        <ReactMarkdown
+          components={thoughtMarkdownComponents}
+          remarkPlugins={remarkPlugins}
+          skipHtml
+        >
+          {content}
+        </ReactMarkdown>
+      </Box>
+    </ContentCard>
+  );
+});
+
+StreamingToolContent.displayName = 'StreamingToolContent';
+
 // --- StreamingContentRenderer ---
 
 /**
@@ -261,51 +296,61 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
       statusLabel = getSkillNamesLabel(item.metadata?.arguments) ?? 'Loading...';
     }
 
+    const hasStreamedContent = isMemory && item.content && item.content.trim().length > 0;
+
     return (
       <Box sx={{ ml: 4, my: 1, mr: 1 }}>
         <Box
           sx={(theme) => ({
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            px: 1.5,
-            py: 0.75,
-            border: '2px dashed',
-            borderColor: alpha(theme.palette[paletteKey].main, 0.4),
+            border: '1px solid',
+            borderColor: alpha(theme.palette[paletteKey].main, 0.25),
             borderRadius: 1.5,
-            bgcolor: alpha(theme.palette[paletteKey].main, 0.05),
+            bgcolor: alpha(theme.palette[paletteKey].main, 0.04),
           })}
         >
           <Box
-            sx={(theme) => ({
-              width: 18,
-              height: 18,
-              border: '2px solid',
-              borderColor: theme.palette[paletteKey].main,
-              borderTopColor: 'transparent',
-              borderRadius: '50%',
-              flexShrink: 0,
-              animation: 'spin 1s linear infinite',
-              '@keyframes spin': {
-                '0%': { transform: 'rotate(0deg)' },
-                '100%': { transform: 'rotate(360deg)' },
-              },
-            })}
-          />
-          <Typography
-            variant="body2"
-            sx={(theme) => ({
-              fontFamily: 'monospace',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              color: theme.palette[paletteKey].main,
-            })}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              px: 1.5,
+              py: 0.75,
+            }}
           >
-            {displayName}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1 }}>
-            {statusLabel}
-          </Typography>
+            <Box
+              sx={(theme) => ({
+                width: 18,
+                height: 18,
+                border: '2px solid',
+                borderColor: theme.palette[paletteKey].main,
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                flexShrink: 0,
+                animation: 'spin 1s linear infinite',
+                '@keyframes spin': {
+                  '0%': { transform: 'rotate(0deg)' },
+                  '100%': { transform: 'rotate(360deg)' },
+                },
+              })}
+            />
+            <Typography
+              variant="body2"
+              sx={(theme) => ({
+                fontFamily: 'monospace',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                color: theme.palette[paletteKey].main,
+              })}
+            >
+              {displayName}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1 }}>
+              {statusLabel}
+            </Typography>
+          </Box>
+          {hasStreamedContent && (
+            <StreamingToolContent content={item.content} />
+          )}
         </Box>
       </Box>
     );

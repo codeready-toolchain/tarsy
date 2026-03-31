@@ -97,7 +97,7 @@ func maybeSummarize(
 	userPrompt := execCtx.PromptBuilder.BuildMCPSummarizationUserPrompt(conversationContext, serverID, toolName, truncatedForLLM)
 
 	// 6. Perform summarization LLM call with streaming
-	summary, usage, err := callSummarizationLLM(ctx, execCtx, systemPrompt, userPrompt, serverID, toolName, estimatedTokens, eventSeq, true)
+	summary, usage, err := callSummarizationLLM(ctx, execCtx, systemPrompt, userPrompt, serverID, toolName, estimatedTokens, eventSeq, summarizationStreamTarget{createEvent: true})
 	if err != nil {
 		slog.Warn("Summarization LLM call failed, using raw result",
 			"server", serverID, "tool", toolName, "error", err)
@@ -117,11 +117,21 @@ func maybeSummarize(
 	}, nil
 }
 
+// summarizationStreamTarget configures how summarization streams to the dashboard.
+type summarizationStreamTarget struct {
+	// createEvent creates a new mcp_tool_summary timeline event and streams to it.
+	createEvent bool
+	// existingEventID streams chunks to an existing timeline event (e.g. the
+	// llm_tool_call event for RequiredSummarization). Takes precedence over createEvent.
+	existingEventID string
+}
+
 // callSummarizationLLM performs the summarization LLM call with streaming.
-// When createTimelineEvent is true, creates an mcp_tool_summary timeline event
-// and streams chunks to WebSocket clients. When false, only performs the LLM
-// call and records the interaction (used by RequiredSummarization where the
-// summary is shown directly in the tool call event instead).
+// The streamTarget controls how chunks reach the dashboard:
+//   - createEvent: creates a new mcp_tool_summary event and streams to it
+//   - existingEventID: streams chunks to an already-created event (e.g. llm_tool_call)
+//   - neither: silently collects the stream (no dashboard updates)
+//
 // Always records an LLMInteraction with type "summarization".
 func callSummarizationLLM(
 	ctx context.Context,
@@ -130,7 +140,7 @@ func callSummarizationLLM(
 	serverID, toolName string,
 	estimatedTokens int,
 	eventSeq *int,
-	createTimelineEvent bool,
+	streamTarget summarizationStreamTarget,
 ) (string, *agent.TokenUsage, error) {
 	startTime := time.Now()
 
@@ -148,7 +158,7 @@ func callSummarizationLLM(
 		Backend:     execCtx.Config.LLMBackend,
 	}
 
-	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq, createTimelineEvent)
+	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq, streamTarget)
 	metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
 		time.Since(startTime), metricsTokens(streamed, err), err)
 	if err != nil {
@@ -175,9 +185,11 @@ func callSummarizationLLM(
 // The streaming pattern is identical (create event -> stream chunks -> finalize).
 // Simpler than callLLMWithStreaming: no thinking event (summarization has no thinking stream).
 //
-// When createTimelineEvent is false, the LLM call is still made and the stream
-// collected, but no timeline event is created or streamed. This is used for
-// RequiredSummarization where the summary becomes the tool call event content.
+// streamTarget controls dashboard streaming:
+//   - existingEventID: streams chunks to an already-created event (no new event created,
+//     no finalization — the caller is responsible for completing the event).
+//   - createEvent: creates a new mcp_tool_summary event and streams to it.
+//   - neither: silently collects the stream.
 func callSummarizationLLMWithStreaming(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
@@ -185,7 +197,7 @@ func callSummarizationLLMWithStreaming(
 	serverID, toolName string,
 	estimatedTokens int,
 	eventSeq *int,
-	createTimelineEvent bool,
+	streamTarget summarizationStreamTarget,
 ) (*StreamedResponse, error) {
 	llmCtx, llmCancel := context.WithCancel(ctx)
 	defer llmCancel()
@@ -195,10 +207,39 @@ func callSummarizationLLMWithStreaming(
 		return nil, fmt.Errorf("summarization LLM Generate failed: %w", err)
 	}
 
-	if !createTimelineEvent || execCtx.EventPublisher == nil {
-		resp, err := collectStream(stream)
-		if err != nil {
-			return nil, err
+	// Stream to an existing event (e.g. the llm_tool_call for RequiredSummarization).
+	// Only publishes chunks — caller completes the event.
+	if streamTarget.existingEventID != "" && execCtx.EventPublisher != nil {
+		pid := parentExecID(execCtx)
+		callback := func(chunkType string, delta string) {
+			if delta == "" || chunkType != ChunkTypeText {
+				return
+			}
+			if pubErr := execCtx.EventPublisher.PublishStreamChunk(ctx, execCtx.SessionID, events.StreamChunkPayload{
+				BasePayload: events.BasePayload{
+					Type:      events.EventTypeStreamChunk,
+					SessionID: execCtx.SessionID,
+					Timestamp: time.Now().Format(time.RFC3339Nano),
+				},
+				EventID:           streamTarget.existingEventID,
+				ParentExecutionID: pid,
+				Delta:             delta,
+			}); pubErr != nil {
+				slog.Warn("Failed to publish summary stream chunk to existing event",
+					"event_id", streamTarget.existingEventID, "session_id", execCtx.SessionID, "error", pubErr)
+			}
+		}
+		resp, collectErr := collectStreamWithCallback(stream, callback, nil, 0, 0)
+		if collectErr != nil {
+			return nil, collectErr
+		}
+		return &StreamedResponse{LLMResponse: resp}, nil
+	}
+
+	if !streamTarget.createEvent || execCtx.EventPublisher == nil {
+		resp, collectErr := collectStream(stream)
+		if collectErr != nil {
+			return nil, collectErr
 		}
 		return &StreamedResponse{LLMResponse: resp}, nil
 	}
