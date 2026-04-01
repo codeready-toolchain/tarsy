@@ -9,7 +9,9 @@
 
 This is the Go-based hybrid rewrite of TARSy, replacing the [original Python implementation](https://github.com/codeready-toolchain/tarsy-bot) (now deprecated). The new architecture splits responsibilities between a Go orchestrator and a stateless Python LLM service for better performance, type safety, and scalability.
 
-[tarsy-gh-demo.webm](https://github.com/user-attachments/assets/dae0e409-ef7f-46a6-b390-dbf287497963)
+## Demo
+
+[![TARSy Demo](docs/img/TARSy.png)](https://vimeo.com/1179081582?share=copy&fl=sv&fe=ci)
 
 ## Documentation
 
