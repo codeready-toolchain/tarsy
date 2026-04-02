@@ -149,6 +149,49 @@ func TestToolExecutor_Execute_InvalidToolName(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	assert.Contains(t, result.Content, "invalid tool name")
+	assert.Contains(t, result.Content, "one dot")
+}
+
+func TestToolExecutor_Execute_ColonPrefixedOrchestrationToolName(t *testing.T) {
+	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
+		"kubernetes": {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
+			},
+		},
+	})
+
+	result, err := executor.Execute(context.Background(), agent.ToolCall{
+		ID:        "call-colon-orch",
+		Name:      "google:dispatch_agent",
+		Arguments: `{}`,
+	})
+
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "orchestration")
+	assert.Contains(t, result.Content, "dispatch_agent")
+}
+
+func TestToolExecutor_Execute_ColonPrefixedSkillToolName(t *testing.T) {
+	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
+		"kubernetes": {
+			"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+				return &mcpsdk.CallToolResult{Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: "ok"}}}, nil
+			},
+		},
+	})
+
+	result, err := executor.Execute(context.Background(), agent.ToolCall{
+		ID:        "call-colon-skill",
+		Name:      "google:load_skill",
+		Arguments: `{}`,
+	})
+
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "skill")
+	assert.Contains(t, result.Content, "load_skill")
 }
 
 func TestToolExecutor_Execute_MCPError(t *testing.T) {

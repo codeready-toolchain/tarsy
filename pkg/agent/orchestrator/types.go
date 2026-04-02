@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
@@ -92,12 +93,11 @@ type subAgentExecution struct {
 // Dashboards can use this to distinguish orchestration from real MCP calls.
 const OrchestrationServerName = "orchestrator"
 
-// Orchestration tool names. Plain names (no dots) — naturally separated
-// from MCP tools which use server.tool format.
+// Orchestration tool names — aliases pkg/builtintools (single source of truth).
 const (
-	ToolDispatchAgent = "dispatch_agent"
-	ToolCancelAgent   = "cancel_agent"
-	ToolListAgents    = "list_agents"
+	ToolDispatchAgent = builtintools.DispatchAgent
+	ToolCancelAgent   = builtintools.CancelAgent
+	ToolListAgents    = builtintools.ListAgents
 )
 
 // IsOrchestrationTool reports whether name is a known orchestration tool.
@@ -122,13 +122,13 @@ var orchestrationTools = []agent.ToolDefinition{
 	{
 		Name:        ToolCancelAgent,
 		Description: "Cancel a running sub-agent.",
-		ParametersSchema: `{
+		ParametersSchema: fmt.Sprintf(`{
 			"type": "object",
 			"properties": {
-				"execution_id": {"type": "string", "description": "Execution ID from dispatch_agent"}
+				"execution_id": {"type": "string", "description": "Execution ID from %s"}
 			},
 			"required": ["execution_id"]
-		}`,
+		}`, builtintools.DispatchAgent),
 	},
 	{
 		Name:        ToolListAgents,
@@ -141,10 +141,15 @@ var orchestrationTools = []agent.ToolDefinition{
 }
 
 // orchestrationToolNames is used for quick lookup when routing tool calls.
-var orchestrationToolNames = map[string]bool{
-	ToolDispatchAgent: true,
-	ToolCancelAgent:   true,
-	ToolListAgents:    true,
+var orchestrationToolNames map[string]bool
+
+func init() {
+	orchestrationToolNames = make(map[string]bool)
+	for name, k := range builtintools.PlainToolKinds {
+		if k == builtintools.KindOrchestration {
+			orchestrationToolNames[name] = true
+		}
+	}
 }
 
 // FormatSubAgentResult formats a sub-agent result as a conversation message

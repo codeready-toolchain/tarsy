@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
@@ -29,9 +30,10 @@ Principles:
 - Be specific in task descriptions — include relevant context from the alert
 - In your final response, ground the analysis in evidence you actually gathered either directly or from sub-agents`
 
-const orchestratorResultDelivery = `## Result Delivery
+func orchestratorResultDelivery() string {
+	return fmt.Sprintf(`## Result Delivery
 
-Sub-agent results are delivered to you automatically as follow-up messages. Do NOT call list_agents to poll for status — the system pushes results to you.
+Sub-agent results are delivered to you automatically as follow-up messages. Do NOT call %s to poll for status — the system pushes results to you.
 After dispatching sub-agents, if you have no other tool calls to make, respond with a brief status (1-2 sentences only) and stop. The system will pause and deliver each sub-agent result as it becomes available. You do not need to loop, poll, or take any action to stay alive.
 You will receive results one at a time. React to each delivered result as needed: dispatch follow-ups, cancel unnecessary agents, or produce your final analysis once all relevant results are collected.
 
@@ -40,7 +42,8 @@ CRITICAL — result integrity rules:
 - NEVER dispatch follow-up sub-agents based on anticipated outcomes. Only act on results you have actually received in a prior message.
 - If you have not yet received a sub-agent's result, do NOT reference its findings — wait for delivery.
 
-Tracking: keep a mental checklist of every agent you dispatch. When a result arrives, match it against your list. Only produce your final analysis once every dispatched agent has reported back (completed, failed, or cancelled by you).`
+Tracking: keep a mental checklist of every agent you dispatch. When a result arrives, match it against your list. Only produce your final analysis once every dispatched agent has reported back (completed, failed, or cancelled by you).`, builtintools.ListAgents)
+}
 
 const orchestratorTaskFocus = "Give clear, actionable guidance. Prefer sub-agents when parallel or specialized work fits the problem; you may work directly when it stays simpler."
 
@@ -49,7 +52,7 @@ const orchestratorTaskFocus = "Give clear, actionable guidance. Prefer sub-agent
 // Called when an agent's SubAgentCatalog is non-empty, regardless of agent type.
 func InjectOrchestratorSections(systemContent string, catalog []config.SubAgentEntry) string {
 	catalogSection := formatAgentCatalog(catalog)
-	return systemContent + "\n\n" + orchestratorBehavioralInstructions + "\n\n" + catalogSection + "\n\n" + orchestratorResultDelivery
+	return systemContent + "\n\n" + orchestratorBehavioralInstructions + "\n\n" + catalogSection + "\n\n" + orchestratorResultDelivery()
 }
 
 // OrchestratorTaskFocus returns the task focus string for orchestrator agents.
@@ -64,8 +67,8 @@ func OrchestratorTaskFocus() string {
 func formatAgentCatalog(entries []config.SubAgentEntry) string {
 	var sb strings.Builder
 	sb.WriteString("## Available Sub-Agents\n\n")
-	sb.WriteString("You can dispatch these agents using the dispatch_agent tool.\n")
-	sb.WriteString("Use cancel_agent to stop unnecessary work.\n")
+	sb.WriteString(fmt.Sprintf("You can dispatch these agents using the %s tool.\n", builtintools.DispatchAgent))
+	sb.WriteString(fmt.Sprintf("Use %s to stop unnecessary work.\n", builtintools.CancelAgent))
 
 	for _, e := range entries {
 		sb.WriteString(fmt.Sprintf("\n- **%s**: %s\n", e.Name, e.Description))

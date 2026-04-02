@@ -8,22 +8,23 @@ import (
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 )
 
 // Compile-time check that ToolExecutor implements agent.ToolExecutor.
 var _ agent.ToolExecutor = (*ToolExecutor)(nil)
 
+// ToolRecallPastInvestigations / ToolSearchPastSessions — wire names from pkg/builtintools.
 const (
-	// ToolRecallPastInvestigations is the tool name for on-demand memory search.
-	ToolRecallPastInvestigations = "recall_past_investigations"
-
-	// ToolSearchPastSessions is the tool name for entity-level session search.
-	ToolSearchPastSessions = "search_past_sessions"
+	ToolRecallPastInvestigations = builtintools.RecallPastInvestigations
+	ToolSearchPastSessions       = builtintools.SearchPastSessions
 )
 
 // IsMemoryTool reports whether name is a known memory tool.
 func IsMemoryTool(name string) bool {
-	return name == ToolRecallPastInvestigations || name == ToolSearchPastSessions
+	k, ok := builtintools.KindForPlainTool(name)
+	return ok && k == builtintools.KindMemory
 }
 
 // recallTool is the tool definition exposed to the LLM.
@@ -144,6 +145,7 @@ func (te *ToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefinition, 
 
 // Execute routes the call to the appropriate handler or the inner executor.
 func (te *ToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+	call.Name = mcp.NormalizeBuiltinPlainToolName(call.Name)
 	switch call.Name {
 	case ToolRecallPastInvestigations:
 		return te.executeRecall(ctx, call)

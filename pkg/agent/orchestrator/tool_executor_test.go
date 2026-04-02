@@ -44,6 +44,23 @@ func TestCompositeToolExecutor_ListTools_NilMCPExecutor(t *testing.T) {
 	assert.Len(t, tools, len(orchestrationTools))
 }
 
+func TestCompositeToolExecutor_Execute_DispatchAgent_ColonPrefixedName(t *testing.T) {
+	runner := newMinimalRunner(5)
+	registry := config.BuildSubAgentRegistry(nil)
+	c := NewCompositeToolExecutor(nil, runner, registry)
+
+	args, _ := json.Marshal(map[string]string{"name": "TestAgent", "task": "do something"})
+	result, err := c.Execute(context.Background(), agent.ToolCall{
+		ID:        "call-colon",
+		Name:      "google:dispatch_agent",
+		Arguments: string(args),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "call-colon", result.CallID)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "dispatch failed")
+}
+
 func TestCompositeToolExecutor_Execute_DispatchAgent(t *testing.T) {
 	runner := newMinimalRunner(5)
 	// Pre-populate an execution to verify dispatch goes through the runner.

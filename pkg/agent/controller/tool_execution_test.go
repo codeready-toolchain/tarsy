@@ -367,6 +367,21 @@ func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
 			wantToolType: string(ToolTypeOrchestrator),
 		},
 		{
+			name:         "colon-prefixed dispatch_agent classified as orchestrator",
+			toolCallName: "google:dispatch_agent",
+			wantToolType: string(ToolTypeOrchestrator),
+		},
+		{
+			name:         "colon-prefixed load_skill classified as skill",
+			toolCallName: "google:load_skill",
+			wantToolType: string(ToolTypeSkill),
+		},
+		{
+			name:         "colon-prefixed recall_past_investigations classified as memory",
+			toolCallName: "openai:recall_past_investigations",
+			wantToolType: string(ToolTypeMemory),
+		},
+		{
 			name:         "recall_past_investigations classified as memory",
 			toolCallName: "recall_past_investigations",
 			wantToolType: string(ToolTypeMemory),

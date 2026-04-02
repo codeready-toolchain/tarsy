@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
+	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
@@ -25,11 +26,6 @@ const (
 	ToolTypeOrchestrator ToolType = "orchestrator"
 	ToolTypeSkill        ToolType = "skill"
 	ToolTypeMemory       ToolType = "memory"
-
-	// mirrors memory.ToolRecallPastInvestigations / ToolSearchPastSessions
-	// (can't import due to cycle)
-	toolNameRecallPastInvestigations = "recall_past_investigations"
-	toolNameSearchPastSessions       = "search_past_sessions"
 )
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
@@ -67,18 +63,19 @@ func executeToolCall(
 	messages []agent.ConversationMessage,
 	eventSeq *int,
 ) toolCallResult {
-	// Step 1: Normalize and split tool name
-	normalizedName := mcp.NormalizeToolName(call.Name)
-	serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
+	// Step 1: Normalize and split tool name (colon-prefixed orchestration names first)
+	plainFixed := mcp.NormalizeBuiltinPlainToolName(call.Name)
+	effectiveName := mcp.NormalizeToolName(plainFixed)
+	serverID, toolName, splitErr := mcp.SplitToolName(effectiveName)
 	var toolType ToolType
 	if splitErr != nil {
-		toolName = call.Name
+		toolName = effectiveName
 		if orchestrator.IsOrchestrationTool(toolName) {
 			serverID = orchestrator.OrchestrationServerName
 			toolType = ToolTypeOrchestrator
 		} else if skill.IsSkillTool(toolName) {
 			toolType = ToolTypeSkill
-		} else if toolName == toolNameRecallPastInvestigations || toolName == toolNameSearchPastSessions {
+		} else if k, ok := builtintools.KindForPlainTool(toolName); ok && k == builtintools.KindMemory {
 			toolType = ToolTypeMemory
 		} else {
 			toolType = ToolTypeMCP
@@ -100,7 +97,13 @@ func executeToolCall(
 	// Step 3: Execute the tool with its own timeout within the iteration budget.
 	toolCtx, toolCancel := context.WithTimeout(ctx, execCtx.Config.ToolCallTimeout)
 	startTime := time.Now()
-	result, toolErr := execCtx.ToolExecutor.Execute(toolCtx, call)
+	execCall := call
+	// Only rewrite the tool name when colon-prefix built-in correction applied.
+	// Otherwise preserve the LLM name (e.g. server__tool) — MCP executor normalizes.
+	if plainFixed != call.Name {
+		execCall.Name = effectiveName
+	}
+	result, toolErr := execCtx.ToolExecutor.Execute(toolCtx, execCall)
 	toolCancel()
 
 	metrics.MCPCallsTotal.WithLabelValues(serverID, toolName).Inc()
