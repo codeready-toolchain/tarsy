@@ -94,7 +94,7 @@ PR2 adds `RequiredSkills` and `Skills` fields to `StageAgentConfig`. Unlike `mcp
 
 **Hard constraint:** After every PR, TARSy must be fully functional. Config changes are acceptable, but no PR may leave any feature broken. Final code must be clean — no dead or legacy code.
 
-### PR1: Sub-agent-driven orchestration + type removal
+### PR1: Sub-agent-driven orchestration + type removal - DONE
 
 Existing orchestrator chains already have `sub_agents` configured, so orchestration keeps working via the new trigger. Configs need updating: `type: orchestrator` becomes invalid and must be removed from agent definitions.
 
@@ -131,7 +131,7 @@ Existing orchestrator chains already have `sub_agents` configured, so orchestrat
 14. Update unit tests across: `config/enums_test.go`, `config/validator_test.go`, `config/builtin_test.go`, `config/sub_agent_registry_test.go`, `config/loader_test.go`, `agent/config_resolver_test.go`, `agent/controller/factory_test.go`, `agent/prompt/builder_test.go`, `agent/prompt/orchestrator_test.go`, `queue/executor_memory_test.go`, `queue/executor_integration_test.go`. Remove or replace all uses of `AgentNameOrchestrator` constant (`services/*_test.go`, `api/handler_trace_test.go`). Add recursion-safety tests verifying `SubAgentRunner` sets `execCtx.SubAgent` and never sets `SubAgentCatalog`/`SubAgentCollector` — sub-agents must not gain orchestrator tools or dispatch further sub-agents.
 15. Update E2E orchestrator tests in `test/e2e/orchestrator_test.go`.
 
-### PR2: Chat orchestrator + stage-level skill overrides
+### PR2: Chat orchestrator + stage-level skill overrides - DONE
 
 Completes the implicit orchestrator design: chat agents gain orchestration support, and stage-level skill overrides enable collapsing separate orchestrator/sub-agent definitions into a single agent.
 
