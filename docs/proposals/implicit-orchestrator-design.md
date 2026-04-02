@@ -71,6 +71,16 @@ The `orchestrator:` config block (max_concurrent_agents, agent_timeout, max_budg
 
 No explicit prevention needed. Sub-agents run via `SubAgentRunner` with `execCtx.SubAgent` set, which gives them a task-only prompt and no orchestrator tools — `SubAgentCatalog` and `SubAgentCollector` are never set on the sub-agent's `ExecutionContext`. A sub-agent cannot dispatch further sub-agents by runtime design, regardless of configuration. This invariant is enforced by dedicated tests (see PR1 test item 14).
 
+### Known limitation: skills prevent full agent collapse
+
+While the implicit orchestrator design allows the same agent definition to serve as both orchestrator and sub-agent, **skills** break this in practice. Orchestrator agents often need report-formatting skills injected into their system prompt, while sub-agent instances of the same agent should only gather evidence — giving them formatting skills wastes prompt tokens and risks confusing their role.
+
+Today, `required_skills` and `skills` are only configurable on the `AgentConfig` (base agent definition). There is no way to add skills at the stage-agent level in the chain config. This means orchestrators that need different skills than their sub-agent counterparts must remain as separate agent definitions.
+
+**Workaround (current):** Keep separate orchestrator and sub-agent definitions with different skills. The `type: orchestrator` line is removed, but the agent definitions remain distinct.
+
+**Resolution (PR3):** Add `required_skills` and `skills` to `StageAgentConfig`. Unlike `mcp_servers` and other stage-agent overrides which use replacement semantics, skills are **additive** — stage-level skills are appended to the agent definition's skills. This matches the nature of skills as cumulative knowledge injections rather than exclusive resource grants. See PR3 below.
+
 ## Core Concepts
 
 | Concept | Before | After |
@@ -125,7 +135,11 @@ Existing orchestrator chains already have `sub_agents` configured, so orchestrat
 14. Update unit tests across: `config/enums_test.go`, `config/validator_test.go`, `config/builtin_test.go`, `config/sub_agent_registry_test.go`, `config/loader_test.go`, `agent/config_resolver_test.go`, `agent/controller/factory_test.go`, `agent/prompt/builder_test.go`, `agent/prompt/orchestrator_test.go`, `queue/executor_memory_test.go`, `queue/executor_integration_test.go`. Remove or replace all uses of `AgentNameOrchestrator` constant (`services/*_test.go`, `api/handler_trace_test.go`). Add recursion-safety tests verifying `SubAgentRunner` sets `execCtx.SubAgent` and never sets `SubAgentCatalog`/`SubAgentCollector` — sub-agents must not gain orchestrator tools or dispatch further sub-agents.
 15. Update E2E orchestrator tests in `test/e2e/orchestrator_test.go`.
 
-### PR2: Chat orchestrator support (additive, opt-in)
+### PR2: Chat orchestrator + stage-level skill overrides
+
+Completes the implicit orchestrator design: chat agents gain orchestration support, and stage-level skill overrides enable collapsing separate orchestrator/sub-agent definitions into a single agent.
+
+#### Chat orchestrator (additive, opt-in)
 
 Only configs that add `chat.sub_agents` are affected.
 
@@ -134,4 +148,50 @@ Only configs that add `chat.sub_agents` are affected.
 3. **`pkg/agent/config_resolver.go`** — In `ResolveChatAgentConfig`, resolve sub-agents: `chatCfg.SubAgents` > `chain.SubAgents` > nil.
 4. **`pkg/queue/chat_executor.go`** — Add `subAgentRegistry` field. Wire `SubAgentRunner` + `CompositeToolExecutor` + `SubAgentCollector` + `SubAgentCatalog` when resolved sub-agents are non-empty.
 5. **`pkg/agent/prompt/builder.go`** — The injection model from PR1 handles this automatically — chat system prompt gets orchestrator sections injected when `SubAgentCatalog` is non-empty.
-6. Tests and config examples.
+
+#### Stage-level skill overrides (agent collapse)
+
+Addresses the [skills limitation](#known-limitation-skills-prevent-full-agent-collapse). Adds `required_skills` and `skills` fields to `StageAgentConfig`, enabling a single agent definition to serve as both orchestrator and sub-agent with different skill sets depending on the chain context.
+
+**Motivation:** Without stage-level skill overrides, orchestrator agents that need report-formatting skills must be defined separately from their sub-agent counterparts — defeating the "same agent, dual role" goal of the implicit orchestrator design.
+
+6. **`pkg/config/types.go`** — Add `RequiredSkills []string` and `Skills []string` to `StageAgentConfig`.
+7. **`pkg/config/validator.go`** — Validate that stage-level skill references exist in the skill registry.
+8. **`pkg/agent/config_resolver.go`** — In `ResolveAgentConfig`, merge stage-level skills with agent-level skills. Semantics: stage-level skills are **additive** (appended to the agent definition's skills, deduplicated). This intentionally differs from `mcp_servers` and other stage-agent overrides which use replacement. Skills are cumulative knowledge injections — an agent that knows about triage runbooks doesn't lose that knowledge by also learning report formatting. Replacement would reintroduce the duplication problem this change exists to solve.
+
+#### Config migration
+
+9. **Production configs** — Collapse separate orchestrator/sub-agent pairs into single agent definitions. The stage-agent entry adds only the orchestrator-specific skills; base skills are inherited from the agent definition.
+
+    **Example (before):**
+    ```yaml
+    agents:
+      IncidentOrchestrator:
+        required_skills: [domain-knowledge, triage-runbook, incident-report-format]
+        # ...
+      IncidentInvestigator:
+        required_skills: [domain-knowledge, triage-runbook]
+        # ...
+    ```
+
+    **Example (after):**
+    ```yaml
+    agents:
+      IncidentInvestigator:
+        required_skills: [domain-knowledge, triage-runbook]
+        # ...
+
+    agent_chains:
+      incident-orchestrated:
+        stages:
+          - stage_agents:
+              - name: IncidentInvestigator
+                required_skills: [incident-report-format]  # additive: merged with agent-def skills
+            sub_agents:
+              - name: IncidentInvestigator
+              # inherits agent-def skills: [domain-knowledge, triage-runbook]
+    ```
+
+#### Tests
+
+10. Tests and config examples for chat orchestrator. Unit tests for skill merging and deduplication in `config_resolver_test.go`, validation in `validator_test.go`, and E2E coverage for stage-level skills.
