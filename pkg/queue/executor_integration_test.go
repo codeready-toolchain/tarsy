@@ -2303,7 +2303,10 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 			{
 				Name: "orchestrate",
 				Agents: []config.StageAgentConfig{
-					{Name: "OrchestratorAgent"},
+					{
+						Name:      "OrchestratorAgent",
+						SubAgents: config.SubAgentRefs{{Name: "GeneralWorker"}},
+					},
 				},
 			},
 		},
@@ -2317,7 +2320,6 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"OrchestratorAgent": {
-				Type:          config.AgentTypeOrchestrator,
 				Description:   "Test orchestrator",
 				LLMBackend:    config.LLMBackendLangChain,
 				MaxIterations: &maxIter,

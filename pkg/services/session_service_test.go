@@ -978,7 +978,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetID(uuid.New().String()).
 			SetSessionID(sess.ID).
 			SetStageID(stg.ID).
-			SetAgentName(config.AgentNameOrchestrator).
+			SetAgentName("TestOrchestrator").
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendLangChain)).
 			SetStatus("completed").
@@ -1048,7 +1048,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 
 		orch := detail.Stages[0].Executions[0]
 		assert.Equal(t, orchestrator.ID, orch.ExecutionID)
-		assert.Equal(t, config.AgentNameOrchestrator, orch.AgentName)
+		assert.Equal(t, "TestOrchestrator", orch.AgentName)
 		assert.Nil(t, orch.ParentExecutionID)
 		assert.Nil(t, orch.Task)
 		assert.Equal(t, int64(100), orch.InputTokens)

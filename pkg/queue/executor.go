@@ -669,52 +669,54 @@ func (e *RealSessionExecutor) executeAgent(
 		},
 	}
 
-	if resolvedConfig.Type == config.AgentTypeOrchestrator {
-		agentDef, getErr := e.cfg.GetAgent(agentConfig.Name)
-		if getErr != nil {
-			failErr := fmt.Errorf("failed to get orchestrator agent config: %w", getErr)
-			logger.Error("Failed to get agent definition for orchestrator", "error", getErr)
-			if updateErr := input.stageService.UpdateAgentExecutionStatus(
-				context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
-			); updateErr != nil {
-				logger.Error("Failed to update agent execution status", "error", updateErr)
-			}
-			publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
-			return agentResult{
-				executionID:     exec.ID,
-				status:          agent.ExecutionStatusFailed,
-				err:             failErr,
-				llmBackend:      resolvedBackend,
-				llmProviderName: resolvedConfig.LLMProviderName,
-			}
-		}
-
-		guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
-		subAgentRefs := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+	subAgentRefs := resolveSubAgents(input.chain, input.stageConfig, agentConfig)
+	if len(subAgentRefs) > 0 {
 		registry := e.subAgentRegistry.Filter(subAgentRefs.Names())
+		if len(registry.Entries()) > 0 {
+			agentDef, getErr := e.cfg.GetAgent(agentConfig.Name)
+			if getErr != nil {
+				failErr := fmt.Errorf("failed to get agent config for orchestration: %w", getErr)
+				logger.Error("Failed to get agent definition for orchestration", "error", getErr)
+				if updateErr := input.stageService.UpdateAgentExecutionStatus(
+					context.Background(), exec.ID, agentexecution.StatusFailed, failErr.Error(),
+				); updateErr != nil {
+					logger.Error("Failed to update agent execution status", "error", updateErr)
+				}
+				publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(agentexecution.StatusFailed), failErr.Error())
+				return agentResult{
+					executionID:     exec.ID,
+					status:          agent.ExecutionStatusFailed,
+					err:             failErr,
+					llmBackend:      resolvedBackend,
+					llmProviderName: resolvedConfig.LLMProviderName,
+				}
+			}
 
-		deps := &orchestrator.SubAgentDeps{
-			Config:             e.cfg,
-			Chain:              input.chain,
-			AgentFactory:       e.agentFactory,
-			MCPFactory:         e.mcpFactory,
-			LLMClient:          e.llmClient,
-			EventPublisher:     e.eventPublisher,
-			PromptBuilder:      e.promptBuilder,
-			StageService:       input.stageService,
-			TimelineService:    input.timelineService,
-			MessageService:     input.messageService,
-			InteractionService: input.interactionService,
-			AlertData:          input.session.AlertData,
-			AlertType:          input.session.AlertType,
-			RunbookContent:     input.runbookContent,
-			WrapToolExecutor:   e.memoryToolWrapper(input.session),
+			guardrails := resolveOrchestratorGuardrails(e.cfg, agentDef)
+
+			deps := &orchestrator.SubAgentDeps{
+				Config:             e.cfg,
+				Chain:              input.chain,
+				AgentFactory:       e.agentFactory,
+				MCPFactory:         e.mcpFactory,
+				LLMClient:          e.llmClient,
+				EventPublisher:     e.eventPublisher,
+				PromptBuilder:      e.promptBuilder,
+				StageService:       input.stageService,
+				TimelineService:    input.timelineService,
+				MessageService:     input.messageService,
+				InteractionService: input.interactionService,
+				AlertData:          input.session.AlertData,
+				AlertType:          input.session.AlertType,
+				RunbookContent:     input.runbookContent,
+				WrapToolExecutor:   e.memoryToolWrapper(input.session),
+			}
+
+			runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
+			toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
+			execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
+			execCtx.SubAgentCatalog = registry.Entries()
 		}
-
-		runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
-		toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
-		execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
-		execCtx.SubAgentCatalog = registry.Entries()
 	}
 
 	// Wrap with skill tool executor (after orchestrator)

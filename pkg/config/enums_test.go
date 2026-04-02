@@ -15,8 +15,9 @@ func TestAgentTypeIsValid(t *testing.T) {
 		{"default (empty)", AgentTypeDefault, true},
 		{"synthesis", AgentTypeSynthesis, true},
 		{"scoring", AgentTypeScoring, true},
-		{"orchestrator", AgentTypeOrchestrator, true},
+		{"action", AgentTypeAction, true},
 		{"invalid", AgentType("invalid"), false},
+		{"orchestrator is now invalid", AgentType("orchestrator"), false},
 	}
 
 	for _, tt := range tests {

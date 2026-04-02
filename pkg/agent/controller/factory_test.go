@@ -81,15 +81,6 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected SingleShotController")
 	})
 
-	t.Run("orchestrator type returns IteratingController", func(t *testing.T) {
-		controller, err := factory.CreateController(config.AgentTypeOrchestrator, execCtx)
-		require.NoError(t, err)
-		require.NotNil(t, controller)
-
-		_, ok := controller.(*IteratingController)
-		assert.True(t, ok, "expected IteratingController")
-	})
-
 	t.Run("action type returns IteratingController", func(t *testing.T) {
 		controller, err := factory.CreateController(config.AgentTypeAction, execCtx)
 		require.NoError(t, err)

@@ -176,7 +176,6 @@ agents:
     mcp_servers:
       - "test-server"
   orch-agent:
-    type: orchestrator
     description: "Orchestrator"
     orchestrator:
       max_concurrent_agents: 3
@@ -201,7 +200,7 @@ agent_chains:
       - name: "stage2"
         agents:
           - name: "worker-agent"
-            type: orchestrator
+            type: action
             sub_agents: ["worker-agent"]
 `
 	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(config), 0644)
@@ -217,9 +216,9 @@ agent_chains:
 	assert.Equal(t, 5*time.Minute, *cfg.Defaults.Orchestrator.AgentTimeout)
 	assert.Equal(t, 30*time.Minute, *cfg.Defaults.Orchestrator.MaxBudget)
 
-	// Agent orchestrator config
+	// Agent orchestrator config (orchestrator block is valid on any agent type)
 	orch := cfg.Agents["orch-agent"]
-	assert.Equal(t, AgentTypeOrchestrator, orch.Type)
+	assert.Equal(t, AgentTypeDefault, orch.Type)
 	require.NotNil(t, orch.Orchestrator)
 	assert.Equal(t, 3, *orch.Orchestrator.MaxConcurrentAgents)
 	assert.Equal(t, 2*time.Minute, *orch.Orchestrator.AgentTimeout)
@@ -238,7 +237,7 @@ agent_chains:
 	// Stage-agent type override parsed from YAML
 	stage2Agent := chain.Stages[1].Agents[0]
 	assert.Equal(t, "worker-agent", stage2Agent.Name)
-	assert.Equal(t, AgentTypeOrchestrator, stage2Agent.Type)
+	assert.Equal(t, AgentTypeAction, stage2Agent.Type)
 
 	// Stage 1 agent has no type override
 	assert.Equal(t, AgentType(""), chain.Stages[0].Agents[0].Type)

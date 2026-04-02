@@ -34,12 +34,11 @@ type BuiltinAgentConfig struct {
 // Built-in agent names. Use these constants instead of string literals
 // when referencing built-in agents in resolvers, executors, and tests.
 const (
-	AgentNameKubernetes   = "KubernetesAgent"
-	AgentNameChat         = "ChatAgent"
-	AgentNameExecSummary  = "ExecSummaryAgent"
-	AgentNameSynthesis    = "SynthesisAgent"
-	AgentNameScoring      = "ScoringAgent"
-	AgentNameOrchestrator = "Orchestrator"
+	AgentNameKubernetes  = "KubernetesAgent"
+	AgentNameChat        = "ChatAgent"
+	AgentNameExecSummary = "ExecSummaryAgent"
+	AgentNameSynthesis   = "SynthesisAgent"
+	AgentNameScoring     = "ScoringAgent"
 )
 
 var (
@@ -137,10 +136,6 @@ Show your work. Report results clearly.`,
 			Description: "General-purpose agent for analysis, summarization, reasoning, and other tasks",
 			CustomInstructions: `You are GeneralWorker, a general-purpose agent.
 Complete the assigned task thoroughly and concisely.`,
-		},
-		AgentNameOrchestrator: {
-			Description: "Dynamic investigation orchestrator that dispatches specialized sub-agents",
-			Type:        AgentTypeOrchestrator,
 		},
 	}
 }

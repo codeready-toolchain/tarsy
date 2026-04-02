@@ -670,6 +670,149 @@ func newMinimalRunner(maxConcurrent int) *SubAgentRunner {
 	)
 }
 
+// TestSubAgentRunner_Dispatch_NeverSetsOrchestratorFields verifies the
+// circularity prevention invariant: sub-agents dispatched by the orchestrator
+// must have SubAgent set but must never receive SubAgentCatalog or
+// SubAgentCollector, ensuring they cannot dispatch further sub-agents.
+func TestSubAgentRunner_Dispatch_NeverSetsOrchestratorFields(t *testing.T) {
+	ctx := context.Background()
+
+	var captured atomic.Pointer[agent.ExecutionContext]
+	runner, cleanup := setupIntegrationRunnerWithCapture(t,
+		func(_ context.Context) (*agent.ExecutionResult, error) {
+			return &agent.ExecutionResult{
+				Status:        agent.ExecutionStatusCompleted,
+				FinalAnalysis: "done",
+			}, nil
+		},
+		func(execCtx *agent.ExecutionContext) {
+			captured.Store(execCtx)
+		},
+	)
+	defer cleanup()
+
+	_, err := runner.Dispatch(ctx, "TestAgent", "verify no orchestrator wiring")
+	require.NoError(t, err)
+
+	_, err = runner.WaitForNext(ctx)
+	require.NoError(t, err)
+
+	execCtx := captured.Load()
+	require.NotNil(t, execCtx, "controller should have captured the execution context")
+
+	assert.NotNil(t, execCtx.SubAgent, "sub-agent context must be set")
+	assert.Nil(t, execCtx.SubAgentCatalog, "sub-agents must not receive SubAgentCatalog")
+	assert.Nil(t, execCtx.SubAgentCollector, "sub-agents must not receive SubAgentCollector")
+}
+
+// setupIntegrationRunnerWithCapture is like setupIntegrationRunner but uses a
+// capturingControllerFactory that calls captureFn with the ExecutionContext
+// before running the mock controller.
+func setupIntegrationRunnerWithCapture(
+	t *testing.T,
+	resultFn func(ctx context.Context) (*agent.ExecutionResult, error),
+	captureFn func(execCtx *agent.ExecutionContext),
+) (*SubAgentRunner, func()) {
+	t.Helper()
+
+	dbClient := testdb.NewTestClient(t)
+	ctx := context.Background()
+
+	stageService := services.NewStageService(dbClient.Client)
+	timelineService := services.NewTimelineService(dbClient.Client)
+	messageService := services.NewMessageService(dbClient.Client)
+	interactionService := services.NewInteractionService(dbClient.Client, messageService)
+	mcpRegistry := config.NewMCPServerRegistry(nil)
+	sessionService := services.NewSessionService(
+		dbClient.Client,
+		config.NewChainRegistry(map[string]*config.ChainConfig{
+			"test-chain": {
+				AlertTypes: []string{"test"},
+				Stages: []config.StageConfig{{
+					Name:   "stage1",
+					Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
+				}},
+			},
+		}),
+		mcpRegistry,
+	)
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test alert",
+		AgentType: "test",
+		ChainID:   "test-chain",
+	})
+	require.NoError(t, err)
+
+	stages, err := stageService.GetStagesBySession(ctx, session.ID, true)
+	require.NoError(t, err)
+	require.NotEmpty(t, stages)
+	stageID := stages[0].ID
+
+	executions, err := stageService.GetAgentExecutions(ctx, stageID)
+	require.NoError(t, err)
+	require.NotEmpty(t, executions)
+	parentExecID := executions[0].ID
+
+	testProvider := &config.LLMProviderConfig{
+		Type:                config.LLMProviderTypeGoogle,
+		Model:               "test-model",
+		MaxToolResultTokens: 10000,
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "test-provider"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent": {Description: "A test agent"},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": testProvider,
+		}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test"},
+		Stages: []config.StageConfig{{
+			Name:   "stage1",
+			Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
+		}},
+	}
+
+	agentFactory := agent.NewAgentFactory(&capturingControllerFactory{resultFn: resultFn, captureFn: captureFn})
+	registry := config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll())
+
+	deps := &SubAgentDeps{
+		Config:             cfg,
+		Chain:              chain,
+		AgentFactory:       agentFactory,
+		StageService:       stageService,
+		TimelineService:    timelineService,
+		MessageService:     messageService,
+		InteractionService: interactionService,
+		AlertData:          "test alert",
+		AlertType:          "test",
+	}
+
+	runner := NewSubAgentRunner(
+		context.Background(),
+		deps,
+		parentExecID,
+		session.ID,
+		stageID,
+		registry,
+		&OrchestratorGuardrails{
+			MaxConcurrentAgents: 5,
+			AgentTimeout:        30 * time.Second,
+			MaxBudget:           60 * time.Second,
+		},
+		nil,
+	)
+
+	return runner, func() {}
+}
+
 // mockControllerFactory returns a factory that produces controllers
 // calling resultFn when Run is invoked. resultFn receives ctx so tests
 // can respect context cancellation/timeout.
@@ -687,6 +830,19 @@ type mockController struct {
 
 func (c *mockController) Run(ctx context.Context, _ *agent.ExecutionContext, _ string) (*agent.ExecutionResult, error) {
 	return c.resultFn(ctx)
+}
+
+// capturingControllerFactory captures the ExecutionContext before delegating to the mock.
+type capturingControllerFactory struct {
+	resultFn  func(ctx context.Context) (*agent.ExecutionResult, error)
+	captureFn func(execCtx *agent.ExecutionContext)
+}
+
+func (f *capturingControllerFactory) CreateController(_ config.AgentType, execCtx *agent.ExecutionContext) (agent.Controller, error) {
+	if f.captureFn != nil {
+		f.captureFn(execCtx)
+	}
+	return &mockController{resultFn: f.resultFn}, nil
 }
 
 // Compile-time check that noopEventPublisher satisfies agent.EventPublisher.

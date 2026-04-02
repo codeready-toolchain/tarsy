@@ -15,7 +15,6 @@ mcp_servers:
 
 agents:
   SREOrchestrator:
-    type: orchestrator
     description: "SRE investigation orchestrator"
     max_iterations: 10
     custom_instructions: "You are SREOrchestrator, you investigate alerts by dispatching specialized sub-agents."

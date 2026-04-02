@@ -12,8 +12,6 @@ const (
 	AgentTypeExecSummary AgentType = "exec_summary"
 	// AgentTypeScoring evaluates session quality (single-shot)
 	AgentTypeScoring AgentType = "scoring"
-	// AgentTypeOrchestrator dispatches and coordinates sub-agents (iterating controller)
-	AgentTypeOrchestrator AgentType = "orchestrator"
 	// AgentTypeAction evaluates findings and executes remediation actions (iterating controller)
 	AgentTypeAction AgentType = "action"
 )
@@ -21,7 +19,7 @@ const (
 // IsValid checks if the agent type is valid (empty string is valid — means default).
 func (t AgentType) IsValid() bool {
 	switch t {
-	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeExecSummary, AgentTypeScoring, AgentTypeOrchestrator, AgentTypeAction:
+	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeExecSummary, AgentTypeScoring, AgentTypeAction:
 		return true
 	default:
 		return false

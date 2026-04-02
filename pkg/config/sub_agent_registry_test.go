@@ -27,16 +27,12 @@ func TestBuildSubAgentRegistry(t *testing.T) {
 		"NoDescAgent": {
 			MCPServers: []string{"some-server"},
 		},
-		"MyOrchestrator": {
-			Type:        AgentTypeOrchestrator,
-			Description: "An orchestrator",
-		},
 	}
 
 	registry := BuildSubAgentRegistry(agents)
 	entries := registry.Entries()
 
-	// Should include agents with Description, excluding orchestrators and no-description
+	// Should include agents with Description, excluding no-description
 	require.Len(t, entries, 3)
 
 	// Sorted by name
@@ -67,6 +63,27 @@ func TestBuildSubAgentRegistry_DisabledNativeToolsExcluded(t *testing.T) {
 
 	require.Len(t, entries, 1)
 	assert.Equal(t, []string{"code_execution"}, entries[0].NativeTools)
+}
+
+func TestBuildSubAgentRegistry_IncludesAllTypesWithDescription(t *testing.T) {
+	agents := map[string]*AgentConfig{
+		"DefaultAgent":   {Description: "Default agent", Type: AgentTypeDefault},
+		"ActionAgent":    {Description: "Action agent", Type: AgentTypeAction},
+		"SynthesisAgent": {Description: "Synthesis agent", Type: AgentTypeSynthesis},
+		"NoDescAgent":    {Type: AgentTypeDefault},
+	}
+
+	registry := BuildSubAgentRegistry(agents)
+	entries := registry.Entries()
+
+	require.Len(t, entries, 3, "all described agents regardless of type")
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name
+	}
+	assert.Contains(t, names, "DefaultAgent")
+	assert.Contains(t, names, "ActionAgent")
+	assert.Contains(t, names, "SynthesisAgent")
 }
 
 func TestBuildSubAgentRegistry_Empty(t *testing.T) {
@@ -151,11 +168,6 @@ func TestBuildSubAgentRegistry_WithBuiltinAgents(t *testing.T) {
 		}
 	}
 
-	// Orchestrator agents (if any are built-in) must be excluded
-	for _, e := range entries {
-		agent := merged[e.Name]
-		assert.NotEqual(t, AgentTypeOrchestrator, agent.Type, "orchestrator %s should not be in registry", e.Name)
-	}
 }
 
 func TestSubAgentRegistry_Get(t *testing.T) {

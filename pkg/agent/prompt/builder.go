@@ -41,15 +41,13 @@ const (
 // BuildFunctionCallingMessages builds the initial conversation for a function calling investigation.
 // Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 //
-// Dispatches to specialized builders for orchestrator and sub-agent modes
-// before falling through to chat / investigation paths.
+// Dispatches to specialized builders for action and sub-agent modes,
+// then falls through to chat / investigation paths. Orchestrator sections
+// are injected additively when SubAgentCatalog is non-empty.
 func (b *PromptBuilder) BuildFunctionCallingMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
-	if execCtx.Config.Type == config.AgentTypeOrchestrator {
-		return b.buildOrchestratorMessages(execCtx, prevStageContext)
-	}
 	if execCtx.Config.Type == config.AgentTypeAction {
 		return b.buildActionMessages(execCtx, prevStageContext)
 	}
@@ -59,7 +57,6 @@ func (b *PromptBuilder) BuildFunctionCallingMessages(
 
 	isChat := execCtx.ChatContext != nil
 
-	// System message (tools are bound natively, not described in text)
 	var composed, focus string
 	if isChat {
 		composed = b.ComposeChatInstructions(execCtx)
@@ -68,13 +65,19 @@ func (b *PromptBuilder) BuildFunctionCallingMessages(
 		composed = b.ComposeInstructions(execCtx)
 		focus = taskFocus
 	}
+
+	// Inject orchestrator sections when this agent has sub-agents available.
+	if len(execCtx.SubAgentCatalog) > 0 {
+		composed = InjectOrchestratorSections(composed, execCtx.SubAgentCatalog)
+		focus = OrchestratorTaskFocus()
+	}
+
 	systemContent := composed + "\n\n" + focus
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},
 	}
 
-	// User message (no tool descriptions — tools are bound natively via function calling)
 	var userContent string
 	if isChat {
 		userContent = b.buildChatUserMessage(execCtx)

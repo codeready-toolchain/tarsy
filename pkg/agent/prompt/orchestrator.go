@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
-// orchestratorBehavioralInstructions is auto-injected for every orchestrator agent
-// (built-in or custom). Provides the orchestration strategy and principles so that
-// custom agents with type=orchestrator get the same behavioral guidance without
-// duplicating it in their CustomInstructions.
+// orchestratorBehavioralInstructions is auto-injected for every agent that
+// resolves a non-empty sub-agent catalog at runtime. Provides the orchestration
+// strategy and principles so that any agent with sub-agents gets the same
+// behavioral guidance without duplicating it in their CustomInstructions.
 const orchestratorBehavioralInstructions = `## Orchestrator Strategy
 
 You are a dynamic investigation orchestrator. You analyze incoming alerts by dispatching
@@ -45,28 +44,19 @@ Tracking: keep a mental checklist of every agent you dispatch. When a result arr
 
 const orchestratorTaskFocus = "Focus on coordinating sub-agents to investigate the alert and consolidate their findings into actionable recommendations for human operators."
 
-// buildOrchestratorMessages builds the initial conversation for an orchestrator agent.
-// System prompt: Tier 1-3 instructions + behavioral strategy + agent catalog + mechanics.
-// User message: same as investigation.
-func (b *PromptBuilder) buildOrchestratorMessages(
-	execCtx *agent.ExecutionContext,
-	prevStageContext string,
-) []agent.ConversationMessage {
-	composed := b.ComposeInstructions(execCtx)
-	catalog := formatAgentCatalog(execCtx.SubAgentCatalog)
-	systemContent := composed + "\n\n" + orchestratorBehavioralInstructions + "\n\n" + catalog + "\n\n" + orchestratorResultDelivery + "\n\n" + orchestratorTaskFocus
+// InjectOrchestratorSections appends orchestrator behavioral instructions,
+// agent catalog, and result delivery rules to the given system prompt content.
+// Called when an agent's SubAgentCatalog is non-empty, regardless of agent type.
+func InjectOrchestratorSections(systemContent string, catalog []config.SubAgentEntry) string {
+	catalogSection := formatAgentCatalog(catalog)
+	return systemContent + "\n\n" + orchestratorBehavioralInstructions + "\n\n" + catalogSection + "\n\n" + orchestratorResultDelivery
+}
 
-	messages := []agent.ConversationMessage{
-		{Role: agent.RoleSystem, Content: systemContent},
-	}
-
-	userContent := b.buildInvestigationUserMessage(execCtx, prevStageContext)
-	messages = append(messages, agent.ConversationMessage{
-		Role:    agent.RoleUser,
-		Content: userContent,
-	})
-
-	return messages
+// OrchestratorTaskFocus returns the task focus string for orchestrator agents.
+// Used by the prompt builder to replace the default task focus when the agent
+// has a non-empty sub-agent catalog.
+func OrchestratorTaskFocus() string {
+	return orchestratorTaskFocus
 }
 
 // formatAgentCatalog renders the available sub-agents section for the

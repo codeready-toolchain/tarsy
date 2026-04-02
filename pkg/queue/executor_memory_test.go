@@ -12,7 +12,6 @@ func TestAgentTypeSupportsMemory(t *testing.T) {
 	supported := []config.AgentType{
 		config.AgentTypeDefault,
 		config.AgentTypeAction,
-		config.AgentTypeOrchestrator,
 	}
 	for _, at := range supported {
 		name := string(at)

@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
-	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
@@ -606,18 +605,21 @@ func TestE2E_OrchestratorMultiAgent(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
-// Built-in Orchestrator agent — verifies that a user-defined chain can
-// reference the built-in "Orchestrator" agent by name (not defined in
-// the test config's agents: section) and get full orchestrator functionality.
+// Implicit orchestrator — verifies that any agent with sub_agents
+// automatically gains orchestration capabilities (dispatch, cancel,
+// list tools + orchestrator prompt sections). Uses a custom
+// InvestigationOrchestrator defined in the test config.
 //
 // Same pattern as TestE2E_OrchestratorMultiAgent but uses:
-//   - Built-in "Orchestrator" agent (type=orchestrator) instead of custom "SREOrchestrator"
-//   - Config: builtin-orchestrator (Orchestrator not in agents: section)
+//   - Custom "InvestigationOrchestrator" (no type: orchestrator — implicit)
+//   - Config: builtin-orchestrator
 //
-// Verifies: built-in agent resolved, 3 executions, parent-child links, trace API, session completion.
+// Verifies: implicit orchestration resolved, 3 executions, parent-child links, trace API, session completion.
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
+	const orchAgent = "InvestigationOrchestrator"
+
 	llm := NewScriptedLLMClient()
 
 	subAgentGate := make(chan struct{})
@@ -625,7 +627,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	orchIter2Ready := make(chan struct{}, 1)
 
 	// Orchestrator iteration 1: dispatch both sub-agents.
-	llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
+	llm.AddRouted(orchAgent, LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ToolCallChunk{CallID: "orch-d1", Name: "dispatch_agent",
 				Arguments: `{"name":"LogAnalyzer","task":"Analyze recent error logs for the payment service"}`},
@@ -635,7 +637,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 		},
 	})
 	// Iteration 2: text → WaitForResult. OnBlock signals readiness.
-	llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
+	llm.AddRouted(orchAgent, LLMScriptEntry{
 		WaitCh:  orchIter2Gate,
 		OnBlock: orchIter2Ready,
 		Chunks: []agent.Chunk{
@@ -645,7 +647,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	})
 	// Iterations 3-4: buffer for timing variance.
 	for i := range 2 {
-		llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
+		llm.AddRouted(orchAgent, LLMScriptEntry{
 			Chunks: []agent.Chunk{
 				&agent.TextChunk{Content: fmt.Sprintf("Waiting for sub-agent results (cycle %d).", i+2)},
 				&agent.UsageChunk{InputTokens: 250, OutputTokens: 15, TotalTokens: 265},
@@ -653,7 +655,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 		})
 	}
 	// Final answer after receiving all results.
-	llm.AddRouted(config.AgentNameOrchestrator, LLMScriptEntry{
+	llm.AddRouted(orchAgent, LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Both sub-agents completed. LogAnalyzer found errors, " +
 				"GeneralWorker assessed severity. Root cause: memory pressure after deploy-5678."},
@@ -734,7 +736,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	assert.NotEmpty(t, session["final_analysis"])
 	assert.NotEmpty(t, session["executive_summary"])
 
-	// ── DB: 4 executions (Orchestrator + 2 sub-agents + exec_summary), all completed ──
+	// ── DB: 4 executions (orchestrator + 2 sub-agents + exec_summary), all completed ──
 	execs := app.QueryExecutions(t, sessionID)
 	require.Len(t, execs, 4, "expected orchestrator + 2 sub-agents + exec_summary")
 
@@ -745,7 +747,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 		assert.Equal(t, "completed", string(e.Status), "%s should be completed", e.AgentName)
 
 		switch e.AgentName {
-		case config.AgentNameOrchestrator:
+		case orchAgent:
 			orchExecID = e.ID
 			assert.Nil(t, e.ParentExecutionID)
 		case "LogAnalyzer":
@@ -758,7 +760,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 			assert.Contains(t, *e.Task, "alert context")
 		}
 	}
-	assert.True(t, agentNames[config.AgentNameOrchestrator], "should have built-in Orchestrator")
+	assert.True(t, agentNames[orchAgent], "should have InvestigationOrchestrator")
 	assert.True(t, agentNames["LogAnalyzer"], "should have LogAnalyzer")
 	assert.True(t, agentNames["GeneralWorker"], "should have GeneralWorker")
 	assert.NotEmpty(t, orchExecID)
@@ -780,7 +782,7 @@ func TestE2E_OrchestratorBuiltinAgent(t *testing.T) {
 	require.Len(t, traceExecs, 1, "only orchestrator at top level")
 
 	orchTrace := traceExecs[0].(map[string]interface{})
-	assert.Equal(t, config.AgentNameOrchestrator, orchTrace["agent_name"])
+	assert.Equal(t, orchAgent, orchTrace["agent_name"])
 
 	subAgents := orchTrace["sub_agents"].([]interface{})
 	require.Len(t, subAgents, 2, "orchestrator should have 2 nested sub-agents")

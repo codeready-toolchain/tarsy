@@ -133,10 +133,9 @@ func TestValidateAgents(t *testing.T) {
 			errMsg:  "invalid native tool",
 		},
 		{
-			name: "orchestrator agent with orchestrator config is valid",
+			name: "any agent with orchestrator config is valid",
 			agents: map[string]*AgentConfig{
-				"my-orch": {
-					Type:         AgentTypeOrchestrator,
+				"my-agent": {
 					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(3)},
 				},
 			},
@@ -144,21 +143,9 @@ func TestValidateAgents(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "non-orchestrator agent with orchestrator config is invalid",
-			agents: map[string]*AgentConfig{
-				"regular": {
-					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(3)},
-				},
-			},
-			servers: map[string]*MCPServerConfig{},
-			wantErr: true,
-			errMsg:  "orchestrator config only valid on orchestrator agents",
-		},
-		{
 			name: "orchestrator config with zero max_concurrent_agents",
 			agents: map[string]*AgentConfig{
 				"orch": {
-					Type:         AgentTypeOrchestrator,
 					Orchestrator: &OrchestratorConfig{MaxConcurrentAgents: intPtr(0)},
 				},
 			},
@@ -170,7 +157,6 @@ func TestValidateAgents(t *testing.T) {
 			name: "orchestrator config with negative agent_timeout",
 			agents: map[string]*AgentConfig{
 				"orch": {
-					Type:         AgentTypeOrchestrator,
 					Orchestrator: &OrchestratorConfig{AgentTimeout: durPtr(-1 * time.Second)},
 				},
 			},
@@ -182,7 +168,6 @@ func TestValidateAgents(t *testing.T) {
 			name: "orchestrator config with zero max_budget",
 			agents: map[string]*AgentConfig{
 				"orch": {
-					Type:         AgentTypeOrchestrator,
 					Orchestrator: &OrchestratorConfig{MaxBudget: durPtr(0)},
 				},
 			},
@@ -199,15 +184,7 @@ func TestValidateAgents(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "orchestrator agent without orchestrator config is valid",
-			agents: map[string]*AgentConfig{
-				"orch": {Type: AgentTypeOrchestrator},
-			},
-			servers: map[string]*MCPServerConfig{},
-			wantErr: false,
-		},
-		{
-			name: "synthesis agent with orchestrator config is invalid",
+			name: "synthesis agent with orchestrator config is valid (inert if no sub-agents)",
 			agents: map[string]*AgentConfig{
 				"synth": {
 					Type:         AgentTypeSynthesis,
@@ -215,8 +192,7 @@ func TestValidateAgents(t *testing.T) {
 				},
 			},
 			servers: map[string]*MCPServerConfig{},
-			wantErr: true,
-			errMsg:  "orchestrator config only valid on orchestrator agents",
+			wantErr: false,
 		},
 	}
 
@@ -1152,7 +1128,7 @@ func TestValidateStageComprehensive(t *testing.T) {
 				Agents: []StageAgentConfig{
 					{
 						Name: "test-agent",
-						Type: AgentTypeOrchestrator,
+						Type: AgentTypeAction,
 					},
 				},
 			},
@@ -2523,7 +2499,7 @@ func TestValidateSubAgents(t *testing.T) {
 	baseAgents := map[string]*AgentConfig{
 		"LogAnalyzer":    {Description: "Analyzes logs"},
 		"MetricChecker":  {Description: "Checks metrics"},
-		"MyOrchestrator": {Type: AgentTypeOrchestrator, Description: "Orchestrator"},
+		"MyOrchestrator": {Description: "Orchestrator agent"},
 	}
 
 	t.Run("valid chain-level sub_agents", func(t *testing.T) {
@@ -2565,27 +2541,6 @@ func TestValidateSubAgents(t *testing.T) {
 		err := validator.validateChains()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "agent 'NonExistent' not found")
-	})
-
-	t.Run("sub_agents cannot reference orchestrator", func(t *testing.T) {
-		cfg := &Config{
-			AgentRegistry:       NewAgentRegistry(baseAgents),
-			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
-			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
-			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
-				"chain1": {
-					AlertTypes: []string{"test"},
-					SubAgents:  SubAgentRefs{{Name: "MyOrchestrator"}},
-					Stages: []StageConfig{
-						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
-					},
-				},
-			}),
-		}
-		validator := NewValidator(cfg)
-		err := validator.validateChains()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "is an orchestrator and cannot be a sub-agent")
 	})
 
 	t.Run("valid stage-level sub_agents", func(t *testing.T) {
@@ -2635,7 +2590,7 @@ func TestValidateSubAgents(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("stage-level sub_agents cannot reference orchestrator", func(t *testing.T) {
+	t.Run("any agent can be a sub-agent", func(t *testing.T) {
 		cfg := &Config{
 			AgentRegistry:       NewAgentRegistry(baseAgents),
 			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
@@ -2655,8 +2610,7 @@ func TestValidateSubAgents(t *testing.T) {
 		}
 		validator := NewValidator(cfg)
 		err := validator.validateChains()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "is an orchestrator and cannot be a sub-agent")
+		assert.NoError(t, err)
 	})
 
 	t.Run("stage-agent-level sub_agents references unknown agent", func(t *testing.T) {

@@ -162,7 +162,7 @@ func TestTimelineService_CreateTimelineEvent(t *testing.T) {
 		parentExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
 			StageID:    stg.ID,
 			SessionID:  session.ID,
-			AgentName:  config.AgentNameOrchestrator,
+			AgentName:  "TestOrchestrator",
 			AgentIndex: 2,
 			LLMBackend: config.LLMBackendLangChain,
 		})

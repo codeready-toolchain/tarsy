@@ -14,12 +14,14 @@ mcp_servers:
       command: mock
 
 agents:
+  InvestigationOrchestrator:
+    description: "Investigation orchestrator that dispatches specialized sub-agents"
+    custom_instructions: "You are InvestigationOrchestrator, you investigate alerts by dispatching sub-agents."
   LogAnalyzer:
     description: "Analyzes logs for error patterns and anomalies"
     mcp_servers: [test-mcp]
     max_iterations: 2
     custom_instructions: "You are LogAnalyzer, you analyze logs to find error patterns."
-  # Orchestrator: built-in agent — no override needed
   # GeneralWorker: built-in agent — no override needed
 
 agent_chains:
@@ -29,7 +31,7 @@ agent_chains:
     stages:
       - name: orchestrate
         agents:
-          - name: Orchestrator
+          - name: InvestigationOrchestrator
             sub_agents:
               - name: LogAnalyzer
                 max_iterations: 3

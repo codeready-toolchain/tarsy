@@ -157,10 +157,9 @@ func TestBuildFunctionCallingMessages_ChatMode(t *testing.T) {
 	assert.Contains(t, messages[1].Content, "Show me the pod status")
 }
 
-func TestBuildFunctionCallingMessages_OrchestratorMode(t *testing.T) {
+func TestBuildFunctionCallingMessages_OrchestratorInjection(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
-	execCtx.Config.Type = config.AgentTypeOrchestrator
 	execCtx.SubAgentCatalog = []config.SubAgentEntry{
 		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
 	}
@@ -171,7 +170,19 @@ func TestBuildFunctionCallingMessages_OrchestratorMode(t *testing.T) {
 	assert.Contains(t, messages[0].Content, "Orchestrator Strategy")
 	assert.Contains(t, messages[0].Content, "Available Sub-Agents")
 	assert.Contains(t, messages[0].Content, "LogAnalyzer")
+	assert.Contains(t, messages[0].Content, "coordinating sub-agents")
 	assert.Contains(t, messages[1].Content, "Alert Details")
+}
+
+func TestBuildFunctionCallingMessages_NoOrchestratorWithoutCatalog(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
+	require.Len(t, messages, 2)
+
+	assert.NotContains(t, messages[0].Content, "Orchestrator Strategy")
+	assert.NotContains(t, messages[0].Content, "Available Sub-Agents")
 }
 
 func TestBuildFunctionCallingMessages_ActionMode(t *testing.T) {
@@ -210,4 +221,41 @@ func TestBuildFunctionCallingMessages_SubAgentMode(t *testing.T) {
 	assert.Contains(t, messages[1].Content, "Find 5xx errors")
 	assert.NotContains(t, messages[1].Content, "Alert Details")
 	assert.NotContains(t, messages[1].Content, "Previous data")
+}
+
+func TestBuildFunctionCallingMessages_ChatModeWithOrchestration(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.ChatContext = &agent.ChatContext{
+		UserQuestion:         "Can you check the failing pods?",
+		InvestigationContext: "Previous investigation context.",
+	}
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
+	}
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
+	require.Len(t, messages, 2)
+
+	system := messages[0].Content
+	assert.Contains(t, system, "Chat Assistant Instructions")
+	assert.Contains(t, system, "Orchestrator Strategy")
+	assert.Contains(t, system, "Available Sub-Agents")
+	assert.Contains(t, system, "LogAnalyzer")
+	assert.Contains(t, system, "coordinating sub-agents")
+
+	assert.Contains(t, messages[1].Content, "Can you check the failing pods?")
+}
+
+func TestBuildFunctionCallingMessages_EmptyCatalogNoOrchestration(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{}
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
+	require.Len(t, messages, 2)
+
+	assert.NotContains(t, messages[0].Content, "Orchestrator Strategy")
+	assert.NotContains(t, messages[0].Content, "Available Sub-Agents")
+	assert.Contains(t, messages[0].Content, "Focus on investigation")
 }

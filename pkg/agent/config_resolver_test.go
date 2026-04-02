@@ -135,13 +135,13 @@ func TestResolveAgentConfig(t *testing.T) {
 		stageConfig := config.StageConfig{}
 		agentConfig := config.StageAgentConfig{
 			Name: config.AgentNameKubernetes,
-			Type: config.AgentTypeOrchestrator,
+			Type: config.AgentTypeAction,
 		}
 
 		resolved, err := ResolveAgentConfig(cfg, chain, stageConfig, agentConfig)
 		require.NoError(t, err)
 
-		assert.Equal(t, config.AgentTypeOrchestrator, resolved.Type)
+		assert.Equal(t, config.AgentTypeAction, resolved.Type)
 	})
 
 	t.Run("falls back to DefaultLLMBackend when no level sets backend", func(t *testing.T) {

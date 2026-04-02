@@ -16,11 +16,11 @@ type SubAgentRegistry struct {
 }
 
 // BuildSubAgentRegistry creates a registry from the merged agent map.
-// Includes agents with non-empty Description, excludes orchestrator agents.
+// Includes agents with non-empty Description.
 func BuildSubAgentRegistry(agents map[string]*AgentConfig) *SubAgentRegistry {
 	var entries []SubAgentEntry
 	for name, agent := range agents {
-		if agent == nil || agent.Description == "" || agent.Type == AgentTypeOrchestrator {
+		if agent == nil || agent.Description == "" {
 			continue
 		}
 		entry := SubAgentEntry{

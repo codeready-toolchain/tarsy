@@ -28,8 +28,6 @@ func (f *Factory) CreateController(agentType config.AgentType, execCtx *agent.Ex
 		return NewExecSummaryController(execCtx.PromptBuilder), nil
 	case config.AgentTypeScoring:
 		return NewScoringController(), nil
-	case config.AgentTypeOrchestrator:
-		return NewIteratingController(), nil
 	case config.AgentTypeAction:
 		return NewIteratingController(), nil
 	default:

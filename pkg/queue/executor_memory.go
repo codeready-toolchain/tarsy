@@ -18,7 +18,7 @@ import (
 // spuriously record injected IDs.
 func agentTypeSupportsMemory(agentType config.AgentType) bool {
 	switch agentType {
-	case config.AgentTypeDefault, config.AgentTypeAction, config.AgentTypeOrchestrator:
+	case config.AgentTypeDefault, config.AgentTypeAction:
 		return true
 	default:
 		return false

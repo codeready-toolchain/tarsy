@@ -472,18 +472,19 @@ agent_chains:
       max_iterations: 20
 
   # ── Orchestrator chains ──────────────────────────────────────
-  # The built-in Orchestrator agent dispatches sub-agents dynamically.
-  # No need to define it in agents: — reference it by name.
+  # Any agent with sub_agents automatically gains orchestrator capabilities
+  # (dispatch_agent, cancel_agent, list_agents tools + orchestrator prompt).
+  # No special type required — orchestration is a capability, not an identity.
 
-  # Minimal orchestrator chain — uses defaults for everything
+  # Minimal orchestrator chain — KubernetesAgent gains orchestration from sub_agents
   orchestrator-minimal:
     alert_types: ["HighErrorRate"]
-    description: "Orchestrated investigation using built-in Orchestrator"
+    description: "Orchestrated investigation using KubernetesAgent"
     executive_summary_provider: "google-default"
     stages:
       - name: "orchestrate"
         agents:
-          - name: "Orchestrator"
+          - name: "KubernetesAgent"
             sub_agents: [KubernetesAgent, GeneralWorker]
 
   # Comprehensive orchestrator chain — overrides for orchestrator and sub-agents
@@ -494,20 +495,23 @@ agent_chains:
     stages:
       - name: "orchestrate"
         agents:
-          - name: "Orchestrator"
-            llm_provider: "gemini-3.1-pro"        # use a more capable model for orchestration
+          - name: "KubernetesAgent"
+            llm_provider: "gemini-3.1-pro"
             llm_backend: "google-native"
+            # orchestrator guardrails (optional — defaults applied if omitted)
+            orchestrator:
+              max_concurrent_agents: 5
+              agent_timeout: 420s
+              max_budget: 900s
             sub_agents:
-              - name: KubernetesAgent             # built-in: K8s pod/deployment inspection
-              - name: WebResearcher               # built-in: web search + URL analysis
-              - name: CodeExecutor                # built-in: Python code execution
-              - name: GeneralWorker               # built-in: pure reasoning / summarization
-                mcp_servers: [kubernetes-server]  # give GeneralWorker K8s access
+              - name: KubernetesAgent
+              - name: WebResearcher
+              - name: CodeExecutor
+              - name: GeneralWorker
+                mcp_servers: [kubernetes-server]
                 max_iterations: 5
 
-  # Custom agent as orchestrator — stage-level type override
-  # The agent's global definition stays unchanged (no type: orchestrator there).
-  # The type override applies only in this chain stage.
+  # Any agent can become an orchestrator — just add sub_agents
   # security-investigation:
   #   alert_types: ["SecurityInvestigation"]
   #   description: "Deep orchestrated security investigation"
@@ -515,7 +519,6 @@ agent_chains:
   #     - name: "investigate"
   #       agents:
   #         - name: "SecurityInvestigationAgent"
-  #           type: orchestrator                    # promote to orchestrator for this stage
   #           sub_agents:
   #             - name: KubernetesAgent
   #             - name: WebResearcher

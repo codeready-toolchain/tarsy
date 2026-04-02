@@ -75,52 +75,79 @@ func TestFormatAgentCatalog_EmptyEntries(t *testing.T) {
 	assert.NotContains(t, result, "**")
 }
 
-func TestBuildOrchestratorMessages_SystemIncludesCatalog(t *testing.T) {
+func TestInjectOrchestratorSections_Content(t *testing.T) {
+	catalog := []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
+		{Name: "GeneralWorker", Description: "General-purpose agent"},
+	}
+
+	result := InjectOrchestratorSections("Base system prompt.", catalog)
+
+	assert.Contains(t, result, "Base system prompt.")
+	assert.Contains(t, result, "Orchestrator Strategy")
+	assert.Contains(t, result, "Dispatch relevant sub-agents in parallel")
+	assert.Contains(t, result, "Available Sub-Agents")
+	assert.Contains(t, result, "LogAnalyzer")
+	assert.Contains(t, result, "GeneralWorker")
+	assert.Contains(t, result, "dispatch_agent")
+	assert.Contains(t, result, "Sub-agent results are delivered to you automatically")
+	assert.Contains(t, result, "NEVER predict, fabricate, or speculate")
+	assert.Contains(t, result, "keep a mental checklist of every agent you dispatch")
+}
+
+func TestInjectOrchestratorSections_BaseContentIsPrefix(t *testing.T) {
+	base := "Existing agent system prompt with custom instructions."
+	result := InjectOrchestratorSections(base, []config.SubAgentEntry{
+		{Name: "Worker", Description: "A worker"},
+	})
+
+	assert.True(t, strings.HasPrefix(result, base),
+		"injected prompt must start with the original base content")
+	behavioralPos := strings.Index(result, "Orchestrator Strategy")
+	assert.Greater(t, behavioralPos, len(base),
+		"orchestrator sections must come after the base content")
+}
+
+func TestOrchestratorTaskFocus(t *testing.T) {
+	focus := OrchestratorTaskFocus()
+	assert.NotEmpty(t, focus)
+	assert.Contains(t, focus, "coordinating sub-agents")
+}
+
+func TestInjectOrchestratorSections_ViaBuilder(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
-	execCtx.Config.Type = config.AgentTypeOrchestrator
 	execCtx.SubAgentCatalog = []config.SubAgentEntry{
 		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
 		{Name: "GeneralWorker", Description: "General-purpose agent"},
 	}
 
-	messages := builder.buildOrchestratorMessages(execCtx, "")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 	require.Len(t, messages, 2)
 
 	system := messages[0]
 	assert.Equal(t, agent.RoleSystem, system.Role)
-	// Auto-injected orchestrator behavioral instructions
 	assert.Contains(t, system.Content, "Orchestrator Strategy")
-	assert.Contains(t, system.Content, "Dispatch relevant sub-agents in parallel")
 	assert.Contains(t, system.Content, "Available Sub-Agents")
 	assert.Contains(t, system.Content, "LogAnalyzer")
 	assert.Contains(t, system.Content, "GeneralWorker")
-	assert.Contains(t, system.Content, "dispatch_agent")
-	assert.Contains(t, system.Content, "Sub-agent results are delivered to you automatically")
-	assert.Contains(t, system.Content, "NEVER predict, fabricate, or speculate")
-	assert.Contains(t, system.Content, "keep a mental checklist of every agent you dispatch")
 	assert.Contains(t, system.Content, orchestratorTaskFocus)
-	// Tier 1 instructions
 	assert.Contains(t, system.Content, "General SRE Agent Instructions")
-	// Tier 2: MCP server instructions (from "kubernetes-server" in test registry)
 	assert.Contains(t, system.Content, "K8s server instructions.")
-	// Tier 3: custom instructions from agent config
 	assert.Contains(t, system.Content, "Be thorough.")
 }
 
-func TestBuildOrchestratorMessages_PromptLayerOrder(t *testing.T) {
+func TestInjectOrchestratorSections_PromptLayerOrder(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
-	execCtx.Config.Type = config.AgentTypeOrchestrator
 	execCtx.Config.CustomInstructions = "Domain-specific security instructions."
 	execCtx.SubAgentCatalog = []config.SubAgentEntry{
 		{Name: "LogAnalyzer", Description: "Analyzes logs"},
 	}
 
-	messages := builder.buildOrchestratorMessages(execCtx, "")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 	system := messages[0].Content
 
-	// Verify ordering: Tier 1 → Tier 3 (custom) → behavioral → catalog → delivery → focus
 	tier1Pos := strings.Index(system, "General SRE Agent Instructions")
 	customPos := strings.Index(system, "Domain-specific security instructions.")
 	behavioralPos := strings.Index(system, "Orchestrator Strategy")
@@ -142,30 +169,30 @@ func TestBuildOrchestratorMessages_PromptLayerOrder(t *testing.T) {
 	assert.Less(t, deliveryPos, focusPos, "Delivery should come before focus")
 }
 
-func TestBuildOrchestratorMessages_NoCustomInstructions(t *testing.T) {
+func TestInjectOrchestratorSections_NoCustomInstructions(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
-	execCtx.Config.Type = config.AgentTypeOrchestrator
-	execCtx.Config.CustomInstructions = "" // Built-in Orchestrator case
-	execCtx.SubAgentCatalog = []config.SubAgentEntry{}
+	execCtx.Config.CustomInstructions = ""
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs"},
+	}
 
-	messages := builder.buildOrchestratorMessages(execCtx, "")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "")
 	system := messages[0].Content
 
-	// Behavioral instructions still present even without custom instructions
 	assert.Contains(t, system, "Orchestrator Strategy")
 	assert.Contains(t, system, "Dispatch relevant sub-agents in parallel")
-	// No stale "Agent-Specific Instructions" header when custom instructions are empty
 	assert.NotContains(t, system, "Agent-Specific Instructions")
 }
 
-func TestBuildOrchestratorMessages_UserIncludesAlert(t *testing.T) {
+func TestInjectOrchestratorSections_UserIncludesAlert(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()
-	execCtx.Config.Type = config.AgentTypeOrchestrator
-	execCtx.SubAgentCatalog = []config.SubAgentEntry{}
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs"},
+	}
 
-	messages := builder.buildOrchestratorMessages(execCtx, "Previous findings")
+	messages := builder.BuildFunctionCallingMessages(execCtx, "Previous findings")
 	require.Len(t, messages, 2)
 
 	user := messages[1]

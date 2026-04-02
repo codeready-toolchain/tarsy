@@ -253,11 +253,6 @@ func (v *Validator) validateAgents() error {
 			}
 		}
 
-		// Orchestrator config only valid on orchestrator agents
-		if agent.Orchestrator != nil && agent.Type != AgentTypeOrchestrator {
-			return NewValidationError("agent", name, "orchestrator", fmt.Errorf("orchestrator config only valid on orchestrator agents"))
-		}
-
 		if agent.Orchestrator != nil {
 			if err := v.validateOrchestratorConfig(agent.Orchestrator, "agent", name); err != nil {
 				return err
@@ -738,10 +733,6 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 	for _, ref := range subAgents {
 		if !v.cfg.AgentRegistry.Has(ref.Name) {
 			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' not found", ref.Name))
-		}
-		agentDef, _ := v.cfg.AgentRegistry.Get(ref.Name)
-		if agentDef.Type == AgentTypeOrchestrator {
-			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' is an orchestrator and cannot be a sub-agent", ref.Name))
 		}
 		if ref.LLMBackend != "" && !ref.LLMBackend.IsValid() {
 			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' has invalid llm_backend: %s", ref.Name, ref.LLMBackend))
