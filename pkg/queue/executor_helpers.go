@@ -528,6 +528,18 @@ func resolveSubAgents(chain *config.ChainConfig, stage config.StageConfig, agent
 	return nil
 }
 
+// resolveChatSubAgents returns sub_agents for chat: chat config overrides chain.
+// Precedence: chat.SubAgents > chain.SubAgents > nil (no explicit ref list).
+func resolveChatSubAgents(chain *config.ChainConfig, chat *config.ChatConfig) config.SubAgentRefs {
+	if chat != nil && len(chat.SubAgents) > 0 {
+		return chat.SubAgents
+	}
+	if chain != nil && len(chain.SubAgents) > 0 {
+		return chain.SubAgents
+	}
+	return nil
+}
+
 // ────────────────────────────────────────────────────────────
 // DB helpers
 // ────────────────────────────────────────────────────────────

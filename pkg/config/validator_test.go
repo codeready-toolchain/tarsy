@@ -2777,6 +2777,163 @@ func TestValidateSubAgents(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "MCP server 'missing-server' which is not found")
 	})
+
+	t.Run("valid chat.sub_agents when chat enabled", func(t *testing.T) {
+		agents := map[string]*AgentConfig{
+			"LogAnalyzer":    {Description: "Analyzes logs"},
+			"MetricChecker":  {Description: "Checks metrics"},
+			"MyOrchestrator": {Description: "Orchestrator agent"},
+			"ChatAgent":      {Description: "Chat"},
+		}
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(agents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Chat: &ChatConfig{
+						Enabled:   true,
+						Agent:     "ChatAgent",
+						SubAgents: SubAgentRefs{{Name: "LogAnalyzer"}},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		assert.NoError(t, err)
+	})
+
+	t.Run("chat.sub_agents references unknown agent", func(t *testing.T) {
+		agents := map[string]*AgentConfig{
+			"LogAnalyzer": {Description: "Analyzes logs"},
+			"ChatAgent":   {Description: "Chat"},
+		}
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(agents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Chat: &ChatConfig{
+						Enabled:   true,
+						Agent:     "ChatAgent",
+						SubAgents: SubAgentRefs{{Name: "MissingSub"}},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "agent 'MissingSub' not found")
+	})
+}
+
+func TestValidateStageAgentSkills(t *testing.T) {
+	skillReg := NewSkillRegistry(map[string]*SkillConfig{
+		"stage-skill": {Name: "stage-skill", Description: "d", Body: "b"},
+		"on-extra":    {Name: "on-extra", Description: "d2", Body: "b2"},
+	})
+	baseChain := func(agents []StageAgentConfig) map[string]*ChainConfig {
+		return map[string]*ChainConfig{
+			"c1": {
+				AlertTypes: []string{"t"},
+				Stages: []StageConfig{{
+					Name:   "s1",
+					Agents: agents,
+				}},
+			},
+		}
+	}
+
+	t.Run("valid stage-agent required_skills and skills", func(t *testing.T) {
+		cfg := &Config{
+			SkillRegistry:       skillReg,
+			AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"worker": {Description: "w"}}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(baseChain([]StageAgentConfig{{
+				Name:           "worker",
+				RequiredSkills: []string{"stage-skill"},
+				Skills:         []string{"on-extra"},
+			}})),
+		}
+		err := NewValidator(cfg).validateChains()
+		assert.NoError(t, err)
+	})
+
+	t.Run("unknown stage-agent required_skill", func(t *testing.T) {
+		cfg := &Config{
+			SkillRegistry:       skillReg,
+			AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"worker": {Description: "w"}}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(baseChain([]StageAgentConfig{{
+				Name:           "worker",
+				RequiredSkills: []string{"unknown-skill"},
+			}})),
+		}
+		err := NewValidator(cfg).validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown-skill")
+	})
+
+	t.Run("duplicate stage-agent required_skill", func(t *testing.T) {
+		cfg := &Config{
+			SkillRegistry:       skillReg,
+			AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"worker": {Description: "w"}}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(baseChain([]StageAgentConfig{{
+				Name:           "worker",
+				RequiredSkills: []string{"stage-skill", "stage-skill"},
+			}})),
+		}
+		err := NewValidator(cfg).validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate skill")
+	})
+
+	t.Run("unknown stage-agent skill in skills", func(t *testing.T) {
+		cfg := &Config{
+			SkillRegistry:       skillReg,
+			AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"worker": {Description: "w"}}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(baseChain([]StageAgentConfig{{
+				Name:   "worker",
+				Skills: []string{"no-such-skill"},
+			}})),
+		}
+		err := NewValidator(cfg).validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no-such-skill")
+	})
+
+	t.Run("duplicate stage-agent skill in skills", func(t *testing.T) {
+		cfg := &Config{
+			SkillRegistry:       skillReg,
+			AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"worker": {Description: "w"}}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(baseChain([]StageAgentConfig{{
+				Name:   "worker",
+				Skills: []string{"on-extra", "on-extra"},
+			}})),
+		}
+		err := NewValidator(cfg).validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate skill")
+	})
 }
 
 func TestValidateFallbackProviders(t *testing.T) {

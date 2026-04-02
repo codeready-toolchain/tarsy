@@ -71,6 +71,9 @@ type StageAgentConfig struct {
 	MCPServers        []string                `yaml:"mcp_servers,omitempty"`
 	SubAgents         SubAgentRefs            `yaml:"sub_agents,omitempty"`
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
+	// RequiredSkills and Skills are additive with the agent definition (merged at resolve time, deduplicated).
+	RequiredSkills []string `yaml:"required_skills,omitempty"`
+	Skills         []string `yaml:"skills,omitempty"`
 }
 
 // SubAgentRef is a reference to a sub-agent with optional per-reference overrides.
@@ -171,12 +174,13 @@ type SynthesisConfig struct {
 
 // ChatConfig defines chat agent configuration
 type ChatConfig struct {
-	Enabled       bool       `yaml:"enabled"`
-	Agent         string     `yaml:"agent,omitempty"`
-	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
-	LLMProvider   string     `yaml:"llm_provider,omitempty"`
-	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
-	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	Enabled       bool         `yaml:"enabled"`
+	Agent         string       `yaml:"agent,omitempty"`
+	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
+	LLMProvider   string       `yaml:"llm_provider,omitempty"`
+	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
+	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
 }
 
 // ScoringConfig defines scoring agent configuration for session quality evaluation

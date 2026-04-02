@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -110,7 +111,8 @@ func ResolveAgentConfig(
 
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
-	requiredSkills, onDemandSkills := resolveSkills(cfg, agentDef)
+	skillAgentDef := effectiveAgentDefForSkills(agentDef, agentConfig)
+	requiredSkills, onDemandSkills := resolveSkills(cfg, &skillAgentDef)
 
 	return &ResolvedAgentConfig{
 		AgentName:                 agentConfig.Name,
@@ -544,6 +546,40 @@ func resolveFullFallbackEntries(cfg *config.Config, entries []config.FallbackPro
 		})
 	}
 	return resolved
+}
+
+// effectiveAgentDefForSkills returns a shallow copy of agentDef with RequiredSkills and Skills
+// merged from stage-level overrides (additive, deduplicated). When agentDef.Skills is nil
+// (all registry skills on-demand), stage skills do not change the allowlist.
+func effectiveAgentDefForSkills(agentDef *config.AgentConfig, stageAgent config.StageAgentConfig) config.AgentConfig {
+	out := *agentDef
+	out.RequiredSkills = dedupeStringsInOrder(append(slices.Clone(agentDef.RequiredSkills), stageAgent.RequiredSkills...))
+
+	if len(stageAgent.Skills) == 0 {
+		return out
+	}
+	if agentDef.Skills == nil {
+		return out
+	}
+	merged := dedupeStringsInOrder(append(slices.Clone(*agentDef.Skills), stageAgent.Skills...))
+	out.Skills = &merged
+	return out
+}
+
+func dedupeStringsInOrder(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
 }
 
 // resolveMaxIterations returns the last non-nil value from the given
