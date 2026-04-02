@@ -1091,6 +1091,23 @@ func TestChatExecutor_ChatSubAgents_DispatchesSubAgent(t *testing.T) {
 
 	require.GreaterOrEqual(t, llm.orchestratorIdx, 2, "chat main agent should call LLM at least twice (dispatch + final)")
 	require.GreaterOrEqual(t, llm.subAgentIdx, 1, "sub-agent should run once")
+
+	subWorkerExecs, err := entClient.AgentExecution.Query().
+		Where(
+			agentexecution.StageIDEQ(chatStage.ID),
+			agentexecution.AgentNameEQ("SubWorker"),
+		).
+		All(ctx)
+	require.NoError(t, err)
+	require.Len(t, subWorkerExecs, 1,
+		"dispatch_agent should persist exactly one SubWorker AgentExecution on chat stage %s (subAgentIdx=%d)",
+		chatStage.ID, llm.subAgentIdx)
+	sw := subWorkerExecs[0]
+	require.Equal(t, agentexecution.StatusCompleted, sw.Status, "SubWorker execution should finish successfully")
+	if sw.ErrorMessage != nil {
+		assert.Empty(t, *sw.ErrorMessage, "completed SubWorker execution should have no error text")
+	}
+	require.NotNil(t, sw.ParentExecutionID, "SubWorker row should reference parent chat AgentExecution")
 }
 
 // ────────────────────────────────────────────────────────────

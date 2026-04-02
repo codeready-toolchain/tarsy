@@ -85,7 +85,7 @@ func TestInjectOrchestratorSections_Content(t *testing.T) {
 
 	assert.Contains(t, result, "Base system prompt.")
 	assert.Contains(t, result, "Orchestrator Strategy")
-	assert.Contains(t, result, "Dispatch relevant sub-agents in parallel")
+	assert.Contains(t, result, "Prefer dispatching sub-agents")
 	assert.Contains(t, result, "Available Sub-Agents")
 	assert.Contains(t, result, "LogAnalyzer")
 	assert.Contains(t, result, "GeneralWorker")
@@ -111,7 +111,7 @@ func TestInjectOrchestratorSections_BaseContentIsPrefix(t *testing.T) {
 func TestOrchestratorTaskFocus(t *testing.T) {
 	focus := OrchestratorTaskFocus()
 	assert.NotEmpty(t, focus)
-	assert.Contains(t, focus, "coordinating sub-agents")
+	assert.Contains(t, focus, "Prefer sub-agents when")
 }
 
 func TestInjectOrchestratorSections_ViaBuilder(t *testing.T) {
@@ -181,7 +181,7 @@ func TestInjectOrchestratorSections_NoCustomInstructions(t *testing.T) {
 	system := messages[0].Content
 
 	assert.Contains(t, system, "Orchestrator Strategy")
-	assert.Contains(t, system, "Dispatch relevant sub-agents in parallel")
+	assert.Contains(t, system, "Prefer dispatching sub-agents")
 	assert.NotContains(t, system, "Agent-Specific Instructions")
 }
 

@@ -170,7 +170,7 @@ func TestBuildFunctionCallingMessages_OrchestratorInjection(t *testing.T) {
 	assert.Contains(t, messages[0].Content, "Orchestrator Strategy")
 	assert.Contains(t, messages[0].Content, "Available Sub-Agents")
 	assert.Contains(t, messages[0].Content, "LogAnalyzer")
-	assert.Contains(t, messages[0].Content, "coordinating sub-agents")
+	assert.Contains(t, messages[0].Content, "Prefer sub-agents when")
 	assert.Contains(t, messages[1].Content, "Alert Details")
 }
 
@@ -242,7 +242,7 @@ func TestBuildFunctionCallingMessages_ChatModeWithOrchestration(t *testing.T) {
 	assert.Contains(t, system, "Orchestrator Strategy")
 	assert.Contains(t, system, "Available Sub-Agents")
 	assert.Contains(t, system, "LogAnalyzer")
-	assert.Contains(t, system, "coordinating sub-agents")
+	assert.Contains(t, system, "Prefer sub-agents when")
 
 	assert.Contains(t, messages[1].Content, "Can you check the failing pods?")
 }
