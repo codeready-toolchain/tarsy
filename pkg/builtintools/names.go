@@ -7,8 +7,11 @@ package builtintools
 type Kind uint8
 
 const (
+	// KindOrchestration is agent orchestration built-ins (dispatch, cancel, list).
 	KindOrchestration Kind = iota
+	// KindSkill is skill-loading built-ins.
 	KindSkill
+	// KindMemory is investigation memory / search built-ins.
 	KindMemory
 )
 
