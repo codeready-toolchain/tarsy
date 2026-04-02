@@ -32,16 +32,22 @@ func TestFormatAgentCatalog_NativeToolsAgent(t *testing.T) {
 	assert.Contains(t, result, "Native tools: google_search, url_context")
 }
 
-func TestFormatAgentCatalog_WebResearcherDescriptionOnlyInCatalog(t *testing.T) {
-	// Dispatch hints for WebResearcher belong in the sub-agent entry Description
-	// (from built-in or YAML)
+func TestOrchestratorPrompt_WebResearcherOnlyWhenListedInCatalog(t *testing.T) {
+	// Dispatch guidance for WebResearcher must come from the sub-agent Description
+	// (built-in or YAML), not from global orchestratorBehavioralInstructions — chains
+	// may omit WebResearcher from sub_agents entirely.
 	longDesc := "Public web research; use for GitHub repos and OpenShift Route URLs."
-	entries := []config.SubAgentEntry{
+
+	noWeb := InjectOrchestratorSections("Base.", []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
+		{Name: "GeneralWorker", Description: "General-purpose"},
+	})
+	assert.NotContains(t, noWeb, "**WebResearcher**", "orchestrator prompt must not mention WebResearcher when it is not in the catalog")
+
+	withWeb := InjectOrchestratorSections("Base.", []config.SubAgentEntry{
 		{Name: "WebResearcher", Description: longDesc, NativeTools: []string{"google_search", "url_context"}},
-	}
-	result := formatAgentCatalog(entries)
-	assert.Contains(t, result, "**WebResearcher**: "+longDesc)
-	assert.NotContains(t, orchestratorBehavioralInstructions, "WebResearcher")
+	})
+	assert.Contains(t, withWeb, "**WebResearcher**: "+longDesc)
 }
 
 func TestFormatAgentCatalog_PureReasoningAgent(t *testing.T) {
