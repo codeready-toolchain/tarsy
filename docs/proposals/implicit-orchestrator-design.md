@@ -71,15 +71,11 @@ The `orchestrator:` config block (max_concurrent_agents, agent_timeout, max_budg
 
 No explicit prevention needed. Sub-agents run via `SubAgentRunner` with `execCtx.SubAgent` set, which gives them a task-only prompt and no orchestrator tools — `SubAgentCatalog` and `SubAgentCollector` are never set on the sub-agent's `ExecutionContext`. A sub-agent cannot dispatch further sub-agents by runtime design, regardless of configuration. This invariant is enforced by dedicated tests (see PR1 test item 14).
 
-### Known limitation: skills prevent full agent collapse
+### Skills and agent collapse (resolved in PR2)
 
-While the implicit orchestrator design allows the same agent definition to serve as both orchestrator and sub-agent, **skills** break this in practice. Orchestrator agents often need report-formatting skills injected into their system prompt, while sub-agent instances of the same agent should only gather evidence — giving them formatting skills wastes prompt tokens and risks confusing their role.
+After PR1, `required_skills` and `skills` are only configurable on `AgentConfig` (the base agent definition). Orchestrator agents often need report-formatting skills that their sub-agent counterparts should not have. Without stage-level skill overrides, this forces separate agent definitions for the orchestrator and sub-agent roles — the `type: orchestrator` line is gone, but the definitions remain distinct.
 
-Today, `required_skills` and `skills` are only configurable on the `AgentConfig` (base agent definition). There is no way to add skills at the stage-agent level in the chain config. This means orchestrators that need different skills than their sub-agent counterparts must remain as separate agent definitions.
-
-**Workaround (current):** Keep separate orchestrator and sub-agent definitions with different skills. The `type: orchestrator` line is removed, but the agent definitions remain distinct.
-
-**Resolution (PR3):** Add `required_skills` and `skills` to `StageAgentConfig`. Unlike `mcp_servers` and other stage-agent overrides which use replacement semantics, skills are **additive** — stage-level skills are appended to the agent definition's skills. This matches the nature of skills as cumulative knowledge injections rather than exclusive resource grants. See PR3 below.
+PR2 adds `RequiredSkills` and `Skills` fields to `StageAgentConfig`. Unlike `mcp_servers` and other stage-agent overrides which use replacement semantics, skills are **additive** — stage-level skills are appended to the agent definition's skills and deduplicated. This matches the nature of skills as cumulative knowledge injections rather than exclusive resource grants. See [PR2 — Stage-level skill overrides](#stage-level-skill-overrides-agent-collapse) for details.
 
 ## Core Concepts
 
@@ -151,7 +147,7 @@ Only configs that add `chat.sub_agents` are affected.
 
 #### Stage-level skill overrides (agent collapse)
 
-Addresses the [skills limitation](#known-limitation-skills-prevent-full-agent-collapse). Adds `required_skills` and `skills` fields to `StageAgentConfig`, enabling a single agent definition to serve as both orchestrator and sub-agent with different skill sets depending on the chain context.
+Addresses the [skills gap](#skills-and-agent-collapse-resolved-in-pr2) from PR1. Adds `RequiredSkills` and `Skills` fields to `StageAgentConfig`, enabling a single agent definition to serve as both orchestrator and sub-agent with different skill sets depending on the chain context.
 
 **Motivation:** Without stage-level skill overrides, orchestrator agents that need report-formatting skills must be defined separately from their sub-agent counterparts — defeating the "same agent, dual role" goal of the implicit orchestrator design.
 
