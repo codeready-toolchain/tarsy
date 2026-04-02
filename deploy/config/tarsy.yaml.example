@@ -540,7 +540,7 @@ agent_chains:
               max_budget: 900s
             sub_agents:
               - name: KubernetesAgent              # built-in: K8s pod/deployment inspection
-              - name: WebResearcher                # built-in: web search + URL analysis
+              - name: WebResearcher                # built-in: public URLs, repos, docs, CVEs (google_search + url_context)
               - name: CodeExecutor                 # built-in: Python code execution
               - name: GeneralWorker                # built-in: pure reasoning / summarization
                 mcp_servers: [kubernetes-server]   # give GeneralWorker K8s access

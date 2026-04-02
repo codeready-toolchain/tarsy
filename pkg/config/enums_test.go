@@ -126,3 +126,12 @@ func TestGoogleNativeToolIsValid(t *testing.T) {
 		})
 	}
 }
+
+func TestIsGoogleNativeToolWireName(t *testing.T) {
+	assert.True(t, IsGoogleNativeToolWireName("google_search"))
+	assert.True(t, IsGoogleNativeToolWireName("url_context"))
+	assert.True(t, IsGoogleNativeToolWireName("code_execution"))
+	assert.False(t, IsGoogleNativeToolWireName("load_skill"))
+	assert.False(t, IsGoogleNativeToolWireName(""))
+	assert.False(t, IsGoogleNativeToolWireName("kubernetes.get_pods"))
+}

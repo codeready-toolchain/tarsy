@@ -174,6 +174,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
   const toolType = (item.metadata?.tool_type as string) || TOOL_TYPE.MCP;
   const isSkill = toolType === TOOL_TYPE.SKILL;
   const isMemory = toolType === TOOL_TYPE.MEMORY;
+  const isGoogleNative = toolType === TOOL_TYPE.GOOGLE_NATIVE;
   // Arguments may be stored as a parsed object or as a JSON string in metadata.
   // Parse strings into objects so isSimpleArguments / SimpleArgumentsList work correctly.
   const toolArguments: Record<string, unknown> = (() => {
@@ -334,10 +335,12 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
   const StatusIcon = isMcpFailure ? ErrorIcon
     : isToolResultError ? InfoOutlined
     : isSkill ? AutoStoriesOutlined
+    : isGoogleNative ? InfoOutlined
     : CheckCircle;
   const accentKey: 'error' | 'warning' | 'info' | 'primary' = isMcpFailure ? 'error'
     : isToolResultError ? 'warning'
     : isSkill ? 'info'
+    : isGoogleNative ? 'info'
     : 'primary';
 
   return (
@@ -384,6 +387,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
           {isSkill ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               Skill
+            </Typography>
+          ) : isGoogleNative ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Gemini native tool{serverName ? ` (${serverName})` : ''}
             </Typography>
           ) : serverName ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>

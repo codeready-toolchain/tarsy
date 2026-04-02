@@ -121,3 +121,13 @@ func (t GoogleNativeTool) IsValid() bool {
 		t == GoogleNativeToolCodeExecution ||
 		t == GoogleNativeToolURLContext
 }
+
+// IsGoogleNativeToolWireName reports whether name is a Gemini provider-native
+// tool wire identifier (google_search, url_context, code_execution). Used to
+// avoid routing these through MCP ToolExecutor — they are fulfilled by the API.
+func IsGoogleNativeToolWireName(name string) bool {
+	t := GoogleNativeTool(name)
+	return t == GoogleNativeToolGoogleSearch ||
+		t == GoogleNativeToolCodeExecution ||
+		t == GoogleNativeToolURLContext
+}

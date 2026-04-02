@@ -276,7 +276,8 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
     const toolType = (item.metadata?.tool_type as string);
     const isSkill = toolType === TOOL_TYPE.SKILL;
     const isMemory = toolType === TOOL_TYPE.MEMORY;
-    const paletteKey = isMemory ? 'success' : isSkill ? 'info' : 'primary';
+    const isGoogleNative = toolType === TOOL_TYPE.GOOGLE_NATIVE;
+    const paletteKey = isMemory ? 'success' : isSkill || isGoogleNative ? 'info' : 'primary';
 
     let displayName = toolName;
     let statusLabel = 'Executing...';

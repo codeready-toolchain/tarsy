@@ -111,15 +111,19 @@ Your report must include:
 Focus on solving the original alert/issue, not on meta-analyzing agent performance or comparing approaches.`,
 		},
 		"WebResearcher": {
-			Description: "Searches the web and analyzes URLs for real-time information",
+			Description: "Public web and URL research: GitHub/GitLab repos, documentation sites, vendor runbooks, issue trackers, CVEs, release notes, image or dependency lookups, and external HTTP(S) hostnames exposed via OpenShift Routes. Use when the alert, runbook, or task references a specific HTTPS URL or needs live internet search — Kubernetes and other MCP tools cannot fetch arbitrary public web pages. Prefer dispatching here over guessing from memory when external sources would verify versions, upstream bugs, or repo layout.",
 			LLMBackend:  LLMBackendNativeGemini,
 			NativeTools: map[GoogleNativeTool]bool{
 				GoogleNativeToolGoogleSearch:  true,
 				GoogleNativeToolURLContext:    true,
 				GoogleNativeToolCodeExecution: false,
 			},
-			CustomInstructions: `You research topics using web search and URL analysis.
-Report findings with sources. Be thorough but concise.`,
+			CustomInstructions: `You complete assigned research using native tools only (no cluster access).
+
+- Use url_context when the task names one or more URLs (repos, docs, READMEs, issues, advisories, OpenShift Route hostnames, etc.).
+- Use google_search for broad queries (CVEs, known outages, version compatibility, error strings, etc.).
+
+Report findings with sources. Be thorough but concise. Cite only what appears in tool results and grounding — if a tool returns nothing useful, say so explicitly; never invent file paths, manifest contents, or metrics.`,
 		},
 		"CodeExecutor": {
 			Description: "Executes Python code for computation, data analysis, and calculations",

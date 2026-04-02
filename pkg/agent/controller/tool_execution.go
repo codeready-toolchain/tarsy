@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
@@ -26,7 +28,13 @@ const (
 	ToolTypeOrchestrator ToolType = "orchestrator"
 	ToolTypeSkill        ToolType = "skill"
 	ToolTypeMemory       ToolType = "memory"
+	ToolTypeNative       ToolType = "google_native"
 )
+
+// geminiNativeServerID labels metrics and MCP interactions for Gemini
+// provider-native tools (google_search, url_context, code_execution) that
+// are not executed via MCP.
+const geminiNativeServerID = "gemini-native"
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
 // integrate into its conversation format (IteratingController
@@ -46,10 +54,77 @@ type toolCallResult struct {
 	Usage *agent.TokenUsage
 }
 
+// syntheticNativeGeminiToolResult builds the role=tool message for Gemini
+// provider-native tools. Grounding metadata is attached to the HTTP response,
+// not returned by MCP — the model must not treat a stub as evidence.
+func syntheticNativeGeminiToolResult(toolName string, groundings []agent.GroundingChunk) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "The %q tool was executed by the Gemini API in this turn (not by the MCP tool runner). "+
+		"Base factual claims on the assistant text above, grounding/url_context events in the timeline, "+
+		"and the digest below — do not invent URLs, file paths, or metrics that do not appear here.\n\n",
+		toolName)
+
+	if toolName == string(config.GoogleNativeToolCodeExecution) {
+		b.WriteString("For interpreted code output, see code_execution timeline events and the model response text.\n\n")
+	}
+
+	querySeen := make(map[string]struct{})
+	var queries []string
+	sourceSeen := make(map[string]struct{})
+	var sourceLines []string
+	for _, g := range groundings {
+		for _, q := range g.WebSearchQueries {
+			q = strings.TrimSpace(q)
+			if q == "" {
+				continue
+			}
+			if _, ok := querySeen[q]; ok {
+				continue
+			}
+			querySeen[q] = struct{}{}
+			queries = append(queries, q)
+		}
+		for _, s := range g.Sources {
+			u := strings.TrimSpace(s.URI)
+			if u == "" {
+				continue
+			}
+			if _, ok := sourceSeen[u]; ok {
+				continue
+			}
+			sourceSeen[u] = struct{}{}
+			title := strings.TrimSpace(s.Title)
+			if title != "" {
+				sourceLines = append(sourceLines, fmt.Sprintf("- %s (%s)", u, title))
+			} else {
+				sourceLines = append(sourceLines, "- "+u)
+			}
+		}
+	}
+	if len(queries) > 0 {
+		b.WriteString("Web search queries (from grounding metadata):\n")
+		for _, q := range queries {
+			fmt.Fprintf(&b, "- %s\n", q)
+		}
+		b.WriteByte('\n')
+	}
+	if len(sourceLines) > 0 {
+		b.WriteString("Sources (from grounding metadata):\n")
+		for _, line := range sourceLines {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+	b.WriteString("No grounding metadata (queries or source URLs) was present in this response turn. " +
+		"If you lack independent verification, state that explicitly.")
+	return b.String()
+}
+
 // executeToolCall runs a single tool call through the full lifecycle:
 //  1. Normalize and split tool name for events/summarization
 //  2. Create streaming llm_tool_call event (dashboard spinner)
-//  3. Execute the tool via ToolExecutor
+//  3. Execute the tool via ToolExecutor (or synthesize result for Gemini native tools)
 //  4. Complete the tool call event with storage-truncated result
 //  5. Optionally summarize large non-error results
 //
@@ -61,6 +136,7 @@ func executeToolCall(
 	execCtx *agent.ExecutionContext,
 	call agent.ToolCall,
 	messages []agent.ConversationMessage,
+	sameTurnGroundings []agent.GroundingChunk,
 	eventSeq *int,
 ) toolCallResult {
 	// Step 1: Normalize and split tool name (colon-prefixed orchestration names first)
@@ -77,6 +153,9 @@ func executeToolCall(
 			toolType = ToolTypeSkill
 		} else if k, ok := builtintools.KindForPlainTool(toolName); ok && k == builtintools.KindMemory {
 			toolType = ToolTypeMemory
+		} else if config.IsGoogleNativeToolWireName(effectiveName) {
+			serverID = geminiNativeServerID
+			toolType = ToolTypeNative
 		} else {
 			toolType = ToolTypeMCP
 		}
@@ -103,7 +182,23 @@ func executeToolCall(
 	if plainFixed != call.Name {
 		execCall.Name = effectiveName
 	}
-	result, toolErr := execCtx.ToolExecutor.Execute(toolCtx, execCall)
+
+	providerNativeTool := execCtx.Config != nil &&
+		execCtx.Config.LLMBackend == config.LLMBackendNativeGemini &&
+		config.IsGoogleNativeToolWireName(effectiveName)
+
+	var result *agent.ToolResult
+	var toolErr error
+	if providerNativeTool {
+		result = &agent.ToolResult{
+			CallID:  call.ID,
+			Name:    call.Name,
+			Content: syntheticNativeGeminiToolResult(effectiveName, sameTurnGroundings),
+			IsError: false,
+		}
+	} else {
+		result, toolErr = execCtx.ToolExecutor.Execute(toolCtx, execCall)
+	}
 	toolCancel()
 
 	metrics.MCPCallsTotal.WithLabelValues(serverID, toolName).Inc()

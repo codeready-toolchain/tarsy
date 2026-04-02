@@ -32,6 +32,18 @@ func TestFormatAgentCatalog_NativeToolsAgent(t *testing.T) {
 	assert.Contains(t, result, "Native tools: google_search, url_context")
 }
 
+func TestFormatAgentCatalog_WebResearcherDescriptionOnlyInCatalog(t *testing.T) {
+	// Dispatch hints for WebResearcher belong in the sub-agent entry Description
+	// (from built-in or YAML)
+	longDesc := "Public web research; use for GitHub repos and OpenShift Route URLs."
+	entries := []config.SubAgentEntry{
+		{Name: "WebResearcher", Description: longDesc, NativeTools: []string{"google_search", "url_context"}},
+	}
+	result := formatAgentCatalog(entries)
+	assert.Contains(t, result, "**WebResearcher**: "+longDesc)
+	assert.NotContains(t, orchestratorBehavioralInstructions, "WebResearcher")
+}
+
 func TestFormatAgentCatalog_PureReasoningAgent(t *testing.T) {
 	entries := []config.SubAgentEntry{
 		{Name: "GeneralWorker", Description: "General-purpose agent"},

@@ -76,10 +76,10 @@ func TestBuiltinAgents(t *testing.T) {
 		{
 			name:                    "WebResearcher",
 			agentID:                 "WebResearcher",
-			wantDesc:                "Searches the web and analyzes URLs for real-time information",
+			wantDesc:                "Public web and URL research: GitHub/GitLab repos, documentation sites, vendor runbooks, issue trackers, CVEs, release notes, image or dependency lookups, and external HTTP(S) hostnames exposed via OpenShift Routes. Use when the alert, runbook, or task references a specific HTTPS URL or needs live internet search — Kubernetes and other MCP tools cannot fetch arbitrary public web pages. Prefer dispatching here over guessing from memory when external sources would verify versions, upstream bugs, or repo layout.",
 			wantType:                AgentTypeDefault,
 			wantCustomInstructions:  true,
-			customInstructionsMatch: "web search",
+			customInstructionsMatch: "url_context",
 		},
 		{
 			name:                    "CodeExecutor",
