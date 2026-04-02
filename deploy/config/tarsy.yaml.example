@@ -504,11 +504,11 @@ agent_chains:
               agent_timeout: 420s
               max_budget: 900s
             sub_agents:
-              - name: KubernetesAgent
-              - name: WebResearcher
-              - name: CodeExecutor
-              - name: GeneralWorker
-                mcp_servers: [kubernetes-server]
+              - name: KubernetesAgent              # built-in: K8s pod/deployment inspection
+              - name: WebResearcher                # built-in: web search + URL analysis
+              - name: CodeExecutor                 # built-in: Python code execution
+              - name: GeneralWorker                # built-in: pure reasoning / summarization
+                mcp_servers: [kubernetes-server]   # give GeneralWorker K8s access
                 max_iterations: 5
 
   # Any agent can become an orchestrator — just add sub_agents
