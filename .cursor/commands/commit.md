@@ -26,7 +26,14 @@ Ask the user:
 > 1. Commit to this branch
 > 2. Create a new branch from `<default-branch>`
 
-If the user picks option 2, follow the same branch creation steps as above.
+If the user picks option 2, explicitly branch from `<default-branch>`:
+
+1. If there are uncommitted changes that would prevent checkout, ask the user whether to stash them first or abort.
+2. `git fetch origin`
+3. `git checkout <default-branch>`
+4. `git pull --ff-only`
+5. Re-apply stashed changes if applicable (`git stash pop`).
+6. Analyze the changes (see Step 3) and create a branch: `git checkout -b <branch-name>`.
 
 ## Step 3: Analyze changes
 
