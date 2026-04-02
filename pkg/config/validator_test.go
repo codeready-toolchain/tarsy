@@ -2638,6 +2638,32 @@ func TestValidateSubAgents(t *testing.T) {
 		assert.Contains(t, err.Error(), "agent 'Ghost' not found")
 	})
 
+	t.Run("sub_agent ref to agent with empty description", func(t *testing.T) {
+		agents := map[string]*AgentConfig{
+			"LogAnalyzer": {Description: "Analyzes logs"},
+			"NoDescAgent": {MCPServers: []string{"some-server"}},
+		}
+		cfg := &Config{
+			AgentRegistry:       NewAgentRegistry(agents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents:  SubAgentRefs{{Name: "NoDescAgent"}},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "LogAnalyzer"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "NoDescAgent")
+		assert.Contains(t, err.Error(), "no description")
+	})
+
 	t.Run("sub_agent ref with valid overrides", func(t *testing.T) {
 		cfg := &Config{
 			AgentRegistry:       NewAgentRegistry(baseAgents),

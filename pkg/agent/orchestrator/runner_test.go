@@ -678,7 +678,7 @@ func TestSubAgentRunner_Dispatch_NeverSetsOrchestratorFields(t *testing.T) {
 	ctx := context.Background()
 
 	var captured atomic.Pointer[agent.ExecutionContext]
-	runner, cleanup := setupIntegrationRunnerWithCapture(t,
+	runner, cleanup := setupIntegrationRunner(t,
 		func(_ context.Context) (*agent.ExecutionResult, error) {
 			return &agent.ExecutionResult{
 				Status:        agent.ExecutionStatusCompleted,
@@ -703,114 +703,6 @@ func TestSubAgentRunner_Dispatch_NeverSetsOrchestratorFields(t *testing.T) {
 	assert.NotNil(t, execCtx.SubAgent, "sub-agent context must be set")
 	assert.Nil(t, execCtx.SubAgentCatalog, "sub-agents must not receive SubAgentCatalog")
 	assert.Nil(t, execCtx.SubAgentCollector, "sub-agents must not receive SubAgentCollector")
-}
-
-// setupIntegrationRunnerWithCapture is like setupIntegrationRunner but uses a
-// capturingControllerFactory that calls captureFn with the ExecutionContext
-// before running the mock controller.
-func setupIntegrationRunnerWithCapture(
-	t *testing.T,
-	resultFn func(ctx context.Context) (*agent.ExecutionResult, error),
-	captureFn func(execCtx *agent.ExecutionContext),
-) (*SubAgentRunner, func()) {
-	t.Helper()
-
-	dbClient := testdb.NewTestClient(t)
-	ctx := context.Background()
-
-	stageService := services.NewStageService(dbClient.Client)
-	timelineService := services.NewTimelineService(dbClient.Client)
-	messageService := services.NewMessageService(dbClient.Client)
-	interactionService := services.NewInteractionService(dbClient.Client, messageService)
-	mcpRegistry := config.NewMCPServerRegistry(nil)
-	sessionService := services.NewSessionService(
-		dbClient.Client,
-		config.NewChainRegistry(map[string]*config.ChainConfig{
-			"test-chain": {
-				AlertTypes: []string{"test"},
-				Stages: []config.StageConfig{{
-					Name:   "stage1",
-					Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
-				}},
-			},
-		}),
-		mcpRegistry,
-	)
-
-	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
-		SessionID: uuid.New().String(),
-		AlertData: "test alert",
-		AgentType: "test",
-		ChainID:   "test-chain",
-	})
-	require.NoError(t, err)
-
-	stages, err := stageService.GetStagesBySession(ctx, session.ID, true)
-	require.NoError(t, err)
-	require.NotEmpty(t, stages)
-	stageID := stages[0].ID
-
-	executions, err := stageService.GetAgentExecutions(ctx, stageID)
-	require.NoError(t, err)
-	require.NotEmpty(t, executions)
-	parentExecID := executions[0].ID
-
-	testProvider := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeGoogle,
-		Model:               "test-model",
-		MaxToolResultTokens: 10000,
-	}
-
-	cfg := &config.Config{
-		Defaults: &config.Defaults{LLMProvider: "test-provider"},
-		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
-			"TestAgent": {Description: "A test agent"},
-		}),
-		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
-			"test-provider": testProvider,
-		}),
-		MCPServerRegistry: config.NewMCPServerRegistry(nil),
-	}
-
-	chain := &config.ChainConfig{
-		AlertTypes: []string{"test"},
-		Stages: []config.StageConfig{{
-			Name:   "stage1",
-			Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
-		}},
-	}
-
-	agentFactory := agent.NewAgentFactory(&capturingControllerFactory{resultFn: resultFn, captureFn: captureFn})
-	registry := config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll())
-
-	deps := &SubAgentDeps{
-		Config:             cfg,
-		Chain:              chain,
-		AgentFactory:       agentFactory,
-		StageService:       stageService,
-		TimelineService:    timelineService,
-		MessageService:     messageService,
-		InteractionService: interactionService,
-		AlertData:          "test alert",
-		AlertType:          "test",
-	}
-
-	runner := NewSubAgentRunner(
-		context.Background(),
-		deps,
-		parentExecID,
-		session.ID,
-		stageID,
-		registry,
-		&OrchestratorGuardrails{
-			MaxConcurrentAgents: 5,
-			AgentTimeout:        30 * time.Second,
-			MaxBudget:           60 * time.Second,
-		},
-		nil,
-	)
-
-	return runner, func() {}
 }
 
 // mockControllerFactory returns a factory that produces controllers
@@ -932,9 +824,12 @@ func (r *recordingEventPublisher) timelineCreated() []events.TimelineCreatedPayl
 
 // setupIntegrationRunner creates a fully wired SubAgentRunner backed by
 // testcontainers PostgreSQL. resultFn controls what the mock agent returns.
+// An optional captureFn, if provided, is called with the ExecutionContext
+// before each controller Run (useful for inspecting what was passed to sub-agents).
 func setupIntegrationRunner(
 	t *testing.T,
 	resultFn func(ctx context.Context) (*agent.ExecutionResult, error),
+	captureFn ...func(execCtx *agent.ExecutionContext),
 ) (*SubAgentRunner, func()) {
 	t.Helper()
 
@@ -1005,7 +900,13 @@ func setupIntegrationRunner(
 		}},
 	}
 
-	agentFactory := agent.NewAgentFactory(&mockControllerFactory{resultFn: resultFn})
+	var factory agent.ControllerFactory
+	if len(captureFn) > 0 && captureFn[0] != nil {
+		factory = &capturingControllerFactory{resultFn: resultFn, captureFn: captureFn[0]}
+	} else {
+		factory = &mockControllerFactory{resultFn: resultFn}
+	}
+	agentFactory := agent.NewAgentFactory(factory)
 
 	registry := config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll())
 

@@ -715,7 +715,7 @@ func (e *RealSessionExecutor) executeAgent(
 			runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
 			toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
 			execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
-			execCtx.SubAgentCatalog = registry.Entries()
+			execCtx.SubAgentCatalog = applyCatalogOverrides(registry.Entries(), subAgentRefs)
 		}
 	}
 

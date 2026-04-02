@@ -752,3 +752,50 @@ func TestResolveSubAgents(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyCatalogOverrides(t *testing.T) {
+	t.Run("mcp_servers override replaces base", func(t *testing.T) {
+		entries := []config.SubAgentEntry{
+			{Name: "GeneralWorker", Description: "Worker", MCPServers: nil},
+			{Name: "LogAnalyzer", Description: "Logs", MCPServers: []string{"loki"}},
+		}
+		refs := config.SubAgentRefs{
+			{Name: "GeneralWorker", MCPServers: []string{"kubernetes-server"}},
+		}
+		result := applyCatalogOverrides(entries, refs)
+
+		assert.Equal(t, []string{"kubernetes-server"}, result[0].MCPServers)
+		assert.Equal(t, []string{"loki"}, result[1].MCPServers, "unmatched entry unchanged")
+	})
+
+	t.Run("empty ref mcp_servers preserves base", func(t *testing.T) {
+		entries := []config.SubAgentEntry{
+			{Name: "LogAnalyzer", Description: "Logs", MCPServers: []string{"loki"}},
+		}
+		refs := config.SubAgentRefs{
+			{Name: "LogAnalyzer"},
+		}
+		result := applyCatalogOverrides(entries, refs)
+		assert.Equal(t, []string{"loki"}, result[0].MCPServers)
+	})
+
+	t.Run("no matching refs returns entries unchanged", func(t *testing.T) {
+		entries := []config.SubAgentEntry{
+			{Name: "A", Description: "Agent A"},
+		}
+		result := applyCatalogOverrides(entries, config.SubAgentRefs{{Name: "B"}})
+		assert.Equal(t, entries, result)
+	})
+
+	t.Run("override is a defensive copy", func(t *testing.T) {
+		entries := []config.SubAgentEntry{
+			{Name: "Worker", Description: "Worker"},
+		}
+		refs := config.SubAgentRefs{
+			{Name: "Worker", MCPServers: []string{"server-a"}},
+		}
+		result := applyCatalogOverrides(entries, refs)
+		result[0].MCPServers[0] = "mutated"
+		assert.Equal(t, "server-a", refs[0].MCPServers[0], "original ref must not be mutated")
+	})
+}

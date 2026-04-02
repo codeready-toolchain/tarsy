@@ -734,6 +734,11 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 		if !v.cfg.AgentRegistry.Has(ref.Name) {
 			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' not found", ref.Name))
 		}
+		agentDef, _ := v.cfg.AgentRegistry.Get(ref.Name)
+		if agentDef != nil && agentDef.Description == "" {
+			return NewValidationError(section, name, field,
+				fmt.Errorf("agent '%s' has no description (required for sub-agent catalog)", ref.Name))
+		}
 		if ref.LLMBackend != "" && !ref.LLMBackend.IsValid() {
 			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' has invalid llm_backend: %s", ref.Name, ref.LLMBackend))
 		}

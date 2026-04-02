@@ -33,7 +33,8 @@ type AgentConfig struct {
 	// missing keys fall through to the provider default.
 	NativeTools map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`
 
-	// Orchestrator-specific configuration (only valid when Type == orchestrator)
+	// Orchestrator guardrails (valid on any agent type; inert unless the agent
+	// has sub-agents at runtime).
 	Orchestrator *OrchestratorConfig `yaml:"orchestrator,omitempty"`
 
 	// Skills controls the on-demand skill catalog (available via load_skill).

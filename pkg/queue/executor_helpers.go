@@ -489,6 +489,29 @@ func applyOrchestratorConfig(g *orchestrator.OrchestratorGuardrails, oc *config.
 	}
 }
 
+// applyCatalogOverrides merges per-ref MCPServers overrides into catalog entries.
+// SubAgentRef.MCPServers, when non-empty, replaces the base agent's MCPServers
+// in the catalog shown to the orchestrator LLM, so the prompt accurately
+// reflects what tools each sub-agent will have when dispatched.
+// Entries are already deep copies from registry.Entries(), safe to mutate.
+func applyCatalogOverrides(entries []config.SubAgentEntry, refs config.SubAgentRefs) []config.SubAgentEntry {
+	overrides := make(map[string]config.SubAgentRef, len(refs))
+	for _, ref := range refs {
+		overrides[ref.Name] = ref
+	}
+	for i, entry := range entries {
+		ref, ok := overrides[entry.Name]
+		if !ok {
+			continue
+		}
+		if len(ref.MCPServers) > 0 {
+			entries[i].MCPServers = make([]string, len(ref.MCPServers))
+			copy(entries[i].MCPServers, ref.MCPServers)
+		}
+	}
+	return entries
+}
+
 // resolveSubAgents returns the sub_agents override from the most specific level
 // in the hierarchy: stage-agent > stage > chain. Returns nil if no override
 // (meaning the full global registry is used).
