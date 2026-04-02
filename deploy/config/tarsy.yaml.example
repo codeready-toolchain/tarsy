@@ -389,12 +389,14 @@ agents:
 # Define multi-stage agent chains for different alert types
 # Built-in chains: kubernetes
 #
-# Sub-agents (investigation): list sub_agents on a stage agent (agents[].sub_agents) or on a
-# stage (stages[].sub_agents). When the filtered catalog is non-empty, that agent can dispatch
-# those agents (dedicated tools + extra prompt guidance). No special agent type is required.
+# Sub-agents (investigation): precedence matches resolveSubAgents in pkg/queue/executor_helpers.go —
+# agents[].sub_agents > stages[].sub_agents > chain.sub_agents. The first non-empty list wins
+# (more specific overrides less specific). When the resolved catalog is non-empty, that agent
+# receives dispatch tools and orchestrator prompt guidance. No special agent type is required.
 #
-# Sub-agents (follow-up chat): optional chat.sub_agents and/or chain-level sub_agents (next to
-# stages). Precedence: chat.sub_agents > chain.sub_agents. Omit both to disable chat dispatch.
+# Sub-agents (follow-up chat): optional chat.sub_agents and/or chain.sub_agents (YAML key
+# sub_agents next to stages). Precedence: chat.sub_agents > chain.sub_agents (see
+# resolveChatSubAgents in pkg/queue/executor_helpers.go). Omit both to disable chat dispatch.
 
 agent_chains:
   # Single-stage chain with native thinking
@@ -407,9 +409,10 @@ agent_chains:
           - name: "KubernetesAgent"
             llm_backend: "google-native"
             max_iterations: 15
-    # Optional chain-level sub_agents: if set, follow-up chat can dispatch them (same mechanism
-    # as investigation). Precedence: chat.sub_agents > chain.sub_agents. Investigation stages
-    # use only per-stage / per-agent sub_agents — not this list.
+    # Optional chain.sub_agents: shared fallback for investigation and chat. Investigation uses
+    # resolveSubAgents: agents[].sub_agents > stages[].sub_agents > chain.sub_agents (first
+    # non-empty wins). Follow-up chat uses resolveChatSubAgents: chat.sub_agents overrides
+    # chain.sub_agents when chat.sub_agents is set; otherwise chain.sub_agents applies.
     # sub_agents:
     #   - name: GeneralWorker
     chat:

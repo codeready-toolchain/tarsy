@@ -144,11 +144,9 @@ var orchestrationTools = []agent.ToolDefinition{
 var orchestrationToolNames map[string]bool
 
 func init() {
-	orchestrationToolNames = make(map[string]bool)
-	for name, k := range builtintools.PlainToolKinds {
-		if k == builtintools.KindOrchestration {
-			orchestrationToolNames[name] = true
-		}
+	orchestrationToolNames = make(map[string]bool, len(orchestrationTools))
+	for _, def := range orchestrationTools {
+		orchestrationToolNames[def.Name] = true
 	}
 }
 
