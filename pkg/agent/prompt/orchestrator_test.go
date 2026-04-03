@@ -32,6 +32,24 @@ func TestFormatAgentCatalog_NativeToolsAgent(t *testing.T) {
 	assert.Contains(t, result, "Native tools: google_search, url_context")
 }
 
+func TestOrchestratorPrompt_WebResearcherOnlyWhenListedInCatalog(t *testing.T) {
+	// Dispatch guidance for WebResearcher must come from the sub-agent Description
+	// (built-in or YAML), not from global orchestratorBehavioralInstructions — chains
+	// may omit WebResearcher from sub_agents entirely.
+	longDesc := "Public web research; use for GitHub repos and OpenShift Route URLs."
+
+	noWeb := InjectOrchestratorSections("Base.", []config.SubAgentEntry{
+		{Name: "LogAnalyzer", Description: "Analyzes logs", MCPServers: []string{"loki"}},
+		{Name: "GeneralWorker", Description: "General-purpose"},
+	})
+	assert.NotContains(t, noWeb, "**WebResearcher**", "orchestrator prompt must not mention WebResearcher when it is not in the catalog")
+
+	withWeb := InjectOrchestratorSections("Base.", []config.SubAgentEntry{
+		{Name: "WebResearcher", Description: longDesc, NativeTools: []string{"google_search", "url_context"}},
+	})
+	assert.Contains(t, withWeb, "**WebResearcher**: "+longDesc)
+}
+
 func TestFormatAgentCatalog_PureReasoningAgent(t *testing.T) {
 	entries := []config.SubAgentEntry{
 		{Name: "GeneralWorker", Description: "General-purpose agent"},
@@ -85,7 +103,7 @@ func TestInjectOrchestratorSections_Content(t *testing.T) {
 
 	assert.Contains(t, result, "Base system prompt.")
 	assert.Contains(t, result, "Orchestrator Strategy")
-	assert.Contains(t, result, "Dispatch relevant sub-agents in parallel")
+	assert.Contains(t, result, "Prefer dispatching sub-agents")
 	assert.Contains(t, result, "Available Sub-Agents")
 	assert.Contains(t, result, "LogAnalyzer")
 	assert.Contains(t, result, "GeneralWorker")
@@ -111,7 +129,7 @@ func TestInjectOrchestratorSections_BaseContentIsPrefix(t *testing.T) {
 func TestOrchestratorTaskFocus(t *testing.T) {
 	focus := OrchestratorTaskFocus()
 	assert.NotEmpty(t, focus)
-	assert.Contains(t, focus, "coordinating sub-agents")
+	assert.Contains(t, focus, "Prefer sub-agents when")
 }
 
 func TestInjectOrchestratorSections_ViaBuilder(t *testing.T) {
@@ -181,7 +199,7 @@ func TestInjectOrchestratorSections_NoCustomInstructions(t *testing.T) {
 	system := messages[0].Content
 
 	assert.Contains(t, system, "Orchestrator Strategy")
-	assert.Contains(t, system, "Dispatch relevant sub-agents in parallel")
+	assert.Contains(t, system, "Prefer dispatching sub-agents")
 	assert.NotContains(t, system, "Agent-Specific Instructions")
 }
 

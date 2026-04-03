@@ -8,14 +8,17 @@ import (
 	"strings"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 )
 
 // Compile-time check that SkillToolExecutor implements agent.ToolExecutor.
 var _ agent.ToolExecutor = (*SkillToolExecutor)(nil)
 
 // ToolLoadSkill is the tool name used by the LLM to load skills.
-const ToolLoadSkill = "load_skill"
+// ToolLoadSkill is the wire name for the on-demand skill loader (pkg/builtintools).
+const ToolLoadSkill = builtintools.LoadSkill
 
 // IsSkillTool reports whether name is a known skill tool.
 func IsSkillTool(name string) bool {
@@ -91,6 +94,7 @@ func (s *SkillToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefiniti
 
 // Execute routes the tool call to load_skill or the inner executor.
 func (s *SkillToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+	call.Name = mcp.NormalizeBuiltinPlainToolName(call.Name)
 	if call.Name == ToolLoadSkill {
 		return s.executeLoadSkill(call)
 	}

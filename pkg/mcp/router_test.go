@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,71 @@ func TestNormalizeToolName(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestNormalizeBuiltinPlainToolName(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"dispatch_agent", "dispatch_agent"},
+		{"google:dispatch_agent", "dispatch_agent"},
+		{"google:load_skill", "load_skill"},
+		{"x:recall_past_investigations", "recall_past_investigations"},
+		{"kubernetes.get_pods", "kubernetes.get_pods"},
+		{"google:read_file", "google:read_file"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			assert.Equal(t, tt.want, NormalizeBuiltinPlainToolName(tt.in))
+		})
+	}
+}
+
+func TestSplitToolName_ErrorHints(t *testing.T) {
+	t.Run("colon prefixed orchestration tool", func(t *testing.T) {
+		_, _, err := SplitToolName("google:dispatch_agent")
+		require.Error(t, err)
+		msg := err.Error()
+		assert.Contains(t, msg, "orchestration")
+		assert.Contains(t, msg, "dispatch_agent")
+		assert.NotContains(t, strings.ToLower(msg), "must be in 'server.tool'")
+	})
+
+	t.Run("colon prefixed skill tool", func(t *testing.T) {
+		_, _, err := SplitToolName("google:load_skill")
+		require.Error(t, err)
+		msg := err.Error()
+		assert.Contains(t, msg, "skill")
+		assert.Contains(t, msg, "load_skill")
+	})
+
+	t.Run("colon prefixed memory tool", func(t *testing.T) {
+		_, _, err := SplitToolName("openai:search_past_sessions")
+		require.Error(t, err)
+		msg := err.Error()
+		assert.Contains(t, msg, "memory")
+		assert.Contains(t, msg, "search_past_sessions")
+	})
+
+	t.Run("plain orchestration name routed to MCP", func(t *testing.T) {
+		_, _, err := SplitToolName("list_agents")
+		require.Error(t, err)
+		msg := err.Error()
+		assert.Contains(t, msg, "orchestration")
+		assert.Contains(t, msg, "list_agents")
+	})
+
+	t.Run("plain load_skill routed to MCP", func(t *testing.T) {
+		_, _, err := SplitToolName("load_skill")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "skill")
+	})
+
+	t.Run("genuinely malformed MCP name", func(t *testing.T) {
+		_, _, err := SplitToolName("resources_get")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "one dot")
+	})
 }
 
 func TestSplitToolName(t *testing.T) {

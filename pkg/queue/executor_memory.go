@@ -25,16 +25,21 @@ func agentTypeSupportsMemory(agentType config.AgentType) bool {
 	}
 }
 
+// MemorySubAgentWrap returns a ToolExecutor wrapping function for sub-agent runs
+// (memory tool with no search exclusions). Returns nil when memory is disabled.
+func MemorySubAgentWrap(mem *memory.Service, memCfg *config.MemoryConfig, sessionID string) func(agent.ToolExecutor) agent.ToolExecutor {
+	if mem == nil || memCfg == nil {
+		return nil
+	}
+	return func(inner agent.ToolExecutor) agent.ToolExecutor {
+		return memory.NewToolExecutor(inner, mem, sessionID, "default", nil)
+	}
+}
+
 // memoryToolWrapper returns a ToolExecutor wrapping function for the memory tool.
 // Returns nil when memory is disabled (no wrapping needed).
 func (e *RealSessionExecutor) memoryToolWrapper(session *ent.AlertSession) func(agent.ToolExecutor) agent.ToolExecutor {
-	if e.memoryService == nil || e.memoryConfig == nil {
-		return nil
-	}
-	sessionID := session.ID
-	return func(inner agent.ToolExecutor) agent.ToolExecutor {
-		return memory.NewToolExecutor(inner, e.memoryService, sessionID, "default", nil)
-	}
+	return MemorySubAgentWrap(e.memoryService, e.memoryConfig, session.ID)
 }
 
 // memoryExcludeIDs builds a set of memory IDs to exclude from tool search results.

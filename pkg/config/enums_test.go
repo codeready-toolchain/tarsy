@@ -126,3 +126,19 @@ func TestGoogleNativeToolIsValid(t *testing.T) {
 		})
 	}
 }
+
+func TestIsGoogleNativeToolWireName(t *testing.T) {
+	assert.True(t, IsGoogleNativeToolWireName("google_search"))
+	assert.True(t, IsGoogleNativeToolWireName("url_context"))
+	assert.True(t, IsGoogleNativeToolWireName("code_execution"))
+	assert.False(t, IsGoogleNativeToolWireName("load_skill"))
+	assert.False(t, IsGoogleNativeToolWireName(""))
+	assert.False(t, IsGoogleNativeToolWireName("kubernetes.get_pods"))
+	assert.False(t, IsGoogleNativeToolWireName("load_context"), "aliases are not wire names until canonicalized")
+}
+
+func TestCanonicalGoogleNativeToolWireName(t *testing.T) {
+	assert.Equal(t, "url_context", CanonicalGoogleNativeToolWireName("load_context"))
+	assert.Equal(t, "url_context", CanonicalGoogleNativeToolWireName("url_context"))
+	assert.Equal(t, "google_search", CanonicalGoogleNativeToolWireName("google_search"))
+}

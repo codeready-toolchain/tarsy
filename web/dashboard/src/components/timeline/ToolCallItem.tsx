@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha, type Theme } from '@mui/material';
-import { ExpandMore, ExpandLess, CheckCircle, Error as ErrorIcon, InfoOutlined, AutoStoriesOutlined, HistoryOutlined } from '@mui/icons-material';
+import { ExpandMore, ExpandLess, HistoryOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
@@ -13,6 +13,7 @@ import InsightsCard from './InsightsCard';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
+import { getToolVisualConfig } from '../../utils/toolCallVisual';
 
 interface ToolCallItemProps {
   item: FlowItem;
@@ -174,6 +175,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
   const toolType = (item.metadata?.tool_type as string) || TOOL_TYPE.MCP;
   const isSkill = toolType === TOOL_TYPE.SKILL;
   const isMemory = toolType === TOOL_TYPE.MEMORY;
+  const isGoogleNative = toolType === TOOL_TYPE.GOOGLE_NATIVE;
   // Arguments may be stored as a parsed object or as a JSON string in metadata.
   // Parse strings into objects so isSimpleArguments / SimpleArgumentsList work correctly.
   const toolArguments: Record<string, unknown> = (() => {
@@ -331,14 +333,11 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
     return keys.length > 2 ? `${preview}, ...` : preview;
   };
 
-  const StatusIcon = isMcpFailure ? ErrorIcon
-    : isToolResultError ? InfoOutlined
-    : isSkill ? AutoStoriesOutlined
-    : CheckCircle;
-  const accentKey: 'error' | 'warning' | 'info' | 'primary' = isMcpFailure ? 'error'
-    : isToolResultError ? 'warning'
-    : isSkill ? 'info'
-    : 'primary';
+  const { accentKey, StatusIcon } = getToolVisualConfig(toolType, {
+    mode: 'completed',
+    isMcpFailure,
+    isToolResultError,
+  });
 
   return (
     <Box
@@ -384,6 +383,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
           {isSkill ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               Skill
+            </Typography>
+          ) : isGoogleNative ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Gemini native tool{serverName ? ` (${serverName})` : ''}
             </Typography>
           ) : serverName ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>

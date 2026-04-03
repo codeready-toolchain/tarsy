@@ -1808,6 +1808,103 @@ func TestResolveAgentConfig_PopulatesSkills(t *testing.T) {
 	assert.Equal(t, "networking", resolved.OnDemandSkills[0].Name)
 }
 
+func TestResolveAgentConfig_StageLevelSkillsAdditive(t *testing.T) {
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"req-a": {Name: "req-a", Description: "d", Body: "body a"},
+		"req-b": {Name: "req-b", Description: "d", Body: "body b"},
+		"on-a":  {Name: "on-a", Description: "od", Body: "x"},
+		"on-b":  {Name: "on-b", Description: "od", Body: "y"},
+	})
+	provider := &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "m", APIKeyEnv: "E"}
+	allow := []string{"on-a"}
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "p"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"worker": {
+				RequiredSkills: []string{"req-a"},
+				Skills:         &allow,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{"p": provider}),
+		SkillRegistry:       registry,
+	}
+
+	resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{
+		Name:           "worker",
+		RequiredSkills: []string{"req-b", "req-a"},
+		Skills:         []string{"on-b"},
+	})
+	require.NoError(t, err)
+
+	reqNames := make([]string, len(resolved.RequiredSkillContent))
+	for i, s := range resolved.RequiredSkillContent {
+		reqNames[i] = s.Name
+	}
+	assert.ElementsMatch(t, []string{"req-a", "req-b"}, reqNames)
+
+	odNames := make([]string, len(resolved.OnDemandSkills))
+	for i, s := range resolved.OnDemandSkills {
+		odNames[i] = s.Name
+	}
+	assert.ElementsMatch(t, []string{"on-a", "on-b"}, odNames)
+}
+
+func TestResolveAgentConfig_StageLevelSkills_StageOnlyRequired(t *testing.T) {
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"report-fmt": {Name: "report-fmt", Description: "d", Body: "format help"},
+		"extra-od":   {Name: "extra-od", Description: "d2", Body: "x"},
+	})
+	provider := &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "m", APIKeyEnv: "E"}
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "p"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"worker": {},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{"p": provider}),
+		SkillRegistry:       registry,
+	}
+
+	resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{
+		Name:           "worker",
+		RequiredSkills: []string{"report-fmt"},
+	})
+	require.NoError(t, err)
+	require.Len(t, resolved.RequiredSkillContent, 1)
+	assert.Equal(t, "report-fmt", resolved.RequiredSkillContent[0].Name)
+	require.Len(t, resolved.OnDemandSkills, 1)
+	assert.Equal(t, "extra-od", resolved.OnDemandSkills[0].Name)
+}
+
+func TestResolveAgentConfig_StageOnDemandSkillsIgnoredWhenAgentAllowlistNil(t *testing.T) {
+	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
+		"r1": {Name: "r1", Description: "d", Body: "b"},
+		"o1": {Name: "o1", Description: "d", Body: "b"},
+		"o2": {Name: "o2", Description: "d", Body: "b"},
+	})
+	provider := &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "m", APIKeyEnv: "E"}
+	cfg := &config.Config{
+		Defaults: &config.Defaults{LLMProvider: "p"},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"worker": {RequiredSkills: []string{"r1"}},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{"p": provider}),
+		SkillRegistry:       registry,
+	}
+
+	resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{
+		Name:   "worker",
+		Skills: []string{"o1"},
+	})
+	require.NoError(t, err)
+	require.Len(t, resolved.RequiredSkillContent, 1)
+	odNames := make([]string, len(resolved.OnDemandSkills))
+	for i, s := range resolved.OnDemandSkills {
+		odNames[i] = s.Name
+	}
+	assert.ElementsMatch(t, []string{"o1", "o2"}, odNames,
+		"agent Skills nil means full registry on-demand; stage skills must not narrow the allowlist")
+}
+
 func TestResolveChatAgentConfig_PopulatesSkills(t *testing.T) {
 	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
 		"kubernetes-basics": {

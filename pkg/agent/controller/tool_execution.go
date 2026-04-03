@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
+	"github.com/codeready-toolchain/tarsy/pkg/builtintools"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
@@ -25,12 +29,13 @@ const (
 	ToolTypeOrchestrator ToolType = "orchestrator"
 	ToolTypeSkill        ToolType = "skill"
 	ToolTypeMemory       ToolType = "memory"
-
-	// mirrors memory.ToolRecallPastInvestigations / ToolSearchPastSessions
-	// (can't import due to cycle)
-	toolNameRecallPastInvestigations = "recall_past_investigations"
-	toolNameSearchPastSessions       = "search_past_sessions"
+	ToolTypeNative       ToolType = "google_native"
 )
+
+// geminiNativeServerID labels metrics and MCP interactions for Gemini
+// provider-native tools (google_search, url_context, code_execution) that
+// are not executed via MCP.
+const geminiNativeServerID = "gemini-native"
 
 // toolCallResult holds the outcome of executeToolCall for the caller to
 // integrate into its conversation format (IteratingController
@@ -50,10 +55,103 @@ type toolCallResult struct {
 	Usage *agent.TokenUsage
 }
 
+// syntheticNativeGeminiToolResult builds the role=tool message for Gemini
+// provider-native tools. Grounding metadata is attached to the HTTP response,
+// not returned by MCP — the model must not treat a stub as evidence.
+func syntheticNativeGeminiToolResult(toolName string, groundings []agent.GroundingChunk) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "The %q tool was executed by the Gemini API in this turn (not by the MCP tool runner). "+
+		"Base factual claims on the assistant text above, grounding/url_context events in the timeline, "+
+		"and the digest below — do not invent URLs, file paths, or metrics that do not appear here.\n\n",
+		toolName)
+
+	if toolName == string(config.GoogleNativeToolCodeExecution) {
+		b.WriteString("For interpreted code output, see code_execution timeline events and the model response text.\n\n")
+	}
+
+	querySeen := make(map[string]struct{})
+	var queries []string
+	sourceSeen := make(map[string]struct{})
+	var sourceLines []string
+	for _, g := range groundings {
+		for _, q := range g.WebSearchQueries {
+			q = strings.TrimSpace(q)
+			if q == "" {
+				continue
+			}
+			if _, ok := querySeen[q]; ok {
+				continue
+			}
+			querySeen[q] = struct{}{}
+			queries = append(queries, q)
+		}
+		for _, s := range g.Sources {
+			u := strings.TrimSpace(s.URI)
+			if u == "" {
+				continue
+			}
+			if _, ok := sourceSeen[u]; ok {
+				continue
+			}
+			sourceSeen[u] = struct{}{}
+			title := strings.TrimSpace(s.Title)
+			if title != "" {
+				sourceLines = append(sourceLines, fmt.Sprintf("- %s (%s)", u, title))
+			} else {
+				sourceLines = append(sourceLines, "- "+u)
+			}
+		}
+	}
+	if len(queries) > 0 {
+		b.WriteString("Web search queries (from grounding metadata):\n")
+		for _, q := range queries {
+			fmt.Fprintf(&b, "- %s\n", q)
+		}
+		b.WriteByte('\n')
+	}
+	if len(sourceLines) > 0 {
+		b.WriteString("Sources (from grounding metadata):\n")
+		for _, line := range sourceLines {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+	b.WriteString("No grounding metadata (queries or source URLs) was present in this response turn. " +
+		"If you lack independent verification, state that explicitly.")
+	return b.String()
+}
+
+// omitLLMToolCallForNativeSearchOrURL is true when the dashboard already shows a dedicated
+// google_search_result or url_context_result (or URL/search fallbacks from tool args), so we
+// skip the generic llm_tool_call row that would duplicate the same turn with synthetic digest text.
+//
+// The google_search argument parser (parseGoogleSearchToolArgumentQueries) runs only inside
+// the GoogleNativeToolGoogleSearch branch — not for MCP or other tool names.
+func omitLLMToolCallForNativeSearchOrURL(
+	effectiveName string,
+	groundings []agent.GroundingChunk,
+	toolArguments string,
+) bool {
+	switch effectiveName {
+	case string(config.GoogleNativeToolGoogleSearch):
+		return groundingsHaveAnySources(groundings) ||
+			groundingsHaveAnyWebSearchQueries(groundings) ||
+			len(parseGoogleSearchToolArgumentQueries(toolArguments)) > 0
+	case string(config.GoogleNativeToolURLContext):
+		if groundingsHaveAnySources(groundings) {
+			return true
+		}
+		return len(parseURLContextToolArgumentURLs(toolArguments)) > 0
+	default:
+		return false
+	}
+}
+
 // executeToolCall runs a single tool call through the full lifecycle:
 //  1. Normalize and split tool name for events/summarization
-//  2. Create streaming llm_tool_call event (dashboard spinner)
-//  3. Execute the tool via ToolExecutor
+//  2. Create streaming llm_tool_call event (dashboard spinner), unless omitted for native search/URL
+//  3. Execute the tool via ToolExecutor (or synthesize result for Gemini native tools)
 //  4. Complete the tool call event with storage-truncated result
 //  5. Optionally summarize large non-error results
 //
@@ -65,21 +163,29 @@ func executeToolCall(
 	execCtx *agent.ExecutionContext,
 	call agent.ToolCall,
 	messages []agent.ConversationMessage,
+	sameTurnGroundings []agent.GroundingChunk,
 	eventSeq *int,
 ) toolCallResult {
-	// Step 1: Normalize and split tool name
-	normalizedName := mcp.NormalizeToolName(call.Name)
-	serverID, toolName, splitErr := mcp.SplitToolName(normalizedName)
+	// Step 1: Normalize and split tool name (colon-prefixed orchestration names first)
+	plainFixed := mcp.NormalizeBuiltinPlainToolName(call.Name)
+	effectiveName := mcp.NormalizeToolName(plainFixed)
+	if execCtx.Config != nil && execCtx.Config.LLMBackend == config.LLMBackendNativeGemini {
+		effectiveName = config.CanonicalGoogleNativeToolWireName(effectiveName)
+	}
+	serverID, toolName, splitErr := mcp.SplitToolName(effectiveName)
 	var toolType ToolType
 	if splitErr != nil {
-		toolName = call.Name
+		toolName = effectiveName
 		if orchestrator.IsOrchestrationTool(toolName) {
 			serverID = orchestrator.OrchestrationServerName
 			toolType = ToolTypeOrchestrator
 		} else if skill.IsSkillTool(toolName) {
 			toolType = ToolTypeSkill
-		} else if toolName == toolNameRecallPastInvestigations || toolName == toolNameSearchPastSessions {
+		} else if k, ok := builtintools.KindForPlainTool(toolName); ok && k == builtintools.KindMemory {
 			toolType = ToolTypeMemory
+		} else if config.IsGoogleNativeToolWireName(effectiveName) {
+			serverID = geminiNativeServerID
+			toolType = ToolTypeNative
 		} else {
 			toolType = ToolTypeMCP
 		}
@@ -87,20 +193,49 @@ func executeToolCall(
 		toolType = ToolTypeMCP
 	}
 
+	providerNativeTool := execCtx.Config != nil &&
+		execCtx.Config.LLMBackend == config.LLMBackendNativeGemini &&
+		config.IsGoogleNativeToolWireName(effectiveName)
+	omitToolCallTimeline := providerNativeTool &&
+		omitLLMToolCallForNativeSearchOrURL(effectiveName, sameTurnGroundings, call.Arguments)
+
 	// Publish execution progress: gathering_info
 	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseGatheringInfo,
 		fmt.Sprintf("Calling %s.%s", serverID, toolName))
 
-	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner)
-	toolCallEvent, createErr := createToolCallEvent(ctx, execCtx, serverID, toolName, toolType, call.Arguments, eventSeq)
-	if createErr != nil {
-		slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
+	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner).
+	// Native google_search / url_context: omit when grounding (or URL-arg fallback) already produced a timeline row.
+	var toolCallEvent *ent.TimelineEvent
+	if !omitToolCallTimeline {
+		var createErr error
+		toolCallEvent, createErr = createToolCallEvent(ctx, execCtx, serverID, toolName, toolType, call.Arguments, eventSeq)
+		if createErr != nil {
+			slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
+		}
 	}
 
 	// Step 3: Execute the tool with its own timeout within the iteration budget.
 	toolCtx, toolCancel := context.WithTimeout(ctx, execCtx.Config.ToolCallTimeout)
 	startTime := time.Now()
-	result, toolErr := execCtx.ToolExecutor.Execute(toolCtx, call)
+	execCall := call
+	// Only rewrite the tool name when colon-prefix built-in correction applied.
+	// Otherwise preserve the LLM name (e.g. server__tool) — MCP executor normalizes.
+	if plainFixed != call.Name {
+		execCall.Name = effectiveName
+	}
+
+	var result *agent.ToolResult
+	var toolErr error
+	if providerNativeTool {
+		result = &agent.ToolResult{
+			CallID:  call.ID,
+			Name:    call.Name,
+			Content: syntheticNativeGeminiToolResult(effectiveName, sameTurnGroundings),
+			IsError: false,
+		}
+	} else {
+		result, toolErr = execCtx.ToolExecutor.Execute(toolCtx, execCall)
+	}
 	toolCancel()
 
 	metrics.MCPCallsTotal.WithLabelValues(serverID, toolName).Inc()
@@ -120,6 +255,17 @@ func executeToolCall(
 
 	// Record MCP interaction (raw data preserved in trace for debugging)
 	recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, result, startTime, nil)
+
+	// When Gemini streaming omits url_context_metadata/grounding sources but the model still
+	// issued a url_context function call, emit a dashboard row from parsed tool arguments.
+	if providerNativeTool && !result.IsError &&
+		effectiveName == string(config.GoogleNativeToolURLContext) {
+		createURLContextFallbackFromToolArgs(ctx, execCtx, call.Arguments, sameTurnGroundings, eventSeq)
+	}
+	if providerNativeTool && !result.IsError &&
+		effectiveName == string(config.GoogleNativeToolGoogleSearch) {
+		createGoogleSearchFallbackFromToolArgs(ctx, execCtx, call.Arguments, sameTurnGroundings, eventSeq)
+	}
 
 	content := result.Content
 	var usage *agent.TokenUsage

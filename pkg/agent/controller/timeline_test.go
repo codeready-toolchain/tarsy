@@ -135,6 +135,15 @@ func TestFormatGoogleSearchContent(t *testing.T) {
 		assert.Contains(t, content, "Site A (https://a.com)")
 		assert.Contains(t, content, "https://b.com")
 	})
+
+	t.Run("queries only no sources in metadata", func(t *testing.T) {
+		content := formatGoogleSearchContent(
+			[]string{"site:github.com openshift"},
+			nil,
+		)
+		assert.Contains(t, content, "'site:github.com openshift'")
+		assert.Contains(t, content, "(none in response metadata)")
+	})
 }
 
 // ============================================================================
@@ -302,7 +311,7 @@ func TestCreateGroundingEvents(t *testing.T) {
 		assert.Equal(t, 1, created)
 	})
 
-	t.Run("skips empty sources", func(t *testing.T) {
+	t.Run("google search with queries only (no source URIs)", func(t *testing.T) {
 		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
 		eventSeq := 0
 
@@ -310,8 +319,8 @@ func TestCreateGroundingEvents(t *testing.T) {
 			{WebSearchQueries: []string{"query"}, Sources: nil},
 		}, &eventSeq)
 
-		assert.Equal(t, 0, created)
-		assert.Equal(t, 0, eventSeq)
+		assert.Equal(t, 1, created)
+		assert.Equal(t, 1, eventSeq)
 	})
 
 	t.Run("empty input", func(t *testing.T) {
@@ -339,5 +348,73 @@ func TestCreateGroundingEvents(t *testing.T) {
 
 		assert.Equal(t, 2, created)
 		assert.Equal(t, 2, eventSeq)
+	})
+}
+
+func TestParseGoogleSearchToolArgumentQueries(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, []string{`site:github.com "x"`}, parseGoogleSearchToolArgumentQueries(
+		`{"query":"site:github.com \"x\""}`))
+	assert.Equal(t, []string{"a", "b"}, parseGoogleSearchToolArgumentQueries(`{"queries":["a","b"]}`))
+	assert.Nil(t, parseGoogleSearchToolArgumentQueries(`{}`))
+	assert.Nil(t, parseGoogleSearchToolArgumentQueries(`not json`))
+}
+
+func TestCreateGoogleSearchFallbackFromToolArgs(t *testing.T) {
+	t.Run("creates event when groundings empty", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		eventSeq := 0
+		createGoogleSearchFallbackFromToolArgs(context.Background(), execCtx,
+			`{"query":"site:github.com test"}`, nil, &eventSeq)
+		assert.Equal(t, 1, eventSeq)
+	})
+
+	t.Run("skips when groundings have search queries", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		eventSeq := 0
+		createGoogleSearchFallbackFromToolArgs(context.Background(), execCtx,
+			`{"query":"ignored"}`,
+			[]agent.GroundingChunk{{WebSearchQueries: []string{"from api"}}},
+			&eventSeq)
+		assert.Equal(t, 0, eventSeq)
+	})
+
+	t.Run("skips when groundings have sources", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		eventSeq := 0
+		createGoogleSearchFallbackFromToolArgs(context.Background(), execCtx,
+			`{"query":"ignored"}`,
+			[]agent.GroundingChunk{{Sources: []agent.GroundingSource{{URI: "https://x"}}}},
+			&eventSeq)
+		assert.Equal(t, 0, eventSeq)
+	})
+}
+
+func TestParseURLContextToolArgumentURLs(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, []string{"https://a.com"}, parseURLContextToolArgumentURLs(`{"url":"https://a.com"}`))
+	assert.Equal(t, []string{"https://a.com", "https://b.com"}, parseURLContextToolArgumentURLs(
+		`{"urls":["https://a.com","https://b.com"]}`))
+	assert.Nil(t, parseURLContextToolArgumentURLs(`{}`))
+	assert.Nil(t, parseURLContextToolArgumentURLs(`not json`))
+}
+
+func TestCreateURLContextFallbackFromToolArgs(t *testing.T) {
+	t.Run("creates event when groundings empty", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		eventSeq := 0
+		createURLContextFallbackFromToolArgs(context.Background(), execCtx,
+			`{"urls":["https://example.com/repo"]}`, nil, &eventSeq)
+		assert.Equal(t, 1, eventSeq)
+	})
+
+	t.Run("skips when groundings already have sources", func(t *testing.T) {
+		execCtx := newTestExecCtx(t, &mockLLMClient{}, &mockToolExecutor{})
+		eventSeq := 0
+		createURLContextFallbackFromToolArgs(context.Background(), execCtx,
+			`{"urls":["https://example.com"]}`,
+			[]agent.GroundingChunk{{Sources: []agent.GroundingSource{{URI: "https://other"}}}},
+			&eventSeq)
+		assert.Equal(t, 0, eventSeq)
 	})
 }

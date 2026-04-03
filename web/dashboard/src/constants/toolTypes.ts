@@ -9,6 +9,7 @@ export const TOOL_TYPE = {
   ORCHESTRATOR: 'orchestrator',
   SKILL: 'skill',
   MEMORY: 'memory',
+  GOOGLE_NATIVE: 'google_native',
 } as const;
 
 export type ToolType = (typeof TOOL_TYPE)[keyof typeof TOOL_TYPE];

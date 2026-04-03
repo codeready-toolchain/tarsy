@@ -211,7 +211,7 @@ func (c *IteratingController) Run(
 
 			// Execute each tool call and append results
 			for _, tc := range resp.ToolCalls {
-				tcResult := executeToolCall(iterCtx, execCtx, tc, messages, &eventSeq)
+				tcResult := executeToolCall(iterCtx, execCtx, tc, messages, resp.Groundings, &eventSeq)
 
 				if tcResult.IsError {
 					state.RecordFailure(tcResult.Content, isTimeoutError(tcResult.Err))

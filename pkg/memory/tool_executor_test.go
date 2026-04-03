@@ -125,6 +125,19 @@ func TestToolExecutor_Execute_RecallNilService(t *testing.T) {
 	assert.Contains(t, result.Content, "memory service is not available")
 }
 
+func TestToolExecutor_Execute_ColonPrefixedRecallNilService(t *testing.T) {
+	te := NewToolExecutor(nil, nil, "", "default", nil)
+
+	result, err := te.Execute(t.Context(), agent.ToolCall{
+		ID:        "call-1",
+		Name:      "vertex:" + ToolRecallPastInvestigations,
+		Arguments: `{"query": "test"}`,
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "memory service is not available")
+}
+
 func TestToolExecutor_Execute_RecallEmptyQuery(t *testing.T) {
 	svc := &Service{}
 	te := NewToolExecutor(nil, svc, "", "default", nil)

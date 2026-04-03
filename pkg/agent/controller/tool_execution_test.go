@@ -8,8 +8,10 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -186,7 +188,7 @@ func TestExecuteToolCall_Success(t *testing.T) {
 		ID:        "tc-1",
 		Name:      "test-mcp__get_pods",
 		Arguments: `{"ns":"default"}`,
-	}, nil, &eventSeq)
+	}, nil, nil, &eventSeq)
 
 	assert.False(t, result.IsError)
 	assert.Contains(t, result.Content, "pods")
@@ -326,7 +328,7 @@ func TestExecuteToolCall_ToolError(t *testing.T) {
 		ID:        "tc-err",
 		Name:      "test-mcp__broken_tool",
 		Arguments: `{}`,
-	}, nil, &eventSeq)
+	}, nil, nil, &eventSeq)
 
 	assert.True(t, result.IsError)
 	assert.Contains(t, result.Content, "server unavailable")
@@ -367,6 +369,21 @@ func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
 			wantToolType: string(ToolTypeOrchestrator),
 		},
 		{
+			name:         "colon-prefixed dispatch_agent classified as orchestrator",
+			toolCallName: "google:dispatch_agent",
+			wantToolType: string(ToolTypeOrchestrator),
+		},
+		{
+			name:         "colon-prefixed load_skill classified as skill",
+			toolCallName: "google:load_skill",
+			wantToolType: string(ToolTypeSkill),
+		},
+		{
+			name:         "colon-prefixed recall_past_investigations classified as memory",
+			toolCallName: "openai:recall_past_investigations",
+			wantToolType: string(ToolTypeMemory),
+		},
+		{
 			name:         "recall_past_investigations classified as memory",
 			toolCallName: "recall_past_investigations",
 			wantToolType: string(ToolTypeMemory),
@@ -375,6 +392,21 @@ func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
 			name:         "malformed MCP name without server prefix stays MCP",
 			toolCallName: "resources_get",
 			wantToolType: string(ToolTypeMCP),
+		},
+		{
+			name:         "url_context classified as google_native",
+			toolCallName: "url_context",
+			wantToolType: string(ToolTypeNative),
+		},
+		{
+			name:         "google_search classified as google_native",
+			toolCallName: "google_search",
+			wantToolType: string(ToolTypeNative),
+		},
+		{
+			name:         "code_execution classified as google_native",
+			toolCallName: "code_execution",
+			wantToolType: string(ToolTypeNative),
 		},
 	}
 
@@ -398,7 +430,7 @@ func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
 				ID:        "tc-classify",
 				Name:      tt.toolCallName,
 				Arguments: `{}`,
-			}, nil, &eventSeq)
+			}, nil, nil, &eventSeq)
 
 			events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
 			require.NoError(t, err)
@@ -409,4 +441,192 @@ func TestExecuteToolCall_ToolTypeClassification(t *testing.T) {
 				"tool_type metadata mismatch for %q", tt.toolCallName)
 		})
 	}
+}
+
+func TestExecuteToolCall_GeminiNative_LoadContextAliasSkipsStub(t *testing.T) {
+	stub := agent.NewStubToolExecutor(nil)
+	execCtx := newTestExecCtx(t, &mockLLMClient{}, stub)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+	ctx := context.Background()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:        "tc-load-ctx",
+		Name:      "load_context",
+		Arguments: `{"urls":["https://github.com/example/repo"]}`,
+	}, nil, nil, &eventSeq)
+
+	assert.False(t, result.IsError)
+	assert.NotContains(t, result.Content, "[stub]")
+	assert.Contains(t, result.Content, "Gemini API")
+}
+
+func TestExecuteToolCall_GeminiNative_SkipsStubExecutor(t *testing.T) {
+	stub := agent.NewStubToolExecutor(nil)
+	execCtx := newTestExecCtx(t, &mockLLMClient{}, stub)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+	groundings := []agent.GroundingChunk{
+		{
+			WebSearchQueries: []string{"cloud-cafe k8s"},
+			Sources: []agent.GroundingSource{
+				{URI: "https://github.com/example/repo", Title: "Example"},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:        "tc-native",
+		Name:      "url_context",
+		Arguments: `{"url":"https://github.com/example/repo"}`,
+	}, nil, groundings, &eventSeq)
+
+	assert.False(t, result.IsError)
+	assert.NotContains(t, result.Content, "[stub]")
+	assert.Contains(t, result.Content, "Gemini API")
+	assert.Contains(t, result.Content, "https://github.com/example/repo")
+	assert.Contains(t, result.Content, "cloud-cafe k8s")
+
+	events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	var llmToolCalls int
+	for _, e := range events {
+		if e.EventType == timelineevent.EventTypeLlmToolCall {
+			llmToolCalls++
+		}
+	}
+	assert.Zero(t, llmToolCalls, "grounding-backed native url_context should not emit duplicate llm_tool_call")
+
+	interactions, err := execCtx.Services.Interaction.GetMCPInteractionsList(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	require.Len(t, interactions, 1)
+	assert.Equal(t, geminiNativeServerID, interactions[0].ServerName)
+	assert.Equal(t, "url_context", *interactions[0].ToolName)
+}
+
+func TestExecuteToolCall_GeminiNative_EmptyGroundingDigest(t *testing.T) {
+	stub := agent.NewStubToolExecutor(nil)
+	execCtx := newTestExecCtx(t, &mockLLMClient{}, stub)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+	ctx := context.Background()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:   "tc-native-2",
+		Name: "google_search",
+	}, nil, nil, &eventSeq)
+
+	assert.False(t, result.IsError)
+	assert.Contains(t, result.Content, "No grounding metadata")
+
+	events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	var llmToolCalls int
+	for _, e := range events {
+		if e.EventType == timelineevent.EventTypeLlmToolCall {
+			llmToolCalls++
+		}
+	}
+	assert.Equal(t, 1, llmToolCalls, "google_search with no grounding should still record llm_tool_call for the synthetic digest")
+}
+
+func TestExecuteToolCall_GeminiNative_GoogleSearchTimelineFallbackFromArgs(t *testing.T) {
+	stub := agent.NewStubToolExecutor(nil)
+	execCtx := newTestExecCtx(t, &mockLLMClient{}, stub)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+	ctx := context.Background()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:        "tc-gs-fallback",
+		Name:      "google_search",
+		Arguments: `{"query":"site:github.com \"openshift-openclaw\""}`,
+	}, nil, nil, &eventSeq)
+
+	assert.False(t, result.IsError)
+
+	events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	var llmToolCalls int
+	var inferred bool
+	for _, e := range events {
+		if e.EventType == timelineevent.EventTypeLlmToolCall {
+			llmToolCalls++
+		}
+		if e.EventType != timelineevent.EventTypeGoogleSearchResult {
+			continue
+		}
+		if b, ok := e.Metadata["inferred_from_tool_arguments"].(bool); ok && b {
+			inferred = true
+			assert.Contains(t, e.Content, "site:github.com")
+			break
+		}
+	}
+	assert.True(t, inferred, "expected google_search_result with inferred_from_tool_arguments")
+	assert.Zero(t, llmToolCalls, "tool-args fallback should not duplicate llm_tool_call")
+}
+
+func TestExecuteToolCall_GeminiNative_URLContextTimelineFallbackFromArgs(t *testing.T) {
+	stub := agent.NewStubToolExecutor(nil)
+	execCtx := newTestExecCtx(t, &mockLLMClient{}, stub)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+	ctx := context.Background()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:        "tc-url-fallback",
+		Name:      "url_context",
+		Arguments: `{"urls":["https://github.com/example/openshift-openclaw"]}`,
+	}, nil, nil, &eventSeq)
+
+	assert.False(t, result.IsError)
+
+	events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	var inferred bool
+	var llmToolCalls int
+	for _, e := range events {
+		if e.EventType == timelineevent.EventTypeLlmToolCall {
+			llmToolCalls++
+		}
+		if e.EventType != timelineevent.EventTypeURLContextResult {
+			continue
+		}
+		if b, ok := e.Metadata["inferred_from_tool_arguments"].(bool); ok && b {
+			inferred = true
+			assert.Contains(t, e.Content, "github.com/example/openshift-openclaw")
+			break
+		}
+	}
+	assert.True(t, inferred, "expected url_context_result with inferred_from_tool_arguments")
+	assert.Zero(t, llmToolCalls, "URL-arg fallback should not duplicate llm_tool_call")
+}
+
+func TestExecuteToolCall_LangChain_StillUsesExecutorForNativeToolNames(t *testing.T) {
+	toolExec := &mockToolExecutorFunc{
+		tools: []agent.ToolDefinition{{Name: "url_context"}},
+		executeFn: func(_ context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+			return &agent.ToolResult{
+				CallID:  call.ID,
+				Name:    call.Name,
+				Content: "executor-was-called",
+				IsError: false,
+			}, nil
+		},
+	}
+	execCtx := newTestExecCtx(t, &mockLLMClient{}, toolExec)
+	// Default backend is LangChain — provider-native short-circuit must not apply.
+	require.Equal(t, config.LLMBackendLangChain, execCtx.Config.LLMBackend)
+
+	ctx := context.Background()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:   "tc-lc",
+		Name: "url_context",
+	}, nil, nil, &eventSeq)
+
+	assert.False(t, result.IsError)
+	assert.Equal(t, "executor-was-called", result.Content)
 }

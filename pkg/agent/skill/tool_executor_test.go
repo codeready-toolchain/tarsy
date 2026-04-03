@@ -223,6 +223,21 @@ func TestSkillToolExecutor_Execute_LoadSkill(t *testing.T) {
 	}
 }
 
+func TestSkillToolExecutor_Execute_ColonPrefixedLoadSkill(t *testing.T) {
+	inner := agent.NewStubToolExecutor(nil)
+	s := NewSkillToolExecutor(inner, testRegistry(), allSkillNames())
+
+	result, err := s.Execute(t.Context(), agent.ToolCall{
+		ID:        "call-colon",
+		Name:      "google:load_skill",
+		Arguments: loadSkillArgs("kubernetes-debugging"),
+	})
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	assert.Equal(t, "load_skill", result.Name)
+	assert.Contains(t, result.Content, "Kubernetes Debugging")
+}
+
 func TestSkillToolExecutor_Execute_DelegatesToInner(t *testing.T) {
 	inner := agent.NewStubToolExecutor([]agent.ToolDefinition{
 		{Name: "server1.read_file"},

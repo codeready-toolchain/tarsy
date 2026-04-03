@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -488,8 +489,8 @@ func formatCodeExecution(code, result string) string {
 
 // createGroundingEvents creates timeline events for grounding results.
 // Determines event type based on whether web_search_queries are present:
-//   - With queries → google_search_result
-//   - Without queries → url_context_result
+//   - With queries → google_search_result (sources optional; API often omits URIs)
+//   - Without queries but with sources → url_context_result
 //
 // Content is human-readable; structured data goes in metadata (Q5 decision).
 func createGroundingEvents(
@@ -501,8 +502,10 @@ func createGroundingEvents(
 	created := 0
 
 	for _, g := range groundings {
-		if len(g.Sources) == 0 {
-			continue // No sources — skip empty grounding
+		hasSources := len(g.Sources) > 0
+		hasQueries := len(g.WebSearchQueries) > 0
+		if !hasSources && !hasQueries {
+			continue
 		}
 
 		// Build structured metadata (full data for frontend rich rendering)
@@ -517,13 +520,12 @@ func createGroundingEvents(
 		var eventType timelineevent.EventType
 		var content string
 
-		if len(g.WebSearchQueries) > 0 {
-			// Google Search grounding
+		if hasQueries {
 			eventType = timelineevent.EventTypeGoogleSearchResult
 			metadata["queries"] = g.WebSearchQueries
 			content = formatGoogleSearchContent(g.WebSearchQueries, g.Sources)
 		} else {
-			// URL Context grounding
+			// URL Context grounding (sources only)
 			eventType = timelineevent.EventTypeURLContextResult
 			content = formatUrlContextContent(g.Sources)
 		}
@@ -533,6 +535,176 @@ func createGroundingEvents(
 	}
 
 	return created
+}
+
+// groundingsHaveAnySources reports whether any grounding chunk carries source URIs.
+func groundingsHaveAnySources(groundings []agent.GroundingChunk) bool {
+	for _, g := range groundings {
+		if len(g.Sources) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// groundingsHaveAnyWebSearchQueries reports whether any chunk includes Google Search queries.
+func groundingsHaveAnyWebSearchQueries(groundings []agent.GroundingChunk) bool {
+	for _, g := range groundings {
+		if len(g.WebSearchQueries) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// parseURLContextToolArgumentURLs extracts URLs from Gemini url_context tool JSON arguments.
+func parseURLContextToolArgumentURLs(arguments string) []string {
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(arguments)), &data); err != nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, key := range []string{"urls", "url", "URL", "uris", "Uris"} {
+		raw, ok := data[key]
+		if !ok {
+			continue
+		}
+		var strVal string
+		if err := json.Unmarshal(raw, &strVal); err == nil {
+			add(strVal)
+			continue
+		}
+		var arr []string
+		if err := json.Unmarshal(raw, &arr); err == nil {
+			for _, s := range arr {
+				add(s)
+			}
+		}
+	}
+	return out
+}
+
+// createURLContextFallbackFromToolArgs emits url_context_result when the model invoked
+// url_context but this LLM turn delivered no grounding/source URIs (streaming often omits
+// url_context_metadata). URLs are taken only from tool arguments — they show what the model
+// asked to fetch, not a guarantee the API attached retrieval metadata.
+func createURLContextFallbackFromToolArgs(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	toolArguments string,
+	groundings []agent.GroundingChunk,
+	eventSeq *int,
+) {
+	if groundingsHaveAnySources(groundings) {
+		return
+	}
+	urls := parseURLContextToolArgumentURLs(toolArguments)
+	if len(urls) == 0 {
+		return
+	}
+	sources := make([]agent.GroundingSource, 0, len(urls))
+	for _, u := range urls {
+		sources = append(sources, agent.GroundingSource{URI: u, Title: u})
+	}
+	metadata := map[string]interface{}{
+		"source":                       "gemini",
+		"sources":                      formatGroundingSources(sources),
+		"inferred_from_tool_arguments": true,
+	}
+	content := formatUrlContextContent(sources)
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeURLContextResult, content, metadata, eventSeq)
+}
+
+// parseGoogleSearchToolArgumentQueries extracts search text from the JSON arguments of a
+// Gemini **native** function call whose wire name is exactly "google_search"
+// (LLMBackendNativeGemini + config.GoogleNativeToolGoogleSearch).
+//
+// It is only invoked from executeToolCall after that guard — never for MCP tools
+// (those use dotted names like "kubernetes-server.pods_list" and do not hit this path).
+//
+// Other plain built-ins (e.g. pkg/builtintools search_past_sessions, recall_past_investigations,
+// dispatch_agent, load_skill) are classified as memory/orchestration/skill in executeToolCall
+// before the Google-native branch; config.IsGoogleNativeToolWireName is false for them, so
+// providerNativeTool is false and this parser is never called — even if their JSON uses a
+// "query" field. Session search keeps the normal llm_tool_call + summarization path.
+//
+// There is therefore no cross-tool false positive: we only parse payloads attached to a
+// native google_search invocation.
+//
+// Multiple top-level keys are accepted because model/SDK payloads have used different shapes
+// (e.g. query vs queries); the first non-empty match wins.
+func parseGoogleSearchToolArgumentQueries(arguments string) []string {
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(arguments)), &data); err != nil {
+		return nil
+	}
+	for _, key := range []string{"query", "q", "search_query", "SearchQuery", "queries"} {
+		raw, ok := data[key]
+		if !ok {
+			continue
+		}
+		var strVal string
+		if err := json.Unmarshal(raw, &strVal); err == nil {
+			strVal = strings.TrimSpace(strVal)
+			if strVal != "" {
+				return []string{strVal}
+			}
+			continue
+		}
+		var arr []string
+		if err := json.Unmarshal(raw, &arr); err == nil {
+			var out []string
+			for _, s := range arr {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+	return nil
+}
+
+// createGoogleSearchFallbackFromToolArgs emits google_search_result when the model invoked
+// native google_search but grounding carried no queries or sources (common with some stream shapes).
+// Call from executeToolCall only for GoogleNativeToolGoogleSearch; queries come from tool arguments.
+func createGoogleSearchFallbackFromToolArgs(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	toolArguments string,
+	groundings []agent.GroundingChunk,
+	eventSeq *int,
+) {
+	if groundingsHaveAnyWebSearchQueries(groundings) || groundingsHaveAnySources(groundings) {
+		return
+	}
+	queries := parseGoogleSearchToolArgumentQueries(toolArguments)
+	if len(queries) == 0 {
+		return
+	}
+	metadata := map[string]interface{}{
+		"source":                       "gemini",
+		"queries":                      queries,
+		"sources":                      formatGroundingSources(nil),
+		"inferred_from_tool_arguments": true,
+	}
+	content := formatGoogleSearchContent(queries, nil)
+	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeGoogleSearchResult, content, metadata, eventSeq)
 }
 
 // formatSourceList formats a list of GroundingSource into a comma-separated string.
@@ -567,6 +739,10 @@ func formatGoogleSearchContent(queries []string, sources []agent.GroundingSource
 		sb.WriteString("'")
 	}
 	sb.WriteString(" → Sources: ")
+	if len(sources) == 0 {
+		sb.WriteString("(none in response metadata)")
+		return sb.String()
+	}
 	sb.WriteString(formatSourceList(sources))
 	return sb.String()
 }

@@ -951,6 +951,165 @@ func TestChatExecutor_CancelBySessionID(t *testing.T) {
 	}
 }
 
+func TestChatExecutor_ChatSubAgents_DispatchesSubAgent(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := context.Background()
+
+	chainID := "chat-subagent-chain"
+	maxIter := 10
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+		},
+		Chat: &config.ChatConfig{
+			Enabled:   true,
+			SubAgents: config.SubAgentRefs{{Name: "SubWorker"}},
+		},
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent": {
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			config.AgentNameChat: {
+				Description:   "Chat assistant with sub-agents",
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+			"SubWorker": {
+				Description:   "Specialist sub-agent",
+				LLMBackend:    config.LLMBackendLangChain,
+				MaxIterations: &maxIter,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+			chainID: chain,
+		}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	llm := &routingMockLLM{
+		orchestratorResp: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{
+					CallID:    "call-1",
+					Name:      "dispatch_agent",
+					Arguments: `{"name":"SubWorker","task":"Analyze the alert"}`,
+				},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Chat answered using sub-agent output."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "unused fallback"},
+			}},
+		},
+		subAgentResp: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Sub-agent found the issue."},
+			}},
+		},
+	}
+
+	publisher := &testEventPublisher{}
+	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, publisher,
+		ChatMessageExecutorConfig{
+			SessionTimeout:    30 * time.Second,
+			HeartbeatInterval: 5 * time.Second,
+		},
+		nil, nil, nil,
+	)
+	defer chatExecutor.Stop()
+
+	session, err := entClient.AlertSession.Create().
+		SetID("session-chat-sub-1").
+		SetAlertData("test alert").
+		SetAgentType("kubernetes").
+		SetAlertType("test-alert").
+		SetChainID(chainID).
+		SetStatus(alertsession.StatusCompleted).
+		SetAuthor("test").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = entClient.Stage.Create().
+		SetID("inv-stage-chat-sub").
+		SetSessionID(session.ID).
+		SetStageName("investigation").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStatus(stage.StatusCompleted).
+		Save(ctx)
+	require.NoError(t, err)
+
+	chatService := services.NewChatService(entClient)
+	chatObj, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+		SessionID: session.ID,
+		CreatedBy: "test@example.com",
+	})
+	require.NoError(t, err)
+
+	msg, err := chatService.AddChatMessage(ctx, models.AddChatMessageRequest{
+		ChatID:  chatObj.ID,
+		Content: "What happened?",
+		Author:  "test@example.com",
+	})
+	require.NoError(t, err)
+
+	stageID, err := chatExecutor.Submit(ctx, ChatExecuteInput{
+		Chat:    chatObj,
+		Message: msg,
+		Session: session,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, stageID)
+
+	chatExecutor.wg.Wait()
+
+	chatStage, err := entClient.Stage.Get(ctx, stageID)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusCompleted, chatStage.Status)
+
+	require.GreaterOrEqual(t, llm.orchestratorIdx, 2, "chat main agent should call LLM at least twice (dispatch + final)")
+	require.GreaterOrEqual(t, llm.subAgentIdx, 1, "sub-agent should run once")
+
+	subWorkerExecs, err := entClient.AgentExecution.Query().
+		Where(
+			agentexecution.StageIDEQ(chatStage.ID),
+			agentexecution.AgentNameEQ("SubWorker"),
+		).
+		All(ctx)
+	require.NoError(t, err)
+	require.Len(t, subWorkerExecs, 1,
+		"dispatch_agent should persist exactly one SubWorker AgentExecution on chat stage %s (subAgentIdx=%d)",
+		chatStage.ID, llm.subAgentIdx)
+	sw := subWorkerExecs[0]
+	require.Equal(t, agentexecution.StatusCompleted, sw.Status, "SubWorker execution should finish successfully")
+	if sw.ErrorMessage != nil {
+		assert.Empty(t, *sw.ErrorMessage, "completed SubWorker execution should have no error text")
+	}
+	require.NotNil(t, sw.ParentExecutionID, "SubWorker row should reference parent chat AgentExecution")
+}
+
 // ────────────────────────────────────────────────────────────
 // Slow LLM mock — blocks until channel is fed or closed
 // ────────────────────────────────────────────────────────────

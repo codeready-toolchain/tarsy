@@ -121,3 +121,29 @@ func (t GoogleNativeTool) IsValid() bool {
 		t == GoogleNativeToolCodeExecution ||
 		t == GoogleNativeToolURLContext
 }
+
+// IsGoogleNativeToolWireName reports whether name is a Gemini provider-native
+// tool wire identifier (google_search, url_context, code_execution). Used to
+// avoid routing these through MCP ToolExecutor — they are fulfilled by the API.
+func IsGoogleNativeToolWireName(name string) bool {
+	t := GoogleNativeTool(name)
+	return t == GoogleNativeToolGoogleSearch ||
+		t == GoogleNativeToolCodeExecution ||
+		t == GoogleNativeToolURLContext
+}
+
+// googleNativeToolWireAliases maps model- or skill-emitted names to canonical Gemini native wire names.
+// Sub-agents often use StubToolExecutor (no MCP); the API still binds native tools, but the model may
+// call a synonym (e.g. from skill text) unless we canonicalize before IsGoogleNativeToolWireName.
+var googleNativeToolWireAliases = map[string]GoogleNativeTool{
+	"load_context": GoogleNativeToolURLContext,
+}
+
+// CanonicalGoogleNativeToolWireName returns the canonical native tool wire name if name is a known
+// alias; otherwise returns name unchanged. Only apply when LLMBackendNativeGemini.
+func CanonicalGoogleNativeToolWireName(name string) string {
+	if t, ok := googleNativeToolWireAliases[name]; ok {
+		return string(t)
+	}
+	return name
+}

@@ -317,6 +317,10 @@ func (v *Validator) validateChains() error {
 			if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
 				return NewValidationError("chain", chainID, "chat.max_iterations", fmt.Errorf("must be at least 1"))
 			}
+
+			if err := v.validateSubAgentRefs(chain.Chat.SubAgents, "chain", chainID, "chat.sub_agents"); err != nil {
+				return err
+			}
 		}
 
 		// Validate scoring agent if enabled
@@ -439,6 +443,15 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 
 		// Validate agent-level fallback providers if specified
 		if err := v.validateFallbackProviders(agentConfig.FallbackProviders, stageRef, agentConfig.Name, "fallback_providers"); err != nil {
+			return err
+		}
+
+		reqSkillField := fmt.Sprintf("stages[%d].agents.%s.required_skills", stageIndex, agentConfig.Name)
+		if err := v.validateSkillNameList(agentConfig.RequiredSkills, "chain", chainID, reqSkillField); err != nil {
+			return err
+		}
+		onDemandSkillField := fmt.Sprintf("stages[%d].agents.%s.skills", stageIndex, agentConfig.Name)
+		if err := v.validateSkillNameList(agentConfig.Skills, "chain", chainID, onDemandSkillField); err != nil {
 			return err
 		}
 	}
@@ -665,9 +678,16 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 			}
 		}
 
-		// Chat-level LLM provider
-		if chain.Chat != nil && chain.Chat.LLMProvider != "" {
-			referenced[chain.Chat.LLMProvider] = true
+		// Chat-level LLM provider and chat sub-agent overrides (same refs as validateSubAgentRefs(..., "chat.sub_agents"))
+		if chain.Chat != nil {
+			if chain.Chat.LLMProvider != "" {
+				referenced[chain.Chat.LLMProvider] = true
+			}
+			for _, ref := range chain.Chat.SubAgents {
+				if ref.LLMProvider != "" {
+					referenced[ref.LLMProvider] = true
+				}
+			}
 		}
 
 		// Scoring-level LLM provider
@@ -752,6 +772,14 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 			if !v.cfg.MCPServerRegistry.Has(serverID) {
 				return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' specifies MCP server '%s' which is not found", ref.Name, serverID))
 			}
+		}
+		reqField := fmt.Sprintf("%s[%s].required_skills", field, ref.Name)
+		if err := v.validateSkillNameList(ref.RequiredSkills, section, name, reqField); err != nil {
+			return err
+		}
+		skillField := fmt.Sprintf("%s[%s].skills", field, ref.Name)
+		if err := v.validateSkillNameList(ref.Skills, section, name, skillField); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -852,44 +880,40 @@ func (v *Validator) validateSlack() error {
 	return nil
 }
 
-func (v *Validator) validateSkills() error {
+// validateSkillNameList checks that each name exists in the skill registry and is unique within names.
+func (v *Validator) validateSkillNameList(names []string, section, resourceName, field string) error {
+	if len(names) == 0 {
+		return nil
+	}
 	registry := v.cfg.SkillRegistry
 	if registry == nil {
 		registry = NewSkillRegistry(nil)
 	}
+	seen := make(map[string]struct{}, len(names))
+	for _, skillName := range names {
+		if _, dup := seen[skillName]; dup {
+			return NewValidationError(section, resourceName, field,
+				fmt.Errorf("duplicate skill %q", skillName))
+		}
+		seen[skillName] = struct{}{}
+		if !registry.Has(skillName) {
+			return NewValidationError(section, resourceName, field,
+				fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
+		}
+	}
+	return nil
+}
 
+func (v *Validator) validateSkills() error {
 	agents := v.cfg.AgentRegistry.GetAll()
 	for name, agent := range agents {
-		// Validate Skills allowlist references
-		var allowedSkills map[string]struct{}
 		if agent.Skills != nil {
-			allowedSkills = make(map[string]struct{}, len(*agent.Skills))
-			for _, skillName := range *agent.Skills {
-				if _, dup := allowedSkills[skillName]; dup {
-					return NewValidationError("agent", name, "skills",
-						fmt.Errorf("duplicate skill %q", skillName))
-				}
-				allowedSkills[skillName] = struct{}{}
-				if !registry.Has(skillName) {
-					return NewValidationError("agent", name, "skills",
-						fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
-				}
+			if err := v.validateSkillNameList(*agent.Skills, "agent", name, "skills"); err != nil {
+				return err
 			}
 		}
-
-		// Validate RequiredSkills references (independent of Skills allowlist)
-		seenRequired := make(map[string]struct{}, len(agent.RequiredSkills))
-		for _, skillName := range agent.RequiredSkills {
-			if _, dup := seenRequired[skillName]; dup {
-				return NewValidationError("agent", name, "required_skills",
-					fmt.Errorf("duplicate skill %q", skillName))
-			}
-			seenRequired[skillName] = struct{}{}
-
-			if !registry.Has(skillName) {
-				return NewValidationError("agent", name, "required_skills",
-					fmt.Errorf("%w: %s", ErrSkillNotFound, skillName))
-			}
+		if err := v.validateSkillNameList(agent.RequiredSkills, "agent", name, "required_skills"); err != nil {
+			return err
 		}
 	}
 

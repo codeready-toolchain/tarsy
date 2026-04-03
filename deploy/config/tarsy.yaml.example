@@ -99,6 +99,14 @@ defaults:
   # Default success policy for parallel stages ("all" or "any")
   success_policy: "any"
 
+  # Default limits for sub-agent dispatch.
+  # Resolution: built-in defaults → defaults.orchestrator → agent.orchestrator.
+  # Ignored when an agent has no resolved sub_agents.
+  # orchestrator:
+  #   max_concurrent_agents: 5
+  #   agent_timeout: 600s
+  #   max_budget: 30m
+
   # LLM provider fallback — ordered list of alternative providers to try when
   # the primary provider fails (after Python-level retries are exhausted).
   # Each entry specifies both provider and backend explicitly.
@@ -277,6 +285,12 @@ mcp_servers:
 # Use 'skills' to restrict which skills an agent sees (allowlist).
 # Use 'required_skills' to inject skill content directly into the system prompt.
 #
+# Stage-level skills (under agent_chains.*.stages.*.agents[]):
+# Optional 'required_skills' and 'skills' on a stage agent entry are additive with the
+# agent definition (merged at resolve time, deduplicated). Unlike mcp_servers overrides,
+# they do not replace the base agent's skills — use this to add extra skills for the
+# coordinating stage entry when the same agent definition is also used as a sub-agent.
+#
 # Skills directory structure:
 #   deploy/config/skills/
 #   ├── pod-troubleshooting/SKILL.md
@@ -338,6 +352,10 @@ agents:
   # Example: Override built-in ChatAgent
   # ChatAgent inherits MCP servers from chain stages via aggregation,
   # so you typically don't set mcp_servers here.
+  #
+  # Follow-up chat can dispatch sub-agents too: set sub_agents under chat: or chain-level
+  # sub_agents (see agent_chains). Precedence: chat.sub_agents > chain.sub_agents.
+  # Stage-level sub_agents apply to investigation agents only, not to chat resolution.
   # ChatAgent:
   #   custom_instructions: |
   #     You are a follow-up chat agent for SRE investigations.
@@ -370,6 +388,15 @@ agents:
 # =============================================================================
 # Define multi-stage agent chains for different alert types
 # Built-in chains: kubernetes
+#
+# Sub-agents (investigation): precedence matches resolveSubAgents in pkg/queue/executor_helpers.go —
+# agents[].sub_agents > stages[].sub_agents > chain.sub_agents. The first non-empty list wins
+# (more specific overrides less specific). When the resolved catalog is non-empty, that agent
+# receives dispatch tools and orchestrator prompt guidance. No special agent type is required.
+#
+# Sub-agents (follow-up chat): optional chat.sub_agents and/or chain.sub_agents (YAML key
+# sub_agents next to stages). Precedence: chat.sub_agents > chain.sub_agents (see
+# resolveChatSubAgents in pkg/queue/executor_helpers.go). Omit both to disable chat dispatch.
 
 agent_chains:
   # Single-stage chain with native thinking
@@ -382,9 +409,18 @@ agent_chains:
           - name: "KubernetesAgent"
             llm_backend: "google-native"
             max_iterations: 15
+    # Optional chain.sub_agents: shared fallback for investigation and chat. Investigation uses
+    # resolveSubAgents: agents[].sub_agents > stages[].sub_agents > chain.sub_agents (first
+    # non-empty wins). Follow-up chat uses resolveChatSubAgents: chat.sub_agents overrides
+    # chain.sub_agents when chat.sub_agents is set; otherwise chain.sub_agents applies.
+    # sub_agents:
+    #   - name: GeneralWorker
     chat:
       enabled: true
       agent: "ChatAgent"
+      # Optional: override chain sub_agents for chat only
+      # sub_agents:
+      #   - name: GeneralWorker
     # Automatic scoring — evaluates session quality after investigation completes.
     # Omit this block entirely to disable scoring for the chain.
     scoring:
@@ -471,50 +507,55 @@ agent_chains:
       agent: "ChatAgent"
       max_iterations: 20
 
-  # ── Orchestrator chains ──────────────────────────────────────
-  # Any agent with sub_agents automatically gains orchestrator capabilities
-  # (dispatch_agent, cancel_agent, list_agents tools + orchestrator prompt).
-  # No special type required — orchestration is a capability, not an identity.
+  # ── Chains with sub-agents ───────────────────────────────────
+  # If an agent lists sub_agents and the catalog is non-empty after resolution, it can dispatch
+  # them (e.g. dispatch_agent, cancel_agent, list_agents) and gets matching prompt guidance.
 
-  # Minimal orchestrator chain — KubernetesAgent gains orchestration from sub_agents
-  orchestrator-minimal:
+  # Minimal example — KubernetesAgent delegates to other agents for parts of the investigation
+  investigation-with-subagents:
     alert_types: ["HighErrorRate"]
-    description: "Orchestrated investigation using KubernetesAgent"
+    description: "Kubernetes investigation with sub-agent dispatch"
     executive_summary_provider: "google-default"
     stages:
-      - name: "orchestrate"
+      - name: "investigate"
         agents:
           - name: "KubernetesAgent"
             sub_agents: [KubernetesAgent, GeneralWorker]
 
-  # Comprehensive orchestrator chain — overrides for orchestrator and sub-agents
-  orchestrator-comprehensive:
+  # Same idea with LLM overrides, per-sub-agent options, and dispatch limits (orchestrator: block)
+  investigation-with-subagents-advanced:
     alert_types: ["LatencySpike", "HighErrorRate-Deep"]
-    description: "Deep orchestrated investigation with custom overrides"
+    description: "Kubernetes investigation with sub-agents and custom overrides"
     executive_summary_provider: "google-default"
     stages:
-      - name: "orchestrate"
+      - name: "investigate"
         agents:
           - name: "KubernetesAgent"
             llm_provider: "gemini-3.1-pro"
             llm_backend: "google-native"
-            # orchestrator guardrails (optional — defaults applied if omitted)
+            # Dispatch limits for sub-agents (optional — defaults applied if omitted)
             orchestrator:
               max_concurrent_agents: 5
               agent_timeout: 420s
               max_budget: 900s
+            # Per-sub_agent ref: optional required_skills / skills merge with that agent definition for dispatch only
+            # (parent stage required_skills do not apply to sub-agents).
             sub_agents:
               - name: KubernetesAgent              # built-in: K8s pod/deployment inspection
-              - name: WebResearcher                # built-in: web search + URL analysis
+              - name: WebResearcher                # built-in: public URLs, repos, docs, CVEs (google_search + url_context)
               - name: CodeExecutor                 # built-in: Python code execution
               - name: GeneralWorker                # built-in: pure reasoning / summarization
                 mcp_servers: [kubernetes-server]   # give GeneralWorker K8s access
                 max_iterations: 5
+            # Additive stage skills (optional) — merged with agents.KubernetesAgent; deduplicated.
+            # Use for extra prompt content on this stage entry when the same def is also a sub-agent.
+            # required_skills: [incident-report-format]
+            # skills: [optional-on-demand-skill]
 
-  # Any agent can become an orchestrator — just add sub_agents
+  # Any agent with sub_agents can dispatch them — same pattern as above
   # security-investigation:
   #   alert_types: ["SecurityInvestigation"]
-  #   description: "Deep orchestrated security investigation"
+  #   description: "Deep security investigation with sub-agents"
   #   stages:
   #     - name: "investigate"
   #       agents:

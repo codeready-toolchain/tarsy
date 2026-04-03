@@ -10,6 +10,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 )
 
 // Compile-time check that CompositeToolExecutor implements agent.ToolExecutor.
@@ -64,6 +65,7 @@ func (c *CompositeToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefi
 
 // Execute routes the tool call to either the orchestration handler or the MCP executor.
 func (c *CompositeToolExecutor) Execute(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+	call.Name = mcp.NormalizeBuiltinPlainToolName(call.Name)
 	if orchestrationToolNames[call.Name] {
 		return c.executeOrchestrationTool(ctx, call)
 	}

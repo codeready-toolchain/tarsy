@@ -71,6 +71,9 @@ type StageAgentConfig struct {
 	MCPServers        []string                `yaml:"mcp_servers,omitempty"`
 	SubAgents         SubAgentRefs            `yaml:"sub_agents,omitempty"`
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
+	// RequiredSkills and Skills are additive with the agent definition (merged at resolve time, deduplicated).
+	RequiredSkills []string `yaml:"required_skills,omitempty"`
+	Skills         []string `yaml:"skills,omitempty"`
 }
 
 // SubAgentRef is a reference to a sub-agent with optional per-reference overrides.
@@ -81,6 +84,10 @@ type SubAgentRef struct {
 	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
+	// RequiredSkills and Skills merge with the agent definition for this dispatch only
+	// (same additive rules as StageAgentConfig). Parent stage required_skills do not apply.
+	RequiredSkills []string `yaml:"required_skills,omitempty"`
+	Skills         []string `yaml:"skills,omitempty"`
 }
 
 // SubAgentRefs is a list of sub-agent references that supports both short-form
@@ -90,11 +97,13 @@ type SubAgentRefs []SubAgentRef
 // subAgentRefAllowedKeys are the YAML keys accepted in a SubAgentRef mapping.
 // Kept in sync with the struct tags on SubAgentRef.
 var subAgentRefAllowedKeys = map[string]bool{
-	"name":           true,
-	"llm_provider":   true,
-	"llm_backend":    true,
-	"max_iterations": true,
-	"mcp_servers":    true,
+	"name":            true,
+	"llm_provider":    true,
+	"llm_backend":     true,
+	"max_iterations":  true,
+	"mcp_servers":     true,
+	"required_skills": true,
+	"skills":          true,
 }
 
 // UnmarshalYAML implements custom unmarshaling to support both:
@@ -171,12 +180,13 @@ type SynthesisConfig struct {
 
 // ChatConfig defines chat agent configuration
 type ChatConfig struct {
-	Enabled       bool       `yaml:"enabled"`
-	Agent         string     `yaml:"agent,omitempty"`
-	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
-	LLMProvider   string     `yaml:"llm_provider,omitempty"`
-	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
-	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	Enabled       bool         `yaml:"enabled"`
+	Agent         string       `yaml:"agent,omitempty"`
+	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
+	LLMProvider   string       `yaml:"llm_provider,omitempty"`
+	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
+	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
 }
 
 // ScoringConfig defines scoring agent configuration for session quality evaluation
