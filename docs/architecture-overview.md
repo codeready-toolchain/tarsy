@@ -4,7 +4,7 @@
 
 ## What is TARSy?
 
-TARSy is an **AI-powered incident analysis and remediation system** built on a Go/Python split architecture. When an alert arrives, TARSy automatically selects the appropriate agent chain, executes multiple stages where specialized agents investigate using external tools (via MCP), and delivers comprehensive analysis and recommendations. For high-confidence findings, **action agents** can automatically execute remediation actions (e.g., shutting down a compromised workload) with built-in safety guardrails. For complex investigations, an **orchestrator agent** can dynamically dispatch sub-agents based on LLM reasoning, enabling adaptive multi-phase workflows.
+TARSy is an **AI-powered incident analysis and remediation system** built on a Go/Python split architecture. When an alert arrives, TARSy automatically selects the appropriate agent chain, executes multiple stages where specialized agents investigate using external tools (via MCP), and delivers comprehensive analysis and recommendations. For high-confidence findings, **action agents** can automatically execute remediation actions (e.g., shutting down a compromised workload) with built-in safety guardrails. For complex investigations, any agent with configured sub-agents automatically gains orchestration capabilities — dynamically dispatching sub-agents based on LLM reasoning, enabling adaptive multi-phase workflows. Chat agents can also become orchestrators through configuration.
 
 The **Go Orchestrator** owns all orchestration logic: session management, chain execution, MCP tool execution, prompt building, conversation management, and real-time WebSocket streaming. The **Python LLM Service** is a stateless gRPC microservice that handles LLM provider interactions (Gemini, OpenAI, Anthropic, xAI, VertexAI), existing solely because LLM provider SDKs have best support in Python.
 
@@ -110,18 +110,18 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
 - **Replica execution** for running the same agent multiple times with different providers for comparison
-- **Dynamic orchestration** -- an orchestrator agent in a chain stage uses LLM reasoning to dispatch sub-agents at runtime, react to partial results, and synthesize findings adaptively
+- **Dynamic orchestration** -- any agent with configured `sub_agents` automatically gains orchestration tools (`dispatch_agent`, `cancel_agent`, `list_agents`), dispatching sub-agents at runtime, reacting to partial results, and synthesizing findings adaptively
 
 ### 4. Specialized Agents & Controllers
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"action"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Three controller types** (text-based ReAct parsing was completely removed):
 
-- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also used by orchestrator agents with push-based sub-agent result injection.
+- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis and executive summary generation.
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
@@ -129,9 +129,9 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 **Provider Fallback**: All controller paths (iterating, forced conclusion, single-shot) support automatic fallback to alternative LLM providers when the primary fails. Fallback state is tracked per-execution; each new execution resets to the primary provider.
 
-### 5. Orchestrator Agent
+### 5. Implicit Orchestration
 
-The Orchestrator Agent introduces **dynamic, LLM-driven workflow orchestration**. Instead of following a predefined chain of agents, the orchestrator uses LLM reasoning to decide which agents to invoke, what tasks to give them, and how to combine their results — all at runtime. It is a standard TARSy agent (`type: orchestrator`) with three additional tools:
+TARSy supports **dynamic, LLM-driven workflow orchestration** as an additive capability on any agent. When an agent resolves a non-empty sub-agent catalog at runtime, it automatically receives three orchestration tools and orchestrator prompt sections injected into its existing system prompt:
 
 - **`dispatch_agent`** — fire-and-forget sub-agent dispatch, returns immediately
 - **`cancel_agent`** — cancel a running sub-agent
@@ -139,9 +139,11 @@ The Orchestrator Agent introduces **dynamic, LLM-driven workflow orchestration**
 
 Sub-agent results are **pushed automatically** into the orchestrator's conversation — no polling. The controller drains available results before each LLM call and waits when the LLM is idle but sub-agents are pending, enabling multi-phase investigation flows.
 
-Sub-agents are regular TARSy agents discovered via a `SubAgentRegistry` (agents with a `description` field). They run through the same execution path as any agent, creating real `AgentExecution` records linked to the orchestrator via `parent_execution_id`. Four new built-in agents ship with the orchestrator: **Orchestrator**, **WebResearcher** (Gemini google_search + url_context), **CodeExecutor** (Gemini code_execution), and **GeneralWorker** (pure reasoning).
+Orchestration is triggered by configuration, not agent type — any investigation agent or chat agent with `sub_agents` configured gains orchestration. Sub-agents are discovered via a `SubAgentRegistry` (agents with a `description` field). They run through the same execution path as any agent, creating real `AgentExecution` records linked to the parent via `parent_execution_id`. Built-in sub-agent-eligible agents include **WebResearcher** (google_search + url_context), **CodeExecutor** (code_execution), and **GeneralWorker** (pure reasoning).
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md)
+Chat agents can also become orchestrators via `chat.sub_agents` (overrides chain-level) or by inheriting chain-level `sub_agents`.
+
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics) and [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger and prompt model)
 
 ### 6. Automated Actions
 
@@ -405,7 +407,7 @@ Each agent operates with a tiered knowledge system composed into its system prom
 
 **Agent Skills** provide modular, reusable knowledge blocks (environment context, classification criteria, report formats) that replace duplicated `custom_instructions` content. Skills follow the industry-standard `SKILL.md` format and are discovered from `<configDir>/skills/` at startup. The `skills` field controls the on-demand catalog (nil = all, `[]` = none), while `required_skills` controls prompt injection — both fields are independent and validated against the registry separately. On-demand skills are loaded via the `load_skill` tool when the LLM determines they're relevant. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
 
-For **orchestrator agents** (`type: orchestrator`), an additional behavioral layer is auto-injected after the tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. For **action agents** (`type: action`), a safety-focused behavioral layer is auto-injected — requiring hard evidence before acting, preferring inaction over incorrect action, and preserving the investigation report amended with actions taken. These layers are injected automatically by the prompt builder so that custom agents receive their respective behavioral guidance without duplicating it in custom instructions.
+When an agent has a non-empty **sub-agent catalog** (resolved from `sub_agents` configuration), an additional behavioral layer is auto-injected after the tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. For **action agents** (`type: action`), a safety-focused behavioral layer is auto-injected — requiring hard evidence before acting, preferring inaction over incorrect action, and preserving the investigation report amended with actions taken. These layers are injected automatically by the prompt builder so that custom agents receive their respective behavioral guidance without duplicating it in custom instructions.
 
 Additionally, **runbook content** (fetched from GitHub or using a configured default) is injected into the user prompt for alert-specific investigation procedures.
 
@@ -443,7 +445,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **Agent Skills**: Add reusable domain knowledge as `SKILL.md` files in `<configDir>/skills/`. `skills` controls on-demand catalog (nil = all, `[]` = none), `required_skills` injects into prompt — both independent. See [ADR-0012](adr/0012-agent-skills.md)
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
-- **Dynamic Orchestration**: Use `type: orchestrator` agents in chains for LLM-driven sub-agent dispatch with configurable guardrails (`max_concurrent_agents`, `agent_timeout`, `max_budget`) and `sub_agents` overrides at chain/stage/agent level. Agent `type` can be overridden at the stage-agent level, allowing a custom investigation agent to act as an orchestrator in a specific chain without modifying its global definition
+- **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`, `agent_timeout`, `max_budget`). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md)
 - **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. See [ADR-0007](adr/0007-automated-actions.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field

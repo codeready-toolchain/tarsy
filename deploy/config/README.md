@@ -267,12 +267,12 @@ agent_chains:
         agents:
           - name: "MyAgent"
             max_iterations: 10  # Agent-level: 10 (highest priority)
-            type: orchestrator  # Override agent type for this stage only
+            sub_agents: [WebResearcher, GeneralWorker]  # Implicit orchestration
 ```
 
 Effective max_iterations for this agent: **10** (agent-level wins)
 
-The `type` field at the stage-agent level lets you promote an agent to a different role (e.g., `orchestrator`) within a specific chain without modifying its global agent definition.
+When `sub_agents` are configured at the stage-agent level (or inherited from stage/chain), the agent automatically gains orchestration tools (`dispatch_agent`, `cancel_agent`, `list_agents`) and orchestrator prompt sections. No special agent type is needed. Stage-level `required_skills` and `skills` can also be set — they are **additive** (merged with agent-definition skills).
 
 ## Deployment
 

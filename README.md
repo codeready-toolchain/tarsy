@@ -72,7 +72,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 ### Agent Architecture
 - **Configuration-Based Agents**: Deploy new agents and chain definitions via YAML without code changes
 - **Parallel Agent Execution**: Run multiple agents concurrently with automatic synthesis. Supports multi-agent, replica, and comparison parallelism for A/B testing providers or strategies
-- **Dynamic Orchestration with Sub-Agents**: Orchestrator agents use LLM reasoning to dispatch specialized sub-agents at runtime, react to partial results, and synthesize findings -- replacing static parallel chains with adaptive, multi-phase investigation flows
+- **Dynamic Orchestration with Sub-Agents**: Any agent with configured `sub_agents` automatically gains orchestration tools, using LLM reasoning to dispatch specialized sub-agents at runtime, react to partial results, and synthesize findings.
 - **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
 - **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
 - **Automated Actions**: Action agents (`type: action`) evaluate investigation findings and execute remediation via MCP tools with auto-injected safety guardrails -- no custom safety prompt required
@@ -121,11 +121,11 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 ### How It Works
 
 1. **Alert arrives** from monitoring systems with flexible text payload
-2. **Chain selected** based on alert type -- static parallel chains or dynamic orchestrator
+2. **Chain selected** based on alert type -- static parallel chains or dynamic orchestration (any agent with sub-agents)
 3. **Runbook injected** (optional) -- if configured, fetches supplemental guidance from GitHub to steer agent behavior
 4. **Skills loaded** -- required skills are injected into the system prompt; on-demand skills are presented as a catalog and loaded via `load_skill` during the investigation
-5. **Agents investigate** -- static chains launch parallel agents per stage; orchestrator agents dynamically dispatch sub-agents based on LLM reasoning, react to partial results, and dispatch follow-ups
-6. **Results synthesized** -- static chains use a dedicated SynthesisAgent; orchestrators synthesize within the same execution as results arrive
+5. **Agents investigate** -- static chains launch parallel agents per stage; agents with `sub_agents` configured dynamically dispatch sub-agents based on LLM reasoning, react to partial results, and dispatch follow-ups
+6. **Results synthesized** -- static chains use a dedicated SynthesisAgent; orchestrating agents synthesize within the same execution as results arrive
 7. **Forced conclusion** at iteration limits -- one final LLM call produces the best analysis with available data (no pause/resume)
 8. **Automated actions** (optional) -- action agents evaluate findings and execute justified remediation with built-in safety guardrails
 9. **Comprehensive analysis** provided to engineers with actionable recommendations
