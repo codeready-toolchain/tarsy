@@ -213,7 +213,7 @@ class TestGoogleNativeProvider:
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
         assert isinstance(result[1].code_execution, genai_types.ToolCodeExecution)
 
-    def test_convert_tools_image_model_only_keeps_google_search(self, provider):
+    def test_convert_tools_image_model_only_keeps_google_search(self, provider, caplog):
         """Test that url_context and code_execution are filtered out for image models."""
         native_tools = {
             "google_search": True,
@@ -221,10 +221,15 @@ class TestGoogleNativeProvider:
             "code_execution": True,
         }
 
-        result = provider._convert_tools([], native_tools, model="gemini-3.1-flash-image-preview")
+        with caplog.at_level("WARNING"):
+            result = provider._convert_tools([], native_tools, model="gemini-3.1-flash-image-preview")
 
         assert len(result) == 1
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
+        assert any(
+            "url_context" in r.message and "image" in r.message.lower()
+            for r in caplog.records
+        ), "expected warning when url_context requested on image model"
 
     def test_convert_tools_non_image_model_keeps_all(self, provider):
         """Test that all native tools are kept for non-image models."""
@@ -248,15 +253,17 @@ class TestGoogleNativeProvider:
         assert not GoogleNativeProvider._is_image_model("gemini-3.1-pro-preview")
         assert not GoogleNativeProvider._is_image_model("gemini-2.5-flash")
 
-    def test_convert_tools_mcp_suppresses_native(self, provider):
-        """Test that MCP tools suppress native tools."""
+    def test_convert_tools_combines_function_declarations_and_native(self, provider):
+        """Test that function declarations and native grounding tools coexist."""
         tools = [pb.ToolDefinition(name="server.tool", description="A tool")]
-        native_tools = {"google_search": True}
-        
+        native_tools = {"google_search": True, "url_context": True}
+
         result = provider._convert_tools(tools, native_tools)
-        
-        assert len(result) == 1
-        assert hasattr(result[0], "function_declarations")
+
+        assert len(result) == 3
+        assert result[0].function_declarations is not None
+        assert isinstance(result[1].google_search, genai_types.GoogleSearch)
+        assert isinstance(result[2].url_context, genai_types.UrlContext)
 
     def test_convert_tools_accepts_raw_json_schema(self, provider):
         """Test that raw JSON Schema (nullable types, additionalProperties) is accepted via parameters_json_schema."""
@@ -1202,6 +1209,54 @@ class TestBuildGroundingDelta:
         assert delta.grounding_supports[0].end_index == 0
         assert delta.grounding_supports[0].text == ""
         assert list(delta.grounding_supports[0].grounding_chunk_indices) == []
+
+    def test_combined_grounding_none_when_empty(self, provider):
+        assert provider._build_combined_grounding_response(None, None) is None
+
+    def test_url_context_metadata_only(self, provider):
+        """URL Context tool fills url_context_metadata; timeline needs those URIs."""
+        ucm = MagicMock()
+        ok = MagicMock()
+        ok.retrieved_url = "https://github.com/foo/bar"
+        ok.url_retrieval_status = "URL_RETRIEVAL_STATUS_SUCCESS"
+        bad = MagicMock()
+        bad.retrieved_url = "https://unsafe.example"
+        bad.url_retrieval_status = "URL_RETRIEVAL_STATUS_UNSAFE"
+        ucm.url_metadata = [ok, bad]
+
+        result = provider._build_combined_grounding_response(None, ucm)
+        assert result is not None
+        delta = result.grounding
+        assert len(delta.grounding_chunks) == 1
+        assert delta.grounding_chunks[0].uri == "https://github.com/foo/bar"
+
+    def test_combined_merges_url_context_with_grounding(self, provider):
+        gm = MagicMock()
+        gm.web_search_queries = None
+        web1 = MagicMock()
+        web1.uri = "https://docs.k8s.io/pods"
+        web1.title = "Kubernetes Pods"
+        chunk1 = MagicMock()
+        chunk1.web = web1
+        gm.grounding_chunks = [chunk1]
+        gm.grounding_supports = []
+        gm.search_entry_point = None
+
+        ucm = MagicMock()
+        dup = MagicMock()
+        dup.retrieved_url = "https://docs.k8s.io/pods"
+        dup.url_retrieval_status = "URL_RETRIEVAL_STATUS_SUCCESS"
+        extra = MagicMock()
+        extra.retrieved_url = "https://other.example/path"
+        extra.url_retrieval_status = "URL_RETRIEVAL_STATUS_SUCCESS"
+        ucm.url_metadata = [dup, extra]
+
+        result = provider._build_combined_grounding_response(gm, ucm)
+        assert result is not None
+        delta = result.grounding
+        assert len(delta.grounding_chunks) == 2
+        uris = {c.uri for c in delta.grounding_chunks}
+        assert uris == {"https://docs.k8s.io/pods", "https://other.example/path"}
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})

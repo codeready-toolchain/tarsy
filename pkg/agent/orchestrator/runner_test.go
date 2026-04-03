@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -618,6 +619,57 @@ func TestSubAgentRunner_CancelAll_Idempotent(t *testing.T) {
 	r.CancelAll()
 	// Second call must not panic (closeCh already closed)
 	r.CancelAll()
+}
+
+// ─── createSubAgentToolExecutor: memory wrapping ────────────────────────────
+
+func TestCreateSubAgentToolExecutor_SkipsMemoryForNativeOnly(t *testing.T) {
+	wrapped := false
+	r := newMinimalRunner(1)
+	r.deps.WrapToolExecutor = func(inner agent.ToolExecutor) agent.ToolExecutor {
+		wrapped = true
+		return inner
+	}
+
+	t.Run("native-only agent skips memory wrapping", func(t *testing.T) {
+		wrapped = false
+		cfg := &agent.ResolvedAgentConfig{
+			AgentName: "WebResearcher",
+			LLMProvider: &config.LLMProviderConfig{
+				NativeTools: map[config.GoogleNativeTool]bool{
+					config.GoogleNativeToolGoogleSearch: true,
+					config.GoogleNativeToolURLContext:   true,
+				},
+			},
+		}
+		r.createSubAgentToolExecutor(t.Context(), cfg, slog.Default())
+		assert.False(t, wrapped, "memory wrapping should be skipped for native-only agents")
+	})
+
+	t.Run("agent without native tools gets memory wrapping", func(t *testing.T) {
+		wrapped = false
+		cfg := &agent.ResolvedAgentConfig{
+			AgentName:   "GeneralWorker",
+			LLMProvider: &config.LLMProviderConfig{},
+		}
+		r.createSubAgentToolExecutor(t.Context(), cfg, slog.Default())
+		assert.True(t, wrapped, "memory wrapping should apply for non-native agents")
+	})
+
+	t.Run("agent with MCP servers and native tools gets memory wrapping", func(t *testing.T) {
+		wrapped = false
+		cfg := &agent.ResolvedAgentConfig{
+			AgentName:  "HybridAgent",
+			MCPServers: []string{"kubernetes-server"},
+			LLMProvider: &config.LLMProviderConfig{
+				NativeTools: map[config.GoogleNativeTool]bool{
+					config.GoogleNativeToolGoogleSearch: true,
+				},
+			},
+		}
+		r.createSubAgentToolExecutor(t.Context(), cfg, slog.Default())
+		assert.True(t, wrapped, "memory wrapping should apply when MCP servers are present")
+	})
 }
 
 // ─── FormatSubAgentResult ───────────────────────────────────────────────────

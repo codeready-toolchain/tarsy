@@ -5,7 +5,7 @@ import logging
 import os
 import time
 import uuid
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from google import genai
 from google.genai import errors as genai_errors
@@ -197,8 +197,9 @@ class GoogleNativeProvider(LLMProvider):
     ) -> Optional[List[genai_types.Tool]]:
         """Convert proto tool definitions to genai Tool objects.
 
-        If MCP tools are present, native tools are suppressed
-        (mutual exclusivity per Gemini API constraint).
+        Gemini 3+ models support combining function declarations with native
+        grounding tools (url_context, google_search) in the same request.
+        Both are included when present.
 
         Image model variants only support google_search; url_context and
         code_execution are filtered out to avoid 400 errors from the
@@ -206,10 +207,8 @@ class GoogleNativeProvider(LLMProvider):
         """
         result_tools: List[genai_types.Tool] = []
 
-        has_mcp_tools = len(tools) > 0
-
-        # Add MCP tools as function declarations
-        if has_mcp_tools:
+        # Add function declarations (MCP / memory / built-in tools)
+        if tools:
             declarations = []
             for tool in tools:
                 try:
@@ -225,10 +224,10 @@ class GoogleNativeProvider(LLMProvider):
                 )
             result_tools.append(genai_types.Tool(function_declarations=declarations))
 
-        # Add native tools (only when no MCP tools).
+        # Add native grounding tools alongside any function declarations.
         # Image model variants only support google_search; url_context and
         # code_execution are not available and would cause a 400 error.
-        if not has_mcp_tools and native_tools:
+        if native_tools:
             is_image = self._is_image_model(model)
             if native_tools.get("google_search"):
                 result_tools.append(genai_types.Tool(google_search=genai_types.GoogleSearch()))
@@ -240,6 +239,13 @@ class GoogleNativeProvider(LLMProvider):
                 skipped = [t for t in ("url_context", "code_execution") if native_tools.get(t)]
                 if skipped:
                     logger.info("Skipping %s for image model %s (not supported)", ", ".join(skipped), model)
+                if native_tools.get("url_context"):
+                    logger.warning(
+                        "Config requests url_context but model %r is an image variant — "
+                        "UrlContext is omitted (API unsupported). Use a text Gemini provider "
+                        "(e.g. google-default, gemini-3-flash) for WebResearcher / URL fetching.",
+                        model,
+                    )
 
         return result_tools if result_tools else None
 
@@ -319,6 +325,15 @@ class GoogleNativeProvider(LLMProvider):
         )
         if tools:
             gen_config.tools = tools
+            has_func_decls = any(t.function_declarations for t in tools)
+            has_native = any(
+                t.google_search or t.url_context or t.code_execution
+                for t in tools
+            )
+            if has_func_decls and has_native:
+                gen_config.tool_config = genai_types.ToolConfig(
+                    include_server_side_tool_invocations=True,
+                )
 
         # Retry loop.
         # Only retry when zero chunks have been yielded to the caller.
@@ -428,6 +443,10 @@ class GoogleNativeProvider(LLMProvider):
         # Buffer grounding metadata (available on the candidate level,
         # typically on the last chunk of a streaming response).
         last_grounding_metadata = None
+        # URL Context tool reports retrieved URLs on url_context_metadata, not always
+        # in grounding_metadata.grounding_chunks — merge so the Go timeline can emit
+        # url_context_result events.
+        last_url_context_metadata = None
         # Collect original Content objects for caching (SDK Chat pattern).
         turn_contents: List[genai_types.Content] = []
 
@@ -458,6 +477,8 @@ class GoogleNativeProvider(LLMProvider):
                     # Capture grounding_metadata when available
                     if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
                         last_grounding_metadata = candidate.grounding_metadata
+                    if hasattr(candidate, 'url_context_metadata') and candidate.url_context_metadata:
+                        last_url_context_metadata = candidate.url_context_metadata
 
                     if not candidate.content or not candidate.content.parts:
                         # Still check for usage on content-less chunks
@@ -544,9 +565,12 @@ class GoogleNativeProvider(LLMProvider):
         if turn_contents and execution_id:
             self._cache_model_turn(execution_id, turn_contents)
 
-        # Yield grounding metadata after content (before usage)
-        if last_grounding_metadata is not None:
-            yield self._build_grounding_delta(last_grounding_metadata)
+        # Yield grounding (+ URL Context retrieval URLs) after content (before usage)
+        combined_grounding = self._build_combined_grounding_response(
+            last_grounding_metadata, last_url_context_metadata
+        )
+        if combined_grounding is not None:
+            yield combined_grounding
 
         # Yield buffered usage info after confirming content was produced
         if last_usage is not None:
@@ -555,6 +579,73 @@ class GoogleNativeProvider(LLMProvider):
         # Final chunk
         yield pb.GenerateResponse(is_final=True)
 
+    def _build_combined_grounding_response(
+        self,
+        grounding_metadata: Optional[Any],
+        url_context_metadata: Optional[Any],
+    ) -> Optional[pb.GenerateResponse]:
+        """Build one GroundingDelta from grounding_metadata plus URL Context retrieval URLs."""
+        if grounding_metadata is not None:
+            resp = self._build_grounding_delta(grounding_metadata)
+            delta = resp.grounding
+        else:
+            delta = pb.GroundingDelta()
+
+        self._merge_url_context_metadata_into_delta(delta, url_context_metadata)
+
+        if (
+            not delta.web_search_queries
+            and not delta.grounding_chunks
+            and not delta.grounding_supports
+            and not delta.search_entry_point_html
+        ):
+            return None
+        return pb.GenerateResponse(grounding=delta)
+
+    def _is_url_retrieval_success(self, status: Any) -> bool:
+        """Match UrlRetrievalStatus from the GenAI SDK or raw string values."""
+        if status is None:
+            return False
+        try:
+            from google.genai.types import UrlRetrievalStatus
+
+            if status == UrlRetrievalStatus.URL_RETRIEVAL_STATUS_SUCCESS:
+                return True
+        except Exception:
+            pass
+        val = getattr(status, "value", None)
+        if val == "URL_RETRIEVAL_STATUS_SUCCESS":
+            return True
+        return "URL_RETRIEVAL_STATUS_SUCCESS" in str(status)
+
+    def _merge_url_context_metadata_into_delta(
+        self,
+        delta: pb.GroundingDelta,
+        ucm: Optional[Any],
+    ) -> None:
+        """Append successful URL Context retrievals as grounding chunk URIs (Go: url_context_result)."""
+        if ucm is None:
+            return
+        url_entries = getattr(ucm, "url_metadata", None)
+        if not url_entries:
+            return
+
+        existing_uris = {c.uri for c in delta.grounding_chunks if c.uri}
+
+        for entry in url_entries:
+            raw_url = getattr(entry, "retrieved_url", None)
+            if raw_url is None:
+                continue
+            url = str(raw_url).strip()
+            if not url:
+                continue
+            status = getattr(entry, "url_retrieval_status", None)
+            if not self._is_url_retrieval_success(status):
+                continue
+            if url in existing_uris:
+                continue
+            delta.grounding_chunks.append(pb.GroundingChunkInfo(uri=url, title=url))
+            existing_uris.add(url)
 
     def _build_grounding_delta(self, gm: "genai_types.GroundingMetadata") -> pb.GenerateResponse:
         """Convert Gemini GroundingMetadata to proto GroundingDelta."""

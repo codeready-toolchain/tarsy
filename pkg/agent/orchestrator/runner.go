@@ -409,7 +409,13 @@ func (r *SubAgentRunner) createSubAgentToolExecutor(
 		executor = skill.NewSkillToolExecutor(executor, r.deps.Config.SkillRegistry, resolvedConfig.OnDemandSkillNameSet())
 	}
 
-	if r.deps.WrapToolExecutor != nil {
+	// Skip memory tools for native-only sub-agents (WebResearcher, CodeExecutor).
+	// These agents rely exclusively on Gemini grounding tools; adding function
+	// declarations for memory search would waste tokens and distract the model.
+	nativeOnly := len(resolvedConfig.MCPServers) == 0 &&
+		resolvedConfig.LLMProvider != nil &&
+		len(resolvedConfig.LLMProvider.NativeTools) > 0
+	if r.deps.WrapToolExecutor != nil && !nativeOnly {
 		executor = r.deps.WrapToolExecutor(executor)
 	}
 

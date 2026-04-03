@@ -167,9 +167,17 @@ export default function ConversationTimeline({
   const shouldAutoCollapse = useCallback(
     (item: FlowItem): boolean => {
       if (manualOverrides.has(item.id)) return false; // user expanded it
-      // Don't auto-collapse final_analysis in chat stages — it's the answer
-      // the user asked for and should always be visible.
-      if (item.type === FLOW_ITEM.FINAL_ANALYSIS && item.stageId && chatStageIds?.has(item.stageId)) return false;
+      // Don't auto-collapse the main chat turn's final_analysis — it's the answer
+      // the user asked for. Sub-agent conclusions (parentExecutionId set) stay
+      // collapsible like other investigation steps.
+      if (
+        item.type === FLOW_ITEM.FINAL_ANALYSIS &&
+        item.stageId &&
+        chatStageIds?.has(item.stageId) &&
+        !item.parentExecutionId
+      ) {
+        return false;
+      }
       return isFlowItemCollapsible(item) && isFlowItemTerminal(item);
     },
     [manualOverrides, chatStageIds],
@@ -189,7 +197,14 @@ export default function ConversationTimeline({
 
   const isItemCollapsible = useCallback(
     (item: FlowItem): boolean => {
-      if (item.type === FLOW_ITEM.FINAL_ANALYSIS && item.stageId && chatStageIds?.has(item.stageId)) return false;
+      if (
+        item.type === FLOW_ITEM.FINAL_ANALYSIS &&
+        item.stageId &&
+        chatStageIds?.has(item.stageId) &&
+        !item.parentExecutionId
+      ) {
+        return false;
+      }
       return isFlowItemCollapsible(item) && isFlowItemTerminal(item);
     },
     [chatStageIds],

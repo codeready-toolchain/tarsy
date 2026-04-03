@@ -202,7 +202,7 @@ func TestBuiltinOrchestratorAgentRemoved(t *testing.T) {
 func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
-	imageProviders := []string{"google-default", "gemini-3.1-flash"}
+	imageProviders := []string{"google-image-flash"}
 	for _, name := range imageProviders {
 		t.Run(name, func(t *testing.T) {
 			p, exists := cfg.LLMProviders[name]
@@ -215,7 +215,9 @@ func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
 		})
 	}
 
-	nonImageProviders := []string{"gemini-3-flash", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-2.5-pro"}
+	nonImageProviders := []string{
+		"google-default", "gemini-3-flash", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-2.5-pro",
+	}
 	for _, name := range nonImageProviders {
 		t.Run(name+" has url_context", func(t *testing.T) {
 			p, exists := cfg.LLMProviders[name]
@@ -263,6 +265,13 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey:   true,
 		},
 		{
+			name:          "google-image-flash",
+			providerID:    "google-image-flash",
+			wantType:      LLMProviderTypeGoogle,
+			wantMinTokens: 900000,
+			checkAPIKey:   true,
+		},
+		{
 			name:          "openai-default",
 			providerID:    "openai-default",
 			wantType:      LLMProviderTypeOpenAI,
@@ -279,13 +288,6 @@ func TestBuiltinLLMProviders(t *testing.T) {
 		{
 			name:          "gemini-3-flash",
 			providerID:    "gemini-3-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
-		},
-		{
-			name:          "gemini-3.1-flash",
-			providerID:    "gemini-3.1-flash",
 			wantType:      LLMProviderTypeGoogle,
 			wantMinTokens: 900000,
 			checkAPIKey:   true,

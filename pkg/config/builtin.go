@@ -120,6 +120,7 @@ Focus on solving the original alert/issue, not on meta-analyzing agent performan
 			},
 			CustomInstructions: `You complete assigned research using native tools only (no cluster access).
 
+- Use the native tool name url_context for URLs (not load_context or other aliases).
 - Use url_context when the task names one or more URLs (repos, docs, READMEs, issues, advisories, OpenShift Route hostnames, etc.).
 - Use google_search for broad queries (CVEs, known outages, version compatibility, error strings, etc.).
 
@@ -207,6 +208,13 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Google Gemini ---
 		"google-default": {
 			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-3-flash-preview",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools(),
+		},
+		"google-image-flash": {
+			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-3.1-flash-image-preview",
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
@@ -218,13 +226,6 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			APIKeyEnv:           "GOOGLE_API_KEY",
 			MaxToolResultTokens: 950000, // Conservative for 1M context
 			NativeTools:         geminiNativeTools(),
-		},
-		"gemini-3.1-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.1-flash-image-preview",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiImageNativeTools(),
 		},
 		"gemini-3.1-pro": {
 			Type:                LLMProviderTypeGoogle,

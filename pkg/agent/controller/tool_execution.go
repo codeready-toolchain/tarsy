@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
@@ -121,9 +122,35 @@ func syntheticNativeGeminiToolResult(toolName string, groundings []agent.Groundi
 	return b.String()
 }
 
+// omitLLMToolCallForNativeSearchOrURL is true when the dashboard already shows a dedicated
+// google_search_result or url_context_result (or URL/search fallbacks from tool args), so we
+// skip the generic llm_tool_call row that would duplicate the same turn with synthetic digest text.
+//
+// The google_search argument parser (parseGoogleSearchToolArgumentQueries) runs only inside
+// the GoogleNativeToolGoogleSearch branch — not for MCP or other tool names.
+func omitLLMToolCallForNativeSearchOrURL(
+	effectiveName string,
+	groundings []agent.GroundingChunk,
+	toolArguments string,
+) bool {
+	switch effectiveName {
+	case string(config.GoogleNativeToolGoogleSearch):
+		return groundingsHaveAnySources(groundings) ||
+			groundingsHaveAnyWebSearchQueries(groundings) ||
+			len(parseGoogleSearchToolArgumentQueries(toolArguments)) > 0
+	case string(config.GoogleNativeToolURLContext):
+		if groundingsHaveAnySources(groundings) {
+			return true
+		}
+		return len(parseURLContextToolArgumentURLs(toolArguments)) > 0
+	default:
+		return false
+	}
+}
+
 // executeToolCall runs a single tool call through the full lifecycle:
 //  1. Normalize and split tool name for events/summarization
-//  2. Create streaming llm_tool_call event (dashboard spinner)
+//  2. Create streaming llm_tool_call event (dashboard spinner), unless omitted for native search/URL
 //  3. Execute the tool via ToolExecutor (or synthesize result for Gemini native tools)
 //  4. Complete the tool call event with storage-truncated result
 //  5. Optionally summarize large non-error results
@@ -142,6 +169,9 @@ func executeToolCall(
 	// Step 1: Normalize and split tool name (colon-prefixed orchestration names first)
 	plainFixed := mcp.NormalizeBuiltinPlainToolName(call.Name)
 	effectiveName := mcp.NormalizeToolName(plainFixed)
+	if execCtx.Config != nil && execCtx.Config.LLMBackend == config.LLMBackendNativeGemini {
+		effectiveName = config.CanonicalGoogleNativeToolWireName(effectiveName)
+	}
 	serverID, toolName, splitErr := mcp.SplitToolName(effectiveName)
 	var toolType ToolType
 	if splitErr != nil {
@@ -163,14 +193,25 @@ func executeToolCall(
 		toolType = ToolTypeMCP
 	}
 
+	providerNativeTool := execCtx.Config != nil &&
+		execCtx.Config.LLMBackend == config.LLMBackendNativeGemini &&
+		config.IsGoogleNativeToolWireName(effectiveName)
+	omitToolCallTimeline := providerNativeTool &&
+		omitLLMToolCallForNativeSearchOrURL(effectiveName, sameTurnGroundings, call.Arguments)
+
 	// Publish execution progress: gathering_info
 	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseGatheringInfo,
 		fmt.Sprintf("Calling %s.%s", serverID, toolName))
 
-	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner)
-	toolCallEvent, createErr := createToolCallEvent(ctx, execCtx, serverID, toolName, toolType, call.Arguments, eventSeq)
-	if createErr != nil {
-		slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
+	// Step 2: Create streaming llm_tool_call event (dashboard shows spinner).
+	// Native google_search / url_context: omit when grounding (or URL-arg fallback) already produced a timeline row.
+	var toolCallEvent *ent.TimelineEvent
+	if !omitToolCallTimeline {
+		var createErr error
+		toolCallEvent, createErr = createToolCallEvent(ctx, execCtx, serverID, toolName, toolType, call.Arguments, eventSeq)
+		if createErr != nil {
+			slog.Warn("Failed to create tool call event", "error", createErr, "tool", call.Name)
+		}
 	}
 
 	// Step 3: Execute the tool with its own timeout within the iteration budget.
@@ -182,10 +223,6 @@ func executeToolCall(
 	if plainFixed != call.Name {
 		execCall.Name = effectiveName
 	}
-
-	providerNativeTool := execCtx.Config != nil &&
-		execCtx.Config.LLMBackend == config.LLMBackendNativeGemini &&
-		config.IsGoogleNativeToolWireName(effectiveName)
 
 	var result *agent.ToolResult
 	var toolErr error
@@ -218,6 +255,17 @@ func executeToolCall(
 
 	// Record MCP interaction (raw data preserved in trace for debugging)
 	recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, result, startTime, nil)
+
+	// When Gemini streaming omits url_context_metadata/grounding sources but the model still
+	// issued a url_context function call, emit a dashboard row from parsed tool arguments.
+	if providerNativeTool && !result.IsError &&
+		effectiveName == string(config.GoogleNativeToolURLContext) {
+		createURLContextFallbackFromToolArgs(ctx, execCtx, call.Arguments, sameTurnGroundings, eventSeq)
+	}
+	if providerNativeTool && !result.IsError &&
+		effectiveName == string(config.GoogleNativeToolGoogleSearch) {
+		createGoogleSearchFallbackFromToolArgs(ctx, execCtx, call.Arguments, sameTurnGroundings, eventSeq)
+	}
 
 	content := result.Content
 	var usage *agent.TokenUsage
