@@ -678,9 +678,16 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 			}
 		}
 
-		// Chat-level LLM provider
-		if chain.Chat != nil && chain.Chat.LLMProvider != "" {
-			referenced[chain.Chat.LLMProvider] = true
+		// Chat-level LLM provider and chat sub-agent overrides (same refs as validateSubAgentRefs(..., "chat.sub_agents"))
+		if chain.Chat != nil {
+			if chain.Chat.LLMProvider != "" {
+				referenced[chain.Chat.LLMProvider] = true
+			}
+			for _, ref := range chain.Chat.SubAgents {
+				if ref.LLMProvider != "" {
+					referenced[ref.LLMProvider] = true
+				}
+			}
 		}
 
 		// Scoring-level LLM provider

@@ -863,6 +863,43 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			errMsg:  "environment variable SYNTHESIS_API_KEY is not set",
 		},
 		{
+			name: "chat.sub_agents referenced provider requires env var",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Chat: &ChatConfig{
+						Enabled: true,
+						Agent:   "ChatAgent",
+						SubAgents: SubAgentRefs{
+							{Name: "Worker", LLMProvider: "chat-sub-provider"},
+						},
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+				"ChatAgent":  {MCPServers: []string{"test"}},
+				"Worker":     {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"chat-sub-provider": {
+					Type:                LLMProviderTypeGoogle,
+					Model:               "gemini-pro",
+					APIKeyEnv:           "CHAT_SUB_AGENT_API_KEY",
+					MaxToolResultTokens: 100000,
+				},
+			},
+			env:     map[string]string{},
+			wantErr: true,
+			errMsg:  "environment variable CHAT_SUB_AGENT_API_KEY is not set",
+		},
+		{
 			name: "only one referenced provider needs env var, others don't",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
@@ -3264,6 +3301,13 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 				SubAgents: SubAgentRefs{
 					{Name: "Worker", LLMProvider: "chain-subagent"},
 				},
+				Chat: &ChatConfig{
+					Enabled: true,
+					Agent:   "TestAgent",
+					SubAgents: SubAgentRefs{
+						{Name: "Worker", LLMProvider: "chat-subagent"},
+					},
+				},
 				Stages: []StageConfig{{
 					Name: "s1",
 					FallbackProviders: []FallbackProviderEntry{
@@ -3293,6 +3337,7 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
 	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
 	assert.True(t, referenced["chain-subagent"], "chain sub-agent provider should be referenced")
+	assert.True(t, referenced["chat-subagent"], "chat.sub_agents provider should be referenced")
 	assert.True(t, referenced["stage-fallback"], "stage fallback provider should be referenced")
 	assert.True(t, referenced["stage-subagent"], "stage sub-agent provider should be referenced")
 	assert.True(t, referenced["agent-fallback"], "agent fallback provider should be referenced")
