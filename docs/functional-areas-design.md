@@ -240,7 +240,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
-- `pkg/config/enums.go` -- AgentType (including `orchestrator`, `exec_summary`, `action`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `synthesis`, `scoring`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
 - `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing (directory and flat file layouts)
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
@@ -366,11 +366,11 @@ Non-stage components (executive summary, follow-up chat) use chain-level provide
 **Purpose**: Agent framework, controller system, and dynamic orchestration
 **Key Responsibility**: Agent behavior, iteration patterns, and LLM-driven sub-agent dispatch
 
-Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, Orchestrator, WebResearcher, CodeExecutor, GeneralWorker, ScoringAgent) and YAML-configured agents.
+Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, ExecSummaryAgent, ScoringAgent, WebResearcher, CodeExecutor, GeneralWorker) and YAML-configured agents.
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"orchestrator"` | `"action"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -382,7 +382,6 @@ graph TB
         KA["KubernetesAgent (built-in)"]
         SA["SynthesisAgent (built-in)"]
         CA["ChatAgent (built-in)"]
-        OA["Orchestrator (built-in)"]
         WR["WebResearcher (built-in)"]
         CE["CodeExecutor (built-in)"]
         GW["GeneralWorker (built-in)"]
@@ -404,7 +403,6 @@ graph TB
     BA --> KA
     BA --> SA
     BA --> CA
-    BA --> OA
     BA --> WR
     BA --> CE
     BA --> GW
@@ -413,7 +411,6 @@ graph TB
 
     KA -.-> FC
     CA -.-> FC
-    OA -.-> FC
     WR -.-> FC
     CE -.-> FC
     GW -.-> FC
@@ -450,8 +447,7 @@ type Controller interface {
 
 | AgentType | Controller | Pattern | Use Case |
 |-----------|-----------|---------|----------|
-| `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents with tool access |
-| `"orchestrator"` | IteratingController | Iterating + push-based sub-agent results | Dynamic multi-agent orchestration |
+| `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents (+ implicit orchestration when sub-agents present) |
 | `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
@@ -501,9 +497,9 @@ Turn 1 uses an outcome-first ceiling mechanic: conclusion quality determines the
 
 Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled via per-chain `scoring:` block or globally via `defaults.scoring`) or on-demand via `POST /api/v1/sessions/:id/score`. The `defaults.scoring` block also supports `llm_provider` and `llm_backend` overrides specific to scoring, inserted into the resolution hierarchy between global defaults and chain-level settings. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
 
-#### Orchestrator Agent (`pkg/agent/orchestrator/`)
+#### Implicit Orchestration (`pkg/agent/orchestrator/`)
 
-The orchestrator agent (`type: orchestrator`) uses the same `IteratingController` with two additions to the iteration loop:
+Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestration capabilities. The `IteratingController` includes two additions to the iteration loop for orchestration:
 
 1. **Before each LLM call**: non-blocking drain of available sub-agent results
 2. **At loop exit** (no tool calls): if sub-agents are pending, blocking wait instead of terminating
@@ -516,11 +512,13 @@ The orchestrator agent (`type: orchestrator`) uses the same `IteratingController
 
 **Result flow**: `dispatch_agent` returns immediately → sub-agent runs in goroutine → result sent to channel → controller drains before next LLM call → injected as user-role message (injection format is internal to `FormatSubAgentResult` and intentionally not disclosed in the orchestrator prompt).
 
-**DB model**: Sub-agents create real `AgentExecution` records with `parent_execution_id` linking to the orchestrator, plus a `task` field for the dispatch description.
+**DB model**: Sub-agents create real `AgentExecution` records with `parent_execution_id` linking to the parent agent, plus a `task` field for the dispatch description.
 
-**Built-in agents**: Orchestrator, WebResearcher (google_search + url_context), CodeExecutor (code_execution), GeneralWorker (pure reasoning).
+**Built-in sub-agent-eligible agents**: WebResearcher (google_search + url_context), CodeExecutor (code_execution), GeneralWorker (pure reasoning).
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md)
+**Chat orchestrator**: `ChatConfig.SubAgents` enables chat agents to gain orchestration. Resolution follows: `chat.sub_agents` > `chain.sub_agents` > none.
+
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics) and [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger, prompt injection, stage-level skills)
 
 #### Instruction Composition
 
@@ -536,7 +534,7 @@ Tier 4:   Lessons from Past Investigations (auto-injected memories, investigatio
 
 **Agent Skills** (`pkg/agent/skill/tool_executor.go`) provide reusable domain knowledge. Required skills are injected as content (Tier 2.5); on-demand skills appear as a catalog with a `load_skill` tool (Tier 2.6). Skill resolution happens in `config_resolver.go` — the prompt builder only formats pre-resolved data from `ResolvedAgentConfig.RequiredSkillContent` and `ResolvedAgentConfig.OnDemandSkills`. `SkillToolExecutor` wraps the inner tool executor and intercepts `load_skill` calls, reading from the in-memory `SkillRegistry`. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
 
-For **orchestrator agents**, the prompt builder auto-injects additional layers after the tiers:
+When an agent has a non-empty **sub-agent catalog** (resolved via `sub_agents` configuration), the prompt builder auto-injects additional layers after the tiers:
 ```
 System prompt = Tier 1-3 (above)
               + Orchestrator behavioral strategy (auto-injected)
@@ -554,7 +552,7 @@ System prompt = Tier 1-3 (above)
 
 The safety preamble enforces: require hard evidence before acting, focus on evaluating upstream analysis, prefer inaction over incorrect action, explain reasoning before executing tools, and preserve the investigation report amended with an actions section. See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) for full design.
 
-This auto-injection pattern means custom agents with `type: orchestrator` or `type: action` receive their respective behavioral guidance without duplicating it in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context.
+This auto-injection pattern means custom agents with sub-agents or `type: action` receive their respective behavioral guidance without duplicating it in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context.
 
 **PromptBuilder** methods:
 - `BuildFunctionCallingMessages()` -- system + user messages for investigation
@@ -599,7 +597,7 @@ All LLM call sites (iterating loop, forced conclusion, single-shot) support auto
 - `pkg/agent/prompt/skills.go` -- formatRequiredSkill(), formatSkillCatalog() for Tier 2.5/2.6
 - `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
 - `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow + memory extraction orchestration)
-- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts). `Type` can be overridden at the stage-agent level, allowing an agent to act as an orchestrator in one chain without modifying its global definition
+- `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts, stage-level skill merging)
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
 

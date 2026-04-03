@@ -216,7 +216,7 @@ func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
 	}
 
 	nonImageProviders := []string{
-		"google-default", "gemini-3-flash", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-2.5-pro",
+		"google-default", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash", "gemini-2.5-flash", "gemini-2.5-pro",
 	}
 	for _, name := range nonImageProviders {
 		t.Run(name+" has url_context", func(t *testing.T) {
@@ -295,6 +295,13 @@ func TestBuiltinLLMProviders(t *testing.T) {
 		{
 			name:          "gemini-3.1-pro",
 			providerID:    "gemini-3.1-pro",
+			wantType:      LLMProviderTypeGoogle,
+			wantMinTokens: 900000,
+			checkAPIKey:   true,
+		},
+		{
+			name:          "gemini-3.1-flash",
+			providerID:    "gemini-3.1-flash",
 			wantType:      LLMProviderTypeGoogle,
 			wantMinTokens: 900000,
 			checkAPIKey:   true,
