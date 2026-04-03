@@ -766,6 +766,14 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 				return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' specifies MCP server '%s' which is not found", ref.Name, serverID))
 			}
 		}
+		reqField := fmt.Sprintf("%s[%s].required_skills", field, ref.Name)
+		if err := v.validateSkillNameList(ref.RequiredSkills, section, name, reqField); err != nil {
+			return err
+		}
+		skillField := fmt.Sprintf("%s[%s].skills", field, ref.Name)
+		if err := v.validateSkillNameList(ref.Skills, section, name, skillField); err != nil {
+			return err
+		}
 	}
 	return nil
 }

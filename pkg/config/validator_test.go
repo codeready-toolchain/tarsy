@@ -2686,6 +2686,40 @@ func TestValidateSubAgents(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("sub_agent ref unknown required_skill", func(t *testing.T) {
+		reg := NewSkillRegistry(map[string]*SkillConfig{
+			"known-skill": {Name: "known-skill", Description: "d", Body: "b"},
+		})
+		cfg := &Config{
+			SkillRegistry:       reg,
+			AgentRegistry:       NewAgentRegistry(baseAgents),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{
+						{
+							Name: "s1",
+							Agents: []StageAgentConfig{
+								{
+									Name: "MyOrchestrator",
+									SubAgents: SubAgentRefs{
+										{Name: "LogAnalyzer", RequiredSkills: []string{"no-such-skill"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no-such-skill")
+	})
+
 	t.Run("sub_agent ref with invalid llm_backend", func(t *testing.T) {
 		cfg := &Config{
 			AgentRegistry:       NewAgentRegistry(baseAgents),

@@ -132,11 +132,13 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		r.deps.Config, r.deps.Chain,
 		config.StageConfig{},
 		config.StageAgentConfig{
-			Name:          name,
-			LLMProvider:   ref.LLMProvider,
-			LLMBackend:    ref.LLMBackend,
-			MaxIterations: ref.MaxIterations,
-			MCPServers:    ref.MCPServers,
+			Name:           name,
+			LLMProvider:    ref.LLMProvider,
+			LLMBackend:     ref.LLMBackend,
+			MaxIterations:  ref.MaxIterations,
+			MCPServers:     ref.MCPServers,
+			RequiredSkills: ref.RequiredSkills,
+			Skills:         ref.Skills,
 		},
 	)
 	if err != nil {

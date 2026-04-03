@@ -8,6 +8,7 @@ import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
 import { getFinalAnalysisPresentation } from '../timeline/ResponseItem';
 import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
 import { getSkillNamesLabel } from '../../utils/format';
+import { getToolVisualConfig } from '../../utils/toolCallVisual';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 
 /**
@@ -276,8 +277,7 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
     const toolType = (item.metadata?.tool_type as string);
     const isSkill = toolType === TOOL_TYPE.SKILL;
     const isMemory = toolType === TOOL_TYPE.MEMORY;
-    const isGoogleNative = toolType === TOOL_TYPE.GOOGLE_NATIVE;
-    const paletteKey = isMemory ? 'success' : isSkill || isGoogleNative ? 'info' : 'primary';
+    const { accentKey: paletteKey } = getToolVisualConfig(toolType, { mode: 'streaming' });
 
     let displayName = toolName;
     let statusLabel = 'Executing...';
