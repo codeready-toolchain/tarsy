@@ -6,13 +6,14 @@ import {
   Hub,
   CheckCircle,
 } from '@mui/icons-material';
-import type { FlowItem } from '../../utils/timelineParser';
+import { flowItemsToPlainText, type FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import TimelineItem from './TimelineItem';
+import CopyButton from '../shared/CopyButton';
 import ErrorCard from './ErrorCard';
 import { formatDurationMs } from '../../utils/format';
 import {
@@ -75,6 +76,12 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
   const theme = useTheme();
   const hasContent = items.length > 0 || dedupedStreaming.length > 0;
+
+  const copyText = React.useMemo(() => {
+    const header = `Sub-agent: ${agentName}`;
+    const body = flowItemsToPlainText(items);
+    return body ? `${header}\n\n${body}` : header;
+  }, [agentName, items]);
 
   const tokenData = eo && (eo.input_tokens > 0 || eo.output_tokens > 0)
     ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
@@ -168,8 +175,12 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             </Box>
           )}
 
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1.5, pt: 0.5 }}>
+            <CopyButton text={copyText} variant="icon" size="small" tooltip="Copy sub-agent content" />
+          </Box>
+
           {/* Timeline */}
-          <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
+          <Box sx={{ px: 1.5, pb: 1.5 }}>
             {items.map((item) => (
               <TimelineItem
                 key={item.id}

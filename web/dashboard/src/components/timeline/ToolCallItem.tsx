@@ -380,11 +380,7 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
 
       <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-          {isSkill ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              Skill
-            </Typography>
-          ) : isGoogleNative ? (
+          {isGoogleNative ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               Gemini native tool{serverName ? ` (${serverName})` : ''}
             </Typography>

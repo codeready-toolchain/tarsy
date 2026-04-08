@@ -8,6 +8,7 @@ import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import { highlightSearchTermNodes } from '../../utils/search';
+import CopyButton from '../shared/CopyButton';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ToolSummaryItemProps {
@@ -71,6 +72,9 @@ function ToolSummaryItem({
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+              <CopyButton text={item.content || ''} variant="icon" size="small" tooltip="Copy summary" />
+            </Box>
             <Box sx={(theme) => ({ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: `2px solid ${alpha(theme.palette.warning.main, 0.2)}` })}>
               {hasMarkdown ? (
                 <Box sx={{ '& p': { color: 'text.secondary' }, '& li': { color: 'text.secondary' }, color: 'text.secondary' }}>

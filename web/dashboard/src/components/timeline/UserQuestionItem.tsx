@@ -4,6 +4,7 @@ import { AccountCircle, Assignment } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
+import CopyButton from '../shared/CopyButton';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface UserQuestionItemProps {
@@ -41,12 +42,18 @@ function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
 
       <Box
         sx={(theme) => ({
-          ml: 4, my: 1, mr: 1, p: 1.5, borderRadius: 1.5,
+          position: 'relative',
+          ml: 4, my: 1, mr: 1, pt: isTask ? 1.5 : 0.75, px: 1.5, pb: 1.5, borderRadius: 1.5,
           bgcolor: 'action.hover',
           border: '1px solid',
           borderColor: theme.palette.divider,
         })}
       >
+        {!isTask && (
+          <Box sx={{ position: 'absolute', top: 4, right: 4 }}>
+            <CopyButton text={item.content} variant="icon" size="small" tooltip="Copy message" />
+          </Box>
+        )}
         <Typography
           variant="caption"
           sx={{

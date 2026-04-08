@@ -6,6 +6,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
 import { highlightSearchTermNodes } from '../../utils/search';
+import CopyButton from '../shared/CopyButton';
 
 interface CodeBlock {
   type: string;
@@ -537,6 +538,9 @@ function NativeToolItem({ item, searchTerm }: NativeToolItemProps) {
 
       <Collapse in={expanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+            <CopyButton text={item.content} variant="icon" size="small" tooltip="Copy content" />
+          </Box>
           {renderContent()}
         </Box>
       </Collapse>
