@@ -1418,8 +1418,8 @@ export function SessionDetailPage() {
         session_ids: [id],
         action: REVIEW_ACTION.UPDATE_FEEDBACK,
         quality_rating: qualityRating || undefined,
-        action_taken: actionTaken || undefined,
-        investigation_feedback: investigationFeedback || undefined,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
       });
       if (resp.results[0]?.success) {
         setReviewModalMode(null);

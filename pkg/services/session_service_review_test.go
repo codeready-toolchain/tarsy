@@ -414,6 +414,35 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Equal(t, "Original feedback", *last.InvestigationFeedback)
 	})
 
+	t.Run("update_feedback clears action_taken and investigation_feedback with empty string", func(t *testing.T) {
+		id := seedReviewSession(t, service, "reviewed", "john@test.com")
+
+		ctx := context.Background()
+		require.NoError(t, service.client.AlertSession.UpdateOneID(id).
+			SetActionTaken("Original action").
+			SetInvestigationFeedback("Original feedback").
+			Exec(ctx))
+
+		emptyStr := ""
+		rating := "accurate"
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
+			Action:                "update_feedback",
+			Actor:                 "john@test.com",
+			QualityRating:         &rating,
+			ActionTaken:           &emptyStr,
+			InvestigationFeedback: &emptyStr,
+		})
+		assert.Nil(t, sess.ActionTaken, "empty string should clear action_taken to nil")
+		assert.Nil(t, sess.InvestigationFeedback, "empty string should clear investigation_feedback to nil")
+
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		last := activities[len(activities)-1]
+		assert.Equal(t, sessionreviewactivity.ActionUpdateFeedback, last.Action)
+		assert.Nil(t, last.Note, "activity snapshot should be nil for cleared action_taken")
+		assert.Nil(t, last.InvestigationFeedback, "activity snapshot should be nil for cleared investigation_feedback")
+	})
+
 	t.Run("update_feedback with invalid quality_rating returns error", func(t *testing.T) {
 		id := seedReviewSession(t, service, "reviewed", "john@test.com")
 		badRating := "perfect"

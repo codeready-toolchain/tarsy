@@ -714,8 +714,8 @@ export function DashboardView() {
         session_ids: [sessionId],
         action: REVIEW_ACTION.UPDATE_FEEDBACK,
         quality_rating: qualityRating || undefined,
-        action_taken: actionTaken || undefined,
-        investigation_feedback: investigationFeedback || undefined,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
       });
       checkReviewResults(resp);
       fetchAllTriageGroups();
@@ -784,8 +784,8 @@ export function DashboardView() {
         session_ids: [targetSessionId],
         action: REVIEW_ACTION.UPDATE_FEEDBACK,
         quality_rating: qualityRating || undefined,
-        action_taken: actionTaken || undefined,
-        investigation_feedback: investigationFeedback || undefined,
+        action_taken: actionTaken,
+        investigation_feedback: investigationFeedback,
       });
       checkReviewResults(resp);
       setReviewTarget(null);

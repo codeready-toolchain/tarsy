@@ -194,10 +194,18 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 			update = update.SetQualityRating(alertsession.QualityRating(*req.QualityRating))
 		}
 		if req.ActionTaken != nil {
-			update = update.SetActionTaken(*req.ActionTaken)
+			if *req.ActionTaken == "" {
+				update = update.ClearActionTaken()
+			} else {
+				update = update.SetActionTaken(*req.ActionTaken)
+			}
 		}
 		if req.InvestigationFeedback != nil {
-			update = update.SetInvestigationFeedback(*req.InvestigationFeedback)
+			if *req.InvestigationFeedback == "" {
+				update = update.ClearInvestigationFeedback()
+			} else {
+				update = update.SetInvestigationFeedback(*req.InvestigationFeedback)
+			}
 		}
 		affected, err := update.Save(writeCtx)
 		if err != nil {
@@ -216,10 +224,14 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		snapshotActionTaken := req.ActionTaken
 		if snapshotActionTaken == nil {
 			snapshotActionTaken = current.ActionTaken
+		} else if *snapshotActionTaken == "" {
+			snapshotActionTaken = nil
 		}
 		snapshotFeedback := req.InvestigationFeedback
 		if snapshotFeedback == nil {
 			snapshotFeedback = current.InvestigationFeedback
+		} else if *snapshotFeedback == "" {
+			snapshotFeedback = nil
 		}
 
 		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
