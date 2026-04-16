@@ -14,17 +14,7 @@ import (
 )
 
 func testQueueConfig() *config.QueueConfig {
-	return &config.QueueConfig{
-		WorkerCount:             5,
-		MaxConcurrentSessions:   5,
-		PollInterval:            1 * time.Second,
-		PollIntervalJitter:      500 * time.Millisecond,
-		SessionTimeout:          20 * time.Minute,
-		GracefulShutdownTimeout: 20 * time.Minute,
-		OrphanDetectionInterval: 5 * time.Minute,
-		OrphanThreshold:         5 * time.Minute,
-		HeartbeatInterval:       30 * time.Second,
-	}
+	return config.DefaultQueueConfig()
 }
 
 func TestWorkerPollInterval(t *testing.T) {

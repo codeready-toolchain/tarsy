@@ -138,7 +138,7 @@ queue:
   max_concurrent_sessions: 5
   poll_interval: 1s
   poll_interval_jitter: 500ms
-  session_timeout: 15m
+  session_timeout: 30m
   orphan_detection_interval: 5m
   orphan_threshold: 5m
 ```
