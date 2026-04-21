@@ -9,7 +9,7 @@ dependencies = [
     "grpcio-health-checking>=1.76.0",
     "google-genai>=1.64.0",
     "pydantic>=2.12.5",
-    "python-dotenv>=1.2.1",
+    "python-dotenv>=1.2.2",
     # LangChain multi-provider support
     "langchain-core>=1.2.13",
     "langchain-openai>=1.1.14",
