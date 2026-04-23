@@ -39,6 +39,8 @@ export interface DashboardSessionItem {
   action_taken?: string | null;
   investigation_feedback?: string | null;
   feedback_edited?: boolean;
+  feedback_edited_by?: string | null;
+  feedback_edited_at?: string | null;
 }
 
 /** Active (in-progress / cancelling) session. */
@@ -118,6 +120,8 @@ export interface SessionDetailResponse {
   action_taken?: string | null;
   investigation_feedback?: string | null;
   feedback_edited?: boolean;
+  feedback_edited_by?: string | null;
+  feedback_edited_at?: string | null;
 
   // Stage list
   stages: StageOverview[];

@@ -32,6 +32,8 @@ export interface EditFeedbackModalProps {
   executiveSummary?: string | null;
   assignee?: string | null;
   feedbackEdited?: boolean;
+  feedbackEditedBy?: string | null;
+  feedbackEditedAt?: string | null;
   error?: string | null;
 }
 
@@ -46,6 +48,8 @@ export function EditFeedbackModal({
   executiveSummary,
   assignee,
   feedbackEdited,
+  feedbackEditedBy,
+  feedbackEditedAt,
   error,
 }: EditFeedbackModalProps) {
   const [qualityRating, setQualityRating] = useState('');
@@ -75,6 +79,8 @@ export function EditFeedbackModal({
         icon={<RateReview color="primary" />}
         title="Edit Review Feedback"
         feedbackEdited={feedbackEdited}
+        feedbackEditedBy={feedbackEditedBy}
+        feedbackEditedAt={feedbackEditedAt}
         assignee={assignee}
         onClose={onClose}
       />

@@ -195,6 +195,8 @@ export function TriageView({
           action_taken: detail.action_taken,
           investigation_feedback: detail.investigation_feedback,
           feedback_edited: detail.feedback_edited,
+          feedback_edited_by: detail.feedback_edited_by,
+          feedback_edited_at: detail.feedback_edited_at,
         },
         mode: REVIEW_MODAL_MODE.EDIT,
       });
@@ -292,6 +294,8 @@ export function TriageView({
         executiveSummary={reviewTarget?.session.executive_summary}
         assignee={reviewTarget?.session.assignee}
         feedbackEdited={reviewTarget?.session.feedback_edited}
+        feedbackEditedBy={reviewTarget?.session.feedback_edited_by}
+        feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
       />
       <EditFeedbackModal
         open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}
@@ -304,6 +308,8 @@ export function TriageView({
         executiveSummary={reviewTarget?.session.executive_summary}
         assignee={reviewTarget?.session.assignee}
         feedbackEdited={reviewTarget?.session.feedback_edited}
+        feedbackEditedBy={reviewTarget?.session.feedback_edited_by}
+        feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
       />
 
       {/* Bulk complete modal */}

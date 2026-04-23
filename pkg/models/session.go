@@ -105,6 +105,8 @@ type DashboardSessionItem struct {
 	ActionTaken           *string    `json:"action_taken"`
 	InvestigationFeedback *string    `json:"investigation_feedback"`
 	FeedbackEdited        bool       `json:"feedback_edited"`
+	FeedbackEditedBy      *string    `json:"feedback_edited_by"`
+	FeedbackEditedAt      *time.Time `json:"feedback_edited_at"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -200,12 +202,14 @@ type SessionDetailResponse struct {
 	ScoreID       *string `json:"score_id"`
 
 	// Review fields
-	ReviewStatus          *string `json:"review_status"`
-	Assignee              *string `json:"assignee"`
-	QualityRating         *string `json:"quality_rating"`
-	ActionTaken           *string `json:"action_taken"`
-	InvestigationFeedback *string `json:"investigation_feedback"`
-	FeedbackEdited        bool    `json:"feedback_edited"`
+	ReviewStatus          *string    `json:"review_status"`
+	Assignee              *string    `json:"assignee"`
+	QualityRating         *string    `json:"quality_rating"`
+	ActionTaken           *string    `json:"action_taken"`
+	InvestigationFeedback *string    `json:"investigation_feedback"`
+	FeedbackEdited        bool       `json:"feedback_edited"`
+	FeedbackEditedBy      *string    `json:"feedback_edited_by"`
+	FeedbackEditedAt      *time.Time `json:"feedback_edited_at"`
 
 	// Stage list
 	Stages []StageOverview `json:"stages"`

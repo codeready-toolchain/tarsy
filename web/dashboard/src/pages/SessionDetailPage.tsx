@@ -1720,6 +1720,8 @@ export function SessionDetailPage() {
               executiveSummary={session.executive_summary}
               assignee={session.assignee}
               feedbackEdited={session.feedback_edited}
+              feedbackEditedBy={session.feedback_edited_by}
+              feedbackEditedAt={session.feedback_edited_at}
               initialRating={reviewInitialRating}
             />
             <EditFeedbackModal
@@ -1734,6 +1736,8 @@ export function SessionDetailPage() {
               executiveSummary={session.executive_summary}
               assignee={session.assignee}
               feedbackEdited={session.feedback_edited}
+              feedbackEditedBy={session.feedback_edited_by}
+              feedbackEditedAt={session.feedback_edited_at}
             />
 
           </Box>

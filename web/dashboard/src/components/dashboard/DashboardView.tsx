@@ -1067,6 +1067,8 @@ export function DashboardView() {
             executiveSummary={reviewTarget?.session.executive_summary}
             assignee={reviewTarget?.session.assignee}
             feedbackEdited={reviewTarget?.session.feedback_edited}
+            feedbackEditedBy={reviewTarget?.session.feedback_edited_by}
+            feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
           />
           <EditFeedbackModal
             open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}
@@ -1080,6 +1082,8 @@ export function DashboardView() {
             executiveSummary={reviewTarget?.session.executive_summary}
             assignee={reviewTarget?.session.assignee}
             feedbackEdited={reviewTarget?.session.feedback_edited}
+            feedbackEditedBy={reviewTarget?.session.feedback_edited_by}
+            feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
           />
         </>
       )}

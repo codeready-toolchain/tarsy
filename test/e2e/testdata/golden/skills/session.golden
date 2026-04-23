@@ -20,6 +20,8 @@
   "executive_summary_error": null,
   "failed_stages": 0,
   "feedback_edited": false,
+  "feedback_edited_at": null,
+  "feedback_edited_by": null,
   "final_analysis": "Remediation: increase memory limit for pod-1 to 1Gi.",
   "has_action_stages": false,
   "has_parallel_stages": false,

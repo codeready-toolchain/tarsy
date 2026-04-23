@@ -797,6 +797,8 @@ func TestSessionService_FeedbackEdited(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, triage.Sessions, 1)
 		assert.False(t, triage.Sessions[0].FeedbackEdited)
+		assert.Nil(t, triage.Sessions[0].FeedbackEditedBy)
+		assert.Nil(t, triage.Sessions[0].FeedbackEditedAt)
 
 		dash, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
 			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
@@ -807,6 +809,8 @@ func TestSessionService_FeedbackEdited(t *testing.T) {
 			if s.ID == id {
 				found = true
 				assert.False(t, s.FeedbackEdited)
+				assert.Nil(t, s.FeedbackEditedBy)
+				assert.Nil(t, s.FeedbackEditedAt)
 			}
 		}
 		require.True(t, found)
@@ -814,6 +818,8 @@ func TestSessionService_FeedbackEdited(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, id)
 		require.NoError(t, err)
 		assert.False(t, detail.FeedbackEdited)
+		assert.Nil(t, detail.FeedbackEditedBy)
+		assert.Nil(t, detail.FeedbackEditedAt)
 	})
 
 	// Perform an update_feedback action.
@@ -828,6 +834,9 @@ func TestSessionService_FeedbackEdited(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, triage.Sessions, 1)
 		assert.True(t, triage.Sessions[0].FeedbackEdited)
+		require.NotNil(t, triage.Sessions[0].FeedbackEditedBy)
+		assert.Equal(t, "alice@test.com", *triage.Sessions[0].FeedbackEditedBy)
+		assert.NotNil(t, triage.Sessions[0].FeedbackEditedAt)
 
 		dash, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
 			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
@@ -838,6 +847,9 @@ func TestSessionService_FeedbackEdited(t *testing.T) {
 			if s.ID == id {
 				found = true
 				assert.True(t, s.FeedbackEdited)
+				require.NotNil(t, s.FeedbackEditedBy)
+				assert.Equal(t, "alice@test.com", *s.FeedbackEditedBy)
+				assert.NotNil(t, s.FeedbackEditedAt)
 			}
 		}
 		require.True(t, found)
@@ -845,6 +857,45 @@ func TestSessionService_FeedbackEdited(t *testing.T) {
 		detail, err := service.GetSessionDetail(ctx, id)
 		require.NoError(t, err)
 		assert.True(t, detail.FeedbackEdited)
+		require.NotNil(t, detail.FeedbackEditedBy)
+		assert.Equal(t, "alice@test.com", *detail.FeedbackEditedBy)
+		assert.NotNil(t, detail.FeedbackEditedAt)
+	})
+
+	// Second edit by a different user — should reflect the latest editor.
+	time.Sleep(10 * time.Millisecond) // ensure distinct created_at
+	anotherRating := "inaccurate"
+	doReview(t, service, id, models.UpdateReviewRequest{
+		Action: "update_feedback", Actor: "bob@test.com", QualityRating: &anotherRating,
+	})
+
+	t.Run("shows latest editor after second update by different user", func(t *testing.T) {
+		triage, err := service.GetTriageGroup(ctx, models.TriageGroupReviewed,
+			models.TriageGroupParams{Page: 1, PageSize: 20})
+		require.NoError(t, err)
+		require.Len(t, triage.Sessions, 1)
+		require.NotNil(t, triage.Sessions[0].FeedbackEditedBy)
+		assert.Equal(t, "bob@test.com", *triage.Sessions[0].FeedbackEditedBy)
+
+		dash, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		var found bool
+		for _, s := range dash.Sessions {
+			if s.ID == id {
+				found = true
+				require.NotNil(t, s.FeedbackEditedBy)
+				assert.Equal(t, "bob@test.com", *s.FeedbackEditedBy)
+			}
+		}
+		require.True(t, found)
+
+		detail, err := service.GetSessionDetail(ctx, id)
+		require.NoError(t, err)
+		require.NotNil(t, detail.FeedbackEditedBy)
+		assert.Equal(t, "bob@test.com", *detail.FeedbackEditedBy)
+		assert.NotNil(t, detail.FeedbackEditedAt)
 	})
 }
 

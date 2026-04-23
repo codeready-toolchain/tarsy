@@ -537,6 +537,8 @@ type triageRow struct {
 	LatestScore           *int       `sql:"latest_score"`
 	ScoringStatus         *string    `sql:"scoring_status"`
 	FeedbackEdited        int        `sql:"feedback_edited"`
+	FeedbackEditedBy      *string    `sql:"feedback_edited_by"`
+	FeedbackEditedAt      *time.Time `sql:"feedback_edited_at"`
 }
 
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
@@ -640,6 +642,14 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback') THEN 1 ELSE 0 END)", sid),
 				"feedback_edited",
 			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT actor FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback' ORDER BY created_at DESC LIMIT 1)", sid),
+				"feedback_edited_by",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT created_at FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback' ORDER BY created_at DESC LIMIT 1)", sid),
+				"feedback_edited_at",
+			)
 		}).
 		Scan(ctx, &rows)
 	if err != nil {
@@ -671,6 +681,8 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			ActionTaken:           row.ActionTaken,
 			InvestigationFeedback: row.InvestigationFeedback,
 			FeedbackEdited:        row.FeedbackEdited != 0,
+			FeedbackEditedBy:      row.FeedbackEditedBy,
+			FeedbackEditedAt:      row.FeedbackEditedAt,
 			HasParallelStages:     row.HasParallel != 0,
 			HasSubAgents:          row.HasSubAgents != 0,
 			HasActionStages:       row.HasActionStages != 0,

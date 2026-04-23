@@ -30,12 +30,14 @@ export interface CompleteReviewModalProps {
   executiveSummary?: string | null;
   assignee?: string | null;
   feedbackEdited?: boolean;
+  feedbackEditedBy?: string | null;
+  feedbackEditedAt?: string | null;
   error?: string | null;
   /** Pre-select a rating when the modal opens (e.g. from inline thumbs) */
   initialRating?: string;
 }
 
-export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, assignee, feedbackEdited, error, initialRating }: CompleteReviewModalProps) {
+export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, assignee, feedbackEdited, feedbackEditedBy, feedbackEditedAt, error, initialRating }: CompleteReviewModalProps) {
   const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
@@ -63,6 +65,8 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
         icon={<CheckCircleOutline color="success" />}
         title={title ?? 'Complete Review'}
         feedbackEdited={feedbackEdited}
+        feedbackEditedBy={feedbackEditedBy}
+        feedbackEditedAt={feedbackEditedAt}
         assignee={assignee}
         onClose={onClose}
       />

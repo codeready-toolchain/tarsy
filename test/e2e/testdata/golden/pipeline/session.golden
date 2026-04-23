@@ -20,6 +20,8 @@
   "executive_summary_error": null,
   "failed_stages": 0,
   "feedback_edited": false,
+  "feedback_edited_at": null,
+  "feedback_edited_by": null,
   "final_analysis": "Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
   "has_action_stages": false,
   "has_parallel_stages": true,

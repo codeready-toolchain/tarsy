@@ -20,6 +20,8 @@
   "executive_summary_error": null,
   "failed_stages": 0,
   "feedback_edited": false,
+  "feedback_edited_at": null,
+  "feedback_edited_by": null,
   "final_analysis": "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).",
   "has_action_stages": true,
   "has_parallel_stages": false,

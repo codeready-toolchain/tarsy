@@ -606,14 +606,24 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		}
 	}
 
-	feedbackEdited, err := s.client.SessionReviewActivity.Query().
+	var feedbackEdited bool
+	var feedbackEditedBy *string
+	var feedbackEditedAt *time.Time
+
+	latestEdit, err := s.client.SessionReviewActivity.Query().
 		Where(
 			sessionreviewactivity.SessionID(sessionID),
 			sessionreviewactivity.ActionEQ(sessionreviewactivity.ActionUpdateFeedback),
 		).
-		Exist(ctx)
-	if err != nil {
+		Order(sessionreviewactivity.ByCreatedAt(sql.OrderDesc())).
+		First(ctx)
+	if err != nil && !ent.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to check feedback edits: %w", err)
+	}
+	if latestEdit != nil {
+		feedbackEdited = true
+		feedbackEditedBy = &latestEdit.Actor
+		feedbackEditedAt = &latestEdit.CreatedAt
 	}
 
 	return &models.SessionDetailResponse{
@@ -659,6 +669,8 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		ActionTaken:             session.ActionTaken,
 		InvestigationFeedback:   session.InvestigationFeedback,
 		FeedbackEdited:          feedbackEdited,
+		FeedbackEditedBy:        feedbackEditedBy,
+		FeedbackEditedAt:        feedbackEditedAt,
 		Stages:                  stages,
 	}, nil
 }
@@ -849,28 +861,30 @@ type dashboardRow struct {
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
-	LLMCount              int     `sql:"llm_count"`
-	LLMInputTokens        int64   `sql:"llm_input_tokens"`
-	LLMOutputTokens       int64   `sql:"llm_output_tokens"`
-	LLMTotalTokens        int64   `sql:"llm_total_tokens"`
-	MCPCount              int     `sql:"mcp_count"`
-	TotalStages           int     `sql:"total_stages"`
-	CompletedStages       int     `sql:"completed_stages"`
-	HasParallel           int     `sql:"has_parallel"`      // 0/1, mapped to bool on output
-	HasSubAgents          int     `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
-	HasActionStages       int     `sql:"has_action_stages"` // 0/1, mapped to bool on output
-	ActionsExecuted       *bool   `sql:"actions_executed"`
-	ChatMsgCount          int     `sql:"chat_msg_count"`
-	FallbackCount         int     `sql:"fallback_count"`
-	MatchedInContent      int     `sql:"matched_in_content"` // 0/1, mapped to bool on output
-	LatestScore           *int    `sql:"latest_score"`
-	ScoringStatus         *string `sql:"scoring_status"`
-	ReviewStatus          *string `sql:"review_status"`
-	Assignee              *string `sql:"assignee"`
-	QualityRating         *string `sql:"quality_rating"`
-	ActionTaken           *string `sql:"action_taken"`
-	InvestigationFeedback *string `sql:"investigation_feedback"`
-	FeedbackEdited        int     `sql:"feedback_edited"`
+	LLMCount              int        `sql:"llm_count"`
+	LLMInputTokens        int64      `sql:"llm_input_tokens"`
+	LLMOutputTokens       int64      `sql:"llm_output_tokens"`
+	LLMTotalTokens        int64      `sql:"llm_total_tokens"`
+	MCPCount              int        `sql:"mcp_count"`
+	TotalStages           int        `sql:"total_stages"`
+	CompletedStages       int        `sql:"completed_stages"`
+	HasParallel           int        `sql:"has_parallel"`      // 0/1, mapped to bool on output
+	HasSubAgents          int        `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
+	HasActionStages       int        `sql:"has_action_stages"` // 0/1, mapped to bool on output
+	ActionsExecuted       *bool      `sql:"actions_executed"`
+	ChatMsgCount          int        `sql:"chat_msg_count"`
+	FallbackCount         int        `sql:"fallback_count"`
+	MatchedInContent      int        `sql:"matched_in_content"` // 0/1, mapped to bool on output
+	LatestScore           *int       `sql:"latest_score"`
+	ScoringStatus         *string    `sql:"scoring_status"`
+	ReviewStatus          *string    `sql:"review_status"`
+	Assignee              *string    `sql:"assignee"`
+	QualityRating         *string    `sql:"quality_rating"`
+	ActionTaken           *string    `sql:"action_taken"`
+	InvestigationFeedback *string    `sql:"investigation_feedback"`
+	FeedbackEdited        int        `sql:"feedback_edited"`
+	FeedbackEditedBy      *string    `sql:"feedback_edited_by"`
+	FeedbackEditedAt      *time.Time `sql:"feedback_edited_at"`
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -1141,6 +1155,14 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				fmt.Sprintf("(CASE WHEN EXISTS(SELECT 1 FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback') THEN 1 ELSE 0 END)", sid),
 				"feedback_edited",
 			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT actor FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback' ORDER BY created_at DESC LIMIT 1)", sid),
+				"feedback_edited_by",
+			)
+			sel.AppendSelectAs(
+				fmt.Sprintf("(SELECT created_at FROM session_review_activities WHERE session_id = %s AND action = 'update_feedback' ORDER BY created_at DESC LIMIT 1)", sid),
+				"feedback_edited_at",
+			)
 
 			// Computed sort expressions applied inside Modify since they reference subquery results.
 			dir := "DESC"
@@ -1206,6 +1228,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ActionTaken:           row.ActionTaken,
 			InvestigationFeedback: row.InvestigationFeedback,
 			FeedbackEdited:        row.FeedbackEdited != 0,
+			FeedbackEditedBy:      row.FeedbackEditedBy,
+			FeedbackEditedAt:      row.FeedbackEditedAt,
 		})
 	}
 
