@@ -14,7 +14,7 @@ import (
 var (
 	LLMBuckets     = []float64{1, 2, 5, 10, 20, 30, 60, 90, 120, 180}
 	MCPBuckets     = []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60}
-	SessionBuckets = []float64{30, 60, 120, 180, 300, 600, 900, 1200, 1800}
+	SessionBuckets = []float64{30, 60, 120, 180, 300, 600, 900, 1200, 1800, 2400}
 )
 
 // Session lifecycle metrics.
