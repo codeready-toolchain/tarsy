@@ -18,8 +18,8 @@ spec:
       labels:
         component: tarsy
     spec:
-      # session_timeout (1800s) + 60s buffer (15s preStop + 45s cleanup)
-      terminationGracePeriodSeconds: 1860
+      # session_timeout (2400s) + 60s buffer (15s preStop + 45s cleanup)
+      terminationGracePeriodSeconds: 2460
       serviceAccountName: tarsy
       containers:
 

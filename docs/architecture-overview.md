@@ -223,7 +223,7 @@ TARSy exports Prometheus metrics via a `/metrics` endpoint on the existing HTTP 
 - **HTTP metrics**: request counts and duration via Echo middleware — labeled by `method`+`path`+`status_code`
 - **WebSocket metrics**: active connection gauge
 
-Custom histogram buckets are tuned per metric type (LLM 1–180s, MCP 0.1–60s, sessions 30s–30min). Standard Go runtime/process metrics are included via the default registry.
+Custom histogram buckets are tuned per metric type (LLM 1–180s, MCP 0.1–60s, sessions 30s–40min). Standard Go runtime/process metrics are included via the default registry.
 
 **For detailed design**: See [ADR-0010: Prometheus Metrics](adr/0010-prometheus-metrics.md)
 
