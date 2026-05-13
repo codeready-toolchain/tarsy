@@ -971,7 +971,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON), `tool_call_id`, `tool_name`, timestamps
 
 **SessionReviewActivity** (`ent/schema/sessionreviewactivity.go`):
-`activity_id`, `session_id`, `actor`, `action` (claim/unclaim/complete/reopen/update_feedback), `from_status`, `to_status`, `quality_rating` (accurate/partially_accurate/inaccurate), `note` (action_taken snapshot on complete/update_feedback), `investigation_feedback`, `created_at`. Every review workflow transition is logged here for auditability. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md).
+`activity_id`, `session_id`, `actor`, `action` (claim/unclaim/complete/reopen/update_feedback/acknowledge), `from_status`, `to_status`, `quality_rating` (accurate/partially_accurate/inaccurate), `note` (action_taken snapshot on complete/update_feedback), `investigation_feedback`, `created_at`. Every review workflow transition is logged here for auditability. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 
 #### Service Layer
 
@@ -1004,7 +1004,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/memories/:id` | Single memory detail |
 | PATCH | `/api/v1/memories/:id` | Edit memory (content, category, valence, deprecated) |
 | DELETE | `/api/v1/memories/:id` | Delete memory |
-| PATCH | `/api/v1/sessions/review` | Review workflow transition for one or more sessions (claim/unclaim/complete/reopen/update_feedback) |
+| PATCH | `/api/v1/sessions/review` | Review workflow transition for one or more sessions (claim/unclaim/complete/reopen/update_feedback/acknowledge) |
 | GET | `/api/v1/sessions/:id/review-activity` | Review activity audit log |
 | GET | `/api/v1/sessions/triage/:group` | Per-group paginated triage view (investigating/needs_review/in_progress/reviewed) |
 | GET | `/health` | Health check (DB, worker pool) |
@@ -1113,7 +1113,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
-- **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md).
+- **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 
 #### Text Search
 
