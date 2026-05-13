@@ -226,16 +226,18 @@ export function TriageSessionRow({
               >
                 Claim
               </Button>
-              <Tooltip title="Acknowledge">
-                <IconButton
-                  size="small"
-                  disabled={actionLoading}
-                  onClick={() => onAcknowledge?.(session.id)}
-                  sx={{ p: 0.5 }}
-                >
-                  <DoneAll sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
+              {onAcknowledge && (
+                <Tooltip title="Acknowledge">
+                  <IconButton
+                    size="small"
+                    disabled={actionLoading}
+                    onClick={() => onAcknowledge(session.id)}
+                    sx={{ p: 0.5 }}
+                  >
+                    <DoneAll sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
             </>
           )}
 
@@ -251,16 +253,18 @@ export function TriageSessionRow({
                   <PersonRemove sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Acknowledge">
-                <IconButton
-                  size="small"
-                  disabled={actionLoading}
-                  onClick={() => onAcknowledge?.(session.id)}
-                  sx={{ p: 0.5 }}
-                >
-                  <DoneAll sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
+              {onAcknowledge && (
+                <Tooltip title="Acknowledge">
+                  <IconButton
+                    size="small"
+                    disabled={actionLoading}
+                    onClick={() => onAcknowledge(session.id)}
+                    sx={{ p: 0.5 }}
+                  >
+                    <DoneAll sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
             </>
           )}
 
