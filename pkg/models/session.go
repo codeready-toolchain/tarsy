@@ -301,12 +301,13 @@ const (
 	ReviewActionComplete       ReviewAction = "complete"
 	ReviewActionReopen         ReviewAction = "reopen"
 	ReviewActionUpdateFeedback ReviewAction = "update_feedback"
+	ReviewActionAcknowledge    ReviewAction = "acknowledge"
 )
 
 // ValidReviewAction returns true if the action is a known value.
 func ValidReviewAction(s string) bool {
 	switch ReviewAction(s) {
-	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionComplete, ReviewActionReopen, ReviewActionUpdateFeedback:
+	case ReviewActionClaim, ReviewActionUnclaim, ReviewActionComplete, ReviewActionReopen, ReviewActionUpdateFeedback, ReviewActionAcknowledge:
 		return true
 	default:
 		return false

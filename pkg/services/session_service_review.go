@@ -89,6 +89,10 @@ func validateReviewRequest(req models.UpdateReviewRequest) error {
 		if req.QualityRating != nil && !validQualityRatings[*req.QualityRating] {
 			return NewValidationError("quality_rating", fmt.Sprintf("invalid value %q", *req.QualityRating))
 		}
+	case models.ReviewActionAcknowledge:
+		if req.QualityRating != nil {
+			return NewValidationError("quality_rating", "must not be set for acknowledge action")
+		}
 	}
 	return nil
 }
@@ -239,6 +243,11 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
 			sessionreviewactivity.ToStatusReviewed,
 			snapshotRating, snapshotActionTaken, snapshotFeedback, now); err != nil {
+			return nil, err
+		}
+
+	case models.ReviewActionAcknowledge:
+		if err := s.doAcknowledge(writeCtx, tx, sessionID, req.Actor, now); err != nil {
 			return nil, err
 		}
 	}
@@ -413,6 +422,85 @@ func (s *SessionService) doComplete(ctx context.Context, tx *ent.Tx, sessionID, 
 		nil,
 		sessionreviewactivity.ToStatusReviewed,
 		&rating, actionTaken, feedback, now)
+}
+
+// doAcknowledge handles acknowledge from needs_review (auto-claim) and in_progress.
+// Same terminal state as doComplete (reviewed) but without quality_rating.
+func (s *SessionService) doAcknowledge(ctx context.Context, tx *ent.Tx, sessionID, actor string, now time.Time) error {
+	// Try acknowledge from in_progress first.
+	affected, err := tx.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusInProgress),
+		).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
+		SetReviewedAt(now).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acknowledge session: %w", err)
+	}
+	if affected > 0 {
+		return s.insertActivity(ctx, tx, sessionID, actor,
+			sessionreviewactivity.ActionAcknowledge,
+			ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
+			sessionreviewactivity.ToStatusReviewed,
+			nil, nil, nil, now)
+	}
+
+	// Try acknowledge from needs_review (auto-claims first).
+	affected, err = tx.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusNeedsReview),
+		).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
+		SetReviewedAt(now).
+		SetAssignee(actor).
+		SetAssignedAt(now).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to direct-acknowledge session: %w", err)
+	}
+	if affected > 0 {
+		claimTime := now
+		ackTime := now.Add(time.Microsecond)
+		if err := s.insertActivity(ctx, tx, sessionID, actor,
+			sessionreviewactivity.ActionClaim,
+			ptrFromStatus(sessionreviewactivity.FromStatusNeedsReview),
+			sessionreviewactivity.ToStatusInProgress,
+			nil, nil, nil, claimTime); err != nil {
+			return err
+		}
+		return s.insertActivity(ctx, tx, sessionID, actor,
+			sessionreviewactivity.ActionAcknowledge,
+			ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
+			sessionreviewactivity.ToStatusReviewed,
+			nil, nil, nil, ackTime)
+	}
+
+	// Try acknowledge from NULL review_status.
+	affected, err = tx.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.ReviewStatusIsNil(),
+		).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
+		SetReviewedAt(now).
+		SetAssignee(actor).
+		SetAssignedAt(now).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to acknowledge session from uninitialized state: %w", err)
+	}
+	if affected == 0 {
+		return ErrConflict
+	}
+
+	return s.insertActivity(ctx, tx, sessionID, actor,
+		sessionreviewactivity.ActionAcknowledge,
+		nil,
+		sessionreviewactivity.ToStatusReviewed,
+		nil, nil, nil, now)
 }
 
 // insertActivity creates a SessionReviewActivity record within the transaction.

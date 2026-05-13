@@ -24,6 +24,7 @@ func TestUpdateReviewHandler_Validation(t *testing.T) {
 		{name: "missing session_ids", body: `{"action":"claim"}`},
 		{name: "unknown action", body: `{"session_ids":["id1"],"action":"bogus"}`},
 		{name: "complete without quality_rating", body: `{"session_ids":["id1"],"action":"complete"}`},
+		{name: "acknowledge with quality_rating", body: `{"session_ids":["id1"],"action":"acknowledge","quality_rating":"accurate"}`},
 	}
 
 	for _, tt := range tests {
