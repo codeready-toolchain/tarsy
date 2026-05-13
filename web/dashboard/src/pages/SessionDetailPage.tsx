@@ -96,6 +96,7 @@ import {
 
 const SessionHeader = lazy(() => import('../components/session/SessionHeader.tsx'));
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
+const ReviewActivityCard = lazy(() => import('../components/session/ReviewActivityCard.tsx'));
 const ExtractedLearningsCard = lazy(() => import('../components/session/ExtractedLearningsCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
 const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
@@ -260,6 +261,7 @@ export function SessionDetailPage() {
   // --- Counters for chat-triggered layout changes ---
   const [timelineExpandCounter, setTimelineExpandCounter] = useState(0);
   const [cardsCollapseCounter, setCardsCollapseCounter] = useState(0);
+  const [reviewActivityRefreshCounter, setReviewActivityRefreshCounter] = useState(0);
 
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -934,6 +936,7 @@ export function SessionDetailPage() {
           }).catch((err) => {
             console.warn('Failed to re-fetch session after review status:', err);
           });
+          setReviewActivityRefreshCounter((c) => c + 1);
           return;
         }
 
@@ -1699,6 +1702,17 @@ export function SessionDetailPage() {
                 onReviewClick={handleReviewClick}
               />
             </Suspense>
+
+            {/* Review activity audit log */}
+            {session.review_status && (
+              <Suspense fallback={null}>
+                <ReviewActivityCard
+                  sessionId={session.id}
+                  refreshCounter={reviewActivityRefreshCounter}
+                  collapseCounter={cardsCollapseCounter}
+                />
+              </Suspense>
+            )}
 
             {/* Lessons learned (memories) from this investigation */}
             <Suspense fallback={null}>
