@@ -352,6 +352,89 @@ func TestE2E_ReviewWorkflow_UpdateFeedback(t *testing.T) {
 	assert.Equal(t, "Actually missed a key finding.", act2["investigation_feedback"])
 }
 
+func TestE2E_ReviewWorkflow_AcknowledgeSession(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Analyzing the alert data."},
+			&agent.TextChunk{Content: "Investigation complete: acknowledge test."},
+			&agent.UsageChunk{InputTokens: 30, OutputTokens: 15, TotalTokens: 45},
+		},
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "review-workflow")),
+		WithLLMClient(llm),
+	)
+
+	ctx := context.Background()
+	ws, err := WSConnect(ctx, app.WSURL)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	resp := app.SubmitAlert(t, "test-review", "Acknowledge test")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "needs_review"
+	}, 5*time.Second, "expected review.status needs_review WS event")
+
+	// ── PATCH acknowledge directly (no prior claim) ──
+	ackResp := app.PatchReview(t, sessionID, map[string]interface{}{
+		"action": "acknowledge",
+	})
+	ackResults := ackResp["results"].([]interface{})
+	require.Len(t, ackResults, 1)
+	assert.Equal(t, true, ackResults[0].(map[string]interface{})["success"])
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+	}, 5*time.Second, "expected review.status reviewed WS event after acknowledge")
+
+	// ── DB assertion ──
+	session, err := app.EntClient.AlertSession.Get(ctx, sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, alertsession.ReviewStatusReviewed, *session.ReviewStatus)
+	assert.Nil(t, session.QualityRating, "acknowledge must not set quality_rating")
+	assert.NotNil(t, session.ReviewedAt)
+	assert.NotNil(t, session.Assignee, "acknowledge from needs_review should auto-assign")
+
+	// ── Review activity: implicit claim + acknowledge ──
+	activityResp := app.GetReviewActivity(t, sessionID)
+	activities, ok := activityResp["activities"].([]interface{})
+	require.True(t, ok, "expected activities array")
+	require.Len(t, activities, 2, "should have claim + acknowledge activity rows")
+
+	act0 := activities[0].(map[string]interface{})
+	assert.Equal(t, "claim", act0["action"])
+	assert.Equal(t, "in_progress", act0["to_status"])
+
+	act1 := activities[1].(map[string]interface{})
+	assert.Equal(t, "acknowledge", act1["action"])
+	assert.Equal(t, "reviewed", act1["to_status"])
+	assert.Nil(t, act1["quality_rating"], "acknowledge activity should have no quality_rating")
+
+	// ── Triage ──
+	reviewedGroup := app.GetTriageGroup(t, "reviewed", "")
+	reviewedSessions, ok := reviewedGroup["sessions"].([]interface{})
+	require.True(t, ok, "expected sessions array in reviewed group")
+
+	found := false
+	for _, item := range reviewedSessions {
+		m := item.(map[string]interface{})
+		if m["id"] == sessionID {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "acknowledged session should appear in triage reviewed group")
+}
+
 func TestE2E_ReviewWorkflow_CancelledAutoReviewed(t *testing.T) {
 	llm := NewScriptedLLMClient()
 

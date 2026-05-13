@@ -12,6 +12,7 @@ import {
 import {
   PersonRemove,
   Replay,
+  DoneAll,
   CallSplit,
   Hub,
   BuildOutlined,
@@ -56,6 +57,7 @@ interface TriageSessionRowProps {
   onToggleSelect?: (sessionId: string) => void;
   onClaim?: (sessionId: string) => void;
   onUnclaim?: (sessionId: string) => void;
+  onAcknowledge?: (sessionId: string) => void;
   onReopen?: (sessionId: string) => void;
   onReviewClick?: (session: DashboardSessionItem) => void;
   actionLoading?: boolean;
@@ -69,6 +71,7 @@ export function TriageSessionRow({
   onToggleSelect,
   onClaim,
   onUnclaim,
+  onAcknowledge,
   onReopen,
   onReviewClick,
   actionLoading,
@@ -213,28 +216,56 @@ export function TriageSessionRow({
           onClick={(e) => e.stopPropagation()}
         >
           {group === 'needs_review' && (
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={actionLoading}
-              onClick={() => onClaim?.(session.id)}
-              sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0.125, px: 1, minWidth: 'auto', lineHeight: 1.5 }}
-            >
-              Claim
-            </Button>
+            <>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={actionLoading}
+                onClick={() => onClaim?.(session.id)}
+                sx={{ textTransform: 'none', fontSize: '0.7rem', py: 0.125, px: 1, minWidth: 'auto', lineHeight: 1.5 }}
+              >
+                Claim
+              </Button>
+              {onAcknowledge && (
+                <Tooltip title="Acknowledge">
+                  <IconButton
+                    size="small"
+                    disabled={actionLoading}
+                    onClick={() => onAcknowledge(session.id)}
+                    sx={{ p: 0.5 }}
+                  >
+                    <DoneAll sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
           )}
 
           {group === 'in_progress' && (
-            <Tooltip title="Unclaim">
-              <IconButton
-                size="small"
-                disabled={actionLoading}
-                onClick={() => onUnclaim?.(session.id)}
-                sx={{ p: 0.5 }}
-              >
-                <PersonRemove sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
+            <>
+              <Tooltip title="Unclaim">
+                <IconButton
+                  size="small"
+                  disabled={actionLoading}
+                  onClick={() => onUnclaim?.(session.id)}
+                  sx={{ p: 0.5 }}
+                >
+                  <PersonRemove sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+              {onAcknowledge && (
+                <Tooltip title="Acknowledge">
+                  <IconButton
+                    size="small"
+                    disabled={actionLoading}
+                    onClick={() => onAcknowledge(session.id)}
+                    sx={{ p: 0.5 }}
+                  >
+                    <DoneAll sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
           )}
 
           {group === 'reviewed' && (

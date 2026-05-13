@@ -521,7 +521,7 @@ var (
 	SessionReviewActivitiesColumns = []*schema.Column{
 		{Name: "activity_id", Type: field.TypeString, Unique: true},
 		{Name: "actor", Type: field.TypeString},
-		{Name: "action", Type: field.TypeEnum, Enums: []string{"claim", "unclaim", "complete", "reopen", "update_feedback"}},
+		{Name: "action", Type: field.TypeEnum, Enums: []string{"claim", "unclaim", "complete", "reopen", "update_feedback", "acknowledge"}},
 		{Name: "from_status", Type: field.TypeEnum, Nullable: true, Enums: []string{"needs_review", "in_progress", "reviewed"}},
 		{Name: "to_status", Type: field.TypeEnum, Enums: []string{"needs_review", "in_progress", "reviewed"}},
 		{Name: "quality_rating", Type: field.TypeEnum, Nullable: true, Enums: []string{"accurate", "partially_accurate", "inaccurate"}},

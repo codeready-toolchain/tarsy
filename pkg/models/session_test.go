@@ -46,6 +46,7 @@ func TestValidReviewAction(t *testing.T) {
 		{"complete", "complete", true},
 		{"reopen", "reopen", true},
 		{"update_feedback", "update_feedback", true},
+		{"acknowledge", "acknowledge", true},
 		{"empty", "", false},
 		{"unknown", "bogus", false},
 		{"old resolve", "resolve", false},

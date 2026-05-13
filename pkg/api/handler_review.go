@@ -41,6 +41,9 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 	if models.ReviewAction(req.Action) == models.ReviewActionComplete && req.QualityRating == nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "quality_rating is required for complete action")
 	}
+	if models.ReviewAction(req.Action) == models.ReviewActionAcknowledge && req.QualityRating != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "quality_rating must not be set for acknowledge action")
+	}
 	req.Actor = extractAuthor(c)
 
 	resp, updated := s.sessionService.UpdateReviewStatus(c.Request().Context(), req)

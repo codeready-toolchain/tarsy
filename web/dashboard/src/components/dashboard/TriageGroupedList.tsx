@@ -44,8 +44,10 @@ interface TriageGroupedListProps {
   onReviewClick: (session: import('../../types/session.ts').DashboardSessionItem) => void;
   onPageChange: (group: TriageGroupKey, page: number) => void;
   onPageSizeChange: (group: TriageGroupKey, pageSize: number) => void;
+  onAcknowledge?: (sessionId: string) => void;
   onBulkClaim?: (sessionIds: string[]) => void;
   onBulkComplete?: (sessionIds: string[]) => void;
+  onBulkAcknowledge?: (sessionIds: string[]) => void;
   onBulkUnclaim?: (sessionIds: string[]) => void;
   onBulkReopen?: (sessionIds: string[]) => void;
   actionLoading?: boolean;
@@ -119,8 +121,10 @@ export function TriageGroupedList({
   onReviewClick,
   onPageChange,
   onPageSizeChange,
+  onAcknowledge,
   onBulkClaim,
   onBulkComplete,
+  onBulkAcknowledge,
   onBulkUnclaim,
   onBulkReopen,
   actionLoading,
@@ -350,6 +354,17 @@ export function TriageGroupedList({
                               Complete All
                             </Button>
                           )}
+                          {onBulkAcknowledge && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={actionLoading}
+                              onClick={() => onBulkAcknowledge([...selectedIds])}
+                              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                            >
+                              Ack All
+                            </Button>
+                          )}
                         </>
                       )}
 
@@ -376,6 +391,17 @@ export function TriageGroupedList({
                               sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
                             >
                               Unclaim All
+                            </Button>
+                          )}
+                          {onBulkAcknowledge && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              disabled={actionLoading}
+                              onClick={() => onBulkAcknowledge([...selectedIds])}
+                              sx={{ textTransform: 'none', fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                            >
+                              Ack All
                             </Button>
                           )}
                         </>
@@ -454,6 +480,7 @@ export function TriageGroupedList({
                             onToggleSelect={selectable ? (id) => toggleSelect(group.dataKey, id) : undefined}
                             onClaim={onClaim}
                             onUnclaim={onUnclaim}
+                            onAcknowledge={onAcknowledge}
                             onReopen={onReopen}
                             onReviewClick={onReviewClick}
                             actionLoading={actionLoading}
