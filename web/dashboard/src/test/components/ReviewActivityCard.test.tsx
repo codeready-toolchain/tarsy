@@ -80,9 +80,8 @@ describe('ReviewActivityCard', () => {
 
     await waitFor(() => {
       expect(mockGetReviewActivity).toHaveBeenCalledWith('sess-1');
+      expect(container.firstChild).toBeNull();
     });
-
-    expect(container.firstChild).toBeNull();
   });
 
   it('shows header with count badge and expands on click', async () => {
