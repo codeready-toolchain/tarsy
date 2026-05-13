@@ -971,7 +971,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `session_id`, `stage_id`, `execution_id`, `sequence_number`, `role` (system/user/assistant/tool), `content`, `tool_calls` (JSON), `tool_call_id`, `tool_name`, timestamps
 
 **SessionReviewActivity** (`ent/schema/sessionreviewactivity.go`):
-`activity_id`, `session_id`, `actor`, `action` (claim/unclaim/complete/reopen/update_feedback), `from_status`, `to_status`, `quality_rating` (accurate/partially_accurate/inaccurate), `note` (action_taken snapshot on complete/update_feedback), `investigation_feedback`, `created_at`. Every review workflow transition is logged here for auditability. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md).
+`activity_id`, `session_id`, `actor`, `action` (claim/unclaim/complete/reopen/update_feedback/acknowledge), `from_status`, `to_status`, `quality_rating` (accurate/partially_accurate/inaccurate), `note` (action_taken snapshot on complete/update_feedback), `investigation_feedback`, `created_at`. Every review workflow transition is logged here for auditability. See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 
 #### Service Layer
 
@@ -1004,7 +1004,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/memories/:id` | Single memory detail |
 | PATCH | `/api/v1/memories/:id` | Edit memory (content, category, valence, deprecated) |
 | DELETE | `/api/v1/memories/:id` | Delete memory |
-| PATCH | `/api/v1/sessions/review` | Review workflow transition for one or more sessions (claim/unclaim/complete/reopen/update_feedback) |
+| PATCH | `/api/v1/sessions/review` | Review workflow transition for one or more sessions (claim/unclaim/complete/reopen/update_feedback/acknowledge) |
 | GET | `/api/v1/sessions/:id/review-activity` | Review activity audit log |
 | GET | `/api/v1/sessions/triage/:group` | Per-group paginated triage view (investigating/needs_review/in_progress/reviewed) |
 | GET | `/health` | Health check (DB, worker pool) |
