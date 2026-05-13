@@ -686,8 +686,20 @@ export function DashboardView() {
     }
   };
 
+  const handleBulkTriageAcknowledge = async (sessionIds: string[]) => {
+    try {
+      const resp = await updateReview({ session_ids: sessionIds, action: REVIEW_ACTION.ACKNOWLEDGE });
+      checkReviewResults(resp);
+      fetchAllTriageGroups();
+    } catch (err) {
+      setTriageError(err instanceof Error ? err.message : handleAPIError(err));
+      throw err;
+    }
+  };
+
   const handleTriageClaim = (sessionId: string) => handleBulkTriageClaim([sessionId]);
   const handleTriageUnclaim = (sessionId: string) => handleBulkTriageUnclaim([sessionId]);
+  const handleTriageAcknowledge = (sessionId: string) => handleBulkTriageAcknowledge([sessionId]);
   const handleTriageReopen = (sessionId: string) => handleBulkTriageReopen([sessionId]);
 
   const handleTriageComplete = async (sessionId: string, qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
@@ -1102,8 +1114,10 @@ export function DashboardView() {
           onComplete={handleTriageComplete}
           onReopen={handleTriageReopen}
           onUpdateFeedback={handleTriageUpdateFeedback}
+          onAcknowledge={handleTriageAcknowledge}
           onBulkClaim={handleBulkTriageClaim}
           onBulkComplete={handleBulkTriageComplete}
+          onBulkAcknowledge={handleBulkTriageAcknowledge}
           onBulkUnclaim={handleBulkTriageUnclaim}
           onBulkReopen={handleBulkTriageReopen}
           onPageChange={handleTriagePageChange}

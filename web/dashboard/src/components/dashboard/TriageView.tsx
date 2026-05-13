@@ -30,8 +30,10 @@ interface TriageViewProps {
   onComplete: (sessionId: string, qualityRating: string, actionTaken?: string, investigationFeedback?: string) => Promise<void>;
   onReopen: (sessionId: string) => Promise<void>;
   onUpdateFeedback: (sessionId: string, qualityRating: string, actionTaken: string, investigationFeedback: string) => Promise<void>;
+  onAcknowledge: (sessionId: string) => Promise<void>;
   onBulkClaim: (sessionIds: string[]) => Promise<void>;
   onBulkComplete: (sessionIds: string[], qualityRating: string, actionTaken?: string, investigationFeedback?: string) => Promise<void>;
+  onBulkAcknowledge: (sessionIds: string[]) => Promise<void>;
   onBulkUnclaim: (sessionIds: string[]) => Promise<void>;
   onBulkReopen: (sessionIds: string[]) => Promise<void>;
   onPageChange: (group: TriageGroupKey, page: number) => void;
@@ -57,8 +59,10 @@ export function TriageView({
   onComplete,
   onReopen,
   onUpdateFeedback,
+  onAcknowledge,
   onBulkClaim,
   onBulkComplete,
+  onBulkAcknowledge,
   onBulkUnclaim,
   onBulkReopen,
   onPageChange,
@@ -90,6 +94,18 @@ export function TriageView({
 
   const handleUnclaim = (sessionId: string) => {
     withAction(() => onUnclaim(sessionId));
+  };
+
+  const handleAcknowledge = (sessionId: string) => {
+    withAction(async () => {
+      await onAcknowledge(sessionId);
+      const session = findSessionInGroups(sessionId);
+      setSnackbar({
+        message: 'Acknowledged',
+        severity: 'success',
+        completedSession: session ? { ...session, review_status: 'reviewed' } : undefined,
+      });
+    });
   };
 
   const handleReviewClick = useCallback((session: DashboardSessionItem) => {
@@ -158,6 +174,10 @@ export function TriageView({
 
   const handleBulkUnclaim = (sessionIds: string[]) => {
     withAction(() => onBulkUnclaim(sessionIds));
+  };
+
+  const handleBulkAcknowledge = (sessionIds: string[]) => {
+    withAction(() => onBulkAcknowledge(sessionIds));
   };
 
   const handleBulkReopen = (sessionIds: string[]) => {
@@ -273,10 +293,12 @@ export function TriageView({
         groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
+        onAcknowledge={handleAcknowledge}
         onReopen={handleReopen}
         onReviewClick={handleReviewClick}
         onBulkClaim={handleBulkClaim}
         onBulkComplete={handleBulkComplete}
+        onBulkAcknowledge={handleBulkAcknowledge}
         onBulkUnclaim={handleBulkUnclaim}
         onBulkReopen={handleBulkReopen}
         onPageChange={onPageChange}
@@ -341,16 +363,18 @@ export function TriageView({
             })()}
             action={hasSnackbarActions ? (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Button
-                  color="inherit"
-                  size="small"
-                  variant="outlined"
-                  startIcon={<RateReview sx={{ fontSize: 16 }} />}
-                  onClick={handleSnackbarAddFeedback}
-                  sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
-                >
-                  Add note
-                </Button>
+                {snackbar.completedRating && (
+                  <Button
+                    color="inherit"
+                    size="small"
+                    variant="outlined"
+                    startIcon={<RateReview sx={{ fontSize: 16 }} />}
+                    onClick={handleSnackbarAddFeedback}
+                    sx={{ borderColor: 'rgba(255,255,255,0.5)' }}
+                  >
+                    Add note
+                  </Button>
+                )}
                 <Button color="inherit" size="small" onClick={handleSnackbarUndo}>
                   Undo
                 </Button>

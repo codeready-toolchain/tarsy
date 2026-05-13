@@ -1,8 +1,9 @@
 import { TableCell, Tooltip, Chip } from '@mui/material';
-import { ThumbsUpDown } from '@mui/icons-material';
+import { ThumbsUpDown, CheckCircle } from '@mui/icons-material';
 import { qualityReviewBodySx } from './qualityGroupSx.ts';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
 import { isTerminalStatus, type SessionStatus } from '../../constants/sessionStatus.ts';
+import { REVIEW_STATUS } from '../../types/api.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
 const iconOnlyChipSx = {
@@ -27,6 +28,7 @@ export function ReviewCell({ session, onReviewClick }: ReviewCellProps) {
   const cfg = getRatingConfig(session.quality_rating);
   const terminal = isTerminalStatus(session.status as SessionStatus);
   const interactive = !!onReviewClick && terminal;
+  const acknowledged = !cfg && session.review_status === REVIEW_STATUS.REVIEWED;
 
   return (
     <TableCell sx={qualityReviewBodySx}>
@@ -40,6 +42,16 @@ export function ReviewCell({ session, onReviewClick }: ReviewCellProps) {
             tabIndex={interactive ? 0 : -1}
             onClick={interactive ? (e) => { e.stopPropagation(); onReviewClick(session); } : undefined}
             sx={{ ...iconOnlyChipSx, cursor: interactive ? 'pointer' : 'default' }}
+          />
+        </Tooltip>
+      ) : acknowledged ? (
+        <Tooltip title="Acknowledged">
+          <Chip
+            icon={<CheckCircle sx={{ fontSize: '0.875rem' }} />}
+            size="small"
+            variant="outlined"
+            tabIndex={-1}
+            sx={{ ...iconOnlyChipSx, cursor: 'default' }}
           />
         </Tooltip>
       ) : interactive ? (

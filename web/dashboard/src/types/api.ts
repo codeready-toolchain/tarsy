@@ -112,6 +112,7 @@ export const REVIEW_ACTION = {
   COMPLETE: 'complete',
   REOPEN: 'reopen',
   UPDATE_FEEDBACK: 'update_feedback',
+  ACKNOWLEDGE: 'acknowledge',
 } as const;
 
 export type ReviewAction = (typeof REVIEW_ACTION)[keyof typeof REVIEW_ACTION];
