@@ -93,6 +93,12 @@ func validateReviewRequest(req models.UpdateReviewRequest) error {
 		if req.QualityRating != nil {
 			return NewValidationError("quality_rating", "must not be set for acknowledge action")
 		}
+		if req.ActionTaken != nil {
+			return NewValidationError("action_taken", "must not be set for acknowledge action")
+		}
+		if req.InvestigationFeedback != nil {
+			return NewValidationError("investigation_feedback", "must not be set for acknowledge action")
+		}
 	}
 	return nil
 }

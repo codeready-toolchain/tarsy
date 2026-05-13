@@ -433,6 +433,30 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Contains(t, errMsg, "quality_rating")
 	})
 
+	t.Run("acknowledge rejects action_taken", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		actionTaken := "Some action"
+
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
+			Action:      "acknowledge",
+			Actor:       "alice@test.com",
+			ActionTaken: &actionTaken,
+		})
+		assert.Contains(t, errMsg, "action_taken")
+	})
+
+	t.Run("acknowledge rejects investigation_feedback", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		feedback := "Some feedback"
+
+		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
+			Action:                "acknowledge",
+			Actor:                 "alice@test.com",
+			InvestigationFeedback: &feedback,
+		})
+		assert.Contains(t, errMsg, "investigation_feedback")
+	})
+
 	t.Run("update_feedback on reviewed session", func(t *testing.T) {
 		id := seedReviewSession(t, service, "reviewed", "john@test.com")
 		rating := "partially_accurate"
