@@ -13,7 +13,7 @@ require (
 	github.com/labstack/echo/v5 v5.0.4
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/prometheus/client_golang v1.23.2
-	github.com/slack-go/slack v0.17.3
+	github.com/slack-go/slack v0.23.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
