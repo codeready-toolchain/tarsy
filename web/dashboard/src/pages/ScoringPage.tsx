@@ -286,7 +286,7 @@ export function ScoringPage() {
                       </Typography>
                       {score ? (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-                          <ScoreBadge score={score.total_score} scoringStatus={score.status} onClick={handleRescoreClick} />
+                          <ScoreBadge score={score.total_score} scoringStatus={score.status} onClick={rescoring ? undefined : handleRescoreClick} />
                           <Typography variant="body2" color="text.secondary">
                             Triggered by: {score.score_triggered_by}
                           </Typography>
