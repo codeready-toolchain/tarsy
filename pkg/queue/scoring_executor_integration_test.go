@@ -245,7 +245,7 @@ func TestScoringExecutor_SubmitScoring_ReturnsScoreID(t *testing.T) {
 		return getErr == nil && s.Status != sessionscore.StatusInProgress && s.Status != sessionscore.StatusPending
 	}, 5*time.Second, 50*time.Millisecond, "score should reach terminal state")
 
-	executor.Stop()
+	executor.Stop(0)
 
 	assert.True(t, pub.hasStageStatus("Reflection", "started"), "expected scoring stage started event")
 }
@@ -264,7 +264,7 @@ func TestScoringExecutor_ScoreSessionAsync_SilentWhenScoringDisabled(t *testing.
 	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
 
 	executor.ScoreSessionAsync(session.ID, "auto", true)
-	executor.Stop()
+	executor.Stop(0)
 
 	// Verify no LLM calls were made
 	llm.mu.Lock()
@@ -305,7 +305,7 @@ func TestScoringExecutor_GracefulShutdown(t *testing.T) {
 	// Stop() also cancels in-flight contexts, so the blocked LLM returns.
 	stopped := make(chan struct{})
 	go func() {
-		executor.Stop()
+		executor.Stop(0)
 		close(stopped)
 	}()
 

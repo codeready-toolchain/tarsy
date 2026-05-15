@@ -18,8 +18,8 @@ spec:
       labels:
         component: tarsy
     spec:
-      # session_timeout (2400s) + 60s buffer (15s preStop + 45s cleanup)
-      terminationGracePeriodSeconds: 2460
+      # session_timeout (2400s) + scoring_shutdown_timeout (180s) + http_shutdown (5s) + buffer (15s)
+      terminationGracePeriodSeconds: 2600
       serviceAccountName: tarsy
       containers:
 
@@ -112,6 +112,10 @@ spec:
         - name: llm-service
           image: tarsy-llm:latest
           imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "200"]
           ports:
             - containerPort: 50051
           env:

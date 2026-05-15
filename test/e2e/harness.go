@@ -309,7 +309,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		chatExecutor.Stop()
 		workerPool.Stop()
 		if scoringExecutor != nil {
-			scoringExecutor.Stop()
+			scoringExecutor.Stop(0)
 		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

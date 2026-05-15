@@ -422,14 +422,17 @@ func main() {
 	}
 
 	// Then drain scoring executor (scoring goroutines spawned by completed sessions).
-	scoringShutdownCtx, scoringCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer scoringCancel()
-
+	// Stop() waits up to ScoringShutdownTimeout for natural completion before
+	// force-cancelling remaining contexts.
 	scoringDone := make(chan struct{})
 	go func() {
-		scoringExecutor.Stop()
+		scoringExecutor.Stop(cfg.Queue.ScoringShutdownTimeout)
 		close(scoringDone)
 	}()
+
+	// Outer budget: grace period + 15s cleanup buffer for post-cancel drain.
+	scoringShutdownCtx, scoringCancel := context.WithTimeout(ctx, cfg.Queue.ScoringShutdownTimeout+15*time.Second)
+	defer scoringCancel()
 
 	select {
 	case <-scoringDone:

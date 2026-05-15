@@ -15,7 +15,7 @@
  */
 
 import { Box, Chip, CircularProgress, Tooltip, Typography, alpha } from '@mui/material';
-import { Error as ErrorIcon } from '@mui/icons-material';
+import { Error as ErrorIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import {
   EXECUTION_STATUS,
   SESSION_STATUS,
@@ -174,24 +174,31 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
 
   // --- Scoring failed / timed out ---
   if (scoringStatus != null && FAILED_EXECUTION_STATUSES.has(scoringStatus)) {
+    const actionable = !!onClick;
+    const icon = actionable
+      ? <RefreshIcon sx={{ fontSize: variant === 'pill' ? 14 : 16 }} />
+      : <ErrorIcon sx={{ fontSize: variant === 'pill' ? 14 : 16 }} />;
+    const label = actionable ? 'Re-score' : (variant === 'pill' ? 'score failed' : 'Score Failed');
+    const tooltip = actionable ? 'Click to re-score' : 'Scoring failed';
+
     if (variant === 'pill') {
       return (
         <PillBadge
           color="error"
-          icon={<ErrorIcon sx={{ fontSize: 14 }} />}
+          icon={icon}
           value=""
-          label="score failed"
-          tooltip="Scoring failed"
+          label={label}
+          tooltip={tooltip}
           onClick={onClick}
         />
       );
     }
 
     return (
-      <Tooltip title="Scoring failed">
+      <Tooltip title={tooltip}>
         <Chip
-          icon={<ErrorIcon sx={{ fontSize: 16 }} />}
-          label="Score Failed"
+          icon={icon}
+          label={label}
           size={size}
           color="error"
           variant="outlined"

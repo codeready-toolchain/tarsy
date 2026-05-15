@@ -27,6 +27,10 @@ type QueueConfig struct {
 	// to complete during shutdown. Should match SessionTimeout.
 	GracefulShutdownTimeout time.Duration `yaml:"graceful_shutdown_timeout"`
 
+	// ScoringShutdownTimeout is how long to wait for in-flight scoring
+	// evaluations to complete naturally during shutdown before cancelling them.
+	ScoringShutdownTimeout time.Duration `yaml:"scoring_shutdown_timeout"`
+
 	// OrphanDetectionInterval is how often to scan for orphaned sessions.
 	OrphanDetectionInterval time.Duration `yaml:"orphan_detection_interval"`
 
@@ -48,6 +52,7 @@ func DefaultQueueConfig() *QueueConfig {
 		PollIntervalJitter:      500 * time.Millisecond,
 		SessionTimeout:          40 * time.Minute,
 		GracefulShutdownTimeout: 40 * time.Minute,
+		ScoringShutdownTimeout:  3 * time.Minute,
 		OrphanDetectionInterval: 5 * time.Minute,
 		OrphanThreshold:         5 * time.Minute,
 		HeartbeatInterval:       30 * time.Second,
