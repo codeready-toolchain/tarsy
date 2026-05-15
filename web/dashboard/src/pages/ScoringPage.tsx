@@ -27,7 +27,6 @@ import {
 import { alpha } from '@mui/material/styles';
 import {
   ArrowBack,
-  Refresh,
   GradingOutlined,
   BuildOutlined,
 } from '@mui/icons-material';
@@ -287,7 +286,7 @@ export function ScoringPage() {
                       </Typography>
                       {score ? (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-                          <ScoreBadge score={score.total_score} scoringStatus={score.status} />
+                          <ScoreBadge score={score.total_score} scoringStatus={score.status} onClick={handleRescoreClick} />
                           <Typography variant="body2" color="text.secondary">
                             Triggered by: {score.score_triggered_by}
                           </Typography>
@@ -315,16 +314,6 @@ export function ScoringPage() {
                     </Box>
                   </Box>
 
-                  {/* Re-score button */}
-                  <Button
-                    variant="outlined"
-                    startIcon={rescoring ? <CircularProgress size={16} color="inherit" /> : <Refresh />}
-                    onClick={handleRescoreClick}
-                    disabled={rescoring}
-                    sx={{ textTransform: 'none', fontWeight: 500 }}
-                  >
-                    {rescoring ? 'Scoring...' : 'Re-score'}
-                  </Button>
                 </Box>
 
                 {rescoreError && (

@@ -17,6 +17,7 @@ func TestDefaultQueueConfig(t *testing.T) {
 	assert.Equal(t, 500*time.Millisecond, cfg.PollIntervalJitter)
 	assert.Equal(t, 40*time.Minute, cfg.SessionTimeout)
 	assert.Equal(t, 40*time.Minute, cfg.GracefulShutdownTimeout)
+	assert.Equal(t, 3*time.Minute, cfg.ScoringShutdownTimeout)
 	assert.Equal(t, 5*time.Minute, cfg.OrphanDetectionInterval)
 	assert.Equal(t, 5*time.Minute, cfg.OrphanThreshold)
 	assert.Equal(t, 30*time.Second, cfg.HeartbeatInterval)
@@ -109,6 +110,25 @@ func TestValidateQueue(t *testing.T) {
 			}(),
 			wantErr: true,
 			errMsg:  "graceful_shutdown_timeout must be positive",
+		},
+		{
+			name: "scoring shutdown timeout negative",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.ScoringShutdownTimeout = -1 * time.Second
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "scoring_shutdown_timeout must be non-negative",
+		},
+		{
+			name: "scoring shutdown timeout zero is valid",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.ScoringShutdownTimeout = 0
+				return q
+			}(),
+			wantErr: false,
 		},
 		{
 			name: "orphan detection interval zero",

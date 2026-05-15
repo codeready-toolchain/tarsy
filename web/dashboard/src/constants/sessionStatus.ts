@@ -53,13 +53,16 @@ export const TERMINAL_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.TIMED_OUT,
 ]);
 
-/** Failed-family statuses (for error display logic). */
+/** Failed-family statuses (for error display logic). Includes cancelled
+ *  so that scoring evaluations cancelled by shutdown also show the error badge. */
 export const FAILED_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.FAILED,
   EXECUTION_STATUS.TIMED_OUT,
+  EXECUTION_STATUS.CANCELLED,
 ]);
 
-/** Cancelled statuses (terminal but not an error — user-initiated). */
+/** Cancelled statuses (terminal but not an error — user-initiated).
+ *  Used by timeline components for distinct cancelled-state rendering. */
 export const CANCELLED_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.CANCELLED,
 ]);

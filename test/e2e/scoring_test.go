@@ -446,7 +446,7 @@ func TestE2E_Scoring_Disabled_NoAutoTrigger(t *testing.T) {
 	// ScoreSessionAsync before completing the session; Stop() waits for the
 	// goroutine to finish (it returns immediately on ErrScoringDisabled).
 	// Stop() is idempotent, so the cleanup teardown calling it again is fine.
-	app.ScoringExecutor.Stop()
+	app.ScoringExecutor.Stop(0)
 
 	scoringStages, err := app.EntClient.Stage.Query().
 		Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).

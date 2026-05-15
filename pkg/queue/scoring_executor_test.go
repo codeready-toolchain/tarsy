@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -37,14 +38,68 @@ func TestIsTerminalStatus(t *testing.T) {
 func TestScoringExecutor_StopIdempotent(t *testing.T) {
 	exec := &ScoringExecutor{}
 
-	assert.NotPanics(t, func() { exec.Stop() })
-	assert.NotPanics(t, func() { exec.Stop() })
+	assert.NotPanics(t, func() { exec.Stop(0) })
+	assert.NotPanics(t, func() { exec.Stop(0) })
 	assert.True(t, exec.stopped)
+}
+
+func TestScoringExecutor_StopWaitsBeforeCancelling(t *testing.T) {
+	exec := &ScoringExecutor{
+		activeCancels: make(map[string]context.CancelFunc),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Simulate an in-flight goroutine that completes quickly.
+	exec.wg.Add(1)
+	exec.trackCancel("score-1", cancel)
+	go func() {
+		defer exec.wg.Done()
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	start := time.Now()
+	exec.Stop(5 * time.Second)
+	elapsed := time.Since(start)
+
+	// Should have completed well within the grace period (goroutine takes ~50ms).
+	assert.Less(t, elapsed, 1*time.Second)
+	// Context should NOT have been cancelled (goroutine finished naturally).
+	assert.NoError(t, ctx.Err())
+}
+
+func TestScoringExecutor_StopCancelsAfterGracePeriod(t *testing.T) {
+	exec := &ScoringExecutor{
+		activeCancels: make(map[string]context.CancelFunc),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Simulate an in-flight goroutine that blocks until cancelled.
+	exec.wg.Add(1)
+	exec.trackCancel("score-1", cancel)
+	go func() {
+		defer exec.wg.Done()
+		<-ctx.Done()
+	}()
+
+	gracePeriod := 100 * time.Millisecond
+	start := time.Now()
+	exec.Stop(gracePeriod)
+	elapsed := time.Since(start)
+
+	// Should have waited approximately the grace period before cancelling.
+	assert.GreaterOrEqual(t, elapsed, gracePeriod)
+	assert.Less(t, elapsed, 2*time.Second)
+	// Context should have been cancelled by Stop().
+	assert.ErrorIs(t, ctx.Err(), context.Canceled)
 }
 
 func TestScoringExecutor_ScoreSessionAsyncRejectedWhenStopped(t *testing.T) {
 	exec := &ScoringExecutor{}
-	exec.Stop()
+	exec.Stop(0)
 
 	assert.NotPanics(t, func() {
 		exec.ScoreSessionAsync("session-123", "auto", true)
@@ -53,7 +108,7 @@ func TestScoringExecutor_ScoreSessionAsyncRejectedWhenStopped(t *testing.T) {
 
 func TestScoringExecutor_SubmitScoringRejectedWhenStopped(t *testing.T) {
 	exec := &ScoringExecutor{}
-	exec.Stop()
+	exec.Stop(0)
 
 	_, err := exec.SubmitScoring(t.Context(), "session-123", "user", false)
 	assert.ErrorIs(t, err, ErrShuttingDown)
@@ -141,7 +196,7 @@ func (m *mockScoreEventPublisher) PublishSessionScoreUpdated(_ context.Context, 
 
 func TestScoringExecutor_RunFeedbackReflectorAsyncRejectedWhenStopped(t *testing.T) {
 	exec := &ScoringExecutor{}
-	exec.Stop()
+	exec.Stop(0)
 
 	assert.NotPanics(t, func() {
 		exec.RunFeedbackReflectorAsync("session-123", "Great investigation", "accurate")
@@ -158,7 +213,7 @@ func TestScoringExecutor_RunFeedbackReflectorAsyncNilMemoryService(t *testing.T)
 	})
 
 	assert.NotPanics(t, func() {
-		exec.Stop()
+		exec.Stop(0)
 	})
 }
 

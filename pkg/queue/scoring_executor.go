@@ -561,22 +561,41 @@ func (e *ScoringExecutor) removeCancel(scoreID string) {
 	e.mu.Unlock()
 }
 
-// Stop marks the executor as stopped, cancels in-flight scoring contexts
-// and pending cleanup timers, then waits for active goroutines to drain.
-func (e *ScoringExecutor) Stop() {
+// Stop marks the executor as stopped, waits up to gracePeriod for in-flight
+// scoring to complete naturally, then cancels any remaining contexts and
+// waits for goroutines to drain.
+func (e *ScoringExecutor) Stop(gracePeriod time.Duration) {
 	e.mu.Lock()
 	e.stopped = true
-	for _, cancel := range e.activeCancels {
-		cancel()
-	}
-	e.activeCancels = nil
 	for _, t := range e.cleanupTimers {
 		t.Stop()
 	}
 	e.cleanupTimers = nil
 	e.mu.Unlock()
 
-	e.wg.Wait()
+	// Wait for in-flight scoring to finish naturally within the grace period.
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return
+	case <-time.After(gracePeriod):
+		slog.Warn("Scoring grace period expired, cancelling in-flight scoring")
+	}
+
+	// Grace period exceeded — force-cancel remaining contexts.
+	e.mu.Lock()
+	for _, cancel := range e.activeCancels {
+		cancel()
+	}
+	e.activeCancels = nil
+	e.mu.Unlock()
+
+	<-done
 }
 
 // ────────────────────────────────────────────────────────────
