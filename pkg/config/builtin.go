@@ -241,6 +241,13 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			MaxToolResultTokens: 950000, // Conservative for 1M context
 			NativeTools:         geminiNativeTools(),
 		},
+		"gemini-3.5-flash": {
+			Type:                LLMProviderTypeGoogle,
+			Model:               "gemini-3.5-flash",
+			APIKeyEnv:           "GOOGLE_API_KEY",
+			MaxToolResultTokens: 950000, // Conservative for 1M context
+			NativeTools:         geminiNativeTools(),
+		},
 		"gemini-2.5-flash": {
 			Type:                LLMProviderTypeGoogle,
 			Model:               "gemini-2.5-flash",
