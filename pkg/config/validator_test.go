@@ -3712,3 +3712,204 @@ func TestWarnMemoryWithoutScoring(t *testing.T) {
 		assert.Contains(t, buf.String(), "Memory is enabled but no chain has scoring enabled")
 	})
 }
+
+func TestWarnNativeToolAgentsWithoutCompatibleFallback(t *testing.T) {
+	captureLogs := func(t *testing.T) (*bytes.Buffer, func()) {
+		t.Helper()
+		var buf bytes.Buffer
+		old := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		return &buf, func() { slog.SetDefault(old) }
+	}
+
+	t.Run("warns when native-tool agent has only langchain fallback", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "openai-fb", Backend: LLMBackendLangChain},
+				},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+						GoogleNativeToolURLContext:   true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
+		assert.Contains(t, buf.String(), "WebResearcher")
+	})
+
+	t.Run("no warning when fallback includes google-native entry", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "openai-fb", Backend: LLMBackendLangChain},
+					{Provider: "gemini-fb", Backend: LLMBackendNativeGemini},
+				},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("no warning when agent has no native tools", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "openai-fb", Backend: LLMBackendLangChain},
+				},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"KubernetesAgent": {},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "KubernetesAgent"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("no warning when no fallback providers configured", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("agent-level fallback overrides chain-level", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "gemini-fb", Backend: LLMBackendNativeGemini},
+				},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{
+							Name: "s1",
+							Agents: []StageAgentConfig{{
+								Name: "WebResearcher",
+								FallbackProviders: []FallbackProviderEntry{
+									{Provider: "openai-only", Backend: LLMBackendLangChain},
+								},
+							}},
+						},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
+	})
+
+	t.Run("warns for native-tool sub-agent refs", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "openai-fb", Backend: LLMBackendLangChain},
+				},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"Orchestrator": {},
+				"CodeExecutor": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolCodeExecution: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					SubAgents: SubAgentRefs{{Name: "CodeExecutor"}},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "Orchestrator"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
+		assert.Contains(t, buf.String(), "CodeExecutor")
+	})
+}

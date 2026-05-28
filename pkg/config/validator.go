@@ -46,6 +46,8 @@ func (v *Validator) ValidateAll() error {
 		return fmt.Errorf("chain validation failed: %w", err)
 	}
 
+	v.warnNativeToolAgentsWithoutCompatibleFallback()
+
 	if err := v.validateDefaults(); err != nil {
 		return fmt.Errorf("defaults validation failed: %w", err)
 	}
@@ -921,4 +923,85 @@ func (v *Validator) validateSkills() error {
 	}
 
 	return nil
+}
+
+// warnNativeToolAgentsWithoutCompatibleFallback checks chains for agents that
+// require native tools but have no google-native fallback entry in their
+// effective fallback list. Logs a warning for each such case. Non-blocking.
+func (v *Validator) warnNativeToolAgentsWithoutCompatibleFallback() {
+	var defaultsFallback []FallbackProviderEntry
+	if v.cfg.Defaults != nil {
+		defaultsFallback = v.cfg.Defaults.FallbackProviders
+	}
+
+	for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
+		// Check stage agents
+		for _, stage := range chain.Stages {
+			for _, agentCfg := range stage.Agents {
+				v.warnIfNativeAgentLacksFallback(chainID, agentCfg.Name,
+					defaultsFallback, chain.FallbackProviders,
+					stage.FallbackProviders, agentCfg.FallbackProviders)
+			}
+		}
+
+		// Check chain-level sub-agents (orchestrator dispatch targets)
+		for _, ref := range chain.SubAgents {
+			v.warnIfNativeAgentLacksFallback(chainID, ref.Name,
+				defaultsFallback, chain.FallbackProviders, nil, nil)
+		}
+	}
+}
+
+func (v *Validator) warnIfNativeAgentLacksFallback(
+	chainID, agentName string,
+	defaultsFallback, chainFallback, stageFallback, agentFallback []FallbackProviderEntry,
+) {
+	agentDef, err := v.cfg.AgentRegistry.Get(agentName)
+	if err != nil {
+		return
+	}
+
+	if !agentHasEnabledNativeTools(agentDef.NativeTools) {
+		return
+	}
+
+	// Resolve effective fallback list using the same precedence as runtime:
+	// last non-nil wins (defaults → chain → stage → agent)
+	effective := resolveEffectiveFallback(defaultsFallback, chainFallback, stageFallback, agentFallback)
+	if len(effective) == 0 {
+		return
+	}
+
+	for _, entry := range effective {
+		if entry.Backend == LLMBackendNativeGemini {
+			return
+		}
+	}
+
+	slog.Warn("Chain has native-tool agent with no compatible fallback entry",
+		"chain", chainID,
+		"agent", agentName,
+		"hint", "all fallback entries use non-google-native backends; runtime will skip them",
+	)
+}
+
+func agentHasEnabledNativeTools(nativeTools map[GoogleNativeTool]bool) bool {
+	for _, enabled := range nativeTools {
+		if enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveEffectiveFallback returns the last non-nil fallback list, mirroring
+// the runtime resolution logic in pkg/agent/config_resolver.go.
+func resolveEffectiveFallback(layers ...[]FallbackProviderEntry) []FallbackProviderEntry {
+	var result []FallbackProviderEntry
+	for _, layer := range layers {
+		if layer != nil {
+			result = layer
+		}
+	}
+	return result
 }

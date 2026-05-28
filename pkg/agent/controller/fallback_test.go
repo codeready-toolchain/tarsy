@@ -604,6 +604,74 @@ func TestNativeToolsDroppedOnFallback(t *testing.T) {
 }
 
 func TestTryFallback_NativeToolsDroppedMetadata(t *testing.T) {
+	t.Run("blocked when agent requires native tools", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.LLMProvider.NativeTools = map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+			config.GoogleNativeToolURLContext:   true,
+		}
+		execCtx.Config.RequiresNativeTools = true
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			{
+				ProviderName: "langchain-fb",
+				Backend:      config.LLMBackendLangChain,
+				Config:       &config.LLMProviderConfig{Model: "gpt-fallback"},
+			},
+		}
+
+		state := NewFallbackState(execCtx)
+		eventSeq := 0
+
+		result := tryFallback(context.Background(), execCtx, state,
+			makePartialError(LLMErrorMaxRetries), &eventSeq)
+		require.False(t, result)
+
+		// Provider was NOT swapped — still on primary
+		assert.Equal(t, "primary", execCtx.Config.LLMProviderName)
+		assert.Equal(t, 0, eventSeq)
+	})
+
+	t.Run("proceeds when agent does not require native tools", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+		execCtx.Config.LLMProviderName = "primary"
+		execCtx.Config.LLMProvider.NativeTools = map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+			config.GoogleNativeToolURLContext:   true,
+		}
+		execCtx.Config.RequiresNativeTools = false
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			{
+				ProviderName: "langchain-fb",
+				Backend:      config.LLMBackendLangChain,
+				Config:       &config.LLMProviderConfig{Model: "gpt-fallback"},
+			},
+		}
+
+		state := NewFallbackState(execCtx)
+		eventSeq := 0
+
+		result := tryFallback(context.Background(), execCtx, state,
+			makePartialError(LLMErrorMaxRetries), &eventSeq)
+		require.True(t, result)
+
+		assert.Equal(t, 1, eventSeq)
+		assert.Equal(t, "langchain-fb", execCtx.Config.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, execCtx.Config.LLMBackend)
+	})
+}
+
+func TestTryFallback_NativeToolsSkipAndAdvance(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
@@ -611,16 +679,18 @@ func TestTryFallback_NativeToolsDroppedMetadata(t *testing.T) {
 	}
 	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
 	execCtx.Config.LLMProviderName = "primary"
-	execCtx.Config.LLMProvider.NativeTools = map[config.GoogleNativeTool]bool{
-		config.GoogleNativeToolGoogleSearch: true,
-		config.GoogleNativeToolURLContext:   true,
-	}
-	// Fallback directly to langchain backend
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.RequiresNativeTools = true
 	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
 		{
 			ProviderName: "langchain-fb",
 			Backend:      config.LLMBackendLangChain,
 			Config:       &config.LLMProviderConfig{Model: "gpt-fallback"},
+		},
+		{
+			ProviderName: "gemini-fb",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "gemini-fallback"},
 		},
 	}
 
@@ -631,10 +701,86 @@ func TestTryFallback_NativeToolsDroppedMetadata(t *testing.T) {
 		makePartialError(LLMErrorMaxRetries), &eventSeq)
 	require.True(t, result)
 
-	// Verify the timeline event was created (contains native_tools_dropped metadata)
-	assert.Equal(t, 1, eventSeq)
+	// Langchain entry was skipped, google-native entry selected
+	assert.Equal(t, "gemini-fb", execCtx.Config.LLMProviderName)
+	assert.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend)
+	// Skipped entry was NOT added to AttemptedProviders
+	assert.Equal(t, []string{"primary", "gemini-fb"}, state.AttemptedProviders)
+}
 
-	// Verify the provider was swapped to langchain
-	assert.Equal(t, "langchain-fb", execCtx.Config.LLMProviderName)
-	assert.Equal(t, config.LLMBackendLangChain, execCtx.Config.LLMBackend)
+func TestTryFallback_AllIncompatible(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.RequiresNativeTools = true
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "langchain-fb-1",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "gpt-1"},
+		},
+		{
+			ProviderName: "langchain-fb-2",
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "gpt-2"},
+		},
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	require.False(t, result)
+
+	// Provider unchanged
+	assert.Equal(t, "primary", execCtx.Config.LLMProviderName)
+	assert.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend)
+	assert.Equal(t, 0, eventSeq)
+}
+
+func TestTryFallback_MixedSkipReasons(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	execCtx.Config.RequiresNativeTools = true
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		{
+			ProviderName: "primary", // same-provider skip
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "same-model"},
+		},
+		{
+			ProviderName: "langchain-fb", // incompatible-backend skip
+			Backend:      config.LLMBackendLangChain,
+			Config:       &config.LLMProviderConfig{Model: "gpt-fallback"},
+		},
+		{
+			ProviderName: "gemini-fb", // compatible — selected
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "gemini-fallback"},
+		},
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	require.True(t, result)
+
+	// Both skip types were traversed, landing on the compatible entry
+	assert.Equal(t, "gemini-fb", execCtx.Config.LLMProviderName)
+	assert.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend)
+	assert.Equal(t, []string{"primary", "gemini-fb"}, state.AttemptedProviders)
 }

@@ -130,6 +130,7 @@ func ResolveAgentConfig(
 		ResolvedFallbackProviders: resolvedFallback,
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
+		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
 		RequiredSkillContent:      requiredSkills,
 		OnDemandSkills:            onDemandSkills,
 	}, nil
@@ -261,6 +262,7 @@ func ResolveChatAgentConfig(
 		ResolvedFallbackProviders: resolvedFallback,
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
+		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
 		RequiredSkillContent:      requiredSkills,
 		OnDemandSkills:            onDemandSkills,
 	}, nil
@@ -378,6 +380,7 @@ func ResolveScoringConfig(
 		ResolvedFallbackProviders: resolvedFallback,
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
+		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
 	}, nil
 }
 
@@ -450,7 +453,19 @@ func ResolveExecSummaryConfig(
 		ResolvedFallbackProviders: resolvedFallback,
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
+		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
 	}, nil
+}
+
+// requiresNativeTools returns true when the agent definition declares at least
+// one enabled native tool. Used to set RequiresNativeTools on ResolvedAgentConfig.
+func requiresNativeTools(agentTools map[config.GoogleNativeTool]bool) bool {
+	for _, enabled := range agentTools {
+		if enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // applyAgentNativeTools clones the provider and merges agent-level native tool

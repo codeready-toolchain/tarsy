@@ -406,6 +406,64 @@ func TestResolveAgentConfig(t *testing.T) {
 			// Original provider must be unchanged
 			assert.False(t, providerWithNative.NativeTools[config.GoogleNativeToolCodeExecution])
 		})
+
+		t.Run("RequiresNativeTools true when agent has enabled native tools", func(t *testing.T) {
+			ntCfg := &config.Config{
+				Defaults: &config.Defaults{LLMProvider: "google-native"},
+				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+					"TestAgent": {
+						NativeTools: map[config.GoogleNativeTool]bool{
+							config.GoogleNativeToolGoogleSearch: true,
+							config.GoogleNativeToolURLContext:   true,
+						},
+					},
+				}),
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+					"google-native": providerWithNative,
+				}),
+			}
+
+			resolved, err := ResolveAgentConfig(ntCfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: "TestAgent"})
+			require.NoError(t, err)
+			assert.True(t, resolved.RequiresNativeTools)
+		})
+
+		t.Run("RequiresNativeTools false when agent has no native tools", func(t *testing.T) {
+			ntCfg := &config.Config{
+				Defaults: &config.Defaults{LLMProvider: "google-native"},
+				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+					"TestAgent": {},
+				}),
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+					"google-native": providerWithNative,
+				}),
+			}
+
+			resolved, err := ResolveAgentConfig(ntCfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: "TestAgent"})
+			require.NoError(t, err)
+			assert.False(t, resolved.RequiresNativeTools)
+		})
+
+		t.Run("RequiresNativeTools false when all agent native tools disabled", func(t *testing.T) {
+			ntCfg := &config.Config{
+				Defaults: &config.Defaults{LLMProvider: "google-native"},
+				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+					"TestAgent": {
+						NativeTools: map[config.GoogleNativeTool]bool{
+							config.GoogleNativeToolGoogleSearch:  false,
+							config.GoogleNativeToolCodeExecution: false,
+						},
+					},
+				}),
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+					"google-native": providerWithNative,
+				}),
+			}
+
+			resolved, err := ResolveAgentConfig(ntCfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: "TestAgent"})
+			require.NoError(t, err)
+			assert.False(t, resolved.RequiresNativeTools)
+		})
 	})
 }
 

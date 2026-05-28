@@ -146,20 +146,34 @@ func tryFallback(
 
 	// Find the next fallback entry whose provider name differs from the
 	// currently active one. An entry with the same provider name would just
-	// repeat the same failure, so skip it.
+	// repeat the same failure, so skip it. Also skip entries that are
+	// incompatible with the agent's required native tools.
 	nextIdx := state.CurrentProviderIndex + 1
+	var skippedIncompatible []string
 	for nextIdx < len(execCtx.Config.ResolvedFallbackProviders) {
 		candidate := execCtx.Config.ResolvedFallbackProviders[nextIdx]
-		if candidate.ProviderName != execCtx.Config.LLMProviderName {
-			break
+		if candidate.ProviderName == execCtx.Config.LLMProviderName {
+			slog.Info("Skipping fallback entry identical to current provider",
+				"session_id", execCtx.SessionID,
+				"execution_id", execCtx.ExecutionID,
+				"skipped_provider", candidate.ProviderName,
+				"skipped_backend", candidate.Backend,
+			)
+			nextIdx++
+			continue
 		}
-		slog.Info("Skipping fallback entry identical to current provider",
-			"session_id", execCtx.SessionID,
-			"execution_id", execCtx.ExecutionID,
-			"skipped_provider", candidate.ProviderName,
-			"skipped_backend", candidate.Backend,
-		)
-		nextIdx++
+		if execCtx.Config.RequiresNativeTools && candidate.Backend != config.LLMBackendNativeGemini {
+			slog.Info("Skipping fallback entry incompatible with required native tools",
+				"session_id", execCtx.SessionID,
+				"execution_id", execCtx.ExecutionID,
+				"skipped_provider", candidate.ProviderName,
+				"skipped_backend", candidate.Backend,
+			)
+			skippedIncompatible = append(skippedIncompatible, candidate.ProviderName)
+			nextIdx++
+			continue
+		}
+		break
 	}
 	if nextIdx >= len(execCtx.Config.ResolvedFallbackProviders) {
 		return false
@@ -220,6 +234,9 @@ func tryFallback(
 	}
 	if len(droppedTools) > 0 {
 		meta["native_tools_dropped"] = droppedTools
+	}
+	if len(skippedIncompatible) > 0 {
+		meta["skipped_incompatible"] = skippedIncompatible
 	}
 	createTimelineEvent(ctx, execCtx, timelineevent.EventTypeProviderFallback,
 		fmt.Sprintf("Provider fallback: %s → %s", prevProvider, entry.ProviderName),

@@ -473,6 +473,195 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// TestE2E_NativeToolFallbackSkipsIncompatible — Agent that requires native
+// tools (google_search, url_context) hits a provider error. The first fallback
+// entry uses langchain backend (incompatible) and must be skipped. The second
+// entry uses google-native (compatible) and is selected.
+//
+// Verifies:
+//   - Session completes after skipping incompatible fallback
+//   - Execution uses the compatible fallback provider (not langchain)
+//   - provider_fallback timeline event includes skipped_incompatible metadata
+//   - LLM call after fallback uses the compatible model
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_NativeToolFallbackSkipsIncompatible(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	// Iteration 1: primary fails → triggers fallback
+	llm.AddRouted("NativeResearcher", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ErrorChunk{Message: "rate limit exceeded", Code: "max_retries", Retryable: true},
+		},
+	})
+	// Iteration 1 (retried on compatible fallback): success
+	llm.AddRouted("NativeResearcher", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Research complete using native tools on compatible fallback."},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 30, TotalTokens: 110},
+		},
+	})
+	// Executive summary
+	llm.AddSequential(LLMScriptEntry{Text: "Summary: research completed after fallback."})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "native-tool-fallback")),
+		WithLLMClient(llm),
+	)
+
+	_, sessionID := submitAndSubscribe(t, app, "test-native-skip", "Research needed for CVE-2026-1234")
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// ── Session completed ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+
+	// ── Execution: fell back to compatible provider, skipping langchain ──
+	execs := app.QueryExecutions(t, sessionID)
+	researcher := findExecution(execs, "NativeResearcher")
+	require.NotNil(t, researcher)
+	assert.Equal(t, "completed", string(researcher.Status))
+	require.NotNil(t, researcher.OriginalLlmProvider)
+	assert.Equal(t, "gemini-primary", *researcher.OriginalLlmProvider)
+	require.NotNil(t, researcher.LlmProvider)
+	assert.Equal(t, "gemini-compatible", *researcher.LlmProvider)
+
+	// ── Timeline: one provider_fallback event with skipped_incompatible ──
+	timeline := app.QueryTimeline(t, sessionID)
+	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
+	require.Len(t, fallbackEvents, 1)
+	assert.Equal(t, "gemini-primary", fallbackEvents[0].Metadata["original_provider"])
+	assert.Equal(t, "gemini-compatible", fallbackEvents[0].Metadata["fallback_provider"])
+
+	skipped, ok := fallbackEvents[0].Metadata["skipped_incompatible"]
+	require.True(t, ok, "timeline event should include skipped_incompatible metadata")
+	skippedList, ok := skipped.([]interface{})
+	require.True(t, ok)
+	assert.Contains(t, skippedList, "langchain-incompatible")
+
+	// ── LLM call after fallback uses compatible model ──
+	inputs := llm.CapturedInputs()
+	require.GreaterOrEqual(t, len(inputs), 2)
+	assert.Equal(t, "gemini-compatible-model", inputs[1].Config.Model)
+	assert.True(t, inputs[1].ClearCache)
+}
+
+// ────────────────────────────────────────────────────────────
+// TestE2E_NativeToolFallbackAllIncompatible — Agent that requires native tools
+// fails on primary, but ALL fallback entries are langchain (incompatible).
+// No fallback occurs; the agent retries on primary until max_iterations
+// exhaustion → session fails.
+//
+// Verifies:
+//   - Session fails (not silently degraded)
+//   - No provider_fallback timeline events (fallback was blocked)
+//   - Execution stays on the primary provider
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_NativeToolFallbackAllIncompatible(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	// All iterations fail on primary — no compatible fallback available.
+	for range 3 {
+		llm.AddRouted("NativeResearcher", LLMScriptEntry{
+			Chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "service unavailable", Code: "max_retries", Retryable: true},
+			},
+		})
+	}
+	// Force conclusion attempt also fails
+	llm.AddRouted("NativeResearcher", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ErrorChunk{Message: "service unavailable", Code: "max_retries", Retryable: true},
+		},
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "native-tool-fallback")),
+		WithLLMClient(llm),
+	)
+
+	_, sessionID := submitAndSubscribe(t, app, "test-native-exhausted", "Research needed but all providers down")
+
+	app.WaitForSessionStatus(t, sessionID, "failed")
+
+	// ── Session failed ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "failed", session["status"])
+
+	// ── No fallback occurred — agent stayed on primary ──
+	timeline := app.QueryTimeline(t, sessionID)
+	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
+	assert.Empty(t, fallbackEvents, "no fallback should occur when all entries are incompatible")
+
+	// ── Execution failed without provider swap ──
+	execs := app.QueryExecutions(t, sessionID)
+	researcher := findExecution(execs, "NativeResearcher")
+	require.NotNil(t, researcher)
+	assert.Equal(t, "failed", string(researcher.Status))
+	assert.Nil(t, researcher.OriginalLlmProvider, "no fallback means no original_llm_provider")
+}
+
+// ────────────────────────────────────────────────────────────
+// TestE2E_NativeToolFallbackNonNativeAgent — Agent WITHOUT native tools
+// falls back to langchain normally (existing behavior preserved).
+//
+// Verifies:
+//   - Non-native-tool agent can fall back to langchain without being blocked
+//   - Session completes with the langchain fallback
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_NativeToolFallbackNonNativeAgent(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	// Iteration 1: primary fails → fallback to langchain (allowed for non-native agents)
+	llm.AddRouted("PlainAgent", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ErrorChunk{Message: "rate limit exceeded", Code: "max_retries", Retryable: true},
+		},
+	})
+	// Iteration 1 (retried on langchain fallback): success
+	llm.AddRouted("PlainAgent", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Analysis complete using langchain fallback."},
+			&agent.UsageChunk{InputTokens: 50, OutputTokens: 20, TotalTokens: 70},
+		},
+	})
+	// Executive summary
+	llm.AddSequential(LLMScriptEntry{Text: "Summary: analysis done via fallback."})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "native-tool-fallback")),
+		WithLLMClient(llm),
+	)
+
+	_, sessionID := submitAndSubscribe(t, app, "test-non-native", "Simple alert needs analysis")
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	// ── Session completed ──
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+
+	// ── Execution fell back to langchain (not blocked) ──
+	execs := app.QueryExecutions(t, sessionID)
+	plain := findExecution(execs, "PlainAgent")
+	require.NotNil(t, plain)
+	assert.Equal(t, "completed", string(plain.Status))
+	require.NotNil(t, plain.OriginalLlmProvider)
+	assert.Equal(t, "gemini-primary", *plain.OriginalLlmProvider)
+	require.NotNil(t, plain.LlmProvider)
+	assert.Equal(t, "langchain-incompatible", *plain.LlmProvider)
+
+	// ── Provider fallback event exists (langchain was NOT skipped for non-native agent) ──
+	timeline := app.QueryTimeline(t, sessionID)
+	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
+	require.Len(t, fallbackEvents, 1)
+	assert.Equal(t, "langchain-incompatible", fallbackEvents[0].Metadata["fallback_provider"])
+}
+
+// ────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────
 
