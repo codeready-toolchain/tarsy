@@ -1,0 +1,52 @@
+defaults:
+  llm_provider: "gemini-primary"
+  llm_backend: "google-native"
+  max_iterations: 3
+  fallback_providers:
+    - provider: "langchain-incompatible"
+      backend: "langchain"
+    - provider: "gemini-compatible"
+      backend: "google-native"
+
+mcp_servers:
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  NativeResearcher:
+    native_tools:
+      google_search: true
+      url_context: true
+    custom_instructions: "You are NativeResearcher, performing web research using native tools."
+  PlainAgent:
+    custom_instructions: "You are PlainAgent, a simple agent with no native tool requirements."
+
+agent_chains:
+  # Used by: TestE2E_NativeToolFallbackSkipsIncompatible
+  native-skip:
+    alert_types: [test-native-skip]
+    stages:
+      - name: research
+        agents:
+          - name: NativeResearcher
+
+  # Used by: TestE2E_NativeToolFallbackAllIncompatible
+  native-exhausted:
+    alert_types: [test-native-exhausted]
+    fallback_providers:
+      - provider: "langchain-incompatible"
+        backend: "langchain"
+    stages:
+      - name: research
+        agents:
+          - name: NativeResearcher
+
+  # Used by: TestE2E_NativeToolFallbackNonNativeAgent
+  non-native:
+    alert_types: [test-non-native]
+    stages:
+      - name: analysis
+        agents:
+          - name: PlainAgent

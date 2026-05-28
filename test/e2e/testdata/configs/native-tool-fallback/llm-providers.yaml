@@ -1,0 +1,13 @@
+llm_providers:
+  gemini-primary:
+    type: google
+    model: gemini-primary-model
+    max_tool_result_tokens: 10000
+  langchain-incompatible:
+    type: openai
+    model: gpt-incompatible
+    max_tool_result_tokens: 10000
+  gemini-compatible:
+    type: google
+    model: gemini-compatible-model
+    max_tool_result_tokens: 10000

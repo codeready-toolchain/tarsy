@@ -113,6 +113,11 @@ type ResolvedAgentConfig struct {
 	// Adaptive timeout: max gap between consecutive chunks (default: 60s)
 	StallTimeout time.Duration
 
+	// RequiresNativeTools is true when the agent definition declares NativeTools
+	// with at least one enabled tool. Such agents MUST run on a google-native
+	// backend — incompatible fallback entries are skipped at runtime.
+	RequiresNativeTools bool
+
 	// NativeToolsOverride is the per-alert native tools override (nil = use provider defaults).
 	// Set by the session executor when the alert provides an MCP selection with native_tools.
 	NativeToolsOverride *models.NativeToolsConfig

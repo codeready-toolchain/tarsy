@@ -406,6 +406,64 @@ func TestResolveAgentConfig(t *testing.T) {
 			// Original provider must be unchanged
 			assert.False(t, providerWithNative.NativeTools[config.GoogleNativeToolCodeExecution])
 		})
+
+		t.Run("RequiresNativeTools true when agent has enabled native tools", func(t *testing.T) {
+			ntCfg := &config.Config{
+				Defaults: &config.Defaults{LLMProvider: "google-native"},
+				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+					"TestAgent": {
+						NativeTools: map[config.GoogleNativeTool]bool{
+							config.GoogleNativeToolGoogleSearch: true,
+							config.GoogleNativeToolURLContext:   true,
+						},
+					},
+				}),
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+					"google-native": providerWithNative,
+				}),
+			}
+
+			resolved, err := ResolveAgentConfig(ntCfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: "TestAgent"})
+			require.NoError(t, err)
+			assert.True(t, resolved.RequiresNativeTools)
+		})
+
+		t.Run("RequiresNativeTools false when agent has no native tools", func(t *testing.T) {
+			ntCfg := &config.Config{
+				Defaults: &config.Defaults{LLMProvider: "google-native"},
+				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+					"TestAgent": {},
+				}),
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+					"google-native": providerWithNative,
+				}),
+			}
+
+			resolved, err := ResolveAgentConfig(ntCfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: "TestAgent"})
+			require.NoError(t, err)
+			assert.False(t, resolved.RequiresNativeTools)
+		})
+
+		t.Run("RequiresNativeTools false when all agent native tools disabled", func(t *testing.T) {
+			ntCfg := &config.Config{
+				Defaults: &config.Defaults{LLMProvider: "google-native"},
+				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+					"TestAgent": {
+						NativeTools: map[config.GoogleNativeTool]bool{
+							config.GoogleNativeToolGoogleSearch:  false,
+							config.GoogleNativeToolCodeExecution: false,
+						},
+					},
+				}),
+				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+					"google-native": providerWithNative,
+				}),
+			}
+
+			resolved, err := ResolveAgentConfig(ntCfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: "TestAgent"})
+			require.NoError(t, err)
+			assert.False(t, resolved.RequiresNativeTools)
+		})
 	})
 }
 
@@ -621,6 +679,43 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolCodeExecution])
 		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
 		assert.NotSame(t, providerWithNative, resolved.LLMProvider)
+	})
+
+	t.Run("RequiresNativeTools true when chat agent has enabled native tools", func(t *testing.T) {
+		ntCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameChat: {
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch: true,
+						config.GoogleNativeToolURLContext:   true,
+					},
+				},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": googleProvider,
+			}),
+		}
+
+		resolved, err := ResolveChatAgentConfig(ntCfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.True(t, resolved.RequiresNativeTools)
+	})
+
+	t.Run("RequiresNativeTools false when chat agent has no native tools", func(t *testing.T) {
+		ntCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameChat: {},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": googleProvider,
+			}),
+		}
+
+		resolved, err := ResolveChatAgentConfig(ntCfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.False(t, resolved.RequiresNativeTools)
 	})
 
 	t.Run("errors on unknown agent", func(t *testing.T) {
@@ -883,6 +978,53 @@ func TestResolveScoringConfig(t *testing.T) {
 		assert.True(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
 		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolURLContext])
 		assert.NotSame(t, providerWithNative, resolved.LLMProvider)
+	})
+
+	t.Run("RequiresNativeTools true when scoring agent has enabled native tools", func(t *testing.T) {
+		providerWithNative := &config.LLMProviderConfig{
+			Type:      config.LLMProviderTypeGoogle,
+			Model:     "gemini-2.5-pro",
+			APIKeyEnv: "GOOGLE_API_KEY",
+		}
+		ntCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-nt"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameScoring: {
+					Type: config.AgentTypeScoring,
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-nt": providerWithNative,
+			}),
+		}
+
+		resolved, err := ResolveScoringConfig(ntCfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.True(t, resolved.RequiresNativeTools)
+	})
+
+	t.Run("RequiresNativeTools false when scoring agent has no native tools", func(t *testing.T) {
+		providerWithNative := &config.LLMProviderConfig{
+			Type:      config.LLMProviderTypeGoogle,
+			Model:     "gemini-2.5-pro",
+			APIKeyEnv: "GOOGLE_API_KEY",
+		}
+		ntCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-nt"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameScoring: {Type: config.AgentTypeScoring},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-nt": providerWithNative,
+			}),
+		}
+
+		resolved, err := ResolveScoringConfig(ntCfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.False(t, resolved.RequiresNativeTools)
 	})
 
 	t.Run("LLM provider full hierarchy: scoringCfg overrides chain overrides defaults.Scoring overrides defaults", func(t *testing.T) {
@@ -1549,6 +1691,33 @@ func TestResolveExecSummaryConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, resolved.FallbackProviders, 1)
 		assert.Equal(t, "openai-default", resolved.FallbackProviders[0].Provider)
+	})
+
+	t.Run("RequiresNativeTools true when exec-summary agent has enabled native tools", func(t *testing.T) {
+		ntCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameExecSummary: {
+					Type: config.AgentTypeExecSummary,
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": googleProvider,
+			}),
+		}
+
+		resolved, err := ResolveExecSummaryConfig(ntCfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.True(t, resolved.RequiresNativeTools)
+	})
+
+	t.Run("RequiresNativeTools false when exec-summary agent has no native tools", func(t *testing.T) {
+		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.False(t, resolved.RequiresNativeTools)
 	})
 
 	t.Run("nil chain returns error", func(t *testing.T) {
