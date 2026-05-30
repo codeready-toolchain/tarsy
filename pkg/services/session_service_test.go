@@ -1051,7 +1051,9 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, "TestOrchestrator", orch.AgentName)
 		assert.Nil(t, orch.ParentExecutionID)
 		assert.Nil(t, orch.Task)
-		assert.Equal(t, int64(100), orch.InputTokens)
+		assert.Equal(t, int64(450), orch.InputTokens, "parent should include sub-agent tokens")
+		assert.Equal(t, int64(120), orch.OutputTokens)
+		assert.Equal(t, int64(570), orch.TotalTokens)
 
 		require.Len(t, orch.SubAgents, 2)
 
@@ -1064,6 +1066,8 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		require.NotNil(t, sa1.Task)
 		assert.Equal(t, task1, *sa1.Task)
 		assert.Equal(t, int64(200), sa1.InputTokens)
+		assert.Equal(t, int64(50), sa1.OutputTokens)
+		assert.Equal(t, int64(250), sa1.TotalTokens)
 
 		sa2 := orch.SubAgents[1]
 		assert.Equal(t, sub2.ID, sa2.ExecutionID)
@@ -1074,6 +1078,8 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		require.NotNil(t, sa2.Task)
 		assert.Equal(t, task2, *sa2.Task)
 		assert.Equal(t, int64(150), sa2.InputTokens)
+		assert.Equal(t, int64(40), sa2.OutputTokens)
+		assert.Equal(t, int64(190), sa2.TotalTokens)
 	})
 
 	t.Run("chat_enabled false when chain explicitly disables chat", func(t *testing.T) {

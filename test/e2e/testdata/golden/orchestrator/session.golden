@@ -48,10 +48,10 @@
           "duration_ms": {DURATION_MS},
           "error_message": null,
           "execution_id": "{EXEC_ID_1}",
-          "input_tokens": 1000,
+          "input_tokens": 1300,
           "llm_backend": "google-native",
           "llm_provider": "test-provider",
-          "output_tokens": 130,
+          "output_tokens": 190,
           "started_at": "{TIMESTAMP}",
           "status": "completed",
           "sub_agents": [
@@ -73,7 +73,7 @@
               "total_tokens": 360
             }
           ],
-          "total_tokens": 1130
+          "total_tokens": 1490
         }
       ],
       "expected_agent_count": 1,
