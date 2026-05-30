@@ -515,7 +515,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 				if exec.Edges.SubAgents != nil {
 					overview.SubAgents = make([]models.ExecutionOverview, 0, len(exec.Edges.SubAgents))
 					for _, sub := range exec.Edges.SubAgents {
-						overview.SubAgents = append(overview.SubAgents, buildExecutionOverview(sub, execTokens, fallbackMeta))
+						subOverview := buildExecutionOverview(sub, execTokens, fallbackMeta)
+						overview.InputTokens += subOverview.InputTokens
+						overview.OutputTokens += subOverview.OutputTokens
+						overview.TotalTokens += subOverview.TotalTokens
+						overview.SubAgents = append(overview.SubAgents, subOverview)
 					}
 				}
 
