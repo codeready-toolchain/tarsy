@@ -4,6 +4,8 @@
  * Covers: checkAuthStatus, getCurrentUser, handleAuthError, redirectToLogin, logout
  */
 
+import type { Mock } from 'vitest';
+
 vi.mock('../../config/env.ts', () => ({
   config: { isDevelopment: false, isProduction: true },
   DASHBOARD_VERSION: 'test',
@@ -20,14 +22,14 @@ import { authService } from '../../services/auth';
 // Helpers
 // ---------------------------------------------------------------------------
 
-let fetchMock: ReturnType<typeof vi.fn>;
-let locationHrefSetter: ReturnType<typeof vi.fn>;
+let fetchMock: Mock;
+let locationHrefSetter: Mock;
 let locationPathname: string;
 let locationSearch: string;
 
 beforeEach(() => {
   fetchMock = vi.fn();
-  global.fetch = fetchMock;
+  vi.stubGlobal('fetch', fetchMock);
 
   locationHrefSetter = vi.fn();
   locationPathname = '/dashboard';
