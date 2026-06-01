@@ -5,6 +5,7 @@
  *         consecutive mismatch detection, and refresh.
  */
 
+import type { Mock } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
 vi.mock('../../services/api.ts', () => ({
@@ -26,11 +27,11 @@ import { useVersionMonitor } from '../../hooks/useVersionMonitor';
 import { getHealth } from '../../services/api';
 
 const mockGetHealth = vi.mocked(getHealth);
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: Mock;
 
 beforeEach(() => {
   fetchMock = vi.fn();
-  global.fetch = fetchMock;
+  vi.stubGlobal('fetch', fetchMock);
 
   mockGetHealth.mockResolvedValue({
     status: 'healthy',
