@@ -87,6 +87,17 @@ func doReview(t *testing.T, service *SessionService, id string, req models.Updat
 	require.Len(t, resp.Results, 1)
 	require.True(t, resp.Results[0].Success, "expected success, got error: %s", resp.Results[0].Error)
 	require.Len(t, updated, 1)
+	return updated[0].Session
+}
+
+// doReviewResult is like doReview but returns the full reviewResult (including PreviousRating).
+func doReviewResult(t *testing.T, service *SessionService, id string, req models.UpdateReviewRequest) ReviewResult {
+	t.Helper()
+	req.SessionIDs = []string{id}
+	resp, updated := service.UpdateReviewStatus(context.Background(), req)
+	require.Len(t, resp.Results, 1)
+	require.True(t, resp.Results[0].Success, "expected success, got error: %s", resp.Results[0].Error)
+	require.Len(t, updated, 1)
 	return updated[0]
 }
 
@@ -627,7 +638,7 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.False(t, resp.Results[1].Success)
 		assert.NotEmpty(t, resp.Results[1].Error)
 		assert.Len(t, updated, 1)
-		assert.Equal(t, goodID, updated[0].ID)
+		assert.Equal(t, goodID, updated[0].Session.ID)
 	})
 
 	t.Run("empty session IDs returns empty results", func(t *testing.T) {
@@ -638,6 +649,84 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		})
 		assert.Empty(t, resp.Results)
 		assert.Empty(t, updated)
+	})
+}
+
+func TestUpdateReviewStatus_PreviousRating(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+
+	t.Run("complete sets nil PreviousRating", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		rating := "accurate"
+		result := doReviewResult(t, service, id, models.UpdateReviewRequest{
+			Action:        "complete",
+			Actor:         "alice@test.com",
+			QualityRating: &rating,
+		})
+		assert.Nil(t, result.PreviousRating)
+		assert.NotNil(t, result.Session.QualityRating)
+	})
+
+	t.Run("update_feedback with rating change populates PreviousRating", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		rating := "accurate"
+		doReview(t, service, id, models.UpdateReviewRequest{
+			Action:        "complete",
+			Actor:         "alice@test.com",
+			QualityRating: &rating,
+		})
+
+		newRating := "inaccurate"
+		result := doReviewResult(t, service, id, models.UpdateReviewRequest{
+			Action:        "update_feedback",
+			Actor:         "alice@test.com",
+			QualityRating: &newRating,
+		})
+		require.NotNil(t, result.PreviousRating)
+		assert.Equal(t, alertsession.QualityRatingAccurate, *result.PreviousRating)
+		require.NotNil(t, result.Session.QualityRating)
+		assert.Equal(t, alertsession.QualityRatingInaccurate, *result.Session.QualityRating)
+	})
+
+	t.Run("update_feedback text only keeps PreviousRating matching current", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		rating := "partially_accurate"
+		doReview(t, service, id, models.UpdateReviewRequest{
+			Action:        "complete",
+			Actor:         "alice@test.com",
+			QualityRating: &rating,
+		})
+
+		note := "updated note"
+		result := doReviewResult(t, service, id, models.UpdateReviewRequest{
+			Action:      "update_feedback",
+			Actor:       "alice@test.com",
+			ActionTaken: &note,
+		})
+		require.NotNil(t, result.PreviousRating)
+		assert.Equal(t, alertsession.QualityRatingPartiallyAccurate, *result.PreviousRating)
+		require.NotNil(t, result.Session.QualityRating)
+		assert.Equal(t, alertsession.QualityRatingPartiallyAccurate, *result.Session.QualityRating)
+	})
+
+	t.Run("acknowledge sets nil PreviousRating", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		result := doReviewResult(t, service, id, models.UpdateReviewRequest{
+			Action: "acknowledge",
+			Actor:  "alice@test.com",
+		})
+		assert.Nil(t, result.PreviousRating)
+		assert.Nil(t, result.Session.QualityRating)
+	})
+
+	t.Run("claim sets nil PreviousRating", func(t *testing.T) {
+		id := seedReviewSession(t, service, "needs_review", "")
+		result := doReviewResult(t, service, id, models.UpdateReviewRequest{
+			Action: "claim",
+			Actor:  "alice@test.com",
+		})
+		assert.Nil(t, result.PreviousRating)
 	})
 }
 

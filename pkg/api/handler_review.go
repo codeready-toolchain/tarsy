@@ -48,15 +48,18 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 
 	resp, updated := s.sessionService.UpdateReviewStatus(c.Request().Context(), req)
 
-	for _, session := range updated {
-		// Adjust memory confidence based on quality rating.
-		if s.memoryService != nil && session.QualityRating != nil {
+	for _, result := range updated {
+		session := result.Session
+
+		// Adjust memory confidence when a rating is added or changed.
+		if s.memoryService != nil && (result.PreviousRating != nil || session.QualityRating != nil) {
 			adjustCtx, adjustCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := s.memoryService.AdjustConfidenceForReview(
-				adjustCtx, "default", session.ID, *session.QualityRating,
+			if err := s.memoryService.ReadjustConfidenceForRatingChange(
+				adjustCtx, "default", session.ID,
+				result.PreviousRating, session.QualityRating,
 			); err != nil {
 				slog.Warn("Failed to adjust memory confidence on review",
-					"session_id", session.ID, "rating", *session.QualityRating, "error", err)
+					"session_id", session.ID, "error", err)
 			}
 			adjustCancel()
 		}
@@ -75,7 +78,8 @@ func (s *Server) updateReviewHandler(c *echo.Context) error {
 		pubCtx, pubCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer pubCancel()
 
-		for _, session := range updated {
+		for _, result := range updated {
+			session := result.Session
 			payload := events.ReviewStatusPayload{
 				BasePayload: events.BasePayload{
 					Type:      events.EventTypeReviewStatus,

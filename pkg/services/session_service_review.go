@@ -22,7 +22,7 @@ import (
 // iterations so bulk operations abort early if the caller disconnects.
 // Returns the per-session results and the list of successfully updated
 // ent sessions (for event publishing).
-func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.UpdateReviewRequest) (models.UpdateReviewResponse, []*ent.AlertSession) {
+func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.UpdateReviewRequest) (models.UpdateReviewResponse, []ReviewResult) {
 	if err := validateReviewRequest(req); err != nil {
 		results := make([]models.UpdateReviewResult, len(req.SessionIDs))
 		for i, sid := range req.SessionIDs {
@@ -32,7 +32,7 @@ func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.Upda
 	}
 
 	results := make([]models.UpdateReviewResult, 0, len(req.SessionIDs))
-	var updated []*ent.AlertSession
+	var updated []ReviewResult
 	for _, sid := range req.SessionIDs {
 		if err := ctx.Err(); err != nil {
 			results = append(results, models.UpdateReviewResult{
@@ -42,7 +42,7 @@ func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.Upda
 			})
 			continue
 		}
-		session, err := s.updateSingleReview(sid, req)
+		result, err := s.updateSingleReview(sid, req)
 		if err != nil {
 			results = append(results, models.UpdateReviewResult{
 				SessionID: sid,
@@ -54,7 +54,7 @@ func (s *SessionService) UpdateReviewStatus(ctx context.Context, req models.Upda
 				SessionID: sid,
 				Success:   true,
 			})
-			updated = append(updated, session)
+			updated = append(updated, result)
 
 			if req.QualityRating != nil {
 				metrics.ReviewsCompletedTotal.WithLabelValues(*req.QualityRating).Inc()
@@ -103,11 +103,18 @@ func validateReviewRequest(req models.UpdateReviewRequest) error {
 	return nil
 }
 
+// ReviewResult holds the outcome of a single review status update, including
+// the previous quality rating so callers can adjust memory confidence correctly.
+type ReviewResult struct {
+	Session        *ent.AlertSession
+	PreviousRating *alertsession.QualityRating
+}
+
 // updateSingleReview performs an atomic compare-and-transition on one session's
 // review_status. Returns the updated session or ErrConflict if the precondition
 // (expected current review_status) was not met.
 // Caller must validate req via validateReviewRequest before calling.
-func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateReviewRequest) (*ent.AlertSession, error) {
+func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateReviewRequest) (ReviewResult, error) {
 	writeCtx, cancel := context.WithTimeoutCause(
 		context.Background(), 5*time.Second,
 		fmt.Errorf("update review status for %s: db write timed out", sessionID),
@@ -116,16 +123,17 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 
 	tx, err := s.client.Tx(writeCtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		return ReviewResult{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now()
+	var previousRating *alertsession.QualityRating
 
 	switch models.ReviewAction(req.Action) {
 	case models.ReviewActionClaim:
 		if err := s.doClaim(writeCtx, tx, sessionID, req.Actor, now); err != nil {
-			return nil, err
+			return ReviewResult{}, err
 		}
 
 	case models.ReviewActionUnclaim:
@@ -139,22 +147,22 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 			ClearAssignedAt().
 			Save(writeCtx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unclaim session: %w", err)
+			return ReviewResult{}, fmt.Errorf("failed to unclaim session: %w", err)
 		}
 		if affected == 0 {
-			return nil, ErrConflict
+			return ReviewResult{}, ErrConflict
 		}
 		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
 			sessionreviewactivity.ActionUnclaim,
 			ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
 			sessionreviewactivity.ToStatusNeedsReview,
 			nil, nil, nil, now); err != nil {
-			return nil, err
+			return ReviewResult{}, err
 		}
 
 	case models.ReviewActionComplete:
 		if err := s.doComplete(writeCtx, tx, sessionID, req.Actor, *req.QualityRating, req.ActionTaken, req.InvestigationFeedback, now); err != nil {
-			return nil, err
+			return ReviewResult{}, err
 		}
 
 	case models.ReviewActionReopen:
@@ -172,28 +180,30 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 			ClearInvestigationFeedback().
 			Save(writeCtx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to reopen session: %w", err)
+			return ReviewResult{}, fmt.Errorf("failed to reopen session: %w", err)
 		}
 		if affected == 0 {
-			return nil, ErrConflict
+			return ReviewResult{}, ErrConflict
 		}
 		if err := s.insertActivity(writeCtx, tx, sessionID, req.Actor,
 			sessionreviewactivity.ActionReopen,
 			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
 			sessionreviewactivity.ToStatusNeedsReview,
 			nil, nil, nil, now); err != nil {
-			return nil, err
+			return ReviewResult{}, err
 		}
 
 	case models.ReviewActionUpdateFeedback:
 		// Read current session to build a full post-update snapshot for the activity log.
 		current, err := tx.AlertSession.Get(writeCtx, sessionID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read session for feedback update: %w", err)
+			return ReviewResult{}, fmt.Errorf("failed to read session for feedback update: %w", err)
 		}
 		if current.ReviewStatus == nil || *current.ReviewStatus != alertsession.ReviewStatusReviewed {
-			return nil, ErrConflict
+			return ReviewResult{}, ErrConflict
 		}
+
+		previousRating = current.QualityRating
 
 		update := tx.AlertSession.Update().
 			Where(
@@ -219,10 +229,10 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 		}
 		affected, err := update.Save(writeCtx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update feedback: %w", err)
+			return ReviewResult{}, fmt.Errorf("failed to update feedback: %w", err)
 		}
 		if affected == 0 {
-			return nil, ErrConflict
+			return ReviewResult{}, ErrConflict
 		}
 
 		// Merge request values with existing session values for a complete snapshot.
@@ -249,25 +259,25 @@ func (s *SessionService) updateSingleReview(sessionID string, req models.UpdateR
 			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
 			sessionreviewactivity.ToStatusReviewed,
 			snapshotRating, snapshotActionTaken, snapshotFeedback, now); err != nil {
-			return nil, err
+			return ReviewResult{}, err
 		}
 
 	case models.ReviewActionAcknowledge:
 		if err := s.doAcknowledge(writeCtx, tx, sessionID, req.Actor, now); err != nil {
-			return nil, err
+			return ReviewResult{}, err
 		}
 	}
 
 	session, err := tx.AlertSession.Get(writeCtx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read updated session: %w", err)
+		return ReviewResult{}, fmt.Errorf("failed to read updated session: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit review status update: %w", err)
+		return ReviewResult{}, fmt.Errorf("failed to commit review status update: %w", err)
 	}
 
-	return session, nil
+	return ReviewResult{Session: session, PreviousRating: previousRating}, nil
 }
 
 // doClaim handles both initial claim (needs_review -> in_progress) and

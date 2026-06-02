@@ -333,6 +333,212 @@ func TestService_AdjustConfidenceForReview(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ReadjustConfidenceForRatingChange
+// ─────────────────────────────────────────────────────────────
+
+func ratingPtr(r alertsession.QualityRating) *alertsession.QualityRating { return &r }
+
+func TestService_ReadjustConfidenceForRatingChange(t *testing.T) {
+	tests := []struct {
+		name      string
+		oldRating *alertsession.QualityRating
+		newRating *alertsession.QualityRating
+		// original = before any adjustment; preReadjust = after old rating applied; final = after readjust
+		check func(t *testing.T, original, preReadjust, final float64, deprecated bool)
+	}{
+		{
+			name:      "accurate to inaccurate deprecates",
+			oldRating: ratingPtr(alertsession.QualityRatingAccurate),
+			newRating: ratingPtr(alertsession.QualityRatingInaccurate),
+			check: func(t *testing.T, _, _, _ float64, deprecated bool) {
+				assert.True(t, deprecated)
+			},
+		},
+		{
+			name:      "accurate to partially_accurate",
+			oldRating: ratingPtr(alertsession.QualityRatingAccurate),
+			newRating: ratingPtr(alertsession.QualityRatingPartiallyAccurate),
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original*0.6, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "accurate to nil reverses boost",
+			oldRating: ratingPtr(alertsession.QualityRatingAccurate),
+			newRating: nil,
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "partially_accurate to accurate",
+			oldRating: ratingPtr(alertsession.QualityRatingPartiallyAccurate),
+			newRating: ratingPtr(alertsession.QualityRatingAccurate),
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original*1.2, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "inaccurate to accurate un-deprecates and boosts",
+			oldRating: ratingPtr(alertsession.QualityRatingInaccurate),
+			newRating: ratingPtr(alertsession.QualityRatingAccurate),
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original*1.2, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "nil to accurate is first-time rating",
+			oldRating: nil,
+			newRating: ratingPtr(alertsession.QualityRatingAccurate),
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original*1.2, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "same rating is no-op",
+			oldRating: ratingPtr(alertsession.QualityRatingAccurate),
+			newRating: ratingPtr(alertsession.QualityRatingAccurate),
+			check: func(t *testing.T, _, preReadjust, final float64, deprecated bool) {
+				assert.InDelta(t, preReadjust, final, 0.001)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "partially_accurate to nil reverses degradation",
+			oldRating: ratingPtr(alertsession.QualityRatingPartiallyAccurate),
+			newRating: nil,
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "inaccurate to nil un-deprecates",
+			oldRating: ratingPtr(alertsession.QualityRatingInaccurate),
+			newRating: nil,
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original, final, 0.01)
+				assert.False(t, deprecated)
+			},
+		},
+		{
+			name:      "both nil is no-op",
+			oldRating: nil,
+			newRating: nil,
+			check: func(t *testing.T, original, _, final float64, deprecated bool) {
+				assert.InDelta(t, original, final, 0.001)
+				assert.False(t, deprecated)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, sessionID, memID := seedMemory(t)
+			ctx := t.Context()
+
+			original, err := svc.GetByID(ctx, memID)
+			require.NoError(t, err)
+
+			// Apply old rating first (to set up the pre-condition).
+			if tt.oldRating != nil {
+				err = svc.AdjustConfidenceForReview(ctx, "default", sessionID, *tt.oldRating)
+				require.NoError(t, err)
+			}
+
+			preReadjust, err := svc.GetByID(ctx, memID)
+			require.NoError(t, err)
+
+			// Now readjust from old → new.
+			err = svc.ReadjustConfidenceForRatingChange(ctx, "default", sessionID, tt.oldRating, tt.newRating)
+			require.NoError(t, err)
+
+			updated, err := svc.GetByID(ctx, memID)
+			require.NoError(t, err)
+			tt.check(t, original.Confidence, preReadjust.Confidence, updated.Confidence, updated.Deprecated)
+		})
+	}
+
+	t.Run("capped value reversal is imprecise", func(t *testing.T) {
+		svc, sessionID := newTestService(t, []float32{1, 0, 0})
+		ctx := t.Context()
+
+		// Create a memory with high initial confidence (0.9) that will hit the 1.0 cap.
+		err := svc.ApplyFeedbackReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
+			Create: []memory.ReflectorCreateAction{
+				{Content: "High confidence memory", Category: "procedural", Valence: "positive"},
+			},
+		})
+		require.NoError(t, err)
+
+		memories, err := svc.FindSimilar(ctx, "default", "anything", 1)
+		require.NoError(t, err)
+		require.Len(t, memories, 1)
+		memID := memories[0].ID
+		assert.InDelta(t, 0.9, memories[0].Confidence, 0.01)
+
+		// Apply accurate → caps at 1.0 (0.9 * 1.2 = 1.08, LEAST → 1.0).
+		err = svc.AdjustConfidenceForReview(ctx, "default", sessionID, alertsession.QualityRatingAccurate)
+		require.NoError(t, err)
+
+		capped, err := svc.GetByID(ctx, memID)
+		require.NoError(t, err)
+		assert.InDelta(t, 1.0, capped.Confidence, 0.01)
+
+		// Reverse: 1.0 / 1.2 ≈ 0.833, NOT the original 0.9.
+		err = svc.ReadjustConfidenceForRatingChange(ctx, "default", sessionID,
+			ratingPtr(alertsession.QualityRatingAccurate), nil)
+		require.NoError(t, err)
+
+		reversed, err := svc.GetByID(ctx, memID)
+		require.NoError(t, err)
+		assert.InDelta(t, 1.0/1.2, reversed.Confidence, 0.01)
+		assert.Greater(t, 0.9-reversed.Confidence, 0.05, "capped reversal cannot restore original 0.9")
+	})
+
+	t.Run("adjusts all memories for a session", func(t *testing.T) {
+		svc, sessionID := newTestService(t, []float32{1, 0, 0})
+		ctx := t.Context()
+
+		err := svc.ApplyReflectorActions(ctx, "default", sessionID, nil, nil, &memory.ReflectorResult{
+			Create: []memory.ReflectorCreateAction{
+				{Content: "First memory", Category: "procedural", Valence: "positive"},
+				{Content: "Second memory", Category: "episodic", Valence: "neutral"},
+			},
+		})
+		require.NoError(t, err)
+
+		all, err := svc.GetBySessionID(ctx, sessionID)
+		require.NoError(t, err)
+		require.Len(t, all, 2)
+		origConf := [2]float64{all[0].Confidence, all[1].Confidence}
+
+		// Apply accurate, then readjust to partially_accurate.
+		err = svc.AdjustConfidenceForReview(ctx, "default", sessionID, alertsession.QualityRatingAccurate)
+		require.NoError(t, err)
+
+		err = svc.ReadjustConfidenceForRatingChange(ctx, "default", sessionID,
+			ratingPtr(alertsession.QualityRatingAccurate),
+			ratingPtr(alertsession.QualityRatingPartiallyAccurate))
+		require.NoError(t, err)
+
+		updated, err := svc.GetBySessionID(ctx, sessionID)
+		require.NoError(t, err)
+		require.Len(t, updated, 2)
+		for i, m := range updated {
+			assert.InDelta(t, origConf[i]*0.6, m.Confidence, 0.01,
+				"memory %d should reflect partially_accurate adjustment", i)
+			assert.False(t, m.Deprecated)
+		}
+	})
+}
+
+// ─────────────────────────────────────────────────────────────
 // ApplyFeedbackReflectorActions (fixed 0.9 confidence)
 // ─────────────────────────────────────────────────────────────
 
