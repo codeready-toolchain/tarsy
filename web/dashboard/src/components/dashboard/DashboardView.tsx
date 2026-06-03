@@ -69,7 +69,7 @@ import {
 } from '../../constants/eventTypes.ts';
 import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
-import { REVIEW_ACTION, REVIEW_MODAL_MODE, getReviewModalMode } from '../../types/api.ts';
+import { REVIEW_ACTION, REVIEW_MODAL_MODE, REVIEW_SELECTION, getReviewModalMode } from '../../types/api.ts';
 import type { ReviewModalMode } from '../../types/api.ts';
 import type { DashboardListParams, TriageGroup, TriageGroupKey, TriageGroupParams, UpdateReviewResponse } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
@@ -756,7 +756,7 @@ export function DashboardView() {
   const [reviewError, setReviewError] = useState<string | null>(null);
 
   const handleSessionReviewClick = useCallback((session: DashboardSessionItem) => {
-    const mode = getReviewModalMode(session.review_status);
+    const mode = getReviewModalMode(session.review_status, session.quality_rating);
     setReviewTarget({ session, mode });
     setReviewError(null);
   }, []);
@@ -767,14 +767,22 @@ export function DashboardView() {
     try {
       setReviewLoading(true);
       setReviewError(null);
-      const resp = await updateReview({
-        session_ids: [targetSessionId],
-        action: REVIEW_ACTION.COMPLETE,
-        quality_rating: qualityRating,
-        action_taken: actionTaken,
-        investigation_feedback: investigationFeedback,
-      });
-      checkReviewResults(resp);
+      if (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE) {
+        const resp = await updateReview({
+          session_ids: [targetSessionId],
+          action: REVIEW_ACTION.ACKNOWLEDGE,
+        });
+        checkReviewResults(resp);
+      } else {
+        const resp = await updateReview({
+          session_ids: [targetSessionId],
+          action: REVIEW_ACTION.COMPLETE,
+          quality_rating: qualityRating,
+          action_taken: actionTaken,
+          investigation_feedback: investigationFeedback,
+        });
+        checkReviewResults(resp);
+      }
       setReviewTarget(null);
       fetchHistoricalAlerts();
       fetchAllTriageGroups();
@@ -792,14 +800,22 @@ export function DashboardView() {
     try {
       setReviewLoading(true);
       setReviewError(null);
-      const resp = await updateReview({
-        session_ids: [targetSessionId],
-        action: REVIEW_ACTION.UPDATE_FEEDBACK,
-        quality_rating: qualityRating || undefined,
-        action_taken: actionTaken,
-        investigation_feedback: investigationFeedback,
-      });
-      checkReviewResults(resp);
+      if (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE) {
+        const resp = await updateReview({
+          session_ids: [targetSessionId],
+          action: REVIEW_ACTION.ACKNOWLEDGE,
+        });
+        checkReviewResults(resp);
+      } else {
+        const resp = await updateReview({
+          session_ids: [targetSessionId],
+          action: REVIEW_ACTION.UPDATE_FEEDBACK,
+          quality_rating: qualityRating || undefined,
+          action_taken: actionTaken,
+          investigation_feedback: investigationFeedback,
+        });
+        checkReviewResults(resp);
+      }
       setReviewTarget(null);
       fetchHistoricalAlerts();
       fetchAllTriageGroups();
@@ -1081,6 +1097,7 @@ export function DashboardView() {
             feedbackEdited={reviewTarget?.session.feedback_edited}
             feedbackEditedBy={reviewTarget?.session.feedback_edited_by}
             feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
+            initialRating={reviewTarget?.session.review_status === 'reviewed' && !reviewTarget?.session.quality_rating ? REVIEW_SELECTION.ACKNOWLEDGE : undefined}
           />
           <EditFeedbackModal
             open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}

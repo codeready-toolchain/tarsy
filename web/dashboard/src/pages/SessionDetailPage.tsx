@@ -42,7 +42,7 @@ import { useChatState } from '../hooks/useChatState.ts';
 
 import { getSession, getTimeline, updateReview, handleAPIError } from '../services/api.ts';
 import { websocketService } from '../services/websocket.ts';
-import { REVIEW_ACTION, REVIEW_MODAL_MODE, getReviewModalMode } from '../types/api.ts';
+import { REVIEW_ACTION, REVIEW_MODAL_MODE, REVIEW_SELECTION, getReviewModalMode } from '../types/api.ts';
 import type { ReviewModalMode } from '../types/api.ts';
 
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
@@ -1381,7 +1381,7 @@ export function SessionDetailPage() {
   const handleReviewClick = useCallback((initialRating?: string) => {
     if (!session) return;
     setReviewInitialRating(initialRating);
-    setReviewModalMode(getReviewModalMode(session.review_status));
+    setReviewModalMode(getReviewModalMode(session.review_status, session.quality_rating));
   }, [session]);
 
   const handleReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
@@ -1389,13 +1389,17 @@ export function SessionDetailPage() {
     try {
       setReviewLoading(true);
       setReviewError(null);
-      const resp = await updateReview({
-        session_ids: [id],
-        action: REVIEW_ACTION.COMPLETE,
-        quality_rating: qualityRating,
-        action_taken: actionTaken,
-        investigation_feedback: investigationFeedback,
-      });
+      const isAck = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
+      const resp = await updateReview(isAck
+        ? { session_ids: [id], action: REVIEW_ACTION.ACKNOWLEDGE }
+        : {
+          session_ids: [id],
+          action: REVIEW_ACTION.COMPLETE,
+          quality_rating: qualityRating,
+          action_taken: actionTaken,
+          investigation_feedback: investigationFeedback,
+        },
+      );
       if (resp.results[0]?.success) {
         setReviewModalMode(null);
         const freshSession = await getSession(id);
@@ -1417,13 +1421,17 @@ export function SessionDetailPage() {
     try {
       setReviewLoading(true);
       setReviewError(null);
-      const resp = await updateReview({
-        session_ids: [id],
-        action: REVIEW_ACTION.UPDATE_FEEDBACK,
-        quality_rating: qualityRating || undefined,
-        action_taken: actionTaken,
-        investigation_feedback: investigationFeedback,
-      });
+      const isAck = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
+      const resp = await updateReview(isAck
+        ? { session_ids: [id], action: REVIEW_ACTION.ACKNOWLEDGE }
+        : {
+          session_ids: [id],
+          action: REVIEW_ACTION.UPDATE_FEEDBACK,
+          quality_rating: qualityRating || undefined,
+          action_taken: actionTaken,
+          investigation_feedback: investigationFeedback,
+        },
+      );
       if (resp.results[0]?.success) {
         setReviewModalMode(null);
         const freshSession = await getSession(id);
@@ -1699,6 +1707,7 @@ export function SessionDetailPage() {
                 latestScore={session.latest_score}
                 scoringStatus={session.scoring_status}
                 qualityRating={session.quality_rating}
+                reviewStatus={session.review_status}
                 onReviewClick={handleReviewClick}
               />
             </Suspense>

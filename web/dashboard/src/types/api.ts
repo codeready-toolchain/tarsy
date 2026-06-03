@@ -134,9 +134,15 @@ export const REVIEW_MODAL_MODE = {
 
 export type ReviewModalMode = (typeof REVIEW_MODAL_MODE)[keyof typeof REVIEW_MODAL_MODE];
 
-/** Returns the modal mode for a given review_status. */
-export function getReviewModalMode(reviewStatus: string | null | undefined): ReviewModalMode {
-  return reviewStatus === REVIEW_STATUS.REVIEWED ? REVIEW_MODAL_MODE.EDIT : REVIEW_MODAL_MODE.COMPLETE;
+/** Returns the modal mode for a given review_status and quality_rating. */
+export function getReviewModalMode(
+  reviewStatus: string | null | undefined,
+  qualityRating: string | null | undefined,
+): ReviewModalMode {
+  if (reviewStatus === REVIEW_STATUS.REVIEWED) {
+    return qualityRating ? REVIEW_MODAL_MODE.EDIT : REVIEW_MODAL_MODE.COMPLETE;
+  }
+  return REVIEW_MODAL_MODE.COMPLETE;
 }
 
 /** Allowed quality rating values for review feedback. */
@@ -147,6 +153,18 @@ export const QUALITY_RATING = {
 } as const;
 
 export type QualityRating = (typeof QUALITY_RATING)[keyof typeof QUALITY_RATING];
+
+/**
+ * UI-only selection values for the review radio group.
+ * Combines quality ratings with an "acknowledge" sentinel that triggers
+ * a different backend action rather than a quality judgment.
+ */
+export const REVIEW_SELECTION = {
+  ...QUALITY_RATING,
+  ACKNOWLEDGE: 'acknowledge',
+} as const;
+
+export type ReviewSelection = (typeof REVIEW_SELECTION)[keyof typeof REVIEW_SELECTION];
 
 /** Request body for PATCH /api/v1/sessions/review. */
 export interface UpdateReviewRequest {

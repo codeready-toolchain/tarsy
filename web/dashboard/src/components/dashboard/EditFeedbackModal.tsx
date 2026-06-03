@@ -14,12 +14,13 @@ import {
   FormLabel,
   Divider,
   Alert,
+  Collapse,
 } from '@mui/material';
-import { RateReview, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { RateReview, ThumbUp, ThumbsUpDown, ThumbDown, DoneAll } from '@mui/icons-material';
 import { ReviewModalHeader } from './ReviewModalHeader.tsx';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
-import { QUALITY_RATING } from '../../types/api.ts';
+import { QUALITY_RATING, REVIEW_SELECTION } from '../../types/api.ts';
 
 export interface EditFeedbackModalProps {
   open: boolean;
@@ -65,7 +66,8 @@ export function EditFeedbackModal({
   }, [open, initialQualityRating, initialActionTaken, initialInvestigationFeedback]);
 
   const handleSave = () => {
-    onSave(qualityRating, actionTaken.trim(), investigationFeedback.trim());
+    const isAcknowledge = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
+    onSave(qualityRating, isAcknowledge ? '' : actionTaken.trim(), isAcknowledge ? '' : investigationFeedback.trim());
   };
 
   const changed =
@@ -115,59 +117,99 @@ export function EditFeedbackModal({
               value={QUALITY_RATING.ACCURATE}
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
-                  <Typography variant="body2" fontWeight={500}>Accurate</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
+                    <Typography variant="body2" fontWeight={500}>Accurate</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    The investigation correctly identified the issue and root cause
+                  </Typography>
                 </Box>
               }
-              sx={{ mb: 0.5 }}
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
               value={QUALITY_RATING.PARTIALLY_ACCURATE}
               control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
-                  <Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
+                    <Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Some findings were correct but the investigation missed key aspects
+                  </Typography>
                 </Box>
               }
-              sx={{ mb: 0.5 }}
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
               value={QUALITY_RATING.INACCURATE}
               control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
-                  <Typography variant="body2" fontWeight={500}>Inaccurate</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
+                    <Typography variant="body2" fontWeight={500}>Inaccurate</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    The investigation was wrong or misleading
+                  </Typography>
                 </Box>
               }
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
+            />
+            <FormControlLabel
+              value={REVIEW_SELECTION.ACKNOWLEDGE}
+              control={<Radio />}
+              label={
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <DoneAll sx={{ fontSize: 16, color: 'text.secondary' }} />
+                    <Typography variant="body2" fontWeight={500}>Acknowledge</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    I've reviewed this but won't judge investigation quality
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
           </RadioGroup>
         </FormControl>
 
-        <TextField
-          label="Action taken"
-          placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
-          value={actionTaken}
-          onChange={(e) => setActionTaken(e.target.value)}
-          multiline
-          minRows={2}
-          maxRows={4}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
+        {qualityRating === REVIEW_SELECTION.ACKNOWLEDGE && initialQualityRating && initialQualityRating !== REVIEW_SELECTION.ACKNOWLEDGE && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Switching to Acknowledge will remove the current quality rating.
+          </Alert>
+        )}
 
-        <TextField
-          label="Investigation feedback"
-          placeholder="e.g., Missed the root cause, focused on wrong service"
-          value={investigationFeedback}
-          onChange={(e) => setInvestigationFeedback(e.target.value)}
-          multiline
-          minRows={2}
-          maxRows={4}
-          fullWidth
-        />
+        <Collapse in={qualityRating !== REVIEW_SELECTION.ACKNOWLEDGE}>
+          <TextField
+            label="Action taken"
+            placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
+            value={actionTaken}
+            onChange={(e) => setActionTaken(e.target.value)}
+            multiline
+            minRows={2}
+            maxRows={4}
+            fullWidth
+            sx={{ mb: 2 }}
+          />
+
+          <TextField
+            label="Investigation feedback"
+            placeholder="e.g., Missed the root cause, focused on wrong service"
+            value={investigationFeedback}
+            onChange={(e) => setInvestigationFeedback(e.target.value)}
+            multiline
+            minRows={2}
+            maxRows={4}
+            fullWidth
+          />
+        </Collapse>
       </DialogContent>
 
       {error && (
@@ -181,9 +223,13 @@ export function EditFeedbackModal({
         <Button
           onClick={handleSave}
           variant="contained"
+          color={qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'primary' : undefined}
           disabled={!changed || !qualityRating || loading}
         >
-          {loading ? 'Saving...' : 'Save'}
+          {loading
+            ? (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'Acknowledging...' : 'Saving...')
+            : (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'Acknowledge' : 'Save Changes')
+          }
         </Button>
       </DialogActions>
     </Dialog>

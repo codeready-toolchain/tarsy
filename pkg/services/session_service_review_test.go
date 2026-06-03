@@ -275,16 +275,31 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Contains(t, errMsg, "invalid")
 	})
 
-	t.Run("complete conflict from reviewed", func(t *testing.T) {
+	t.Run("complete from reviewed upgrades rating", func(t *testing.T) {
 		id := seedReviewSession(t, service, "reviewed", "john@test.com")
-		rating := "accurate"
+		rating := "inaccurate"
+		actionTaken := "Changed my mind"
 
-		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action:        "complete",
 			Actor:         "bob@test.com",
 			QualityRating: &rating,
+			ActionTaken:   &actionTaken,
 		})
-		assert.Contains(t, errMsg, "conflict")
+		require.NotNil(t, sess.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *sess.ReviewStatus)
+		require.NotNil(t, sess.QualityRating)
+		assert.Equal(t, alertsession.QualityRatingInaccurate, *sess.QualityRating)
+		require.NotNil(t, sess.ActionTaken)
+		assert.Equal(t, "Changed my mind", *sess.ActionTaken)
+
+		ctx := context.Background()
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		require.Len(t, activities, 1)
+		assert.Equal(t, sessionreviewactivity.ActionComplete, activities[0].Action)
+		require.NotNil(t, activities[0].FromStatus)
+		assert.Equal(t, sessionreviewactivity.FromStatusReviewed, *activities[0].FromStatus)
 	})
 
 	t.Run("complete from NULL review_status", func(t *testing.T) {
@@ -401,14 +416,26 @@ func TestSessionService_UpdateReviewStatus(t *testing.T) {
 		assert.Equal(t, sessionreviewactivity.ActionAcknowledge, activities[0].Action)
 	})
 
-	t.Run("acknowledge conflict from reviewed", func(t *testing.T) {
+	t.Run("acknowledge from reviewed clears rating", func(t *testing.T) {
 		id := seedReviewSession(t, service, "reviewed", "alice@test.com")
 
-		errMsg := doReviewExpectError(t, service, id, models.UpdateReviewRequest{
+		sess := doReview(t, service, id, models.UpdateReviewRequest{
 			Action: "acknowledge",
 			Actor:  "alice@test.com",
 		})
-		assert.Contains(t, errMsg, "conflict")
+		require.NotNil(t, sess.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *sess.ReviewStatus)
+		assert.Nil(t, sess.QualityRating, "acknowledge should clear quality_rating")
+		assert.Nil(t, sess.ActionTaken, "acknowledge should clear action_taken")
+		assert.Nil(t, sess.InvestigationFeedback, "acknowledge should clear investigation_feedback")
+
+		ctx := context.Background()
+		activities, err := service.GetReviewActivity(ctx, id)
+		require.NoError(t, err)
+		require.Len(t, activities, 1)
+		assert.Equal(t, sessionreviewactivity.ActionAcknowledge, activities[0].Action)
+		require.NotNil(t, activities[0].FromStatus)
+		assert.Equal(t, sessionreviewactivity.FromStatusReviewed, *activities[0].FromStatus)
 	})
 
 	t.Run("acknowledge from NULL review_status", func(t *testing.T) {

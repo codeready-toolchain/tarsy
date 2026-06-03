@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Paper, Typography, Box, Alert, Collapse, IconButton, Tooltip } from '@mui/material';
-import { Psychology, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown, ThumbUp, ThumbDown } from '@mui/icons-material';
+import { Psychology, ExpandLess, UnfoldMore, AutoAwesome, ThumbsUpDown, ThumbUp, ThumbDown, DoneAll } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
@@ -9,7 +9,7 @@ import CopyButton from '../shared/CopyButton';
 import ErrorCard from '../timeline/ErrorCard';
 import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
-import { QUALITY_RATING } from '../../types/api';
+import { QUALITY_RATING, REVIEW_SELECTION, REVIEW_STATUS } from '../../types/api';
 import { sessionScoringPath } from '../../constants/routes';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 import { getRatingConfig } from '../../constants/ratingConfig';
@@ -31,6 +31,8 @@ interface FinalAnalysisCardProps {
   scoringStatus?: string | null;
   /** Current quality rating (if reviewed) */
   qualityRating?: string | null;
+  /** Current review status */
+  reviewStatus?: string | null;
   /** Callback when user clicks a review icon; optional rating pre-selects in the modal */
   onReviewClick?: (initialRating?: string) => void;
 }
@@ -57,7 +59,7 @@ function generateFakeAnalysis(status: string, errorMessage?: string | null): str
  * Supports counter-based expand/collapse from parent.
  */
 const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
-  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, onReviewClick }, ref) => {
+  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, reviewStatus, onReviewClick }, ref) => {
     const navigate = useNavigate();
     const [analysisExpanded, setAnalysisExpanded] = useState(false);
     const [prevAnalysis, setPrevAnalysis] = useState<string | null>(null);
@@ -144,6 +146,20 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                     </Tooltip>
                   );
                 }
+                const acknowledged = !qualityRating && reviewStatus === REVIEW_STATUS.REVIEWED;
+                if (acknowledged) {
+                  return (
+                    <Tooltip title="Acknowledged — click to review" arrow>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); onReviewClick(REVIEW_SELECTION.ACKNOWLEDGE); }}
+                        sx={{ color: 'text.secondary', p: 0.5 }}
+                      >
+                        <DoneAll sx={{ fontSize: 20 }} />
+                      </IconButton>
+                    </Tooltip>
+                  );
+                }
                 return (
                   <Box
                     sx={(theme) => ({
@@ -170,6 +186,11 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                     <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.INACCURATE)} sx={{ color: 'error.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.15) } }}>
                       <ThumbDown sx={{ fontSize: 16 }} />
                     </IconButton>
+                    <Tooltip title="Acknowledge without rating" arrow>
+                      <IconButton size="small" onClick={() => onReviewClick(REVIEW_SELECTION.ACKNOWLEDGE)} sx={{ color: 'text.secondary', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.action.hover, 0.15) } }}>
+                        <DoneAll sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 );
               })()}

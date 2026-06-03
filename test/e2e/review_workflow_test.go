@@ -500,3 +500,178 @@ func TestE2E_ReviewWorkflow_CancelledAutoReviewed(t *testing.T) {
 	}
 	assert.True(t, found, "cancelled session should appear in triage reviewed group")
 }
+
+func TestE2E_ReviewWorkflow_AcknowledgeToRated(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Analyzing the alert data."},
+			&agent.TextChunk{Content: "Investigation complete: ack-to-rated test."},
+			&agent.UsageChunk{InputTokens: 30, OutputTokens: 15, TotalTokens: 45},
+		},
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "review-workflow")),
+		WithLLMClient(llm),
+	)
+
+	ctx := context.Background()
+	ws, err := WSConnect(ctx, app.WSURL)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	resp := app.SubmitAlert(t, "test-review", "Ack-to-rated test")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "needs_review"
+	}, 5*time.Second, "expected review.status needs_review WS event")
+
+	// ── Step 1: Acknowledge the session ──
+	ackResp := app.PatchReview(t, sessionID, map[string]interface{}{
+		"action": "acknowledge",
+	})
+	ackResults := ackResp["results"].([]interface{})
+	require.Len(t, ackResults, 1)
+	assert.Equal(t, true, ackResults[0].(map[string]interface{})["success"])
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+	}, 5*time.Second, "expected review.status reviewed WS event after acknowledge")
+
+	// DB: acknowledged (no quality_rating).
+	session, err := app.EntClient.AlertSession.Get(ctx, sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, alertsession.ReviewStatusReviewed, *session.ReviewStatus)
+	assert.Nil(t, session.QualityRating)
+
+	// ── Step 2: Upgrade to rated via complete ──
+	completeResp := app.PatchReview(t, sessionID, map[string]interface{}{
+		"action":         "complete",
+		"quality_rating": "accurate",
+		"action_taken":   "Upgraded from ack to rated.",
+	})
+	completeResults := completeResp["results"].([]interface{})
+	require.Len(t, completeResults, 1)
+	assert.Equal(t, true, completeResults[0].(map[string]interface{})["success"])
+
+	var completeEvent WSEvent
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		if e.Type == "review.status" && e.Parsed["quality_rating"] == "accurate" {
+			completeEvent = e
+			return true
+		}
+		return false
+	}, 5*time.Second, "expected review.status WS event with quality_rating after upgrade")
+
+	assert.Equal(t, "reviewed", completeEvent.Parsed["review_status"])
+	assert.Equal(t, "accurate", completeEvent.Parsed["quality_rating"])
+
+	// ── DB assertion: session now has quality_rating ──
+	session, err = app.EntClient.AlertSession.Get(ctx, sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, alertsession.ReviewStatusReviewed, *session.ReviewStatus)
+	require.NotNil(t, session.QualityRating)
+	assert.Equal(t, alertsession.QualityRatingAccurate, *session.QualityRating)
+	require.NotNil(t, session.ActionTaken)
+	assert.Equal(t, "Upgraded from ack to rated.", *session.ActionTaken)
+
+	// ── Review activity: implicit claim + acknowledge + complete = 3 rows ──
+	activityResp := app.GetReviewActivity(t, sessionID)
+	activities, ok := activityResp["activities"].([]interface{})
+	require.True(t, ok, "expected activities array")
+	require.Len(t, activities, 3)
+
+	act2 := activities[2].(map[string]interface{})
+	assert.Equal(t, "complete", act2["action"])
+	assert.Equal(t, "accurate", act2["quality_rating"])
+}
+
+func TestE2E_ReviewWorkflow_RatedToAcknowledge(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Analyzing the alert data."},
+			&agent.TextChunk{Content: "Investigation complete: rated-to-ack test."},
+			&agent.UsageChunk{InputTokens: 30, OutputTokens: 15, TotalTokens: 45},
+		},
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "review-workflow")),
+		WithLLMClient(llm),
+	)
+
+	ctx := context.Background()
+	ws, err := WSConnect(ctx, app.WSURL)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	resp := app.SubmitAlert(t, "test-review", "Rated-to-ack test")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "needs_review"
+	}, 5*time.Second, "expected review.status needs_review WS event")
+
+	// ── Step 1: Complete with a quality rating ──
+	completeResp := app.PatchReview(t, sessionID, map[string]interface{}{
+		"action":         "complete",
+		"quality_rating": "inaccurate",
+		"action_taken":   "Initial assessment was wrong.",
+	})
+	completeResults := completeResp["results"].([]interface{})
+	require.Len(t, completeResults, 1)
+	assert.Equal(t, true, completeResults[0].(map[string]interface{})["success"])
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+	}, 5*time.Second, "expected review.status reviewed WS event after complete")
+
+	// DB: rated as inaccurate.
+	session, err := app.EntClient.AlertSession.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.NotNil(t, session.QualityRating)
+	assert.Equal(t, alertsession.QualityRatingInaccurate, *session.QualityRating)
+
+	// ── Step 2: Downgrade to acknowledge ──
+	ackResp := app.PatchReview(t, sessionID, map[string]interface{}{
+		"action": "acknowledge",
+	})
+	ackResults := ackResp["results"].([]interface{})
+	require.Len(t, ackResults, 1)
+	assert.Equal(t, true, ackResults[0].(map[string]interface{})["success"])
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		_, hasQR := e.Parsed["quality_rating"]
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed" && !hasQR
+	}, 5*time.Second, "expected review.status reviewed WS event after acknowledge downgrade")
+
+	// ── DB assertion: quality_rating cleared ──
+	session, err = app.EntClient.AlertSession.Get(ctx, sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, alertsession.ReviewStatusReviewed, *session.ReviewStatus)
+	assert.Nil(t, session.QualityRating, "acknowledge should clear quality_rating")
+
+	// ── Review activity: implicit claim + complete + acknowledge = 3 rows ──
+	activityResp := app.GetReviewActivity(t, sessionID)
+	activities, ok := activityResp["activities"].([]interface{})
+	require.True(t, ok, "expected activities array")
+	require.Len(t, activities, 3)
+
+	act2 := activities[2].(map[string]interface{})
+	assert.Equal(t, "acknowledge", act2["action"])
+	assert.Equal(t, "reviewed", act2["to_status"])
+	assert.Nil(t, act2["quality_rating"], "acknowledge activity should have no quality_rating")
+}

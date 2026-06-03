@@ -45,13 +45,14 @@ export function ReviewCell({ session, onReviewClick }: ReviewCellProps) {
           />
         </Tooltip>
       ) : acknowledged ? (
-        <Tooltip title="Acknowledged">
+        <Tooltip title={interactive ? 'Acknowledged — click to review' : 'Acknowledged'}>
           <Chip
             icon={<CheckCircle sx={{ fontSize: '0.875rem' }} />}
             size="small"
             variant="outlined"
-            tabIndex={-1}
-            sx={{ ...iconOnlyChipSx, cursor: 'default' }}
+            tabIndex={interactive ? 0 : -1}
+            onClick={interactive ? (e) => { e.stopPropagation(); onReviewClick(session); } : undefined}
+            sx={{ ...iconOnlyChipSx, cursor: interactive ? 'pointer' : 'default' }}
           />
         </Tooltip>
       ) : interactive ? (
