@@ -1097,6 +1097,7 @@ export function DashboardView() {
             feedbackEdited={reviewTarget?.session.feedback_edited}
             feedbackEditedBy={reviewTarget?.session.feedback_edited_by}
             feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
+            initialRating={reviewTarget?.session.review_status === 'reviewed' && !reviewTarget?.session.quality_rating ? REVIEW_SELECTION.ACKNOWLEDGE : undefined}
           />
           <EditFeedbackModal
             open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}
