@@ -654,7 +654,8 @@ func TestE2E_ReviewWorkflow_RatedToAcknowledge(t *testing.T) {
 	assert.Equal(t, true, ackResults[0].(map[string]interface{})["success"])
 
 	ws.WaitForEvent(t, func(e WSEvent) bool {
-		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+		_, hasQR := e.Parsed["quality_rating"]
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed" && !hasQR
 	}, 5*time.Second, "expected review.status reviewed WS event after acknowledge downgrade")
 
 	// ── DB assertion: quality_rating cleared ──

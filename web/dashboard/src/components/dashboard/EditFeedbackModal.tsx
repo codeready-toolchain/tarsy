@@ -66,7 +66,8 @@ export function EditFeedbackModal({
   }, [open, initialQualityRating, initialActionTaken, initialInvestigationFeedback]);
 
   const handleSave = () => {
-    onSave(qualityRating, actionTaken.trim(), investigationFeedback.trim());
+    const isAcknowledge = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
+    onSave(qualityRating, isAcknowledge ? '' : actionTaken.trim(), isAcknowledge ? '' : investigationFeedback.trim());
   };
 
   const changed =

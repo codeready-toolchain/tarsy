@@ -53,10 +53,11 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
 
   const handleComplete = () => {
     if (!qualityRating) return;
+    const isAcknowledge = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
     onComplete(
       qualityRating,
-      actionTaken.trim() || undefined,
-      investigationFeedback.trim() || undefined,
+      isAcknowledge ? undefined : actionTaken.trim() || undefined,
+      isAcknowledge ? undefined : investigationFeedback.trim() || undefined,
     );
   };
 

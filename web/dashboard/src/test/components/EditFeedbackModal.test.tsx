@@ -100,6 +100,6 @@ describe('EditFeedbackModal', () => {
     const submitBtn = screen.getByRole('button', { name: 'Acknowledge' });
     await user.click(submitBtn);
 
-    expect(onSave).toHaveBeenCalledWith(REVIEW_SELECTION.ACKNOWLEDGE, 'Fixed the issue', 'Good analysis');
+    expect(onSave).toHaveBeenCalledWith(REVIEW_SELECTION.ACKNOWLEDGE, '', '');
   });
 });
