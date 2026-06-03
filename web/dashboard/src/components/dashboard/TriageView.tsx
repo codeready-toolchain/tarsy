@@ -13,7 +13,7 @@ import { CompleteReviewModal } from './CompleteReviewModal.tsx';
 import { EditFeedbackModal } from './EditFeedbackModal.tsx';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
 import { getSession } from '../../services/api.ts';
-import { REVIEW_MODAL_MODE, getReviewModalMode } from '../../types/api.ts';
+import { REVIEW_MODAL_MODE, REVIEW_SELECTION, getReviewModalMode } from '../../types/api.ts';
 import type { TriageGroup, TriageGroupKey, ReviewModalMode } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
@@ -96,20 +96,8 @@ export function TriageView({
     withAction(() => onUnclaim(sessionId));
   };
 
-  const handleAcknowledge = (sessionId: string) => {
-    withAction(async () => {
-      await onAcknowledge(sessionId);
-      const session = findSessionInGroups(sessionId);
-      setSnackbar({
-        message: 'Acknowledged',
-        severity: 'success',
-        completedSession: session ? { ...session, review_status: 'reviewed' } : undefined,
-      });
-    });
-  };
-
   const handleReviewClick = useCallback((session: DashboardSessionItem) => {
-    const mode = getReviewModalMode(session.review_status);
+    const mode = getReviewModalMode(session.review_status, session.quality_rating);
     setReviewTarget({ session, mode });
   }, []);
 
@@ -117,19 +105,28 @@ export function TriageView({
     if (!reviewTarget) return;
     setActionLoading(true);
     try {
-      await onComplete(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
-      const cfg = getRatingConfig(qualityRating);
-      setSnackbar({
-        message: `Marked as ${cfg?.label ?? qualityRating}`,
-        severity: cfg?.color ?? 'success',
-        completedSession: {
-          ...reviewTarget.session,
-          quality_rating: qualityRating,
-          action_taken: actionTaken ?? reviewTarget.session.action_taken ?? null,
-          investigation_feedback: investigationFeedback ?? reviewTarget.session.investigation_feedback ?? null,
-        },
-        completedRating: qualityRating,
-      });
+      if (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE) {
+        await onAcknowledge(reviewTarget.session.id);
+        setSnackbar({
+          message: 'Acknowledged',
+          severity: 'success',
+          completedSession: { ...reviewTarget.session, review_status: 'reviewed' },
+        });
+      } else {
+        await onComplete(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
+        const cfg = getRatingConfig(qualityRating);
+        setSnackbar({
+          message: `Marked as ${cfg?.label ?? qualityRating}`,
+          severity: cfg?.color ?? 'success',
+          completedSession: {
+            ...reviewTarget.session,
+            quality_rating: qualityRating,
+            action_taken: actionTaken ?? reviewTarget.session.action_taken ?? null,
+            investigation_feedback: investigationFeedback ?? reviewTarget.session.investigation_feedback ?? null,
+          },
+          completedRating: qualityRating,
+        });
+      }
       setReviewTarget(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Action failed';
@@ -143,7 +140,16 @@ export function TriageView({
     if (!reviewTarget) return;
     setActionLoading(true);
     try {
-      await onUpdateFeedback(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
+      if (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE) {
+        await onAcknowledge(reviewTarget.session.id);
+        setSnackbar({
+          message: 'Acknowledged',
+          severity: 'success',
+          completedSession: { ...reviewTarget.session, review_status: 'reviewed' },
+        });
+      } else {
+        await onUpdateFeedback(reviewTarget.session.id, qualityRating, actionTaken, investigationFeedback);
+      }
       setReviewTarget(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Action failed';
@@ -157,7 +163,11 @@ export function TriageView({
     if (!completeSessionIds) return;
     const ids = completeSessionIds;
     setCompleteSessionIds(null);
-    withAction(() => onBulkComplete(ids, qualityRating, actionTaken, investigationFeedback));
+    if (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE) {
+      withAction(() => onBulkAcknowledge(ids));
+    } else {
+      withAction(() => onBulkComplete(ids, qualityRating, actionTaken, investigationFeedback));
+    }
   };
 
   const handleReopen = (sessionId: string) => {
@@ -174,10 +184,6 @@ export function TriageView({
 
   const handleBulkUnclaim = (sessionIds: string[]) => {
     withAction(() => onBulkUnclaim(sessionIds));
-  };
-
-  const handleBulkAcknowledge = (sessionIds: string[]) => {
-    withAction(() => onBulkAcknowledge(sessionIds));
   };
 
   const handleBulkReopen = (sessionIds: string[]) => {
@@ -238,7 +244,7 @@ export function TriageView({
   };
 
   const completeModalTitle = completeSessionIds && completeSessionIds.length > 1
-    ? `Complete Review for ${completeSessionIds.length} Sessions`
+    ? `Review ${completeSessionIds.length} Sessions`
     : undefined;
 
   const hasSnackbarActions = snackbar?.completedSession !== undefined;
@@ -293,12 +299,10 @@ export function TriageView({
         groups={groups}
         onClaim={handleClaim}
         onUnclaim={handleUnclaim}
-        onAcknowledge={handleAcknowledge}
         onReopen={handleReopen}
         onReviewClick={handleReviewClick}
         onBulkClaim={handleBulkClaim}
         onBulkComplete={handleBulkComplete}
-        onBulkAcknowledge={handleBulkAcknowledge}
         onBulkUnclaim={handleBulkUnclaim}
         onBulkReopen={handleBulkReopen}
         onPageChange={onPageChange}

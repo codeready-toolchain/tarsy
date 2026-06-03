@@ -14,12 +14,13 @@ import {
   FormLabel,
   Divider,
   Alert,
+  Collapse,
 } from '@mui/material';
-import { CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown } from '@mui/icons-material';
+import { CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown, DoneAll } from '@mui/icons-material';
 import { ReviewModalHeader } from './ReviewModalHeader.tsx';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
-import { QUALITY_RATING } from '../../types/api.ts';
+import { QUALITY_RATING, REVIEW_SELECTION } from '../../types/api.ts';
 
 export interface CompleteReviewModalProps {
   open: boolean;
@@ -143,33 +144,51 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
                   </Typography>
                 </Box>
               }
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
+            />
+            <FormControlLabel
+              value={REVIEW_SELECTION.ACKNOWLEDGE}
+              control={<Radio />}
+              label={
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <DoneAll sx={{ fontSize: 16, color: 'text.secondary' }} />
+                    <Typography variant="body1" fontWeight={500}>Acknowledge</Typography>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    I've reviewed this but won't judge investigation quality
+                  </Typography>
+                </Box>
+              }
               sx={{ alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
           </RadioGroup>
         </FormControl>
 
-        <TextField
-          label="Action taken (optional)"
-          placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
-          value={actionTaken}
-          onChange={(e) => setActionTaken(e.target.value)}
-          multiline
-          minRows={2}
-          maxRows={4}
-          fullWidth
-          sx={{ mb: 2 }}
-        />
+        <Collapse in={qualityRating !== REVIEW_SELECTION.ACKNOWLEDGE}>
+          <TextField
+            label="Action taken (optional)"
+            placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
+            value={actionTaken}
+            onChange={(e) => setActionTaken(e.target.value)}
+            multiline
+            minRows={2}
+            maxRows={4}
+            fullWidth
+            sx={{ mb: 2 }}
+          />
 
-        <TextField
-          label="Investigation feedback (optional)"
-          placeholder="e.g., Missed the root cause, focused on wrong service"
-          value={investigationFeedback}
-          onChange={(e) => setInvestigationFeedback(e.target.value)}
-          multiline
-          minRows={2}
-          maxRows={4}
-          fullWidth
-        />
+          <TextField
+            label="Investigation feedback (optional)"
+            placeholder="e.g., Missed the root cause, focused on wrong service"
+            value={investigationFeedback}
+            onChange={(e) => setInvestigationFeedback(e.target.value)}
+            multiline
+            minRows={2}
+            maxRows={4}
+            fullWidth
+          />
+        </Collapse>
       </DialogContent>
 
       {error && (
@@ -183,10 +202,13 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
         <Button
           onClick={handleComplete}
           variant="contained"
-          color="success"
+          color={qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'primary' : 'success'}
           disabled={!qualityRating || loading}
         >
-          {loading ? 'Completing...' : 'Complete Review'}
+          {loading
+            ? (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'Acknowledging...' : 'Completing...')
+            : (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'Acknowledge' : 'Complete Review')
+          }
         </Button>
       </DialogActions>
     </Dialog>

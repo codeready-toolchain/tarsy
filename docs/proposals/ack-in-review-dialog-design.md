@@ -115,7 +115,7 @@ The handler (`handler_review.go`) is updated to pass old + new rating to this me
 
 Two PRs, each independently shippable.
 
-### PR 1: Backend — Memory confidence reset on rating change
+### PR 1: Backend — Memory confidence reset on rating change - DONE
 
 Fixes a pre-existing bug where re-rating a session applies the new adjustment without reversing the old one. Also enables the upcoming "downgrade to acknowledge" flow.
 
