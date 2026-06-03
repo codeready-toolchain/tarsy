@@ -367,6 +367,81 @@ func (s *Service) AdjustConfidenceForReview(ctx context.Context, project, sessio
 	}
 }
 
+// ReadjustConfidenceForRatingChange reverses the confidence effect of oldRating
+// and then applies newRating. Use this when a session's quality rating changes
+// (e.g. update_feedback with a different rating, or downgrade to acknowledge).
+//
+// Reversal is approximate: values that hit the 1.0 cap during the original
+// accurate boost cannot be precisely restored.
+//
+//   - oldRating nil, newRating non-nil: first-time rating (delegates to AdjustConfidenceForReview)
+//   - oldRating non-nil, newRating nil: rating removed (reverse only)
+//   - both non-nil and different: reverse old, apply new
+//   - both nil, or equal: no-op
+func (s *Service) ReadjustConfidenceForRatingChange(ctx context.Context, project, sessionID string, oldRating, newRating *alertsession.QualityRating) error {
+	if oldRating == nil && newRating == nil {
+		return nil
+	}
+	if oldRating != nil && newRating != nil && *oldRating == *newRating {
+		return nil
+	}
+
+	if oldRating != nil {
+		if err := s.reverseConfidenceAdjustment(ctx, project, sessionID, *oldRating); err != nil {
+			return fmt.Errorf("reverse old rating %q for session %s: %w", *oldRating, sessionID, err)
+		}
+	}
+
+	if newRating != nil {
+		return s.AdjustConfidenceForReview(ctx, project, sessionID, *newRating)
+	}
+	return nil
+}
+
+// reverseConfidenceAdjustment undoes the effect of a previous AdjustConfidenceForReview call.
+func (s *Service) reverseConfidenceAdjustment(ctx context.Context, project, sessionID string, rating alertsession.QualityRating) error {
+	switch rating {
+	case alertsession.QualityRatingAccurate:
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE investigation_memories
+			SET confidence = confidence / 1.2,
+			    updated_at = NOW()
+			WHERE source_session_id = $1 AND project = $2 AND deprecated = false
+		`, sessionID, project)
+		if err != nil {
+			return fmt.Errorf("reverse accurate boost for session %s: %w", sessionID, err)
+		}
+		return nil
+
+	case alertsession.QualityRatingPartiallyAccurate:
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE investigation_memories
+			SET confidence = LEAST(confidence / 0.6, 1.0),
+			    updated_at = NOW()
+			WHERE source_session_id = $1 AND project = $2 AND deprecated = false
+		`, sessionID, project)
+		if err != nil {
+			return fmt.Errorf("reverse partial degradation for session %s: %w", sessionID, err)
+		}
+		return nil
+
+	case alertsession.QualityRatingInaccurate:
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE investigation_memories
+			SET deprecated = false,
+			    updated_at = NOW()
+			WHERE source_session_id = $1 AND project = $2 AND deprecated = true
+		`, sessionID, project)
+		if err != nil {
+			return fmt.Errorf("reverse deprecation for session %s: %w", sessionID, err)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown quality rating %q", rating)
+	}
+}
+
 // GetByID returns a single memory by ID.
 func (s *Service) GetByID(ctx context.Context, memoryID string) (*Detail, error) {
 	m, err := s.entClient.InvestigationMemory.Get(ctx, memoryID)
