@@ -117,44 +117,65 @@ export function EditFeedbackModal({
               value={QUALITY_RATING.ACCURATE}
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
-                  <Typography variant="body2" fontWeight={500}>Accurate</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
+                    <Typography variant="body2" fontWeight={500}>Accurate</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    The investigation correctly identified the issue and root cause
+                  </Typography>
                 </Box>
               }
-              sx={{ mb: 0.5 }}
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
               value={QUALITY_RATING.PARTIALLY_ACCURATE}
               control={<Radio sx={{ color: 'warning.main', '&.Mui-checked': { color: 'warning.main' } }} />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
-                  <Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
+                    <Typography variant="body2" fontWeight={500}>Partially Accurate</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Some findings were correct but the investigation missed key aspects
+                  </Typography>
                 </Box>
               }
-              sx={{ mb: 0.5 }}
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
               value={QUALITY_RATING.INACCURATE}
               control={<Radio sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
-                  <Typography variant="body2" fontWeight={500}>Inaccurate</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
+                    <Typography variant="body2" fontWeight={500}>Inaccurate</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    The investigation was wrong or misleading
+                  </Typography>
                 </Box>
               }
-              sx={{ mb: 0.5 }}
+              sx={{ mb: 1, alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
             <FormControlLabel
               value={REVIEW_SELECTION.ACKNOWLEDGE}
               control={<Radio />}
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <DoneAll sx={{ fontSize: 16, color: 'text.secondary' }} />
-                  <Typography variant="body2" fontWeight={500}>Acknowledge</Typography>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <DoneAll sx={{ fontSize: 16, color: 'text.secondary' }} />
+                    <Typography variant="body2" fontWeight={500}>Acknowledge</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    I've reviewed this but won't judge investigation quality
+                  </Typography>
                 </Box>
               }
+              sx={{ alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.5 } }}
             />
           </RadioGroup>
         </FormControl>
