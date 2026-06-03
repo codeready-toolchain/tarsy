@@ -417,6 +417,24 @@ func (s *SessionService) doComplete(ctx context.Context, tx *ent.Tx, sessionID, 
 			&rating, actionTaken, feedback, completeTime)
 	}
 
+	// Try complete from reviewed (upgrade from acknowledged -> rated).
+	update = buildUpdate(tx.AlertSession.Update().Where(
+		alertsession.IDEQ(sessionID),
+		alertsession.ReviewStatusEQ(alertsession.ReviewStatusReviewed),
+	))
+
+	affected, err = update.Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to upgrade reviewed session: %w", err)
+	}
+	if affected > 0 {
+		return s.insertActivity(ctx, tx, sessionID, actor,
+			sessionreviewactivity.ActionComplete,
+			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
+			sessionreviewactivity.ToStatusReviewed,
+			&rating, actionTaken, feedback, now)
+	}
+
 	// Try complete from NULL review_status (session still investigating or pre-migration).
 	update = buildUpdate(tx.AlertSession.Update().Where(
 		alertsession.IDEQ(sessionID),
@@ -492,6 +510,29 @@ func (s *SessionService) doAcknowledge(ctx context.Context, tx *ent.Tx, sessionI
 			ptrFromStatus(sessionreviewactivity.FromStatusInProgress),
 			sessionreviewactivity.ToStatusReviewed,
 			nil, nil, nil, ackTime)
+	}
+
+	// Try acknowledge from reviewed (downgrade from rated -> acknowledged).
+	affected, err = tx.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.ReviewStatusEQ(alertsession.ReviewStatusReviewed),
+		).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
+		SetReviewedAt(now).
+		ClearQualityRating().
+		ClearActionTaken().
+		ClearInvestigationFeedback().
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to downgrade session to acknowledged: %w", err)
+	}
+	if affected > 0 {
+		return s.insertActivity(ctx, tx, sessionID, actor,
+			sessionreviewactivity.ActionAcknowledge,
+			ptrFromStatus(sessionreviewactivity.FromStatusReviewed),
+			sessionreviewactivity.ToStatusReviewed,
+			nil, nil, nil, now)
 	}
 
 	// Try acknowledge from NULL review_status.
