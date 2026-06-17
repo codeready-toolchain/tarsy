@@ -69,7 +69,7 @@ import {
 import type { SessionFilter, PaginationState, SortState, DashboardTab, TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem, ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
 import { REVIEW_ACTION, REVIEW_MODAL_MODE, REVIEW_SELECTION, getReviewModalMode } from '../../types/api.ts';
-import type { ReviewModalMode } from '../../types/api.ts';
+import type { ReviewModalMode, ReviewSelection } from '../../types/api.ts';
 import type { DashboardListParams, TriageGroup, TriageGroupKey, TriageGroupParams, UpdateReviewResponse } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
@@ -760,7 +760,7 @@ export function DashboardView() {
     setReviewError(null);
   }, []);
 
-  const handleSessionReviewComplete = useCallback(async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+  const handleSessionReviewComplete = useCallback(async (qualityRating: ReviewSelection, actionTaken?: string, investigationFeedback?: string) => {
     if (!reviewTarget) return;
     const targetSessionId = reviewTarget.session.id;
     try {
@@ -793,7 +793,7 @@ export function DashboardView() {
     }
   }, [reviewTarget, fetchHistoricalAlerts, fetchAllTriageGroups]);
 
-  const handleSessionReviewSave = useCallback(async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+  const handleSessionReviewSave = useCallback(async (qualityRating: ReviewSelection, actionTaken: string, investigationFeedback: string) => {
     if (!reviewTarget) return;
     const targetSessionId = reviewTarget.session.id;
     try {

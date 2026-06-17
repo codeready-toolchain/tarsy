@@ -20,7 +20,7 @@ import { CheckCircleOutline, RateReview, ThumbUp, ThumbsUpDown, ThumbDown, DoneA
 import { ReviewModalHeader } from './ReviewModalHeader.tsx';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
-import { QUALITY_RATING, REVIEW_SELECTION } from '../../types/api.ts';
+import { QUALITY_RATING, REVIEW_SELECTION, type ReviewSelection } from '../../types/api.ts';
 
 export type ReviewModalMode = 'complete' | 'edit';
 
@@ -28,7 +28,7 @@ export interface ReviewModalProps {
   open: boolean;
   mode: ReviewModalMode;
   onClose: () => void;
-  onSubmit: (qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
+  onSubmit: (qualityRating: ReviewSelection, actionTaken: string, investigationFeedback: string) => void;
   loading?: boolean;
   error?: string | null;
   title?: string;
@@ -62,14 +62,14 @@ export function ReviewModal({
   const isEdit = mode === 'edit';
   const optionalSuffix = isEdit ? '' : ' (optional)';
 
-  const [qualityRating, setQualityRating] = useState('');
+  const [qualityRating, setQualityRating] = useState<ReviewSelection | ''>('');
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
   const [showActionTaken, setShowActionTaken] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setQualityRating(initialRating || (isEdit ? '' : QUALITY_RATING.ACCURATE));
+      setQualityRating((initialRating as ReviewSelection) || (isEdit ? '' : QUALITY_RATING.ACCURATE));
       setActionTaken(initialActionTaken);
       setInvestigationFeedback(initialInvestigationFeedback);
       setShowActionTaken(!!initialActionTaken.trim());
@@ -144,7 +144,7 @@ export function ReviewModal({
           <FormLabel component="legend" sx={{ mb: 1, fontWeight: 600 }}>
             Investigation quality
           </FormLabel>
-          <RadioGroup value={qualityRating} onChange={(e) => setQualityRating(e.target.value)}>
+          <RadioGroup value={qualityRating} onChange={(e) => setQualityRating(e.target.value as ReviewSelection)}>
             <FormControlLabel
               value={QUALITY_RATING.ACCURATE}
               control={<Radio sx={{ color: 'success.main', '&.Mui-checked': { color: 'success.main' } }} />}

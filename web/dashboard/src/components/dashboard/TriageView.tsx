@@ -13,7 +13,7 @@ import { ReviewModal } from './ReviewModal.tsx';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
 import { getSession } from '../../services/api.ts';
 import { REVIEW_MODAL_MODE, REVIEW_SELECTION, getReviewModalMode } from '../../types/api.ts';
-import type { TriageGroup, TriageGroupKey, ReviewModalMode } from '../../types/api.ts';
+import type { TriageGroup, TriageGroupKey, ReviewModalMode, ReviewSelection } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
@@ -100,7 +100,7 @@ export function TriageView({
     setReviewTarget({ session, mode });
   }, []);
 
-  const handleReviewComplete = async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+  const handleReviewComplete = async (qualityRating: ReviewSelection, actionTaken?: string, investigationFeedback?: string) => {
     if (!reviewTarget) return;
     setActionLoading(true);
     try {
@@ -135,7 +135,7 @@ export function TriageView({
     }
   };
 
-  const handleReviewSave = async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+  const handleReviewSave = async (qualityRating: ReviewSelection, actionTaken: string, investigationFeedback: string) => {
     if (!reviewTarget) return;
     setActionLoading(true);
     try {
@@ -158,7 +158,7 @@ export function TriageView({
     }
   };
 
-  const handleBulkCompleteConfirm = (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+  const handleBulkCompleteConfirm = (qualityRating: ReviewSelection, actionTaken?: string, investigationFeedback?: string) => {
     if (!completeSessionIds) return;
     const ids = completeSessionIds;
     setCompleteSessionIds(null);
