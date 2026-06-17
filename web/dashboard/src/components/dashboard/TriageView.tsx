@@ -9,12 +9,11 @@ import {
 import { RateReview } from '@mui/icons-material';
 import { TriageFilterBar } from './TriageFilterBar.tsx';
 import { TriageGroupedList } from './TriageGroupedList.tsx';
-import { CompleteReviewModal } from './CompleteReviewModal.tsx';
-import { EditFeedbackModal } from './EditFeedbackModal.tsx';
+import { ReviewModal } from './ReviewModal.tsx';
 import { getRatingConfig } from '../../constants/ratingConfig.ts';
 import { getSession } from '../../services/api.ts';
 import { REVIEW_MODAL_MODE, REVIEW_SELECTION, getReviewModalMode } from '../../types/api.ts';
-import type { TriageGroup, TriageGroupKey, ReviewModalMode } from '../../types/api.ts';
+import type { TriageGroup, TriageGroupKey, ReviewModalMode, ReviewSelection } from '../../types/api.ts';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 
@@ -101,7 +100,7 @@ export function TriageView({
     setReviewTarget({ session, mode });
   }, []);
 
-  const handleReviewComplete = async (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+  const handleReviewComplete = async (qualityRating: ReviewSelection, actionTaken?: string, investigationFeedback?: string) => {
     if (!reviewTarget) return;
     setActionLoading(true);
     try {
@@ -136,7 +135,7 @@ export function TriageView({
     }
   };
 
-  const handleReviewSave = async (qualityRating: string, actionTaken: string, investigationFeedback: string) => {
+  const handleReviewSave = async (qualityRating: ReviewSelection, actionTaken: string, investigationFeedback: string) => {
     if (!reviewTarget) return;
     setActionLoading(true);
     try {
@@ -159,7 +158,7 @@ export function TriageView({
     }
   };
 
-  const handleBulkCompleteConfirm = (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => {
+  const handleBulkCompleteConfirm = (qualityRating: ReviewSelection, actionTaken?: string, investigationFeedback?: string) => {
     if (!completeSessionIds) return;
     const ids = completeSessionIds;
     setCompleteSessionIds(null);
@@ -310,11 +309,12 @@ export function TriageView({
         actionLoading={actionLoading}
       />
 
-      {/* Single-session review modals (from Review column click) */}
-      <CompleteReviewModal
+      {/* Single-session review modal (from Review column click) */}
+      <ReviewModal
         open={reviewTarget?.mode === REVIEW_MODAL_MODE.COMPLETE}
+        mode="complete"
         onClose={() => setReviewTarget(null)}
-        onComplete={handleReviewComplete}
+        onSubmit={handleReviewComplete}
         loading={actionLoading}
         title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
         executiveSummary={reviewTarget?.session.executive_summary}
@@ -324,12 +324,13 @@ export function TriageView({
         feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
         initialRating={reviewTarget?.session.review_status === 'reviewed' && !reviewTarget?.session.quality_rating ? REVIEW_SELECTION.ACKNOWLEDGE : undefined}
       />
-      <EditFeedbackModal
+      <ReviewModal
         open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}
+        mode="edit"
         onClose={() => setReviewTarget(null)}
-        onSave={handleReviewSave}
+        onSubmit={handleReviewSave}
         loading={actionLoading}
-        initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
+        initialRating={reviewTarget?.session.quality_rating ?? ''}
         initialActionTaken={reviewTarget?.session.action_taken ?? ''}
         initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
         executiveSummary={reviewTarget?.session.executive_summary}
@@ -340,10 +341,11 @@ export function TriageView({
       />
 
       {/* Bulk complete modal */}
-      <CompleteReviewModal
+      <ReviewModal
         open={completeSessionIds !== null}
+        mode="complete"
         onClose={() => setCompleteSessionIds(null)}
-        onComplete={handleBulkCompleteConfirm}
+        onSubmit={handleBulkCompleteConfirm}
         loading={actionLoading}
         title={completeModalTitle}
       />
