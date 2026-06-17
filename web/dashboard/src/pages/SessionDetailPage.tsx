@@ -101,8 +101,7 @@ const ExtractedLearningsCard = lazy(() => import('../components/session/Extracte
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
 const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
 
-import { CompleteReviewModal } from '../components/dashboard/CompleteReviewModal.tsx';
-import { EditFeedbackModal } from '../components/dashboard/EditFeedbackModal.tsx';
+import { ReviewModal } from '../components/dashboard/ReviewModal.tsx';
 
 // ────────────────────────────────────────────────────────────
 // Skeleton placeholders
@@ -1733,10 +1732,11 @@ export function SessionDetailPage() {
             </Suspense>
 
             {/* Review modals */}
-            <CompleteReviewModal
+            <ReviewModal
               open={reviewModalMode === REVIEW_MODAL_MODE.COMPLETE}
+              mode="complete"
               onClose={() => { setReviewModalMode(null); setReviewError(null); }}
-              onComplete={handleReviewComplete}
+              onSubmit={handleReviewComplete}
               loading={reviewLoading}
               error={reviewError}
               title={session.alert_type ? `Review: ${session.alert_type}` : undefined}
@@ -1747,13 +1747,14 @@ export function SessionDetailPage() {
               feedbackEditedAt={session.feedback_edited_at}
               initialRating={reviewInitialRating}
             />
-            <EditFeedbackModal
+            <ReviewModal
               open={reviewModalMode === REVIEW_MODAL_MODE.EDIT}
+              mode="edit"
               onClose={() => { setReviewModalMode(null); setReviewError(null); }}
-              onSave={handleReviewSave}
+              onSubmit={handleReviewSave}
               loading={reviewLoading}
               error={reviewError}
-              initialQualityRating={session.quality_rating ?? ''}
+              initialRating={session.quality_rating ?? ''}
               initialActionTaken={session.action_taken ?? ''}
               initialInvestigationFeedback={session.investigation_feedback ?? ''}
               executiveSummary={session.executive_summary}

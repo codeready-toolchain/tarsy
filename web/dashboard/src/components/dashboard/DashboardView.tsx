@@ -43,8 +43,7 @@ import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
 import { TriageView } from './TriageView.tsx';
-import { CompleteReviewModal } from './CompleteReviewModal.tsx';
-import { EditFeedbackModal } from './EditFeedbackModal.tsx';
+import { ReviewModal } from './ReviewModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
 import { useColorScheme } from '@mui/material/styles';
 import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx, glassToggleGroupSx } from '../../theme/headerStyles';
@@ -1085,10 +1084,11 @@ export function DashboardView() {
           </Box>
 
           {/* Review modals for session-level review */}
-          <CompleteReviewModal
+          <ReviewModal
             open={reviewTarget?.mode === REVIEW_MODAL_MODE.COMPLETE}
+            mode="complete"
             onClose={() => { setReviewTarget(null); setReviewError(null); }}
-            onComplete={handleSessionReviewComplete}
+            onSubmit={handleSessionReviewComplete}
             loading={reviewLoading}
             error={reviewError}
             title={reviewTarget?.session.alert_type ? `Review: ${reviewTarget.session.alert_type}` : undefined}
@@ -1099,13 +1099,14 @@ export function DashboardView() {
             feedbackEditedAt={reviewTarget?.session.feedback_edited_at}
             initialRating={reviewTarget?.session.review_status === 'reviewed' && !reviewTarget?.session.quality_rating ? REVIEW_SELECTION.ACKNOWLEDGE : undefined}
           />
-          <EditFeedbackModal
+          <ReviewModal
             open={reviewTarget?.mode === REVIEW_MODAL_MODE.EDIT}
+            mode="edit"
             onClose={() => { setReviewTarget(null); setReviewError(null); }}
-            onSave={handleSessionReviewSave}
+            onSubmit={handleSessionReviewSave}
             loading={reviewLoading}
             error={reviewError}
-            initialQualityRating={reviewTarget?.session.quality_rating ?? ''}
+            initialRating={reviewTarget?.session.quality_rating ?? ''}
             initialActionTaken={reviewTarget?.session.action_taken ?? ''}
             initialInvestigationFeedback={reviewTarget?.session.investigation_feedback ?? ''}
             executiveSummary={reviewTarget?.session.executive_summary}

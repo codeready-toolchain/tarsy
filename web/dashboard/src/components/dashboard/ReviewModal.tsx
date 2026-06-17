@@ -16,56 +16,102 @@ import {
   Alert,
   Collapse,
 } from '@mui/material';
-import { CheckCircleOutline, ThumbUp, ThumbsUpDown, ThumbDown, DoneAll } from '@mui/icons-material';
+import { CheckCircleOutline, RateReview, ThumbUp, ThumbsUpDown, ThumbDown, DoneAll } from '@mui/icons-material';
 import { ReviewModalHeader } from './ReviewModalHeader.tsx';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
 import { QUALITY_RATING, REVIEW_SELECTION } from '../../types/api.ts';
 
-export interface CompleteReviewModalProps {
+export type ReviewModalMode = 'complete' | 'edit';
+
+export interface ReviewModalProps {
   open: boolean;
+  mode: ReviewModalMode;
   onClose: () => void;
-  onComplete: (qualityRating: string, actionTaken?: string, investigationFeedback?: string) => void;
+  onSubmit: (qualityRating: string, actionTaken: string, investigationFeedback: string) => void;
   loading?: boolean;
+  error?: string | null;
   title?: string;
   executiveSummary?: string | null;
   assignee?: string | null;
   feedbackEdited?: boolean;
   feedbackEditedBy?: string | null;
   feedbackEditedAt?: string | null;
-  error?: string | null;
-  /** Pre-select a rating when the modal opens (e.g. from inline thumbs) */
   initialRating?: string;
+  initialActionTaken?: string;
+  initialInvestigationFeedback?: string;
 }
 
-export function CompleteReviewModal({ open, onClose, onComplete, loading, title, executiveSummary, assignee, feedbackEdited, feedbackEditedBy, feedbackEditedAt, error, initialRating }: CompleteReviewModalProps) {
-  const [qualityRating, setQualityRating] = useState<string>(QUALITY_RATING.ACCURATE);
+export function ReviewModal({
+  open,
+  mode,
+  onClose,
+  onSubmit,
+  loading,
+  error,
+  title,
+  executiveSummary,
+  assignee,
+  feedbackEdited,
+  feedbackEditedBy,
+  feedbackEditedAt,
+  initialRating,
+  initialActionTaken = '',
+  initialInvestigationFeedback = '',
+}: ReviewModalProps) {
+  const isEdit = mode === 'edit';
+  const optionalSuffix = isEdit ? '' : ' (optional)';
+
+  const [qualityRating, setQualityRating] = useState('');
   const [actionTaken, setActionTaken] = useState('');
   const [investigationFeedback, setInvestigationFeedback] = useState('');
+  const [showActionTaken, setShowActionTaken] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setQualityRating(initialRating || QUALITY_RATING.ACCURATE);
-      setActionTaken('');
-      setInvestigationFeedback('');
+      setQualityRating(initialRating || (isEdit ? '' : QUALITY_RATING.ACCURATE));
+      setActionTaken(initialActionTaken);
+      setInvestigationFeedback(initialInvestigationFeedback);
+      setShowActionTaken(!!initialActionTaken.trim());
     }
-  }, [open, initialRating]);
+  }, [open, isEdit, initialRating, initialActionTaken, initialInvestigationFeedback]);
 
-  const handleComplete = () => {
+  const isAcknowledge = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
+
+  const handleSubmit = () => {
     if (!qualityRating) return;
-    const isAcknowledge = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
-    onComplete(
+    onSubmit(
       qualityRating,
-      isAcknowledge ? undefined : actionTaken.trim() || undefined,
-      isAcknowledge ? undefined : investigationFeedback.trim() || undefined,
+      isAcknowledge ? '' : actionTaken.trim(),
+      isAcknowledge ? '' : investigationFeedback.trim(),
     );
   };
+
+  const changed = !isEdit || (
+    qualityRating !== (initialRating ?? '') ||
+    actionTaken.trim() !== initialActionTaken.trim() ||
+    investigationFeedback.trim() !== initialInvestigationFeedback.trim()
+  );
+
+  const headerIcon = isEdit
+    ? <RateReview color="primary" />
+    : <CheckCircleOutline color="success" />;
+  const headerTitle = isEdit
+    ? 'Edit Review Feedback'
+    : (title ?? 'Complete Review');
+
+  const submitLabel = isAcknowledge
+    ? 'Acknowledge'
+    : (isEdit ? 'Save Changes' : 'Complete Review');
+  const loadingLabel = isAcknowledge
+    ? 'Acknowledging...'
+    : (isEdit ? 'Saving...' : 'Completing...');
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth disableScrollLock>
       <ReviewModalHeader
-        icon={<CheckCircleOutline color="success" />}
-        title={title ?? 'Complete Review'}
+        icon={headerIcon}
+        title={isEdit ? headerTitle : (title ?? headerTitle)}
         feedbackEdited={feedbackEdited}
         feedbackEditedBy={feedbackEditedBy}
         feedbackEditedAt={feedbackEditedAt}
@@ -166,29 +212,47 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
           </RadioGroup>
         </FormControl>
 
-        <Collapse in={qualityRating !== REVIEW_SELECTION.ACKNOWLEDGE}>
-          <TextField
-            label="Action taken (optional)"
-            placeholder="Note about taken action, e.g., applied fix from runbook, ticket INFRA-1234"
-            value={actionTaken}
-            onChange={(e) => setActionTaken(e.target.value)}
-            multiline
-            minRows={2}
-            maxRows={4}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
+        {isEdit && isAcknowledge && initialRating && initialRating !== REVIEW_SELECTION.ACKNOWLEDGE && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Switching to Acknowledge will remove the current quality rating.
+          </Alert>
+        )}
 
+        <Collapse in={!isAcknowledge}>
           <TextField
-            label="Investigation feedback (optional)"
+            label={`Investigation feedback${optionalSuffix}`}
             placeholder="e.g., Missed the root cause, focused on wrong service"
+            helperText="Helps TARSy learn — tell it what the investigation got right or wrong to improve future analyses"
             value={investigationFeedback}
             onChange={(e) => setInvestigationFeedback(e.target.value)}
             multiline
             minRows={2}
             maxRows={4}
             fullWidth
+            sx={{ mb: 1 }}
           />
+
+          <Typography
+            variant="body2"
+            color="primary"
+            onClick={() => setShowActionTaken((v) => !v)}
+            sx={{ cursor: 'pointer', mb: 1, display: 'inline-block', '&:hover': { textDecoration: 'underline' } }}
+          >
+            {showActionTaken ? '− Hide action taken' : '+ Add action taken note'}
+          </Typography>
+          <Collapse in={showActionTaken}>
+            <TextField
+              label={`Action taken${optionalSuffix}`}
+              placeholder="e.g., applied fix from runbook, created ticket INFRA-1234"
+              helperText="For your team's records only — documents what you did to resolve the alert (not used by TARSy for learning)"
+              value={actionTaken}
+              onChange={(e) => setActionTaken(e.target.value)}
+              multiline
+              minRows={2}
+              maxRows={4}
+              fullWidth
+            />
+          </Collapse>
         </Collapse>
       </DialogContent>
 
@@ -201,15 +265,12 @@ export function CompleteReviewModal({ open, onClose, onComplete, loading, title,
           Cancel
         </Button>
         <Button
-          onClick={handleComplete}
+          onClick={handleSubmit}
           variant="contained"
-          color={qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'primary' : 'success'}
-          disabled={!qualityRating || loading}
+          color={isAcknowledge ? 'primary' : (isEdit ? undefined : 'success')}
+          disabled={!changed || !qualityRating || loading}
         >
-          {loading
-            ? (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'Acknowledging...' : 'Completing...')
-            : (qualityRating === REVIEW_SELECTION.ACKNOWLEDGE ? 'Acknowledge' : 'Complete Review')
-          }
+          {loading ? loadingLabel : submitLabel}
         </Button>
       </DialogActions>
     </Dialog>
