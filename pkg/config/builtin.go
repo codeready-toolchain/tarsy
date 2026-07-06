@@ -274,9 +274,9 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Anthropic ---
 		"anthropic-default": {
 			Type:                LLMProviderTypeAnthropic,
-			Model:               "claude-sonnet-4-6-20260217",
+			Model:               "claude-sonnet-5", // Dateless canonical model ID
 			APIKeyEnv:           "ANTHROPIC_API_KEY",
-			MaxToolResultTokens: 900000, // Conservative for 1M context (beta)
+			MaxToolResultTokens: 950000, // Conservative for 1M context (GA)
 		},
 
 		// --- xAI ---
@@ -290,10 +290,10 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Vertex AI ---
 		"vertexai-default": {
 			Type:                LLMProviderTypeVertexAI,
-			Model:               "claude-sonnet-4-6",     // Claude Sonnet 4.6 on Vertex AI
+			Model:               "claude-sonnet-5",       // Claude Sonnet 5 on Vertex AI
 			ProjectEnv:          "GOOGLE_CLOUD_PROJECT",  // Standard GCP project ID env var
 			LocationEnv:         "GOOGLE_CLOUD_LOCATION", // Standard GCP location env var
-			MaxToolResultTokens: 900000,                  // Conservative for 1M context (beta)
+			MaxToolResultTokens: 950000,                  // Conservative for 1M context (GA)
 		},
 	}
 }

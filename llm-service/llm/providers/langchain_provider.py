@@ -10,6 +10,7 @@ import enum
 import json
 import logging
 import os
+import re
 import uuid
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
@@ -111,14 +112,26 @@ class LangChainProvider(LLMProvider):
             "reasoning": {"effort": "high", "summary": "auto"},
         }
 
-    @staticmethod
-    def _get_anthropic_thinking_kwargs(_model: str) -> dict:
-        """Return kwargs to enable extended thinking for Claude models.
+    # Matches bare-major-version-5 Claude model families (e.g. claude-sonnet-5,
+    # claude-sonnet-5-20260101, claude-fable-5). These generations only support
+    # adaptive thinking; the legacy manual budget_tokens control returns a 400.
+    # Does NOT match minor releases like claude-sonnet-4-5 (still on manual thinking).
+    _ADAPTIVE_ONLY_THINKING_RE = re.compile(r"claude-[a-z]+-5(?:-|$)")
 
-        Extended thinking is enabled by default. budget_tokens must be
-        less than max_tokens.  _model is accepted (but currently unused)
-        to match the signature of the other _get_*_kwargs helpers.
+    @classmethod
+    def _get_anthropic_thinking_kwargs(cls, model: str) -> dict:
+        """Return kwargs to enable thinking for Claude models.
+
+        budget_tokens must be less than max_tokens. Claude Sonnet 5 (and other
+        5th-generation models) removed manual budget_tokens thinking in favor
+        of always-on adaptive thinking; passing budget_tokens to those models
+        returns a 400 error, so they get the adaptive form instead.
         """
+        if cls._ADAPTIVE_ONLY_THINKING_RE.search(model.lower()):
+            return {
+                "thinking": {"type": "adaptive"},
+                "max_tokens": 64000,
+            }
         return {
             "thinking": {"type": "enabled", "budget_tokens": 32000},
             "max_tokens": 64000,
