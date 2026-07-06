@@ -282,7 +282,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:          "anthropic-default",
 			providerID:    "anthropic-default",
 			wantType:      LLMProviderTypeAnthropic,
-			wantMinTokens: 800000,
+			wantMinTokens: 900000,
 			checkAPIKey:   true,
 		},
 		{
@@ -338,7 +338,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:          "vertexai-default",
 			providerID:    "vertexai-default",
 			wantType:      LLMProviderTypeVertexAI,
-			wantMinTokens: 800000,
+			wantMinTokens: 900000,
 			checkAPIKey:   false, // VertexAI uses ProjectEnv/LocationEnv
 		},
 	}

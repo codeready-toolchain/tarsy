@@ -174,15 +174,25 @@ class TestLangChainProviderReasoningConfig:
     def test_openai_no_reasoning(self, model):
         assert LangChainProvider._get_openai_reasoning_kwargs(model) == {}
 
-    # --- Anthropic: thinking enabled for all models ---
+    # --- Anthropic: manual budget-based thinking for pre-5th-gen models ---
     @pytest.mark.parametrize("model", [
         "claude-sonnet-4-5-20250929", "claude-opus-4-6",
-        "claude-haiku-4-5-20251001", "claude-sonnet-5-20260101",
+        "claude-haiku-4-5-20251001", "claude-sonnet-4-6-20260217",
     ])
     def test_anthropic_thinking(self, model):
         result = LangChainProvider._get_anthropic_thinking_kwargs(model)
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 32000
+        assert result["max_tokens"] == 64000
+
+    # --- Anthropic: 5th-gen models only support adaptive thinking (manual
+    # budget_tokens returns a 400 error on these) ---
+    @pytest.mark.parametrize("model", [
+        "claude-sonnet-5", "claude-sonnet-5-20260101",
+    ])
+    def test_anthropic_adaptive_thinking(self, model):
+        result = LangChainProvider._get_anthropic_thinking_kwargs(model)
+        assert result["thinking"] == {"type": "adaptive"}
         assert result["max_tokens"] == 64000
 
 

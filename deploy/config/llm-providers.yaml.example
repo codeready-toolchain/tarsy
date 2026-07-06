@@ -90,12 +90,19 @@ llm_providers:
 # ANTHROPIC / CLAUDE PROVIDERS
 # =============================================================================
 
-  # Claude Sonnet 4.6 for balanced performance (default)
+  # Claude Sonnet 5 for balanced performance (default)
+  claude-sonnet-5:
+    type: anthropic
+    model: claude-sonnet-5
+    api_key_env: ANTHROPIC_API_KEY
+    max_tool_result_tokens: 950000  # Conservative for 1M context
+
+  # Claude Sonnet 4.6 (previous generation, pinned)
   claude-sonnet-4-6:
     type: anthropic
     model: claude-sonnet-4-6-20260217
     api_key_env: ANTHROPIC_API_KEY
-    max_tool_result_tokens: 900000  # Conservative for 1M context (beta)
+    max_tool_result_tokens: 900000  # Conservative for 1M context
 
   # Claude Opus for maximum capability
   claude-opus:
@@ -133,13 +140,13 @@ llm_providers:
 # VERTEX AI PROVIDERS (GCP)
 # =============================================================================
 
-  # Claude Sonnet 4.6 on Vertex AI
+  # Claude Sonnet 5 on Vertex AI
   vertexai-claude-sonnet:
     type: vertexai
-    model: claude-sonnet-4-6@20260217
+    model: claude-sonnet-5
     project_env: GCP_PROJECT
     location_env: GCP_LOCATION
-    max_tool_result_tokens: 900000  # Conservative for 1M context (beta)
+    max_tool_result_tokens: 950000  # Conservative for 1M context
 
   # Gemini on Vertex AI
   vertexai-gemini-pro:
