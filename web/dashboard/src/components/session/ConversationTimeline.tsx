@@ -17,6 +17,7 @@ import {
   KeyboardDoubleArrowDown,
   AccountTree,
   Forum,
+  SwapHoriz,
 } from '@mui/icons-material';
 import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
@@ -27,6 +28,7 @@ import {
   isFlowItemCollapsible,
   isFlowItemTerminal,
   flowItemsToPlainText,
+  countProviderFallbacks,
 } from '../../utils/timelineParser';
 import { TIMELINE_EVENT_TYPES, STAGE_TYPE, COLLAPSIBLE_STAGE_TYPES } from '../../constants/eventTypes';
 import StageSeparator from '../timeline/StageSeparator';
@@ -298,6 +300,9 @@ export default function ConversationTimeline({
   // --- Copy ---
   const plainText = useMemo(() => flowItemsToPlainText(items), [items]);
 
+  // --- Provider fallback rollup (session-wide, for the collapsed header pill) ---
+  const totalFallbackCount = useMemo(() => countProviderFallbacks(items), [items]);
+
   // --- Stage lookup (for execution overviews) ---
   const stageMap = useMemo(() => {
     const map = new Map<string, StageOverview>();
@@ -474,6 +479,28 @@ export default function ConversationTimeline({
                 </Box>
               </Tooltip>
             )}
+            {totalFallbackCount > 0 && (
+              <Tooltip title={`Provider fallback${totalFallbackCount > 1 ? ` (${totalFallbackCount}×)` : ''} in this session`}>
+                <Box
+                  sx={(theme) => ({
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    px: 1,
+                    py: 0.5,
+                    backgroundColor: alpha(theme.palette.warning.main, 0.08),
+                    borderRadius: '16px',
+                    border: '1px solid',
+                    borderColor: alpha(theme.palette.warning.main, 0.35),
+                  })}
+                >
+                  <SwapHoriz sx={{ fontSize: 16, color: 'warning.main' }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'warning.main', minWidth: '1ch', textAlign: 'center' }}>
+                    {totalFallbackCount}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            )}
           </Box>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
             {timelineCollapsed
@@ -590,6 +617,7 @@ export default function ConversationTimeline({
                       return next;
                     });
                   }}
+                  fallbackCount={countProviderFallbacks(group.items)}
                 />
               )}
 

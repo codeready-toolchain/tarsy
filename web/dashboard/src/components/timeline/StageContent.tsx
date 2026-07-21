@@ -6,8 +6,9 @@ import {
   PlayArrow,
   CallSplit,
   CancelOutlined,
+  SwapHoriz,
 } from '@mui/icons-material';
-import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
+import { FLOW_ITEM, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -465,6 +466,23 @@ const StageContent: React.FC<StageContentProps> = ({
     return byExec;
   }, [executions, subAgentIds]);
 
+  // Provider-fallback rollup per top-level execution: its own items plus any
+  // fallbacks from sub-agents it dispatched, so the agent card badge stays
+  // visible without digging into a nested SubAgentCard.
+  const fallbackCountByExec = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const execution of executions) {
+      counts.set(execution.executionId, countProviderFallbacks(execution.items));
+    }
+    for (const [subExecId, subItems] of subAgentItemsByExec) {
+      const parentId = subAgentParentMap.get(subExecId);
+      if (!parentId) continue;
+      const subCount = countProviderFallbacks(subItems);
+      counts.set(parentId, (counts.get(parentId) || 0) + subCount);
+    }
+    return counts;
+  }, [executions, subAgentItemsByExec, subAgentParentMap]);
+
   // Check if any parallel agent is still running (for "Waiting for other agents...")
   const hasOtherActiveAgents = useMemo(() => {
     if (!isMultiAgent) return false;
@@ -696,6 +714,21 @@ const StageContent: React.FC<StageContentProps> = ({
                     sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic', opacity: 0.7 }}
                   />
                 ) : null}
+                {(() => {
+                  const fallbackCount = fallbackCountByExec.get(execution.executionId) || 0;
+                  if (fallbackCount === 0) return null;
+                  return (
+                    <Tooltip title={`Provider fallback${fallbackCount > 1 ? ` (${fallbackCount}×)` : ''}`}>
+                      <Chip
+                        icon={<SwapHoriz sx={{ fontSize: '0.8rem' }} />}
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        sx={{ height: 18, minWidth: 18, '& .MuiChip-label': { px: 0, display: 'none' }, '& .MuiChip-icon': { mx: 0 } }}
+                      />
+                    </Tooltip>
+                  );
+                })()}
               </Box>
               {/* Row 2: model info (left) + tokens (right) */}
               <Box display="flex" alignItems="center" gap={1} mt={0.5}>

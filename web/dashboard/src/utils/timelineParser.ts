@@ -391,6 +391,20 @@ export function getTimelineStats(items: FlowItem[], stages: StageOverview[]): Ti
   return stats;
 }
 
+/**
+ * Count provider-fallback events within a flat list of FlowItems.
+ * Used to roll up fallback occurrences onto parent visual nodes (sub-agent
+ * cards, parallel-agent cards, stage separators) so they don't stay hidden
+ * until a user expands all the way down to the leaf item.
+ */
+export function countProviderFallbacks(items: FlowItem[]): number {
+  let count = 0;
+  for (const item of items) {
+    if (item.type === FLOW_ITEM.PROVIDER_FALLBACK) count++;
+  }
+  return count;
+}
+
 // --- Collapse helpers ---
 
 /** Types that support auto-collapse. */
