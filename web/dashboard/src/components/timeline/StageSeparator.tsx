@@ -1,8 +1,8 @@
 import { memo, useCallback } from 'react';
-import { Box, Typography, Divider, Alert } from '@mui/material';
+import { Box, Typography, Divider, Alert, Chip, Tooltip } from '@mui/material';
 import {
   Search, ExpandMore, ExpandLess,
-  MergeType, SmsOutlined, AutoAwesome, BuildOutlined,
+  MergeType, SmsOutlined, AutoAwesome, BuildOutlined, SwapHoriz,
 } from '@mui/icons-material';
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
@@ -13,6 +13,8 @@ interface StageSeparatorProps {
   item: FlowItem;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Total provider-fallback count within this stage (own items + all sub-agents) */
+  fallbackCount?: number;
 }
 
 function getStageTypeIcon(stageType: string | undefined) {
@@ -31,7 +33,7 @@ function getStageTypeIcon(stageType: string | undefined) {
  * StageSeparator — minimal stage boundary divider.
  * A single clickable line: icon + stage name + chevron.
  */
-function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSeparatorProps) {
+function StageSeparator({ item, isCollapsed = false, onToggleCollapse, fallbackCount = 0 }: StageSeparatorProps) {
   const stageStatus = (item.metadata?.stage_status as string) || '';
   const stageType = item.metadata?.stage_type as string | undefined;
   const isErrorStatus = FAILED_EXECUTION_STATUSES.has(stageStatus);
@@ -86,6 +88,21 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse }: StageSe
         >
           {getStageTypeIcon(stageType)}
           {stageName}
+          {fallbackCount > 0 && (
+            <Tooltip title={`Provider fallback${fallbackCount > 1 ? ` (${fallbackCount}×)` : ''} in this stage`}>
+              <Chip
+                icon={<SwapHoriz sx={{ fontSize: '0.75rem' }} />}
+                size="small"
+                color="warning"
+                variant="outlined"
+                sx={{
+                  height: 16, minWidth: 16, ml: 0.5,
+                  '& .MuiChip-label': { px: 0, display: 'none' },
+                  '& .MuiChip-icon': { mx: 0 },
+                }}
+              />
+            </Tooltip>
+          )}
           {onToggleCollapse && (
             isCollapsed
               ? <ExpandMore sx={{ fontSize: 18, ml: 0.25, transition: 'transform 0.3s' }} />

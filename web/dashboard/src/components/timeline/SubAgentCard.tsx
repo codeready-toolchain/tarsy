@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Chip, Collapse, IconButton, Alert, alpha, keyframes, useTheme } from '@mui/material';
+import { Box, Typography, Chip, Collapse, IconButton, Alert, Tooltip, alpha, keyframes, useTheme } from '@mui/material';
 import {
   ExpandMore,
   ExpandLess,
   Hub,
   CheckCircle,
+  SwapHoriz,
 } from '@mui/icons-material';
-import { flowItemsToPlainText, type FlowItem } from '../../utils/timelineParser';
+import { flowItemsToPlainText, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -76,6 +77,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
   const theme = useTheme();
   const hasContent = items.length > 0 || dedupedStreaming.length > 0;
+  const fallbackCount = React.useMemo(() => countProviderFallbacks(items), [items]);
 
   const copyText = React.useMemo(() => {
     const header = `Sub-agent: ${agentName}`;
@@ -133,6 +135,17 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           {agentName}
         </Typography>
         <Box sx={{ flex: 1 }} />
+        {fallbackCount > 0 && (
+          <Tooltip title={`Provider fallback${fallbackCount > 1 ? ` (${fallbackCount}×)` : ''}`}>
+            <Chip
+              icon={<SwapHoriz sx={{ fontSize: '0.8rem' }} />}
+              size="small"
+              color="warning"
+              variant="outlined"
+              sx={{ height: 18, minWidth: 18, flexShrink: 0, '& .MuiChip-label': { px: 0, display: 'none' }, '& .MuiChip-icon': { mx: 0 } }}
+            />
+          </Tooltip>
+        )}
         {isCompleted && (
           <CheckCircle sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
         )}
