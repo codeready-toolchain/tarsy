@@ -275,6 +275,8 @@ func (s *Server) setupRoutes() {
 	v1.GET("/system/warnings", s.systemWarningsHandler)
 	v1.GET("/system/mcp-servers", s.mcpServersHandler)
 	v1.GET("/system/default-tools", s.defaultToolsHandler)
+	v1.GET("/system/config", s.systemConfigHandler)
+	v1.GET("/system/config/skills/:name", s.systemConfigSkillHandler)
 	v1.GET("/alert-types", s.alertTypesHandler)
 	v1.GET("/runbooks", s.handleListRunbooks)
 

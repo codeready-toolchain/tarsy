@@ -183,6 +183,18 @@ func (app *TestApp) GetDefaultTools(t *testing.T) map[string]interface{} {
 	return app.getJSON(t, "/api/v1/system/default-tools", http.StatusOK)
 }
 
+// GetSystemConfig calls GET /api/v1/system/config.
+func (app *TestApp) GetSystemConfig(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/config", http.StatusOK)
+}
+
+// GetSystemConfigSkill calls GET /api/v1/system/config/skills/:name.
+func (app *TestApp) GetSystemConfigSkill(t *testing.T, name string, expectedStatus int) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/config/skills/"+name, expectedStatus)
+}
+
 // GetAlertTypes calls GET /api/v1/alert-types.
 func (app *TestApp) GetAlertTypes(t *testing.T) map[string]interface{} {
 	t.Helper()

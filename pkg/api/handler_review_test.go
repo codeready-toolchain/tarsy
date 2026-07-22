@@ -51,7 +51,9 @@ func TestUpdateReviewHandler_TooManyIDs(t *testing.T) {
 		if i > 0 {
 			ids.WriteString(",")
 		}
-		ids.WriteString(`"id-` + strings.Repeat("x", 5) + `"`)
+		ids.WriteString(`"id-`)
+		ids.WriteString(strings.Repeat("x", 5))
+		ids.WriteString(`"`)
 	}
 	ids.WriteString(`],"action":"claim"}`)
 
