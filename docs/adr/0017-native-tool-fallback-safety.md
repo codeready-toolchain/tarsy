@@ -39,7 +39,7 @@ The skip is unconditional (hard guard). An agent without its native tools is bro
 
 The guard distinguishes between:
 - **Agent requires native tools** — agent definition declares `NativeTools` with at least one enabled tool (e.g. WebResearcher, CodeExecutor). Losing them breaks the agent.
-- **Provider happens to support native tools** — agent uses a Gemini provider but doesn't declare `NativeTools` in its definition (e.g. VMRemediationAgent, orchestrators running on `gemini-3.5-flash`). Falling back to langchain is fine.
+- **Provider happens to support native tools** — agent uses a Gemini provider but doesn't declare `NativeTools` in its definition (e.g. VMRemediationAgent, orchestrators running on `google-default`). Falling back to langchain is fine.
 
 Checking the provider's NativeTools alone is insufficient — all Gemini providers declare `google_search: true, url_context: true` by default, so any agent on a Gemini provider would trigger the guard incorrectly.
 
