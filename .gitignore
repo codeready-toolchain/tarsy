@@ -49,6 +49,9 @@ htmlcov/
 *.swo
 *~
 
+# Cursor (local-only commands)
+.cursor/commands/common/
+
 # OS
 .DS_Store
 Thumbs.db
