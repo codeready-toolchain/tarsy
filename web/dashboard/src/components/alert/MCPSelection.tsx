@@ -182,9 +182,10 @@ export function MCPSelection({
     }
   }, [alertType]);
 
-  // Load on first expansion or when alert type changes
+  // Load on first expansion or when alert type changes.
+  // Always start a load when expanded — latestRequestIdRef ignores stale completions.
   useEffect(() => {
-    if (expanded && !loading && !error) {
+    if (expanded) {
       (async () => {
         await loadDefaultsAndServers();
       })();

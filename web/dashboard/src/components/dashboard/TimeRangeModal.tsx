@@ -42,6 +42,11 @@ interface TimePreset {
   getDateRange: () => { start: Date; end: Date };
 }
 
+/** Compare optional dates by timestamp; null/undefined only match the same sentinel. */
+function sameDate(a?: Date | null, b?: Date | null): boolean {
+  return a === b || (a != null && b != null && a.getTime() === b.getTime());
+}
+
 /**
  * TimeRangeModal — Advanced Time Range Selection
  * Provides both preset time ranges and custom date/time selection in a modal dialog.
@@ -117,6 +122,7 @@ export function TimeRangeModal({
   ];
 
   // Reset state when modal opens (null = not yet synced).
+  // Compare dates by timestamp so new Date instances with the same value don't retrigger.
   const [resetSnapshot, setResetSnapshot] = useState<{
     open: boolean;
     startDate?: Date | null;
@@ -125,8 +131,8 @@ export function TimeRangeModal({
   if (
     resetSnapshot === null ||
     open !== resetSnapshot.open ||
-    startDate !== resetSnapshot.startDate ||
-    endDate !== resetSnapshot.endDate
+    !sameDate(startDate, resetSnapshot.startDate) ||
+    !sameDate(endDate, resetSnapshot.endDate)
   ) {
     setResetSnapshot({ open, startDate, endDate });
     if (open) {
