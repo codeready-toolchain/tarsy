@@ -23,6 +23,9 @@ mcp_servers:
 agents:
   SimpleAgent:
     custom_instructions: "You are SimpleAgent, performing a quick analysis."
+    # Empty allowlist: keep example-skill in the registry for SystemConfig e2e,
+    # but do not expose load_skill (avoids a tool_list MCP interaction).
+    skills: []
 
 agent_chains:
   concurrency-chain:
