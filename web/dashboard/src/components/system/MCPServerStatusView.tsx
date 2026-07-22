@@ -29,7 +29,12 @@ import type { MCPServerStatus } from '../../types/system.ts';
 
 const POLL_INTERVAL_MS = 15_000; // 15 seconds, matching backend health check interval
 
-export function MCPServerStatusView() {
+interface MCPServerStatusViewProps {
+  /** When false, skip polling (e.g. while another System Status tab is active). */
+  pollingEnabled?: boolean;
+}
+
+export function MCPServerStatusView({ pollingEnabled = true }: MCPServerStatusViewProps) {
   const [servers, setServers] = useState<MCPServerStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,10 +54,13 @@ export function MCPServerStatusView() {
   }, []);
 
   useEffect(() => {
+    if (!pollingEnabled) {
+      return;
+    }
     fetchServers();
     const interval = setInterval(fetchServers, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [fetchServers]);
+  }, [fetchServers, pollingEnabled]);
 
   const handleToggleExpand = (serverId: string) => {
     setExpandedServer(expandedServer === serverId ? null : serverId);

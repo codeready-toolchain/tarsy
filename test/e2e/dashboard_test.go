@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -467,6 +469,108 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, false, nativeTools["google_search"])
 		assert.Equal(t, false, nativeTools["code_execution"])
 		assert.Equal(t, false, nativeTools["url_context"])
+	})
+
+	// ── System Config (sanitized effective snapshot) ──
+	t.Run("SystemConfig", func(t *testing.T) {
+		cfg := app.GetSystemConfig(t)
+		raw, err := json.Marshal(cfg)
+		require.NoError(t, err)
+		body := string(raw)
+
+		// Sentinel secrets from concurrency test config must never appear.
+		assert.NotContains(t, body, "E2E_SENTINEL_MCP_ARG")
+		assert.NotContains(t, body, "E2E_SENTINEL_MCP_ENV")
+		assert.NotContains(t, body, "E2E_SENTINEL_URL_SECRET")
+		assert.NotContains(t, body, "E2E_SENTINEL_QUERY")
+		assert.NotContains(t, body, "E2E_SENTINEL_BEARER")
+		assert.NotContains(t, body, "E2E_SENTINEL_BASE_URL")
+		assert.NotContains(t, body, "E2E_SENTINEL_BASE_QUERY")
+		assert.NotContains(t, body, "E2E_SENTINEL_SKILL_BODY")
+		assert.NotContains(t, body, "ghp_FAKE_NOT_REAL_GITHUB_TOKEN_XXXXXXXXXXXX")
+
+		defaults, ok := cfg["defaults"].(map[string]interface{})
+		require.True(t, ok, "defaults should be a map")
+		assert.Equal(t, "test-provider", defaults["llm_provider"])
+
+		agents, ok := cfg["agents"].(map[string]interface{})
+		require.True(t, ok, "agents should be a map")
+		simple, ok := agents["SimpleAgent"].(map[string]interface{})
+		require.True(t, ok, "SimpleAgent should be present")
+		assert.Equal(t, "You are SimpleAgent, performing a quick analysis.", simple["custom_instructions"])
+		_, hasLLMProvider := simple["llm_provider"]
+		assert.False(t, hasLLMProvider, "agents must not expose llm_provider")
+
+		chains, ok := cfg["chains"].(map[string]interface{})
+		require.True(t, ok, "chains should be a map")
+		concurrency, ok := chains["concurrency-chain"].(map[string]interface{})
+		require.True(t, ok, "concurrency-chain should be present")
+		alertTypes, ok := concurrency["alert_types"].([]interface{})
+		require.True(t, ok)
+		assert.Contains(t, alertTypes, "test-concurrency")
+
+		mcpServers, ok := cfg["mcp_servers"].(map[string]interface{})
+		require.True(t, ok, "mcp_servers should be a map")
+
+		k8s, ok := mcpServers["kubernetes-server"].(map[string]interface{})
+		require.True(t, ok, "kubernetes-server should be present")
+		k8sTransport, ok := k8s["transport"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "stdio", k8sTransport["type"])
+		assert.Equal(t, "***", k8sTransport["command"], "secret-looking command must be redacted")
+		assert.Equal(t, []interface{}{"***"}, k8sTransport["args"])
+		envKeys, ok := k8sTransport["env_keys"].([]interface{})
+		require.True(t, ok)
+		assert.Contains(t, envKeys, "KUBE_TOKEN")
+		_, hasEnv := k8sTransport["env"]
+		assert.False(t, hasEnv, "raw env map must not appear")
+		_, hasBearer := k8sTransport["bearer_token"]
+		assert.False(t, hasBearer, "raw bearer_token must not appear")
+
+		httpProbe, ok := mcpServers["http-probe-server"].(map[string]interface{})
+		require.True(t, ok, "http-probe-server should be present")
+		httpTransport, ok := httpProbe["transport"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "https://mcp.example.com/v1", httpTransport["url"])
+		assert.Equal(t, true, httpTransport["bearer_token_set"])
+		_, hasRawBearer := httpTransport["bearer_token"]
+		assert.False(t, hasRawBearer)
+
+		providers, ok := cfg["llm_providers"].(map[string]interface{})
+		require.True(t, ok, "llm_providers should be a map")
+		testProvider, ok := providers["test-provider"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "https://llm.example.com/v1", testProvider["base_url"])
+
+		skills, ok := cfg["skills"].(map[string]interface{})
+		require.True(t, ok, "skills should be a map")
+		require.Contains(t, skills, "example-skill")
+		for name, rawSkill := range skills {
+			meta, ok := rawSkill.(map[string]interface{})
+			require.True(t, ok, "skill %s should be an object", name)
+			_, hasBody := meta["body"]
+			assert.False(t, hasBody, "skill %s snapshot must omit body", name)
+			assert.Equal(t, name, meta["name"])
+		}
+
+		queue, ok := cfg["queue"].(map[string]interface{})
+		require.True(t, ok, "queue should be a map")
+		_, pollIsString := queue["poll_interval"].(string)
+		assert.True(t, pollIsString, "queue.poll_interval should be a duration string")
+	})
+
+	t.Run("SystemConfigSkillDetail", func(t *testing.T) {
+		resp := app.GetSystemConfigSkill(t, "example-skill", http.StatusOK)
+		assert.Equal(t, "example-skill", resp["name"])
+		assert.Equal(t, "Example skill for config viewer e2e coverage.", resp["description"])
+		body, ok := resp["body"].(string)
+		require.True(t, ok)
+		assert.Contains(t, body, "E2E_SENTINEL_SKILL_BODY")
+	})
+
+	t.Run("SystemConfigSkillNotFound", func(t *testing.T) {
+		resp := app.GetSystemConfigSkill(t, "definitely-missing-skill", http.StatusNotFound)
+		assert.NotEmpty(t, resp) // Echo error body
 	})
 
 	// ── Alert Types (from config, not DB: concurrency-chain + kubernetes) ──

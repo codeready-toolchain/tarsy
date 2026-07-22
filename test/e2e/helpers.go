@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -181,6 +182,18 @@ func (app *TestApp) GetMCPServers(t *testing.T) map[string]interface{} {
 func (app *TestApp) GetDefaultTools(t *testing.T) map[string]interface{} {
 	t.Helper()
 	return app.getJSON(t, "/api/v1/system/default-tools", http.StatusOK)
+}
+
+// GetSystemConfig calls GET /api/v1/system/config.
+func (app *TestApp) GetSystemConfig(t *testing.T) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/config", http.StatusOK)
+}
+
+// GetSystemConfigSkill calls GET /api/v1/system/config/skills/:name.
+func (app *TestApp) GetSystemConfigSkill(t *testing.T, name string, expectedStatus int) map[string]interface{} {
+	t.Helper()
+	return app.getJSON(t, "/api/v1/system/config/skills/"+url.PathEscape(name), expectedStatus)
 }
 
 // GetAlertTypes calls GET /api/v1/alert-types.

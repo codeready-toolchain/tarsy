@@ -50,6 +50,8 @@ import {
   submitAlert,
   getHealth,
   getDefaultTools,
+  getSystemConfig,
+  getSystemConfigSkill,
 } from '../../services/api';
 
 function getMockClient() {
@@ -191,6 +193,23 @@ describe('API methods', () => {
       expect(client.get).toHaveBeenCalledWith('/api/v1/system/default-tools', {
         params: undefined,
       });
+    });
+  });
+
+  describe('getSystemConfig', () => {
+    it('calls system config endpoint', async () => {
+      client.get.mockResolvedValue({ data: { agents: {}, skills: {} } });
+      const result = await getSystemConfig();
+      expect(client.get).toHaveBeenCalledWith('/api/v1/system/config');
+      expect(result.agents).toEqual({});
+    });
+  });
+
+  describe('getSystemConfigSkill', () => {
+    it('calls skill detail endpoint with encoded name', async () => {
+      client.get.mockResolvedValue({ data: { name: 'my skill', body: '...' } });
+      await getSystemConfigSkill('my skill');
+      expect(client.get).toHaveBeenCalledWith('/api/v1/system/config/skills/my%20skill');
     });
   });
 });

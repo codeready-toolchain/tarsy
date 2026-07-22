@@ -153,3 +153,214 @@ export interface HealthResponse {
   mcp_health?: Record<string, MCPHealthStatus>;
   warnings?: SystemWarning[];
 }
+
+// ── System config viewer (GET /api/v1/system/config) ─────────
+
+/** Sanitized MCP transport (secrets redacted). */
+export interface SanitizedTransport {
+  type: string;
+  command?: string;
+  args?: string[];
+  url?: string;
+  verify_ssl?: boolean | null;
+  timeout?: number;
+  env_keys?: string[];
+  bearer_token_set: boolean;
+}
+
+/** MCP server config view. */
+export interface MCPServerConfigView {
+  transport: SanitizedTransport;
+  instructions?: string;
+  data_masking?: Record<string, unknown> | null;
+  summarization?: Record<string, unknown> | null;
+}
+
+/** Agent config view. */
+export interface AgentConfigView {
+  type?: string;
+  description?: string;
+  mcp_servers?: string[];
+  custom_instructions: string;
+  llm_backend?: string;
+  max_iterations?: number | null;
+  native_tools?: Record<string, boolean>;
+  orchestrator?: OrchestratorView | null;
+  skills?: string[] | null;
+  required_skills?: string[];
+}
+
+export interface OrchestratorView {
+  max_concurrent_agents?: number | null;
+  agent_timeout?: string | null;
+  max_budget?: string | null;
+}
+
+export interface FallbackProviderView {
+  provider: string;
+  backend: string;
+}
+
+export interface SubAgentView {
+  name: string;
+  llm_provider?: string;
+  llm_backend?: string;
+  max_iterations?: number | null;
+  mcp_servers?: string[];
+  required_skills?: string[];
+  skills?: string[];
+}
+
+export interface StageAgentView {
+  name: string;
+  type?: string;
+  llm_provider?: string;
+  llm_backend?: string;
+  max_iterations?: number | null;
+  mcp_servers?: string[];
+  sub_agents?: SubAgentView[];
+  fallback_providers?: FallbackProviderView[];
+  required_skills?: string[];
+  skills?: string[];
+}
+
+export interface StageView {
+  name: string;
+  agents: StageAgentView[];
+  replicas?: number;
+  success_policy?: string;
+  max_iterations?: number | null;
+  mcp_servers?: string[];
+  fallback_providers?: FallbackProviderView[];
+  sub_agents?: SubAgentView[];
+  synthesis?: {
+    agent?: string;
+    llm_backend?: string;
+    llm_provider?: string;
+  } | null;
+}
+
+export interface ChatView {
+  enabled: boolean;
+  agent?: string;
+  llm_backend?: string;
+  llm_provider?: string;
+  mcp_servers?: string[];
+  max_iterations?: number | null;
+  sub_agents?: SubAgentView[];
+}
+
+export interface ScoringView {
+  enabled: boolean;
+  agent?: string;
+  llm_backend?: string;
+  llm_provider?: string;
+  mcp_servers?: string[];
+  max_iterations?: number | null;
+}
+
+export interface ChainConfigView {
+  alert_types: string[];
+  description?: string;
+  stages: StageView[];
+  chat?: ChatView | null;
+  scoring?: ScoringView | null;
+  llm_provider?: string;
+  executive_summary_provider?: string;
+  llm_backend?: string;
+  fallback_providers?: FallbackProviderView[];
+  max_iterations?: number | null;
+  mcp_servers?: string[];
+  sub_agents?: SubAgentView[];
+}
+
+export interface LLMProviderConfigView {
+  type: string;
+  model: string;
+  api_key_env?: string;
+  credentials_env?: string;
+  project_env?: string;
+  location_env?: string;
+  base_url?: string;
+  max_tool_result_tokens: number;
+  native_tools?: Record<string, boolean>;
+}
+
+export interface SkillMetaView {
+  name: string;
+  description: string;
+}
+
+export interface DefaultsView {
+  llm_provider?: string;
+  max_iterations?: number | null;
+  llm_backend?: string;
+  fallback_providers?: FallbackProviderView[];
+  scoring?: ScoringView | null;
+  success_policy?: string;
+  alert_type?: string;
+  runbook?: string;
+  alert_masking?: { enabled: boolean; pattern_group: string } | null;
+  orchestrator?: OrchestratorView | null;
+  memory?: {
+    enabled: boolean;
+    max_inject?: number;
+    reflector_memory_limit?: number;
+    embedding?: {
+      provider?: string;
+      model?: string;
+      api_key_env?: string;
+      dimensions?: number;
+      base_url?: string;
+    };
+  } | null;
+}
+
+export interface QueueView {
+  worker_count: number;
+  max_concurrent_sessions: number;
+  poll_interval: string;
+  poll_interval_jitter: string;
+  session_timeout: string;
+  graceful_shutdown_timeout: string;
+  scoring_shutdown_timeout: string;
+  orphan_detection_interval: string;
+  orphan_threshold: string;
+  heartbeat_interval: string;
+}
+
+export interface SystemSettingsView {
+  github?: { token_env?: string } | null;
+  slack?: { enabled: boolean; token_env?: string; channel?: string } | null;
+  runbooks?: {
+    repo_url?: string;
+    cache_ttl?: string;
+    allowed_domains?: string[];
+  } | null;
+  retention?: {
+    session_retention_days: number;
+    event_ttl: string;
+    cleanup_interval: string;
+  } | null;
+  dashboard_url?: string;
+  allowed_ws_origins: string[];
+}
+
+/** Full sanitized config snapshot. */
+export interface SystemConfigResponse {
+  defaults: DefaultsView | null;
+  queue: QueueView | null;
+  system: SystemSettingsView;
+  agents: Record<string, AgentConfigView>;
+  chains: Record<string, ChainConfigView>;
+  mcp_servers: Record<string, MCPServerConfigView>;
+  llm_providers: Record<string, LLMProviderConfigView>;
+  skills: Record<string, SkillMetaView>;
+}
+
+/** Skill detail with body (GET /api/v1/system/config/skills/:name). */
+export interface SystemConfigSkillResponse {
+  name: string;
+  description: string;
+  body: string;
+}

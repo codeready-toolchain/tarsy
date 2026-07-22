@@ -46,6 +46,8 @@ import type {
   DefaultToolsResponse,
   AlertTypesResponse,
   FilterOptionsResponse,
+  SystemConfigResponse,
+  SystemConfigSkillResponse,
 } from '../types/system.ts';
 
 // ────────────────────────────────────────────────────────────
@@ -270,6 +272,22 @@ export async function getDefaultTools(alertType?: string): Promise<DefaultToolsR
   const response = await client.get<DefaultToolsResponse>('/api/v1/system/default-tools', {
     params,
   });
+  return response.data;
+}
+
+export async function getSystemConfig(): Promise<SystemConfigResponse> {
+  const response = await retryOnTemporaryError(() =>
+    client.get<SystemConfigResponse>('/api/v1/system/config'),
+  );
+  return response.data;
+}
+
+export async function getSystemConfigSkill(name: string): Promise<SystemConfigSkillResponse> {
+  const response = await retryOnTemporaryError(() =>
+    client.get<SystemConfigSkillResponse>(
+      `/api/v1/system/config/skills/${encodeURIComponent(name)}`,
+    ),
+  );
   return response.data;
 }
 

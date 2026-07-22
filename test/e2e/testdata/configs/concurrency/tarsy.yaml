@@ -5,14 +5,27 @@ defaults:
 
 mcp_servers:
   # Dummy entry so built-in agents pass validation.
+  # Sentinel values exercise config-viewer transport sanitization in e2e.
   kubernetes-server:
     transport:
       type: stdio
-      command: mock
+      # Secret-looking command is redacted in the config viewer snapshot.
+      command: ghp_FAKE_NOT_REAL_GITHUB_TOKEN_XXXXXXXXXXXX
+      args: ["--token", "E2E_SENTINEL_MCP_ARG"]
+      env:
+        KUBE_TOKEN: "E2E_SENTINEL_MCP_ENV"
+  http-probe-server:
+    transport:
+      type: http
+      url: "https://user:E2E_SENTINEL_URL_SECRET@mcp.example.com/v1?api_key=E2E_SENTINEL_QUERY"
+      bearer_token: "E2E_SENTINEL_BEARER"
 
 agents:
   SimpleAgent:
     custom_instructions: "You are SimpleAgent, performing a quick analysis."
+    # Empty allowlist: keep example-skill in the registry for SystemConfig e2e,
+    # but do not expose load_skill (avoids a tool_list MCP interaction).
+    skills: []
 
 agent_chains:
   concurrency-chain:

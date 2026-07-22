@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"time"
@@ -192,5 +193,37 @@ func (s *Server) defaultToolsHandler(c *echo.Context) error {
 		AlertType:   alertType,
 		MCPServers:  mcpServers,
 		NativeTools: nativeTools,
+	})
+}
+
+// systemConfigHandler handles GET /api/v1/system/config.
+// Returns a sanitized snapshot of the effective in-memory configuration.
+func (s *Server) systemConfigHandler(c *echo.Context) error {
+	return c.JSON(http.StatusOK, buildSystemConfigResponse(s.cfg))
+}
+
+// systemConfigSkillHandler handles GET /api/v1/system/config/skills/:name.
+// Returns skill metadata plus body from the in-memory SkillRegistry.
+func (s *Server) systemConfigSkillHandler(c *echo.Context) error {
+	name := c.Param("name")
+	if name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "skill name is required")
+	}
+	if s.cfg == nil || s.cfg.SkillRegistry == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "skill not found")
+	}
+
+	skill, err := s.cfg.SkillRegistry.Get(name)
+	if err != nil {
+		if errors.Is(err, config.ErrSkillNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "skill not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load skill")
+	}
+
+	return c.JSON(http.StatusOK, SystemConfigSkillResponse{
+		Name:        skill.Name,
+		Description: skill.Description,
+		Body:        skill.Body,
 	})
 }
