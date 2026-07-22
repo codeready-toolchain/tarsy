@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -192,7 +193,7 @@ func (app *TestApp) GetSystemConfig(t *testing.T) map[string]interface{} {
 // GetSystemConfigSkill calls GET /api/v1/system/config/skills/:name.
 func (app *TestApp) GetSystemConfigSkill(t *testing.T, name string, expectedStatus int) map[string]interface{} {
 	t.Helper()
-	return app.getJSON(t, "/api/v1/system/config/skills/"+name, expectedStatus)
+	return app.getJSON(t, "/api/v1/system/config/skills/"+url.PathEscape(name), expectedStatus)
 }
 
 // GetAlertTypes calls GET /api/v1/alert-types.

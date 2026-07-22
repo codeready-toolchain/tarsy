@@ -40,18 +40,18 @@ func TestSanitizeTransport(t *testing.T) {
 		assert.NotContains(t, string(raw), "/path/to/kubeconfig")
 	})
 
-	t.Run("http transport sets bearer_token_set and redacts url", func(t *testing.T) {
+	t.Run("http transport sets bearer_token_set and sanitizes url", func(t *testing.T) {
 		verify := true
 		got := sanitizeTransport(config.TransportConfig{
 			Type:        config.TransportTypeHTTP,
-			URL:         "https://mcp.example.com?token=live-secret",
+			URL:         "https://user:live-secret@mcp.example.com/v1?token=live-query-secret#frag",
 			BearerToken: "live-bearer-token",
 			VerifySSL:   &verify,
 			Timeout:     30,
 		})
 
 		assert.Equal(t, "http", got.Type)
-		assert.Equal(t, "***", got.URL)
+		assert.Equal(t, "https://mcp.example.com/v1", got.URL)
 		assert.True(t, got.BearerTokenSet)
 		assert.Equal(t, &verify, got.VerifySSL)
 		assert.Equal(t, 30, got.Timeout)
@@ -61,6 +61,7 @@ func TestSanitizeTransport(t *testing.T) {
 		raw, err := json.Marshal(got)
 		require.NoError(t, err)
 		assert.NotContains(t, string(raw), "live-secret")
+		assert.NotContains(t, string(raw), "live-query-secret")
 		assert.NotContains(t, string(raw), "live-bearer-token")
 		assert.Contains(t, string(raw), `"bearer_token_set":true`)
 	})
@@ -442,7 +443,46 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.NotContains(t, body, "--secret")
 		assert.Contains(t, body, `"bearer_token_set":true`)
 		assert.Contains(t, body, `"env_keys"`)
+		assert.Equal(t, "https://example.com", got.URL)
 	})
+
+	t.Run("llm provider base_url strips credentials and query", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"custom": {
+					Type:                config.LLMProviderTypeOpenAI,
+					Model:               "gpt-test",
+					APIKeyEnv:           "OPENAI_API_KEY",
+					BaseURL:             "https://api:E2E_SENTINEL_BASE_URL@llm.example.com/v1?api_key=E2E_SENTINEL_QUERY",
+					MaxToolResultTokens: 1000,
+				},
+			}),
+		})
+		provider := resp.LLMProviders["custom"]
+		assert.Equal(t, "https://llm.example.com/v1", provider.BaseURL)
+		raw, err := json.Marshal(provider)
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), "E2E_SENTINEL_BASE_URL")
+		assert.NotContains(t, string(raw), "E2E_SENTINEL_QUERY")
+	})
+}
+
+func TestSanitizeURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: "", want: ""},
+		{name: "plain https", in: "https://api.example.com/v1", want: "https://api.example.com/v1"},
+		{name: "strips userinfo query fragment", in: "https://user:pass@host.example/path?token=secret#x", want: "https://host.example/path"},
+		{name: "unparseable secret-looking", in: "sk-FAKE-NOT-REAL-API-KEY-XXXXXXXXXXXX", want: "***"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeURL(tt.in))
+		})
+	}
 }
 
 func TestSystemConfigSkillHandler(t *testing.T) {

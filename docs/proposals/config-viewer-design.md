@@ -78,7 +78,8 @@ Build an **allowlist DTO** (fail-closed). New transport fields are denylist-by-d
 | `verify_ssl`, `timeout` | as-is |
 | `env` | `env_keys` only (keys, no values) |
 | `bearer_token` | `bearer_token_set: bool` only |
-| `args`, `url` | omit, or `"***"` / `["***"]` when present |
+| `args` | omit, or `["***"]` when present |
+| `url` | sanitized: scheme/host/port/path only (userinfo, query, fragment stripped) |
 
 Never emit raw `Env` values or `BearerToken`. Future token-exchange fields (see [token-exchange sketch](token-exchange-sketch.md)) must stay off the allowlist until reviewed.
 
@@ -136,7 +137,7 @@ A dedicated response type (not the internal `config.*` structs):
 | `agents` | `AgentRegistry` | Full `AgentConfig` fields (see below) — **no** `llm_provider` on agents |
 | `chains` | `ChainRegistry` | Full chain shape including stages, chat, scoring, overrides |
 | `mcp_servers` | `MCPServerRegistry` | Sanitized transport + instructions + masking/summarization |
-| `llm_providers` | `LLMProviderRegistry` | Full provider fields including env names + `base_url` (as-is) |
+| `llm_providers` | `LLMProviderRegistry` | Full provider fields including env names + sanitized `base_url` |
 | `skills` | `SkillRegistry` | Metadata only: `name`, `description` |
 
 **Agent fields** (`AgentConfig` — correct shape):
@@ -147,7 +148,7 @@ A dedicated response type (not the internal `config.*` structs):
 **LLM provider fields:**
 
 - `type`, `model`, `api_key_env`, `credentials_env`, `project_env`, `location_env`, `base_url`, `max_tool_result_tokens`, `native_tools`
-- `base_url` is shown as-is. Putting secrets in URLs is an anti-pattern; we do not special-case redaction for it.
+- `base_url` is sanitized like MCP transport `url`: keep scheme/host/port/path; strip userinfo, query, and fragment (common ExpandEnv secret carriers).
 
 **Excluded from the snapshot (not unavailable):**
 
@@ -164,9 +165,10 @@ A dedicated response type (not the internal `config.*` structs):
 | Embedding `APIKeyEnv` under defaults.memory | Low (name only) | Show as-is |
 | `TransportConfig.BearerToken` | **High** | `bearer_token_set` only |
 | `TransportConfig.Env` values | **High** | `env_keys` only |
-| `TransportConfig.Args` / `URL` | **Medium–High** | `"***"` when present |
+| `TransportConfig.Args` | **Medium–High** | `["***"]` when present |
+| `TransportConfig.URL` | **Medium–High** | Sanitized origin/path (no userinfo/query/fragment) |
 | `TransportConfig.Command` | Low in practice; medium if misused | as-is, or `"***"` via best-effort heuristic |
-| `LLMProviderConfig.BaseURL` | Low (secrets-in-URL is anti-pattern) | Show as-is |
+| `LLMProviderConfig.BaseURL` | **Medium** if templated with secrets | Same URL sanitization as transport `url` |
 | Skill `Body` | Ops-sensitive | On-demand detail endpoint |
 | Agent `CustomInstructions`, MCP `Instructions`, Defaults.`Runbook` | Ops-sensitive | **Include** (first-class config) |
 
@@ -351,6 +353,6 @@ Ship as **one PR**: backend API + dashboard UI + tests together. No staged rollo
 
 ## Post-verify decisions
 
-1. **`base_url`** — show as-is (secrets-in-URL is an anti-pattern; no special redaction).
+1. **`base_url` / transport `url`** — sanitize to scheme/host/port/path; strip userinfo, query, and fragment (ExpandEnv can embed credentials).
 2. **`config_dir`** — omit (low operator value).
 3. **YAML secondary view** — use `js-yaml` in the dashboard to serialize the sanitized DTO.

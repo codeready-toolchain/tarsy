@@ -2,6 +2,7 @@ package api
 
 import (
 	"maps"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -608,7 +609,7 @@ func buildLLMProviderView(p *config.LLMProviderConfig) LLMProviderView {
 		CredentialsEnv:      p.CredentialsEnv,
 		ProjectEnv:          p.ProjectEnv,
 		LocationEnv:         p.LocationEnv,
-		BaseURL:             p.BaseURL,
+		BaseURL:             sanitizeURL(p.BaseURL),
 		MaxToolResultTokens: p.MaxToolResultTokens,
 		NativeTools:         nativeToolsToMap(p.NativeTools),
 	}
@@ -635,7 +636,7 @@ func sanitizeTransport(t config.TransportConfig) SanitizedTransport {
 		out.Args = []string{"***"}
 	}
 	if t.URL != "" {
-		out.URL = "***"
+		out.URL = sanitizeURL(t.URL)
 	}
 
 	if len(t.Env) > 0 {
@@ -645,6 +646,26 @@ func sanitizeTransport(t config.TransportConfig) SanitizedTransport {
 	}
 
 	return out
+}
+
+// sanitizeURL returns a safe URL representation: scheme, host, port, and path
+// are preserved; userinfo, query, and fragment (common secret carriers after
+// ExpandEnv) are stripped. Unparseable secret-looking values become "***".
+func sanitizeURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		if looksSecretBearing(raw) {
+			return "***"
+		}
+		return raw
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }
 
 var (
