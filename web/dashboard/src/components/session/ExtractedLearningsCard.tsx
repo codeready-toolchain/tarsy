@@ -43,29 +43,34 @@ export default function ExtractedLearningsCard({ sessionId, hasScore, collapseCo
   const [isExpanded, setIsExpanded] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  useEffect(() => {
+  const [prevCollapseCounter, setPrevCollapseCounter] = useState(collapseCounter);
+  if (collapseCounter !== prevCollapseCounter) {
+    setPrevCollapseCounter(collapseCounter);
     if (collapseCounter > 0) setIsExpanded(false);
-  }, [collapseCounter]);
+  }
 
-  useEffect(() => {
-    if (!hasScore) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
+  const [prevFetchKey, setPrevFetchKey] = useState(`${sessionId}:${hasScore}`);
+  const fetchKey = `${sessionId}:${hasScore}`;
+  if (fetchKey !== prevFetchKey) {
+    setPrevFetchKey(fetchKey);
     setLoading(true);
     setFetchError(null);
-    getSessionMemories(sessionId)
-      .then((data) => {
+  }
+
+  useEffect(() => {
+    if (!hasScore) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await getSessionMemories(sessionId);
         if (!cancelled) setMemories(data);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) setFetchError(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [sessionId, hasScore, retryCount]);
 
@@ -82,7 +87,15 @@ export default function ExtractedLearningsCard({ sessionId, hasScore, collapseCo
       <Alert
         severity="warning"
         action={
-          <Button color="inherit" size="small" onClick={() => setRetryCount((c) => c + 1)}>
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              setFetchError(null);
+              setLoading(true);
+              setRetryCount((c) => c + 1);
+            }}
+          >
             Retry
           </Button>
         }

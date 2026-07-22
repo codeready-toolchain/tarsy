@@ -5,7 +5,7 @@ import TypewriterText from './TypewriterText';
 import ContentCard from '../shared/ContentCard';
 import { TIMELINE_EVENT_TYPES } from '../../constants/eventTypes';
 import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
-import { getFinalAnalysisPresentation } from '../timeline/ResponseItem';
+import { getFinalAnalysisPresentation } from '../timeline/finalAnalysisPresentation';
 import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
 import { getSkillNamesLabel } from '../../utils/format';
 import { getToolVisualConfig } from '../../utils/toolCallVisual';

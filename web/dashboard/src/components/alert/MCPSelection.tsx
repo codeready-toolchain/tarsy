@@ -6,7 +6,7 @@
  * Only sends override config when user modifies the defaults.
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Accordion,
@@ -110,10 +110,12 @@ export function MCPSelection({
   disabled = false,
   alertType,
 }: MCPSelectionProps) {
-  // State for defaults and current config
+  // State for defaults; current config is controlled by `value` when provided,
+  // otherwise falls back to the loaded defaults (derived at render time —
+  // avoids syncing state via an effect).
   const [defaultConfig, setDefaultConfig] = useState<MCPSelectionConfig | null>(null);
-  const [currentConfig, setCurrentConfig] = useState<MCPSelectionConfig | null>(null);
-  const [hasChanges, setHasChanges] = useState(false);
+  const currentConfig: MCPSelectionConfig | null = value ?? defaultConfig;
+  const hasChanges = !configsAreEqual(currentConfig, defaultConfig);
 
   // State for available servers (for tool details)
   const [availableServers, setAvailableServers] = useState<MCPServerStatus[]>([]);
@@ -127,9 +129,6 @@ export function MCPSelection({
 
   // Track if component was initialized with a value (e.g., from resubmit)
   const initializedWithValueRef = useRef(value !== undefined);
-
-  // Track if defaults have been loaded (to avoid premature onChange calls)
-  const defaultsLoadedRef = useRef(false);
 
   // Guard against stale async completions: only the latest invocation may
   // touch state. Each call to loadDefaultsAndServers mints a new ID and
@@ -169,8 +168,6 @@ export function MCPSelection({
       setDefaultConfig(defaults);
       setAvailableServers(serversResp.servers);
 
-      defaultsLoadedRef.current = true;
-
       setExpandedServers(new Set());
       setNativeToolsExpanded(false);
     } catch (err: unknown) {
@@ -185,47 +182,36 @@ export function MCPSelection({
     }
   }, [alertType]);
 
-  // Load on first expansion or when alert type changes
+  // Load on first expansion or when alert type changes.
+  // Always start a load when expanded — latestRequestIdRef ignores stale completions.
   useEffect(() => {
-    if (expanded && !loading && !error) {
-      loadDefaultsAndServers();
+    if (expanded) {
+      (async () => {
+        await loadDefaultsAndServers();
+      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, alertType]);
 
-  // Reconcile value prop and defaultConfig to set currentConfig
-  useEffect(() => {
-    if (value !== undefined) {
-      setCurrentConfig(value);
-    } else if (defaultConfig !== null) {
-      setCurrentConfig(defaultConfig);
-    } else {
-      setCurrentConfig(null);
-    }
-  }, [value, defaultConfig]);
+  // ── Handlers ────────────────────────────────────────────
 
-  // Detect changes whenever currentConfig changes
-  useEffect(() => {
-    const changed = !configsAreEqual(currentConfig, defaultConfig);
-    setHasChanges(changed);
-
-    if (!defaultsLoadedRef.current) return;
-
+  // Notify the parent with the new config, preserving the original semantics:
+  // only emit an explicit override when it actually differs from defaults
+  // (unless the component was initialized with an explicit value, e.g. resubmit).
+  const commitConfig = (newConfig: MCPSelectionConfig | null) => {
+    const changed = !configsAreEqual(newConfig, defaultConfig);
     if (!changed && !initializedWithValueRef.current) {
       onChange(undefined);
     } else {
-      onChange(currentConfig || undefined);
+      onChange(newConfig || undefined);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentConfig, defaultConfig]);
-
-  // ── Handlers ────────────────────────────────────────────
+  };
 
   const handleResetToDefaults = () => {
-    setCurrentConfig(defaultConfig);
     setExpandedServers(new Set());
     setNativeToolsExpanded(false);
     initializedWithValueRef.current = false;
+    commitConfig(defaultConfig);
   };
 
   const handleServerToggle = (serverId: string) => {
@@ -243,7 +229,7 @@ export function MCPSelection({
       newServers.push({ name: serverId, tools: null });
     }
 
-    setCurrentConfig({ ...currentConfig, servers: newServers });
+    commitConfig({ ...currentConfig, servers: newServers });
   };
 
   const toggleToolExpansion = (serverId: string) => {
@@ -266,7 +252,7 @@ export function MCPSelection({
       return server;
     });
 
-    setCurrentConfig({ ...currentConfig, servers: newServers });
+    commitConfig({ ...currentConfig, servers: newServers });
   };
 
   const handleToolToggle = (serverId: string, toolName: string) => {
@@ -299,7 +285,7 @@ export function MCPSelection({
       return server;
     });
 
-    setCurrentConfig({ ...currentConfig, servers: newServers });
+    commitConfig({ ...currentConfig, servers: newServers });
   };
 
   const handleNativeToolToggle = (toolName: NativeToolName) => {
@@ -311,7 +297,7 @@ export function MCPSelection({
       [toolName]: !currentNativeTools[toolName],
     };
 
-    setCurrentConfig({ ...currentConfig, native_tools: newNativeTools });
+    commitConfig({ ...currentConfig, native_tools: newNativeTools });
   };
 
   // ── Helpers ─────────────────────────────────────────────
@@ -343,11 +329,9 @@ export function MCPSelection({
     return currentConfig?.native_tools?.[toolName] || false;
   };
 
-  const enabledNativeToolsCount = useMemo(() => {
-    return currentConfig?.native_tools
-      ? Object.values(currentConfig.native_tools).filter(Boolean).length
-      : 0;
-  }, [currentConfig?.native_tools]);
+  const enabledNativeToolsCount = currentConfig?.native_tools
+    ? Object.values(currentConfig.native_tools).filter(Boolean).length
+    : 0;
 
   // ── Render ──────────────────────────────────────────────
 

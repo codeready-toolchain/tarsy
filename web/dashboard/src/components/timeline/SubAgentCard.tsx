@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Chip, Collapse, IconButton, Alert, Tooltip, alpha, keyframes, useTheme } from '@mui/material';
 import {
   ExpandMore,
@@ -59,7 +59,11 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   searchTerm,
 }) => {
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => { setExpanded(expandAllToolCalls); }, [expandAllToolCalls]);
+  const [prevExpandAllToolCalls, setPrevExpandAllToolCalls] = useState(expandAllToolCalls);
+  if (expandAllToolCalls !== prevExpandAllToolCalls) {
+    setPrevExpandAllToolCalls(expandAllToolCalls);
+    setExpanded(expandAllToolCalls);
+  }
 
   const eo = executionOverview;
   const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;

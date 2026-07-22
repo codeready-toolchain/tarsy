@@ -1,4 +1,4 @@
-import { useState, useEffect, memo, type ReactNode } from 'react';
+import { useState, memo, type ReactNode } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, PsychologyOutlined } from '@mui/icons-material';
 
@@ -18,7 +18,11 @@ interface InsightsCardProps {
  */
 function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, children }: InsightsCardProps) {
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => { setExpanded(expandAll); }, [expandAll]);
+  const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
+  if (expandAll !== prevExpandAll) {
+    setPrevExpandAll(expandAll);
+    setExpanded(expandAll);
+  }
   const isExpanded = expandAll || expanded;
 
   return (

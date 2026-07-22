@@ -6,7 +6,7 @@
  * custom date/time selection in a modal dialog, matching old dashboard UX.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -40,6 +40,11 @@ interface TimePreset {
   value: string;
   description: string;
   getDateRange: () => { start: Date; end: Date };
+}
+
+/** Compare optional dates by timestamp; null/undefined only match the same sentinel. */
+function sameDate(a?: Date | null, b?: Date | null): boolean {
+  return a === b || (a != null && b != null && a.getTime() === b.getTime());
 }
 
 /**
@@ -116,15 +121,27 @@ export function TimeRangeModal({
     },
   ];
 
-  // Reset state when modal opens
-  useEffect(() => {
+  // Reset state when modal opens (null = not yet synced).
+  // Compare dates by timestamp so new Date instances with the same value don't retrigger.
+  const [resetSnapshot, setResetSnapshot] = useState<{
+    open: boolean;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  } | null>(null);
+  if (
+    resetSnapshot === null ||
+    open !== resetSnapshot.open ||
+    !sameDate(startDate, resetSnapshot.startDate) ||
+    !sameDate(endDate, resetSnapshot.endDate)
+  ) {
+    setResetSnapshot({ open, startDate, endDate });
     if (open) {
       setCustomStartDate(startDate || null);
       setCustomEndDate(endDate || null);
       setSelectedPreset(null);
       setMode('preset');
     }
-  }, [open, startDate, endDate]);
+  }
 
   // Handle preset selection
   const handlePresetSelect = (preset: TimePreset) => {

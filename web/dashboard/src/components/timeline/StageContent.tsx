@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Box, Typography, Chip, Alert, Collapse, Tooltip, alpha } from '@mui/material';
 import {
   CheckCircle,
@@ -70,9 +70,9 @@ interface TabPanelProps {
 function TabPanel({ renderContent, value, index, ...other }: TabPanelProps) {
   const active = value === index;
   const [hasBeenActive, setHasBeenActive] = useState(active);
-  useEffect(() => {
-    if (active && !hasBeenActive) setHasBeenActive(true);
-  }, [active, hasBeenActive]);
+  if (active && !hasBeenActive) {
+    setHasBeenActive(true);
+  }
 
   // `active` provides immediate rendering on first activation (no flash);
   // `hasBeenActive` keeps the panel mounted after deactivation.
@@ -422,25 +422,28 @@ const StageContent: React.FC<StageContentProps> = ({
   // so the tabbed interface appears immediately, not only after items complete.
   const isMultiAgent = mergedExecutions.length > 1;
 
+  // Clamp selectedTab when the execution list shrinks to avoid out-of-range index.
+  // Adjusted during render (not in an effect) so the rest of this render already
+  // sees the corrected value — see https://react.dev/learn/you-might-not-need-an-effect.
+  const clampedSelectedTab = Math.max(0, Math.min(selectedTab, mergedExecutions.length - 1));
+  if (clampedSelectedTab !== selectedTab) {
+    setSelectedTab(clampedSelectedTab);
+  }
+
   // Notify parent when selected agent actually changes (parallel stages only).
   // Uses a ref to skip redundant calls when mergedExecutions array identity
   // changes but the selected execution ID is the same.
-  // Clamps selectedTab when the execution list shrinks to avoid out-of-range index.
   const prevSelectedExecIdRef = useRef<string | null | undefined>(undefined);
   React.useEffect(() => {
-    const clampedIndex = Math.max(0, Math.min(selectedTab, mergedExecutions.length - 1));
-    if (clampedIndex !== selectedTab) {
-      setSelectedTab(clampedIndex);
-    }
     if (!onSelectedAgentChange) return;
-    const newExecId = isMultiAgent && mergedExecutions[clampedIndex]
-      ? mergedExecutions[clampedIndex].executionId
+    const newExecId = isMultiAgent && mergedExecutions[clampedSelectedTab]
+      ? mergedExecutions[clampedSelectedTab].executionId
       : !isMultiAgent ? null : undefined;
     if (newExecId === undefined) return;
     if (newExecId === prevSelectedExecIdRef.current) return;
     prevSelectedExecIdRef.current = newExecId;
     onSelectedAgentChange(newExecId);
-  }, [selectedTab, mergedExecutions, onSelectedAgentChange, isMultiAgent]);
+  }, [clampedSelectedTab, mergedExecutions, onSelectedAgentChange, isMultiAgent]);
 
   // Group sub-agent streaming events by execution ID
   const subAgentStreamingByExec = useMemo(() => {
@@ -659,7 +662,7 @@ const StageContent: React.FC<StageContentProps> = ({
         </Tooltip>
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
         {mergedExecutions.map((execution, tabIndex) => {
-          const isSelected = selectedTab === tabIndex;
+          const isSelected = clampedSelectedTab === tabIndex;
           const eo = execOverviewMap.get(execution.executionId);
           const cardWsStatus = executionStatuses?.get(execution.executionId)?.status;
           const cardEffectiveStatus = cardWsStatus || eo?.status || execution.status;
@@ -779,7 +782,7 @@ const StageContent: React.FC<StageContentProps> = ({
       {mergedExecutions.map((execution, index) => (
         <TabPanel
           key={execution.executionId}
-          value={selectedTab}
+          value={clampedSelectedTab}
           index={index}
           renderContent={() => renderExecutionItems(execution)}
         />

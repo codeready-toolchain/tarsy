@@ -126,8 +126,9 @@ export function ScoringPage() {
   }, [id]);
 
   useEffect(() => {
-    loadData();
-    loadScore();
+    (async () => {
+      await Promise.all([loadData(), loadScore()]);
+    })();
   }, [loadData, loadScore]);
 
   // WebSocket: re-fetch score when scoring stage completes

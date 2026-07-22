@@ -41,18 +41,19 @@ export default function InjectedMemoriesCard({ sessionId }: InjectedMemoriesCard
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setFetchError(null);
-    getInjectedMemories(sessionId)
-      .then((data) => {
-        if (!cancelled) setMemories(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setFetchError(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
+    (async () => {
+      try {
+        const data = await getInjectedMemories(sessionId);
+        if (cancelled) return;
+        setMemories(data);
+        setFetchError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setFetchError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [sessionId, retryCount]);
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Paper,
@@ -126,12 +126,9 @@ export default function SessionHeader({
     }
   }, [session.id]);
 
-  // Clear canceling state when status changes
-  useEffect(() => {
-    if (session.status === SESSION_STATUS.CANCELLED && isCanceling) {
-      setIsCanceling(false);
-    }
-  }, [session.status, isCanceling]);
+  const showCanceling =
+    (isCanceling || session.status === SESSION_STATUS.CANCELLING) &&
+    session.status !== SESSION_STATUS.CANCELLED;
 
   const handleResubmit = useCallback(() => {
     navigate(ROUTES.SUBMIT_ALERT, {
@@ -162,13 +159,11 @@ export default function SessionHeader({
     }
   }, [session.id]);
 
-  useEffect(() => {
-    if (!scoringTriggered) return;
-    const done = session.latest_score != null
-      || session.scoring_status === SCORING_STATUS.COMPLETED
-      || session.scoring_status === SCORING_STATUS.FAILED;
-    if (done) setScoringTriggered(false);
-  }, [scoringTriggered, session.latest_score, session.scoring_status]);
+  const scoringDone =
+    session.latest_score != null ||
+    session.scoring_status === SCORING_STATUS.COMPLETED ||
+    session.scoring_status === SCORING_STATUS.FAILED;
+  const showScoringInProgress = scoringTriggered && !scoringDone;
 
   return (
     <Paper
@@ -213,11 +208,11 @@ export default function SessionHeader({
           {/* Right: action buttons */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
             {canCancel && (
-              <Tooltip title={isCanceling || session.status === SESSION_STATUS.CANCELLING ? 'Canceling…' : 'Cancel session'}>
+              <Tooltip title={showCanceling ? 'Canceling…' : 'Cancel session'}>
                 <span>
                   <IconButton
                     onClick={handleCancelClick}
-                    disabled={isCanceling || session.status === SESSION_STATUS.CANCELLING}
+                    disabled={showCanceling}
                     sx={{
                       color: 'error.main',
                       border: '1px solid',
@@ -237,7 +232,7 @@ export default function SessionHeader({
                       },
                     }}
                   >
-                    {isCanceling || session.status === SESSION_STATUS.CANCELLING
+                    {showCanceling
                       ? <CircularProgress size={22} color="inherit" />
                       : <Stop />}
                   </IconButton>
@@ -269,7 +264,7 @@ export default function SessionHeader({
             )}
 
             {session.status === SESSION_STATUS.COMPLETED && session.latest_score == null &&
-              (!session.scoring_status || session.scoring_status === 'not_scored') && !scoringTriggered && (
+              (!session.scoring_status || session.scoring_status === 'not_scored') && !showScoringInProgress && (
               <Tooltip title={scoringError || 'Score session'}>
                 <IconButton
                   size="small"
@@ -280,7 +275,7 @@ export default function SessionHeader({
                 </IconButton>
               </Tooltip>
             )}
-            {scoringTriggered && (
+            {showScoringInProgress && (
               <Tooltip title="Scoring in progress…">
                 <span>
                   <IconButton size="small" disabled>

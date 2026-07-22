@@ -142,14 +142,18 @@ export default function ConversationTimeline({
   const [timelineCollapsed, setTimelineCollapsed] = useState(defaultCollapsed ?? false);
 
   // Sync when defaultCollapsed flips to true after initial data loads
-  useEffect(() => {
+  const [prevDefaultCollapsed, setPrevDefaultCollapsed] = useState(defaultCollapsed);
+  if (defaultCollapsed !== prevDefaultCollapsed) {
+    setPrevDefaultCollapsed(defaultCollapsed);
     if (defaultCollapsed) setTimelineCollapsed(true);
-  }, [defaultCollapsed]);
+  }
 
   // Expand from outside (e.g. when user sends a chat message)
-  useEffect(() => {
+  const [prevExpandCounter, setPrevExpandCounter] = useState(expandCounter);
+  if (expandCounter !== prevExpandCounter) {
+    setPrevExpandCounter(expandCounter);
     if (expandCounter > 0) setTimelineCollapsed(false);
-  }, [expandCounter]);
+  }
 
   // --- Selected agent tracking (for per-agent ProcessingIndicator message) ---
   const [selectedAgentExecutionId, setSelectedAgentExecutionId] = useState<string | null>(null);

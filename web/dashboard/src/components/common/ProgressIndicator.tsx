@@ -45,16 +45,21 @@ export default function ProgressIndicator({
   const [liveDurationMs, setLiveDurationMs] = useState<number | null>(computeLive);
 
   useEffect(() => {
-    // Always sync immediately (covers status transitions & prop changes)
-    setLiveDurationMs(computeLive());
+    // Sync on the next tick (covers status transitions & prop changes) rather
+    // than synchronously in the effect body — setState is only ever called
+    // from the timer callback, never directly in the effect.
+    const syncTimer = setTimeout(() => setLiveDurationMs(computeLive()), 0);
 
-    if (!isActive || durationMs != null) return;
+    if (!isActive || durationMs != null) return () => clearTimeout(syncTimer);
 
     const interval = setInterval(() => {
       setLiveDurationMs(computeLive());
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(syncTimer);
+      clearInterval(interval);
+    };
   }, [isActive, durationMs, computeLive]);
 
   const statusColor = isActive

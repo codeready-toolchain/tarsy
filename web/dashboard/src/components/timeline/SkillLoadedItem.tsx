@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, AutoStoriesOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
@@ -15,9 +15,11 @@ interface SkillLoadedItemProps {
 
 function SkillLoadedItem({ item, expandAll = false, searchTerm }: SkillLoadedItemProps) {
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => {
+  const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
+  if (expandAll !== prevExpandAll) {
+    setPrevExpandAll(expandAll);
     setExpanded(expandAll);
-  }, [expandAll]);
+  }
   const isExpanded = expandAll || expanded;
 
   const rehypePlugins = useMemo(

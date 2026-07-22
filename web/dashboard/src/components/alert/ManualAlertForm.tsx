@@ -89,24 +89,50 @@ interface ResubmitState {
 // Component
 // ────────────────────────────────────────────────────────────
 
+function formatResubmitFreeText(alertData: string): string {
+  try {
+    const parsed = JSON.parse(alertData);
+    const keys = Object.keys(parsed);
+    if (keys.length === 1 && keys[0] === 'message' && typeof parsed.message === 'string') {
+      return parsed.message;
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return alertData;
+  }
+}
+
 export function ManualAlertForm() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Track if we've already processed resubmit state
-  const resubmitProcessedRef = useRef(false);
   const defaultAlertTypeRef = useRef<string | null>(null);
 
+  // Capture resubmit state once on mount (process-once semantics).
+  const [initialResubmit] = useState<ResubmitState | null>(() => {
+    const state = location.state as ResubmitState | null;
+    if (state?.resubmit && state?.alertData) return state;
+    return null;
+  });
+
   // Re-submission state
-  const [sourceSessionId, setSourceSessionId] = useState<string | null>(null);
-  const [showResubmitBanner, setShowResubmitBanner] = useState(false);
+  const [sourceSessionId] = useState<string | null>(
+    () => initialResubmit?.sessionId || null,
+  );
+  const [showResubmitBanner, setShowResubmitBanner] = useState(() => !!initialResubmit);
 
   // Common fields
   const [alertType, setAlertType] = useState('');
-  const [runbookUrl, setRunbookUrl] = useState('');
-  const [mcpSelection, setMcpSelection] = useState<MCPSelectionConfig | undefined>(undefined);
-  const [slackFingerprint, setSlackFingerprint] = useState('');
-  const [slackExpanded, setSlackExpanded] = useState(false);
+  const [runbookUrl, setRunbookUrl] = useState(() => initialResubmit?.runbook || '');
+  const [mcpSelection, setMcpSelection] = useState<MCPSelectionConfig | undefined>(
+    () => initialResubmit?.mcpSelection ?? undefined,
+  );
+  const [slackFingerprint, setSlackFingerprint] = useState(
+    () => initialResubmit?.slackFingerprint || '',
+  );
+  const [slackExpanded, setSlackExpanded] = useState(
+    () => !!initialResubmit?.slackFingerprint,
+  );
 
   // Mode selection (0 = Structured, 1 = Text) - Default to Text
   const [mode, setMode] = useState(1);
@@ -119,7 +145,9 @@ export function ManualAlertForm() {
   ]);
 
   // Mode B: Free text
-  const [freeText, setFreeText] = useState('');
+  const [freeText, setFreeText] = useState(
+    () => (initialResubmit?.alertData ? formatResubmitFreeText(initialResubmit.alertData) : ''),
+  );
 
   // Available options
   const [availableAlertTypes, setAvailableAlertTypes] = useState<string[]>([]);
@@ -131,57 +159,15 @@ export function ManualAlertForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // ── STEP 1: Process resubmit state ────────────────────
-
+  // Seed alert-type override and clear location state (no setState).
   useEffect(() => {
-    const state = location.state as ResubmitState | null;
-
-    if (state?.resubmit && state?.alertData && !resubmitProcessedRef.current) {
-      resubmitProcessedRef.current = true;
-
-      if (state.alertType) {
-        defaultAlertTypeRef.current = state.alertType;
-      }
-
-      setSourceSessionId(state.sessionId || null);
-      setShowResubmitBanner(true);
-
-      if (state.runbook) {
-        setRunbookUrl(state.runbook);
-      }
-
-      if (state.mcpSelection) {
-        setMcpSelection(state.mcpSelection);
-      }
-
-      if (state.slackFingerprint) {
-        setSlackFingerprint(state.slackFingerprint);
-        setSlackExpanded(true);
-      }
-
-      // Always use text mode for re-submissions
-      setMode(1);
-
-      // Try to parse as JSON for cleaner display
-      const alertData = state.alertData;
-      try {
-        const parsed = JSON.parse(alertData);
-        // If it's { message: "text" }, extract just the text
-        const keys = Object.keys(parsed);
-        if (keys.length === 1 && keys[0] === 'message' && typeof parsed.message === 'string') {
-          setFreeText(parsed.message);
-        } else {
-          setFreeText(JSON.stringify(parsed, null, 2));
-        }
-      } catch {
-        // Not JSON — use as-is (raw text)
-        setFreeText(alertData);
-      }
-
-      // Clear location state to prevent re-population on refresh
-      navigate(location.pathname, { replace: true, state: {} });
+    if (!initialResubmit) return;
+    if (initialResubmit.alertType) {
+      defaultAlertTypeRef.current = initialResubmit.alertType;
     }
-  }, [location, navigate]);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot clear of navigation state
+  }, []);
 
   // ── STEP 2: Load alert types ──────────────────────────
 

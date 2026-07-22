@@ -52,14 +52,18 @@ export default function TypewriterText({
     onCompleteRef.current = onComplete;
   }, [onComplete]);
 
+  // Reset display state during render when text clears.
+  if (!text && (displayedText !== '' || isAnimating)) {
+    setDisplayedText('');
+    setIsAnimating(false);
+  }
+
   useEffect(() => {
     if (!text) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      setDisplayedText('');
-      setIsAnimating(false);
       displayedLengthRef.current = 0;
       completedRef.current = true;
       targetTextRef.current = text;
@@ -77,13 +81,17 @@ export default function TypewriterText({
       completedRef.current = false;
     }
     
-    setIsAnimating(true);
     completedRef.current = false;
     lastUpdateTimeRef.current = performance.now();
     
     if (timerRef.current) return;
 
+    let animationStarted = false;
     timerRef.current = setInterval(() => {
+      if (!animationStarted) {
+        animationStarted = true;
+        setIsAnimating(true);
+      }
       const now = performance.now();
       const elapsed = now - lastUpdateTimeRef.current;
       const target = targetTextRef.current;
