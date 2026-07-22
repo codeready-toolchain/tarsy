@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha, type Theme } from '@mui/material';
 import { ExpandMore, ExpandLess, HistoryOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
@@ -164,9 +164,11 @@ function MemoryResultCards({ result, searchTerm }: { result: string; searchTerm?
  */
 function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps) {
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => {
+  const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
+  if (expandAll !== prevExpandAll) {
+    setPrevExpandAll(expandAll);
     setExpanded(expandAll);
-  }, [expandAll]);
+  }
   const isExpanded = expandAll || expanded;
 
   // Extract data from FlowItem metadata

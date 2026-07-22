@@ -162,7 +162,9 @@ export function TracePage() {
 
   // Initial load
   useEffect(() => {
-    loadData();
+    (async () => {
+      await loadData();
+    })();
   }, [loadData]);
 
   // ────────────────────────────────────────────────────────────

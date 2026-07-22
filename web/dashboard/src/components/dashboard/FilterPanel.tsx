@@ -51,7 +51,10 @@ export function FilterPanel({
   const [searchInput, setSearchInput] = useState(filters.search);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -68,13 +71,11 @@ export function FilterPanel({
   }, [searchInput, onFiltersChange]);
 
   // Sync local input when parent clears filters externally (e.g. "Clear All", chip delete)
-  useEffect(() => {
-    if (filters.search !== searchInput) {
-      setSearchInput(filters.search);
-    }
-    // Only react to parent-driven changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.search]);
+  const [prevSearch, setPrevSearch] = useState(filters.search);
+  if (filters.search !== prevSearch) {
+    setPrevSearch(filters.search);
+    setSearchInput(filters.search);
+  }
 
   const isActive = hasActiveFilters(filters);
 

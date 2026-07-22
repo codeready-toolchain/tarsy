@@ -8,6 +8,7 @@
 
 import axios from 'axios';
 import type { AxiosError } from 'axios';
+import type { DashboardListParams, SubmitAlertRequest } from '../../types/api';
 
 // We need to mock modules before importing the SUT
 vi.mock('axios', () => {
@@ -118,8 +119,8 @@ describe('API methods', () => {
   describe('getSessions', () => {
     it('calls correct endpoint with params', async () => {
       client.get.mockResolvedValue({ data: { sessions: [], total: 0 } });
-      const params = { page: 1, page_size: 25, status: 'completed' };
-      const result = await getSessions(params as any);
+      const params: DashboardListParams = { page: 1, page_size: 25, status: 'completed' };
+      const result = await getSessions(params);
       expect(client.get).toHaveBeenCalledWith('/api/v1/sessions', { params });
       expect(result).toEqual({ sessions: [], total: 0 });
     });
@@ -128,7 +129,7 @@ describe('API methods', () => {
       const error = makeAxiosError(404, 'Not Found');
       client.get.mockRejectedValue(error);
 
-      await expect(getSessions({} as any)).rejects.toThrow();
+      await expect(getSessions({})).rejects.toThrow();
       // Non-retryable errors should only call once
       expect(client.get).toHaveBeenCalledTimes(1);
     });
@@ -163,8 +164,8 @@ describe('API methods', () => {
   describe('submitAlert', () => {
     it('calls correct endpoint with data', async () => {
       client.post.mockResolvedValue({ data: { session_id: 's1' } });
-      const data = { alert_data: '{}', alert_type: 'test' };
-      await submitAlert(data as any);
+      const data: SubmitAlertRequest = { data: '{}', alert_type: 'test' };
+      await submitAlert(data);
       expect(client.post).toHaveBeenCalledWith('/api/v1/alerts', data);
     });
   });

@@ -85,24 +85,32 @@ export default function ReviewActivityCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  useEffect(() => {
+  const [prevCollapseCounter, setPrevCollapseCounter] = useState(collapseCounter);
+  if (collapseCounter !== prevCollapseCounter) {
+    setPrevCollapseCounter(collapseCounter);
     if (collapseCounter > 0) setIsExpanded(false);
-  }, [collapseCounter]);
+  }
+
+  const [prevFetchKey, setPrevFetchKey] = useState(`${sessionId}:${refreshCounter}`);
+  const fetchKey = `${sessionId}:${refreshCounter}`;
+  if (fetchKey !== prevFetchKey) {
+    setPrevFetchKey(fetchKey);
+    setLoading(true);
+    setFetchError(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setFetchError(null);
-    getReviewActivity(sessionId)
-      .then((data) => {
+    void (async () => {
+      try {
+        const data = await getReviewActivity(sessionId);
         if (!cancelled) setActivities(data.activities);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) setFetchError(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [sessionId, refreshCounter, retryCount]);
 
@@ -115,7 +123,15 @@ export default function ReviewActivityCard({
       <Alert
         severity="warning"
         action={
-          <Button color="inherit" size="small" onClick={() => setRetryCount((c) => c + 1)}>
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              setFetchError(null);
+              setLoading(true);
+              setRetryCount((c) => c + 1);
+            }}
+          >
             Retry
           </Button>
         }

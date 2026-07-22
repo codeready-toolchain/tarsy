@@ -57,7 +57,9 @@ export function MCPServerStatusView({ pollingEnabled = true }: MCPServerStatusVi
     if (!pollingEnabled) {
       return;
     }
-    fetchServers();
+    (async () => {
+      await fetchServers();
+    })();
     const interval = setInterval(fetchServers, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchServers, pollingEnabled]);

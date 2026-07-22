@@ -241,6 +241,86 @@ const thoughtTableRenderers = createTableRenderers({
   tdPadding: '4px 10px',
 });
 
+// Code element: handles both inline code and fenced code with language.
+// When inside a <pre> wrapper (block code without language), the parent's
+// `& > code` selector applies block styling. Uses useColorScheme() to switch
+// syntax highlighter theme between light and dark modes.
+//
+// Not a top-level `function Code(...)` declaration on purpose: react-refresh's
+// only-export-components rule flags any top-level PascalCase FunctionDeclaration
+// in a file with other non-component exports, even when unexported. A function
+// expression assigned to a const avoids that false positive while still
+// satisfying rules-of-hooks' component-name check for the useColorScheme() call.
+const Code = function Code(props: MdProps) {
+  const { mode, systemMode } = useColorScheme();
+  const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
+  const { node: _node, inline: _inline, className, children, ...safeProps } = props;
+
+  // Fenced code block with language — render with syntax highlighting
+  const match = /language-(\w+)/.exec(className || '');
+  if (match) {
+    const language = match[1];
+    const codeString = String(children).replace(/\n$/, '');
+    return (
+      <Box sx={{ position: 'relative', my: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            bgcolor: 'action.selected',
+            px: 1.5,
+            py: 0.5,
+            borderRadius: '4px 4px 0 0',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
+            {language}
+          </Typography>
+          <CopyButton text={codeString} variant="icon" size="small" tooltip="Copy code" />
+        </Box>
+        <SyntaxHighlighter
+          language={language}
+          style={isDark ? vscDarkPlus : vs}
+          customStyle={{
+            margin: 0,
+            padding: '12px',
+            fontSize: '0.875rem',
+            lineHeight: 1.5,
+            borderRadius: '0 0 4px 4px',
+          }}
+          wrapLines
+          wrapLongLines
+        >
+          {codeString}
+        </SyntaxHighlighter>
+      </Box>
+    );
+  }
+
+  // Inline code (or block code without language — styled by parent pre's CSS)
+  return (
+    <Box
+      component="code"
+      sx={{
+        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+        color: isDark ? 'warning.light' : 'error.main',
+        padding: '2px 6px',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
+        borderRadius: '4px',
+        fontFamily: 'monospace',
+        fontSize: '0.85rem',
+      }}
+      {...safeProps}
+    >
+      {children}
+    </Box>
+  );
+};
+
 /**
  * Memoized markdown components for final answer rendering.
  * Matches the old FinalAnalysisCard inline component styles exactly.
@@ -364,75 +444,7 @@ export const finalAnswerMarkdownComponents = {
   // When inside a <pre> wrapper (block code without language), the parent's
   // `& > code` selector applies block styling. Uses useColorScheme() to switch
   // syntax highlighter theme between light and dark modes.
-  code: (props: MdProps) => {
-    const { mode, systemMode } = useColorScheme();
-    const isDark = mode === 'dark' || (mode === 'system' && systemMode === 'dark');
-    const { node: _node, inline: _inline, className, children, ...safeProps } = props;
-
-    // Fenced code block with language — render with syntax highlighting
-    const match = /language-(\w+)/.exec(className || '');
-    if (match) {
-      const language = match[1];
-      const codeString = String(children).replace(/\n$/, '');
-      return (
-        <Box sx={{ position: 'relative', my: 1 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              bgcolor: 'action.selected',
-              px: 1.5,
-              py: 0.5,
-              borderRadius: '4px 4px 0 0',
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
-              {language}
-            </Typography>
-            <CopyButton text={codeString} variant="icon" size="small" tooltip="Copy code" />
-          </Box>
-          <SyntaxHighlighter
-            language={language}
-            style={isDark ? vscDarkPlus : vs}
-            customStyle={{
-              margin: 0,
-              padding: '12px',
-              fontSize: '0.875rem',
-              lineHeight: 1.5,
-              borderRadius: '0 0 4px 4px',
-            }}
-            wrapLines
-            wrapLongLines
-          >
-            {codeString}
-          </SyntaxHighlighter>
-        </Box>
-      );
-    }
-
-    // Inline code (or block code without language — styled by parent pre's CSS)
-    return (
-      <Box
-        component="code"
-        sx={{
-          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
-          color: isDark ? 'warning.light' : 'error.main',
-          padding: '2px 6px',
-          border: '1px solid',
-          borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
-          borderRadius: '4px',
-          fontFamily: 'monospace',
-          fontSize: '0.85rem',
-        }}
-        {...safeProps}
-      >
-        {children}
-      </Box>
-    );
-  },
+  code: Code,
   strong: (props: MdProps) => {
     const { node: _node, children, ...safeProps } = props;
     return (

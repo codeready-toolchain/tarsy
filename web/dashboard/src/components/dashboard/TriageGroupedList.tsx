@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -143,9 +143,11 @@ export function TriageGroupedList({
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
 
   // Clear selection when group data changes (e.g. after a bulk action refetch).
-  useEffect(() => {
+  const [prevGroups, setPrevGroups] = useState(groups);
+  if (groups !== prevGroups) {
+    setPrevGroups(groups);
     setSelection(emptySelection());
-  }, [groups]);
+  }
 
   const toggleSection = (key: string) => {
     setOpenSections((prev) => {

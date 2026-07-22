@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -67,14 +67,30 @@ export function ReviewModal({
   const [investigationFeedback, setInvestigationFeedback] = useState('');
   const [showActionTaken, setShowActionTaken] = useState(false);
 
-  useEffect(() => {
+  // null = not yet synced; ensures first open (including mount with open=true) resets form.
+  const [formSnapshot, setFormSnapshot] = useState<{
+    open: boolean;
+    isEdit: boolean;
+    initialRating?: string;
+    initialActionTaken: string;
+    initialInvestigationFeedback: string;
+  } | null>(null);
+  if (
+    formSnapshot === null ||
+    open !== formSnapshot.open ||
+    isEdit !== formSnapshot.isEdit ||
+    initialRating !== formSnapshot.initialRating ||
+    initialActionTaken !== formSnapshot.initialActionTaken ||
+    initialInvestigationFeedback !== formSnapshot.initialInvestigationFeedback
+  ) {
+    setFormSnapshot({ open, isEdit, initialRating, initialActionTaken, initialInvestigationFeedback });
     if (open) {
       setQualityRating((initialRating as ReviewSelection) || (isEdit ? '' : QUALITY_RATING.ACCURATE));
       setActionTaken(initialActionTaken);
       setInvestigationFeedback(initialInvestigationFeedback);
       setShowActionTaken(!!initialActionTaken.trim());
     }
-  }, [open, isEdit, initialRating, initialActionTaken, initialInvestigationFeedback]);
+  }
 
   const isAcknowledge = qualityRating === REVIEW_SELECTION.ACKNOWLEDGE;
 

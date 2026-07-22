@@ -7,6 +7,7 @@
 
 import type { Mock } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import type { HealthResponse } from '../../types/system';
 
 vi.mock('../../services/api.ts', () => ({
   getHealth: vi.fn(),
@@ -36,7 +37,7 @@ beforeEach(() => {
   mockGetHealth.mockResolvedValue({
     status: 'healthy',
     version: 'v1.0.0',
-  } as any);
+  } as HealthResponse);
 
   fetchMock.mockResolvedValue({
     ok: true,
@@ -116,7 +117,7 @@ describe('useVersionMonitor', () => {
       expect(result.current.backendVersion).toBe('v1.0.0');
     });
 
-    mockGetHealth.mockResolvedValue({ status: 'healthy', version: 'v2.0.0' } as any);
+    mockGetHealth.mockResolvedValue({ status: 'healthy', version: 'v2.0.0' } as HealthResponse);
 
     await result.current.refresh();
 
@@ -126,7 +127,7 @@ describe('useVersionMonitor', () => {
   });
 
   it('sets unknown version when health response has no version', async () => {
-    mockGetHealth.mockResolvedValue({ status: 'healthy' } as any);
+    mockGetHealth.mockResolvedValue({ status: 'healthy' } as HealthResponse);
 
     const { result } = renderHook(() => useVersionMonitor());
 

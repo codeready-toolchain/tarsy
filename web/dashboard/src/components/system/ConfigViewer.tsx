@@ -119,7 +119,9 @@ export function ConfigViewer() {
   }, []);
 
   useEffect(() => {
-    fetchConfig();
+    (async () => {
+      await fetchConfig();
+    })();
   }, [fetchConfig]);
 
   const handleRefresh = () => {

@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { Box, Typography, Chip, alpha } from '@mui/material';
+import { CATEGORY_LABEL, VALENCE_COLOR } from './memoryCardConstants';
 
 export interface ParsedMemory {
   category: string;
@@ -7,18 +8,6 @@ export interface ParsedMemory {
   ageLabel: string;
   content: string;
 }
-
-export const CATEGORY_LABEL: Record<string, string> = {
-  semantic: 'S',
-  episodic: 'E',
-  procedural: 'P',
-};
-
-export const VALENCE_COLOR: Record<string, 'success' | 'error' | 'default'> = {
-  positive: 'success',
-  negative: 'error',
-  neutral: 'default',
-};
 
 interface MemoryCardListProps {
   memories: ParsedMemory[];

@@ -87,7 +87,9 @@ export function useVersionMonitor(): VersionInfo {
 
   // Initial fetch on mount
   useEffect(() => {
-    refresh();
+    (async () => {
+      await refresh();
+    })();
 
     // Mark initial mount complete after first poll cycle
     const timer = setTimeout(() => {

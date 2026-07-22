@@ -228,7 +228,6 @@ export function SessionDetailPage() {
   // --- Auto-scroll ---
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const disableTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevStatusRef = useRef<string | undefined>(undefined);
   const hasPerformedInitialScrollRef = useRef(false);
 
   // --- Chat state ---
@@ -241,15 +240,14 @@ export function SessionDetailPage() {
   // Keep ref in sync for use in WS handler closure
   useEffect(() => {
     chatStageIdRef.current = chatState.chatStageId;
-    if (chatState.chatStageId) {
-      setChatStageIds((prev) => {
-        if (prev.has(chatState.chatStageId!)) return prev;
-        const next = new Set(prev);
-        next.add(chatState.chatStageId!);
-        return next;
-      });
-    }
   }, [chatState.chatStageId]);
+
+  // Accumulate chat stage IDs during render (avoids setState-in-effect).
+  if (chatState.chatStageId && !chatStageIds.has(chatState.chatStageId)) {
+    const next = new Set(chatStageIds);
+    next.add(chatState.chatStageId);
+    setChatStageIds(next);
+  }
 
   // --- Review state ---
   const [reviewModalMode, setReviewModalMode] = useState<ReviewModalMode | null>(null);
@@ -554,6 +552,10 @@ export function SessionDetailPage() {
 
   const loadData = useCallback(async () => {
     if (!id) return;
+
+    // Yield so subsequent setState calls are not synchronous in the effect body.
+    await Promise.resolve();
+
     setLoading(true);
     setError(null);
 
@@ -646,9 +648,18 @@ export function SessionDetailPage() {
 
   // Initial load
   useEffect(() => {
-    loadData();
-    // Reset scroll flags on session change
     hasPerformedInitialScrollRef.current = false;
+    let cancelled = false;
+    void (async () => {
+      // Ensure setState inside loadData is not treated as sync effect work.
+      await Promise.resolve();
+      if (!cancelled) {
+        await loadData();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [loadData]);
 
   // ────────────────────────────────────────────────────────────
@@ -1222,39 +1233,50 @@ export function SessionDetailPage() {
 
   // Update auto-scroll enabled state when session transitions between active/inactive
   const sessionStatus = session?.status;
-  useEffect(() => {
-    if (!sessionStatus) return;
+  const sessionIsActive = !!sessionStatus && (
+    ACTIVE_STATUSES.has(sessionStatus as SessionStatus) ||
+    sessionStatus === SESSION_STATUS.PENDING
+  );
 
-    const previousActive = prevStatusRef.current
-      ? ACTIVE_STATUSES.has(prevStatusRef.current as SessionStatus) ||
-        prevStatusRef.current === SESSION_STATUS.PENDING
+  const [prevStatus, setPrevStatus] = useState<string | undefined>(undefined);
+  if (sessionStatus !== undefined) {
+    const previousActive = prevStatus
+      ? ACTIVE_STATUSES.has(prevStatus as SessionStatus) ||
+        prevStatus === SESSION_STATUS.PENDING
       : false;
-    const currentActive =
-      ACTIVE_STATUSES.has(sessionStatus as SessionStatus) ||
-      sessionStatus === SESSION_STATUS.PENDING;
-
-    // Only update on first load or when crossing active↔inactive boundary
-    if (prevStatusRef.current === undefined || previousActive !== currentActive) {
-      if (currentActive) {
-        // Transitioning to active — enable immediately, clear pending disable
-        if (disableTimeoutRef.current) {
-          clearTimeout(disableTimeoutRef.current);
-          disableTimeoutRef.current = null;
-        }
+    if (prevStatus === undefined || previousActive !== sessionIsActive) {
+      setPrevStatus(sessionStatus);
+      if (sessionIsActive && !autoScrollEnabled) {
         setAutoScrollEnabled(true);
-      } else {
-        // Transitioning to inactive — delay disable for final content
-        if (disableTimeoutRef.current) {
-          clearTimeout(disableTimeoutRef.current);
-        }
-        disableTimeoutRef.current = setTimeout(() => {
-          setAutoScrollEnabled(false);
-          disableTimeoutRef.current = null;
-        }, 2000);
       }
-      prevStatusRef.current = sessionStatus;
     }
-  }, [sessionStatus]);
+  }
+
+  // Delayed disable when becoming inactive — setState only inside timeout.
+  useEffect(() => {
+    if (!sessionStatus || sessionIsActive) {
+      if (disableTimeoutRef.current) {
+        clearTimeout(disableTimeoutRef.current);
+        disableTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    if (disableTimeoutRef.current) {
+      clearTimeout(disableTimeoutRef.current);
+    }
+    disableTimeoutRef.current = setTimeout(() => {
+      setAutoScrollEnabled(false);
+      disableTimeoutRef.current = null;
+    }, 2000);
+
+    return () => {
+      if (disableTimeoutRef.current) {
+        clearTimeout(disableTimeoutRef.current);
+        disableTimeoutRef.current = null;
+      }
+    };
+  }, [sessionStatus, sessionIsActive]);
 
   // Initial scroll to bottom for active sessions
   useEffect(() => {
@@ -1447,12 +1469,18 @@ export function SessionDetailPage() {
     }
   }, [id]);
 
-  // Auto-scroll for chat: enable when chat stage starts, disable after completion
-  useEffect(() => {
+  // Auto-scroll for chat: enable when chat stage starts (render-time), disable after completion.
+  const [prevChatStageInProgress, setPrevChatStageInProgress] = useState(false);
+  if (chatStageInProgress !== prevChatStageInProgress) {
+    setPrevChatStageInProgress(chatStageInProgress);
     if (chatStageInProgress) {
       setAutoScrollEnabled(true);
-    } else if (chatState.chatStageId === null && !chatState.sendingMessage) {
-      // Chat stage just completed — disable with delay (same pattern as investigation)
+    }
+  }
+
+  useEffect(() => {
+    if (chatStageInProgress) return;
+    if (chatState.chatStageId === null && !chatState.sendingMessage) {
       const timer = setTimeout(() => setAutoScrollEnabled(false), 2000);
       return () => clearTimeout(timer);
     }

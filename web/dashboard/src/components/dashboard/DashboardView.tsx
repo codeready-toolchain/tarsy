@@ -188,7 +188,7 @@ export function DashboardView() {
   const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse | undefined>();
 
   // ── WebSocket connection status ──
-  const [wsConnected, setWsConnected] = useState(false);
+  const [wsConnected, setWsConnected] = useState(() => websocketService.isConnected);
 
   // ── Tab state (persisted) ──
   const [activeTab, setActiveTab] = useState<DashboardTab>(loadDashboardTab);
@@ -207,6 +207,7 @@ export function DashboardView() {
   const activeReconnRef = useRef(false);
   const historicalReconnRef = useRef(false);
   const mountedRef = useRef(false); // suppress effect-based fetches on first render
+  const filterResetPageRef = useRef(false); // flag to suppress pagination effect during filter-driven page reset
   const triageFilterInitRef = useRef(true); // skip first triage-filter effect (initial fetch handles it)
   const filtersRef = useRef(filters);
   const paginationRef = useRef(pagination);
@@ -431,11 +432,13 @@ export function DashboardView() {
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchActiveAlerts();
-    fetchHistoricalAlerts();
-    if (activeTabRef.current === 'triage') {
-      fetchAllTriageGroups();
-    }
+    (async () => {
+      const tasks = [fetchActiveAlerts(), fetchHistoricalAlerts()];
+      if (activeTabRef.current === 'triage') {
+        tasks.push(fetchAllTriageGroups());
+      }
+      await Promise.all(tasks);
+    })();
 
     (async () => {
       try {
@@ -533,7 +536,6 @@ export function DashboardView() {
     const unsubConn = websocketService.onConnectionChange(handleConnectionChange);
 
     websocketService.connect();
-    setWsConnected(websocketService.isConnected);
 
     return () => {
       unsubChannel();
@@ -544,8 +546,6 @@ export function DashboardView() {
   // ────────────────────────────────────────────────────────────
   // Handler callbacks for child components
   // ────────────────────────────────────────────────────────────
-
-  const filterResetPageRef = useRef(false); // flag to suppress pagination effect during filter-driven page reset
 
   const handleFiltersChange = (newFilters: SessionFilter) => {
     setFilters(newFilters);
