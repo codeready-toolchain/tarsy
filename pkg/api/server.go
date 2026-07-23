@@ -278,6 +278,9 @@ func (s *Server) setupRoutes() {
 	v1.GET("/sessions/:id/review-activity", s.getReviewActivityHandler)
 	v1.GET("/sessions/:id/timeline", s.getTimelineHandler)
 
+	// Usage aggregation.
+	v1.GET("/usage/summary", s.usageSummaryHandler)
+
 	// System endpoints.
 	v1.GET("/system/warnings", s.systemWarningsHandler)
 	v1.GET("/system/mcp-servers", s.mcpServersHandler)

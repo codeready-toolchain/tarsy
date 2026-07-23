@@ -326,6 +326,99 @@ func DeriveCostCompleteness(tokenBearing, priced int) CostCompleteness {
 	return CostCompletenessPartial
 }
 
+// --- Usage summary DTOs (GET /api/v1/usage/summary) ---
+
+// UsageRankBy selects how top_sessions are ordered.
+type UsageRankBy string
+
+// Usage ranking modes for top_sessions.
+const (
+	UsageRankByCost   UsageRankBy = "cost"
+	UsageRankByTokens UsageRankBy = "tokens"
+)
+
+// ValidUsageRankBy reports whether s is a known rank_by value.
+func ValidUsageRankBy(s string) bool {
+	switch UsageRankBy(s) {
+	case UsageRankByCost, UsageRankByTokens:
+		return true
+	default:
+		return false
+	}
+}
+
+// UsageSummaryParams holds query parameters for the usage summary endpoint.
+type UsageSummaryParams struct {
+	StartDate time.Time   // created_at >= start (required)
+	EndDate   time.Time   // created_at < end (required)
+	AlertType string      // optional exact filter
+	ChainID   string      // optional exact filter
+	RankBy    UsageRankBy // cost or tokens; empty means default from costEstimationEnabled
+}
+
+// UsageSummaryResponse is returned by GET /api/v1/usage/summary.
+type UsageSummaryResponse struct {
+	CostEstimationEnabled bool                  `json:"cost_estimation_enabled"`
+	Window                UsageWindow           `json:"window"`
+	RankBy                UsageRankBy           `json:"rank_by"`
+	Totals                UsageTotals           `json:"totals"`
+	ByModel               []UsageModelBreakdown `json:"by_model"`
+	ByAlertType           []UsageAlertBreakdown `json:"by_alert_type"`
+	ByChain               []UsageChainBreakdown `json:"by_chain"`
+	TopSessions           []UsageTopSession     `json:"top_sessions"`
+}
+
+// UsageWindow echoes the requested date range.
+type UsageWindow struct {
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+}
+
+// UsageTotals is the fleet-wide token/cost rollup for the window.
+type UsageTotals struct {
+	InputTokens              int64            `json:"input_tokens"`
+	OutputTokens             int64            `json:"output_tokens"`
+	TotalTokens              int64            `json:"total_tokens"`
+	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
+	UnpricedInteractionCount *int             `json:"unpriced_interaction_count,omitempty"`
+}
+
+// UsageModelBreakdown is a per-model rollup within the window.
+type UsageModelBreakdown struct {
+	ModelName        string   `json:"model_name"`
+	InputTokens      int64    `json:"input_tokens"`
+	OutputTokens     int64    `json:"output_tokens"`
+	TotalTokens      int64    `json:"total_tokens"`
+	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
+	Priced           *bool    `json:"priced,omitempty"` // true when all token-bearing rows for the model are priced
+}
+
+// UsageAlertBreakdown is a per-alert-type rollup within the window.
+type UsageAlertBreakdown struct {
+	AlertType        string   `json:"alert_type"`
+	TotalTokens      int64    `json:"total_tokens"`
+	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
+}
+
+// UsageChainBreakdown is a per-chain rollup within the window.
+type UsageChainBreakdown struct {
+	ChainID          string   `json:"chain_id"`
+	TotalTokens      int64    `json:"total_tokens"`
+	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
+}
+
+// UsageTopSession is one of the capped top sessions in the window.
+type UsageTopSession struct {
+	SessionID        string           `json:"session_id"`
+	AlertType        *string          `json:"alert_type"`
+	ChainID          string           `json:"chain_id"`
+	TotalTokens      int64            `json:"total_tokens"`
+	EstimatedCostUsd *float64         `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness CostCompleteness `json:"cost_completeness,omitempty"`
+	CreatedAt        time.Time        `json:"created_at"`
+}
+
 // --- Review workflow DTOs ---
 
 // ReviewAction represents a workflow transition action.

@@ -2,7 +2,7 @@
 
 TARSy can attach an **estimated USD cost** to each LLM interaction at write time, using list prices from a price book. Estimates are for operator judgment — they are **not** invoice truth.
 
-Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The Usage dashboard page and `GET /api/v1/usage/summary` land in follow-up work. Config Viewer already exposes the effective toggle, overrides, and catalog status via `GET /api/v1/system/config`.
+Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. Fleet dig-in uses `GET /api/v1/usage/summary` (Usage dashboard page lands in follow-up work). Config Viewer already exposes the effective toggle, overrides, and catalog status via `GET /api/v1/system/config`.
 
 ## Table of Contents
 
@@ -11,6 +11,7 @@ Cost is persisted on each `llm_interaction` at write time. Session list, detail,
 - [Price book](#price-book)
 - [How estimates are computed](#how-estimates-are-computed)
 - [Session APIs](#session-apis)
+- [Usage API](#usage-api)
 - [Thinking tokens](#thinking-tokens)
 - [Known gaps](#known-gaps)
 - [Completeness](#completeness)
@@ -93,6 +94,32 @@ When cost estimation is **enabled**, these responses include cost fields next to
 
 When estimation is **disabled**: responses set `cost_estimation_enabled: false` and omit the other cost keys. Aggregates use `SUM(estimated_cost_usd)` of non-null values; completeness uses priced vs token-bearing interaction counts (see [Completeness](#completeness)).
 
+## Usage API
+
+```
+GET /api/v1/usage/summary?start_date=&end_date=&alert_type=&chain_id=&rank_by=cost|tokens
+```
+
+Server-side fleet aggregates for one date window (the Usage page does not load-all-then-filter).
+
+| Param | Required | Notes |
+|-------|----------|--------|
+| `start_date` | yes | RFC3339; session `created_at >= start_date` |
+| `end_date` | yes | RFC3339; session `created_at < end_date` (half-open, same as Alert History) |
+| `alert_type` | no | Exact match filter |
+| `chain_id` | no | Exact match filter |
+| `rank_by` | no | `cost` or `tokens`. Default: `cost` when estimation enabled, else `tokens`. `rank_by=cost` is rejected when estimation is disabled. |
+
+Rules:
+
+- Soft-deleted sessions are always excluded.
+- All `interaction_type` values count (same as session token SUMs).
+- Response sections: `totals`, `by_model`, `by_alert_type`, `by_chain`, and capped `top_sessions` (hardcoded top **20**; no `limit` param).
+- Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
+- When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
+
+Window edge case: a long-running session started before the window is excluded even if it burns tokens inside the window (and late chat on an in-window session is included). Same mental model as Alert History.
+
 ## Thinking tokens
 
 - Column: `llm_interactions.thinking_tokens` (nullable).
@@ -111,7 +138,7 @@ When estimation is **disabled**: responses set `cost_estimation_enabled: false` 
 
 ## Completeness
 
-Session list/detail/summary and `ExecutionOverview` expose `cost_completeness` (Usage API follows later). Semantics:
+Session list/detail/summary, `ExecutionOverview`, and `GET /api/v1/usage/summary` expose `cost_completeness`. Semantics:
 
 | Completeness | Meaning |
 |--------------|---------|
