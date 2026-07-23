@@ -152,6 +152,9 @@ func main() {
 
 	alertService := services.NewAlertService(dbClient.Client, cfg.ChainRegistry, cfg.Defaults, maskingService)
 	sessionService := services.NewSessionService(dbClient.Client, cfg.ChainRegistry, cfg.MCPServerRegistry)
+	if cfg.CostEstimation != nil {
+		sessionService.SetCostEstimationEnabled(cfg.CostEstimation.Enabled)
+	}
 	slog.Info("Services initialized")
 
 	// 4a. Start cleanup service (retention + event TTL)

@@ -11,11 +11,14 @@
   "chat_message_count": 0,
   "completed_at": "{TIMESTAMP}",
   "completed_stages": 2,
+  "cost_completeness": "none",
+  "cost_estimation_enabled": true,
   "created_at": "{TIMESTAMP}",
   "current_stage_id": "{UUID}",
   "current_stage_index": 2,
   "duration_ms": {DURATION_MS},
   "error_message": null,
+  "estimated_cost_usd": 0,
   "executive_summary": "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.",
   "executive_summary_error": null,
   "failed_stages": 0,
@@ -45,8 +48,10 @@
           "agent_index": 1,
           "agent_name": "SREOrchestrator",
           "completed_at": "{TIMESTAMP}",
+          "cost_completeness": "none",
           "duration_ms": {DURATION_MS},
           "error_message": null,
+          "estimated_cost_usd": 0,
           "execution_id": "{EXEC_ID_1}",
           "input_tokens": 1300,
           "llm_backend": "google-native",
@@ -59,8 +64,10 @@
               "agent_index": 1,
               "agent_name": "LogAnalyzer",
               "completed_at": "{TIMESTAMP}",
+              "cost_completeness": "none",
               "duration_ms": {DURATION_MS},
               "error_message": null,
+              "estimated_cost_usd": 0,
               "execution_id": "{EXEC_ID_2}",
               "input_tokens": 300,
               "llm_backend": "google-native",
@@ -70,10 +77,12 @@
               "started_at": "{TIMESTAMP}",
               "status": "completed",
               "task": "Find all error patterns in the last 30 minutes",
-              "total_tokens": 360
+              "total_tokens": 360,
+              "unpriced_interaction_count": 2
             }
           ],
-          "total_tokens": 1490
+          "total_tokens": 1490,
+          "unpriced_interaction_count": 5
         }
       ],
       "expected_agent_count": 1,
@@ -92,8 +101,10 @@
           "agent_index": 1,
           "agent_name": "ExecSummaryAgent",
           "completed_at": "{TIMESTAMP}",
+          "cost_completeness": "none",
           "duration_ms": {DURATION_MS},
           "error_message": null,
+          "estimated_cost_usd": 0,
           "execution_id": "{UUID}",
           "input_tokens": 10,
           "llm_backend": "google-native",
@@ -101,7 +112,8 @@
           "output_tokens": 5,
           "started_at": "{TIMESTAMP}",
           "status": "completed",
-          "total_tokens": 15
+          "total_tokens": 15,
+          "unpriced_interaction_count": 1
         }
       ],
       "expected_agent_count": 1,
@@ -117,5 +129,6 @@
   "started_at": "{TIMESTAMP}",
   "status": "completed",
   "total_stages": 2,
-  "total_tokens": 1505
+  "total_tokens": 1505,
+  "unpriced_interaction_count": 6
 }

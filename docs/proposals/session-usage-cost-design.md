@@ -277,7 +277,7 @@ Cost is computed and stored, but not yet exposed by any API — a safe, invisibl
 4. **Write path:** extend `CreateLLMInteractionRequest` + `InteractionService`; set thinking + cost in `recordLLMInteraction` and `summarize.go` (skip cost when estimation disabled).
 5. **Operator docs:** estimate caveats, tiers, thinking/LangChain/cache gaps, airgap/snapshot fallback, completeness semantics — the backend behavior this PR introduces.
 
-### PR 2 — Session & execution API enrichment
+### PR 2 — Session & execution API enrichment ✅ Done
 
 Depends on PR 1's columns. Mechanical extension of existing aggregation code to add cost alongside tokens — reviewed independently of the estimator internals.
 
