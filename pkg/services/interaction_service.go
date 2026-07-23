@@ -88,9 +88,13 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 }
 
 // estimateCost returns a point-in-time USD estimate, or nil when estimation is
-// disabled or the model is unpriced.
+// disabled, no usage metadata was reported, or the model is unpriced.
 func (s *InteractionService) estimateCost(req models.CreateLLMInteractionRequest) *float64 {
 	if s.costBook == nil || !s.costBook.Enabled() {
+		return nil
+	}
+	// No usage fields at all → skip estimation (distinct from explicit zeros).
+	if req.InputTokens == nil && req.OutputTokens == nil && req.ThinkingTokens == nil {
 		return nil
 	}
 	input, output, thinking := 0, 0, 0

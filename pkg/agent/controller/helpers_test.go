@@ -451,3 +451,32 @@ func TestRecordLLMInteraction_NilUsageSkipsTokens(t *testing.T) {
 	assert.Nil(t, rows[0].ThinkingTokens)
 	assert.Nil(t, rows[0].EstimatedCostUsd)
 }
+
+func TestRecordLLMInteraction_ZeroThinkingTokensLeftNil(t *testing.T) {
+	book, err := cost.NewBook(&cost.Config{
+		Enabled: true,
+		ModelRates: map[string]cost.ModelRateOverride{
+			"test-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+		},
+	})
+	require.NoError(t, err)
+
+	execCtx := newTestExecCtx(t, nil, nil, book)
+	ctx := t.Context()
+
+	recordLLMInteraction(ctx, execCtx, 1, llminteraction.InteractionTypeIteration, 1, &LLMResponse{
+		Text: "ok",
+		Usage: &agent.TokenUsage{
+			InputTokens:    1000,
+			OutputTokens:   500,
+			TotalTokens:    1500,
+			ThinkingTokens: 0,
+		},
+	}, nil, time.Now())
+
+	rows, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Nil(t, rows[0].ThinkingTokens)
+	require.NotNil(t, rows[0].EstimatedCostUsd)
+}

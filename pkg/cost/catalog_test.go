@@ -25,15 +25,28 @@ func TestParseCatalogJSON(t *testing.T) {
 				{"input_cost_per_token": 9e-8, "output_cost_per_token": 8e-8, "range": [1000, 10000]}
 			]
 		},
+		"input-only": {
+			"input_cost_per_token": 1e-6
+		},
+		"explicit-zero-output": {
+			"input_cost_per_token": 1e-6,
+			"output_cost_per_token": 0
+		},
 		"sample_spec": {"max_tokens": 100},
 		"no-prices": {"litellm_provider": "x"}
 	}`
 
 	entries, err := parseCatalogJSON([]byte(raw))
 	require.NoError(t, err)
-	require.Len(t, entries, 2, "entries without usable rates should be skipped")
+	require.Contains(t, entries, "flat-model")
+	require.Contains(t, entries, "tiered-model")
+	require.Contains(t, entries, "input-only")
+	require.Contains(t, entries, "explicit-zero-output")
+	assert.NotContains(t, entries, "no-prices")
 
 	flat := entries["flat-model"]
+	assert.True(t, flat.HasInput)
+	assert.True(t, flat.HasOutput)
 	assert.Equal(t, 1e-6, flat.InputCostPerToken)
 	assert.Equal(t, 2e-6, flat.OutputCostPerToken)
 	require.NotNil(t, flat.OutputCostPerReasoningToken)
@@ -43,13 +56,23 @@ func TestParseCatalogJSON(t *testing.T) {
 
 	tiered := entries["tiered-model"]
 	require.Len(t, tiered.TieredPricing, 2)
-	assert.Equal(t, 0.0, tiered.TieredPricing[0].RangeStart)
-	assert.Equal(t, 1000.0, tiered.TieredPricing[0].RangeEnd)
+	assert.False(t, tiered.HasInput)
+	assert.False(t, tiered.HasOutput)
+
+	inputOnly := entries["input-only"]
+	assert.True(t, inputOnly.HasInput)
+	assert.False(t, inputOnly.HasOutput)
+
+	zeroOut := entries["explicit-zero-output"]
+	assert.True(t, zeroOut.HasOutput)
+	assert.Equal(t, 0.0, zeroOut.OutputCostPerToken)
 }
 
 func TestRatesForInput(t *testing.T) {
 	reasoning := 7e-6
 	entry := catalogEntry{
+		HasInput:                    true,
+		HasOutput:                   true,
 		InputCostPerToken:           1e-6,
 		OutputCostPerToken:          2e-6,
 		OutputCostPerReasoningToken: &reasoning,
@@ -61,27 +84,32 @@ func TestRatesForInput(t *testing.T) {
 	}
 
 	t.Run("flat below thresholds", func(t *testing.T) {
-		r := entry.ratesForInput(50_000)
+		r, ok := entry.ratesForInput(50_000)
+		require.True(t, ok)
 		assert.Equal(t, 1e-6, r.Input)
 		assert.Equal(t, 2e-6, r.Output)
-		assert.Equal(t, 7e-6, r.Reasoning)
+		require.NotNil(t, r.Reasoning)
+		assert.Equal(t, 7e-6, *r.Reasoning)
 	})
 
 	t.Run("highest matching above_Nk wins", func(t *testing.T) {
-		r := entry.ratesForInput(250_000)
+		r, ok := entry.ratesForInput(250_000)
+		require.True(t, ok)
 		assert.Equal(t, 4e-6, r.Input)
 		assert.Equal(t, 5e-6, r.Output)
 	})
 
 	t.Run("above_Nk preferred over tiered_pricing", func(t *testing.T) {
-		// 150k matches 100k threshold; tiered would also match but above_Nk takes precedence.
-		r := entry.ratesForInput(150_000)
+		r, ok := entry.ratesForInput(150_000)
+		require.True(t, ok)
 		assert.Equal(t, 3e-6, r.Input)
 		assert.Equal(t, 3.5e-6, r.Output)
 	})
 
 	t.Run("tiered when no above threshold applies", func(t *testing.T) {
 		tierOnly := catalogEntry{
+			HasInput:           true,
+			HasOutput:          true,
 			InputCostPerToken:  1e-6,
 			OutputCostPerToken: 2e-6,
 			TieredPricing: []tierRange{
@@ -89,18 +117,51 @@ func TestRatesForInput(t *testing.T) {
 				{InputCostPerToken: 9e-8, OutputCostPerToken: 8e-8, RangeStart: 100, RangeEnd: 1000},
 			},
 		}
-		low := tierOnly.ratesForInput(50)
-		high := tierOnly.ratesForInput(100)
+		low, ok := tierOnly.ratesForInput(50)
+		require.True(t, ok)
+		high, ok := tierOnly.ratesForInput(100)
+		require.True(t, ok)
 		assert.Equal(t, 1e-8, low.Input)
 		assert.Equal(t, 9e-8, high.Input)
-		// Boundary end is exclusive for first tier; 100 falls in second.
 		assert.Equal(t, 8e-8, high.Output)
 	})
 
-	t.Run("reasoning falls back to output", func(t *testing.T) {
-		noReasoning := catalogEntry{InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6}
-		r := noReasoning.ratesForInput(10)
-		assert.Equal(t, 2e-6, r.Reasoning)
+	t.Run("tiered-only entry prices when tier matches", func(t *testing.T) {
+		tierOnly := catalogEntry{
+			TieredPricing: []tierRange{
+				{InputCostPerToken: 1e-8, OutputCostPerToken: 2e-8, RangeStart: 0, RangeEnd: 100},
+			},
+		}
+		r, ok := tierOnly.ratesForInput(50)
+		require.True(t, ok)
+		assert.Equal(t, 1e-8, r.Input)
+		assert.Nil(t, r.Reasoning)
+	})
+
+	t.Run("missing output side is unpriced", func(t *testing.T) {
+		partial := catalogEntry{HasInput: true, InputCostPerToken: 1e-6}
+		_, ok := partial.ratesForInput(10)
+		assert.False(t, ok)
+	})
+
+	t.Run("explicit zero output remains priced", func(t *testing.T) {
+		zeroOut := catalogEntry{
+			HasInput: true, HasOutput: true,
+			InputCostPerToken: 1e-6, OutputCostPerToken: 0,
+		}
+		r, ok := zeroOut.ratesForInput(10)
+		require.True(t, ok)
+		assert.Equal(t, 0.0, r.Output)
+	})
+
+	t.Run("reasoning unset when catalog omits it", func(t *testing.T) {
+		noReasoning := catalogEntry{
+			HasInput: true, HasOutput: true,
+			InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6,
+		}
+		r, ok := noReasoning.ratesForInput(10)
+		require.True(t, ok)
+		assert.Nil(t, r.Reasoning)
 	})
 }
 
@@ -126,4 +187,6 @@ func TestFetchCatalog_OK(t *testing.T) {
 	entries, err := fetchCatalog(t.Context(), srv.Client(), srv.URL, 1<<20)
 	require.NoError(t, err)
 	require.Contains(t, entries, "m")
+	assert.True(t, entries["m"].HasInput)
+	assert.True(t, entries["m"].HasOutput)
 }

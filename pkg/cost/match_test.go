@@ -7,20 +7,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func entry(in, out float64) catalogEntry {
+	return catalogEntry{
+		HasInput: true, HasOutput: true,
+		InputCostPerToken: in, OutputCostPerToken: out,
+	}
+}
+
 func TestFindInCatalog(t *testing.T) {
 	entries := map[string]catalogEntry{
-		"gemini-3.6-flash": {
-			InputCostPerToken:  1e-6,
-			OutputCostPerToken: 2e-6,
-		},
-		"gemini/gemini-2.5-pro": {
-			InputCostPerToken:  3e-6,
-			OutputCostPerToken: 4e-6,
-		},
-		"openai/gpt-4o": {
-			InputCostPerToken:  5e-6,
-			OutputCostPerToken: 6e-6,
-		},
+		"gemini-3.6-flash":      entry(1e-6, 2e-6),
+		"gemini/gemini-2.5-pro": entry(3e-6, 4e-6),
+		"openai/gpt-4o":         entry(5e-6, 6e-6),
 	}
 
 	tests := []struct {
@@ -63,10 +61,31 @@ func TestStripProviderPrefix(t *testing.T) {
 
 func TestRatesEqual(t *testing.T) {
 	r := 1e-6
-	a := catalogEntry{InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, OutputCostPerReasoningToken: &r}
-	b := catalogEntry{InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, OutputCostPerReasoningToken: &r}
+	a := entry(1e-6, 2e-6)
+	a.OutputCostPerReasoningToken = &r
+	b := entry(1e-6, 2e-6)
+	b.OutputCostPerReasoningToken = &r
 	require.True(t, ratesEqual(a, b))
 
-	c := catalogEntry{InputCostPerToken: 1e-6, OutputCostPerToken: 9e-6}
+	c := entry(1e-6, 9e-6)
 	assert.False(t, ratesEqual(a, c))
+}
+
+func TestFindInCatalog_HeuristicConflictUnpriced(t *testing.T) {
+	entries := map[string]catalogEntry{
+		"provider-a/my-model": entry(1e-6, 2e-6),
+		"provider-b/my-model": entry(9e-6, 8e-6),
+	}
+	_, _, ok := findInCatalog(entries, "my-model")
+	assert.False(t, ok)
+}
+
+func TestFindInCatalog_HeuristicAgree(t *testing.T) {
+	entries := map[string]catalogEntry{
+		"provider-a/my-model": entry(1e-6, 2e-6),
+		"provider-b/my-model": entry(1e-6, 2e-6),
+	}
+	_, key, ok := findInCatalog(entries, "my-model")
+	require.True(t, ok)
+	assert.NotEmpty(t, key)
 }

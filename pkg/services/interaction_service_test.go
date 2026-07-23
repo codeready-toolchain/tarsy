@@ -179,6 +179,56 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		require.NotNil(t, row.ThinkingTokens)
 		assert.Nil(t, row.EstimatedCostUsd)
 	})
+
+	t.Run("no usage metadata skips estimation", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+		assert.Nil(t, row.InputTokens)
+		assert.Nil(t, row.OutputTokens)
+		assert.Nil(t, row.ThinkingTokens)
+		assert.Nil(t, row.EstimatedCostUsd)
+	})
+
+	t.Run("explicit zero tokens still estimate", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+		zero := 0
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &zero,
+			OutputTokens:    &zero,
+			ThinkingTokens:  &zero,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row.EstimatedCostUsd)
+		assert.InDelta(t, 0.0, *row.EstimatedCostUsd, 1e-12)
+	})
 }
 
 func TestInteractionService_CreateLLMInteraction_SessionLevel(t *testing.T) {

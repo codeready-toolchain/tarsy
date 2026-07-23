@@ -7,7 +7,8 @@ import "time"
 // Provenance identifies how rates were resolved for an estimate.
 type Provenance string
 
-// Provenance values returned by Book.Estimate.
+// ProvenanceOverride, ProvenanceCatalog, ProvenanceSnapshot, and ProvenanceUnpriced
+// identify how rates were resolved for an estimate.
 const (
 	ProvenanceOverride Provenance = "override"
 	ProvenanceCatalog  Provenance = "catalog"
@@ -61,7 +62,7 @@ type CatalogStatus struct {
 type Rates struct {
 	Input     float64
 	Output    float64
-	Reasoning float64 // per thinking/reasoning token; falls back to Output when unset
+	Reasoning *float64 // nil → Estimate uses Output for thinking tokens
 }
 
 // resolved holds rates plus provenance for a successful match.

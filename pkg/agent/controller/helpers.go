@@ -61,7 +61,11 @@ func recordLLMInteraction(
 			inputTokens = &resp.Usage.InputTokens
 			outputTokens = &resp.Usage.OutputTokens
 			totalTokens = &resp.Usage.TotalTokens
-			thinkingTokens = &resp.Usage.ThinkingTokens
+			// TokenUsage has no presence flag (proto scalars default to 0). Persist
+			// thinking only when > 0 so unreported LangChain zeros stay nil.
+			if resp.Usage.ThinkingTokens > 0 {
+				thinkingTokens = &resp.Usage.ThinkingTokens
+			}
 		}
 		textLen = len(resp.Text)
 		toolCallsCount = len(resp.ToolCalls)

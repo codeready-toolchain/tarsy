@@ -168,31 +168,6 @@ func TestEstimate_HeuristicSuffixMatch(t *testing.T) {
 	}
 }
 
-func TestFindInCatalog_HeuristicConflictUnpriced(t *testing.T) {
-	entries := map[string]catalogEntry{
-		"provider-a/my-model": {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6},
-		"provider-b/my-model": {InputCostPerToken: 9e-6, OutputCostPerToken: 8e-6},
-	}
-	_, _, ok := findInCatalog(entries, "my-model")
-	if ok {
-		t.Fatal("conflicting heuristic candidates should be unpriced")
-	}
-}
-
-func TestFindInCatalog_HeuristicAgree(t *testing.T) {
-	entries := map[string]catalogEntry{
-		"provider-a/my-model": {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6},
-		"provider-b/my-model": {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6},
-	}
-	_, key, ok := findInCatalog(entries, "my-model")
-	if !ok {
-		t.Fatal("agreeing candidates should match")
-	}
-	if key == "" {
-		t.Fatal("expected a match key")
-	}
-}
-
 func TestBook_CatalogFetch(t *testing.T) {
 	payload := map[string]any{
 		"test-model": map[string]any{

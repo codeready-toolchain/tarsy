@@ -16,7 +16,10 @@ import (
 type rawCatalogEntry map[string]any
 
 // catalogEntry is a normalized pricing entry.
+// HasInput/HasOutput distinguish an explicit zero rate from a missing field.
 type catalogEntry struct {
+	HasInput                    bool
+	HasOutput                   bool
 	InputCostPerToken           float64
 	OutputCostPerToken          float64
 	OutputCostPerReasoningToken *float64
@@ -66,6 +69,8 @@ func parseEntry(raw rawCatalogEntry) (catalogEntry, bool) {
 	}
 
 	e := catalogEntry{
+		HasInput:           hasInput,
+		HasOutput:          hasOutput,
 		InputCostPerToken:  input,
 		OutputCostPerToken: output,
 		InputCostAbove:     map[int]float64{},
@@ -178,9 +183,10 @@ func fetchCatalog(ctx context.Context, client *http.Client, url string, maxBody 
 }
 
 // ratesForInput selects flat / above_Nk / tiered rates for the given input token count.
-func (e catalogEntry) ratesForInput(inputTokens int) Rates {
-	in := e.InputCostPerToken
-	out := e.OutputCostPerToken
+// Returns ok=false when a required input or output rate is absent (not merely zero).
+func (e catalogEntry) ratesForInput(inputTokens int) (Rates, bool) {
+	hasIn, hasOut := e.HasInput, e.HasOutput
+	in, out := e.InputCostPerToken, e.OutputCostPerToken
 
 	// 1. above_Nk thresholds (highest matching threshold wins).
 	bestThreshold := -1
@@ -188,11 +194,13 @@ func (e catalogEntry) ratesForInput(inputTokens int) Rates {
 		if inputTokens >= threshold && threshold > bestThreshold {
 			bestThreshold = threshold
 			in = rate
+			hasIn = true
 		}
 	}
 	if bestThreshold >= 0 {
 		if rate, ok := e.OutputCostAbove[bestThreshold]; ok {
 			out = rate
+			hasOut = true
 		}
 	} else if len(e.TieredPricing) > 0 {
 		// 2. tiered_pricing single-tier pick (no blending).
@@ -200,15 +208,20 @@ func (e catalogEntry) ratesForInput(inputTokens int) Rates {
 			if float64(inputTokens) >= t.RangeStart && float64(inputTokens) < t.RangeEnd {
 				in = t.InputCostPerToken
 				out = t.OutputCostPerToken
+				hasIn, hasOut = true, true
 				break
 			}
 		}
 	}
 
-	reasoning := out
-	if e.OutputCostPerReasoningToken != nil {
-		reasoning = *e.OutputCostPerReasoningToken
+	if !hasIn || !hasOut {
+		return Rates{}, false
 	}
 
-	return Rates{Input: in, Output: out, Reasoning: reasoning}
+	rates := Rates{Input: in, Output: out}
+	if e.OutputCostPerReasoningToken != nil {
+		r := *e.OutputCostPerReasoningToken
+		rates.Reasoning = &r
+	}
+	return rates, true
 }

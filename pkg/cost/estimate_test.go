@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func f64(v float64) *float64 { return &v }
+
 func TestEstimate(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -17,29 +19,35 @@ func TestEstimate(t *testing.T) {
 	}{
 		{
 			name:   "input and output only",
-			rates:  Rates{Input: 1e-6, Output: 2e-6, Reasoning: 2e-6},
+			rates:  Rates{Input: 1e-6, Output: 2e-6, Reasoning: f64(2e-6)},
 			input:  1_000_000,
 			output: 500_000,
 			want:   2.0, // 1.0 + 1.0
 		},
 		{
 			name:     "thinking zero is ignored",
-			rates:    Rates{Input: 1e-6, Output: 2e-6, Reasoning: 9e-6},
+			rates:    Rates{Input: 1e-6, Output: 2e-6, Reasoning: f64(9e-6)},
 			input:    1000,
 			output:   0,
 			thinking: 0,
 			want:     0.001,
 		},
 		{
-			name:     "thinking uses reasoning rate",
-			rates:    Rates{Input: 0, Output: 1e-6, Reasoning: 3e-6},
+			name:     "thinking uses reasoning rate when set",
+			rates:    Rates{Input: 0, Output: 1e-6, Reasoning: f64(3e-6)},
 			output:   1000,
 			thinking: 2000,
 			want:     0.001 + 0.006,
 		},
 		{
+			name:     "thinking falls back to output when reasoning unset",
+			rates:    Rates{Input: 0, Output: 2e-6},
+			thinking: 1_000_000,
+			want:     2.0,
+		},
+		{
 			name:  "all zero tokens",
-			rates: Rates{Input: 1e-6, Output: 2e-6, Reasoning: 3e-6},
+			rates: Rates{Input: 1e-6, Output: 2e-6, Reasoning: f64(3e-6)},
 			want:  0,
 		},
 	}
@@ -59,5 +67,7 @@ func TestOverrideRates(t *testing.T) {
 	})
 	assert.InDelta(t, 2e-6, rates.Input, 1e-15)
 	assert.InDelta(t, 12e-6, rates.Output, 1e-15)
-	assert.InDelta(t, 12e-6, rates.Reasoning, 1e-15, "reasoning falls back to output for overrides")
+	assert.Nil(t, rates.Reasoning, "overrides leave reasoning unset")
+	assert.InDelta(t, 12.0, Estimate(rates, 0, 0, 1_000_000), 1e-12,
+		"thinking should fall back to output rate")
 }

@@ -94,7 +94,13 @@ func stripProviderPrefix(key string) string {
 }
 
 func ratesEqual(a, b catalogEntry) bool {
-	if a.InputCostPerToken != b.InputCostPerToken || a.OutputCostPerToken != b.OutputCostPerToken {
+	if a.HasInput != b.HasInput || a.HasOutput != b.HasOutput {
+		return false
+	}
+	if a.HasInput && a.InputCostPerToken != b.InputCostPerToken {
+		return false
+	}
+	if a.HasOutput && a.OutputCostPerToken != b.OutputCostPerToken {
 		return false
 	}
 	if (a.OutputCostPerReasoningToken == nil) != (b.OutputCostPerReasoningToken == nil) {

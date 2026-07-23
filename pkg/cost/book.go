@@ -221,20 +221,24 @@ func (b *Book) resolveLocked(modelName string, inputTokens int) (resolved, bool)
 
 	// 2. Remote catalog.
 	if e, key, ok := findInCatalog(b.catalog, modelName); ok {
-		return resolved{
-			rates:      e.ratesForInput(inputTokens),
-			provenance: Provenance(string(ProvenanceCatalog) + ":" + key),
-			matchKey:   key,
-		}, true
+		if rates, ok := e.ratesForInput(inputTokens); ok {
+			return resolved{
+				rates:      rates,
+				provenance: Provenance(string(ProvenanceCatalog) + ":" + key),
+				matchKey:   key,
+			}, true
+		}
 	}
 
 	// 3. Bundled snapshot.
 	if e, key, ok := findInCatalog(b.snapshot, modelName); ok {
-		return resolved{
-			rates:      e.ratesForInput(inputTokens),
-			provenance: Provenance(string(ProvenanceSnapshot) + ":" + key),
-			matchKey:   key,
-		}, true
+		if rates, ok := e.ratesForInput(inputTokens); ok {
+			return resolved{
+				rates:      rates,
+				provenance: Provenance(string(ProvenanceSnapshot) + ":" + key),
+				matchKey:   key,
+			}, true
+		}
 	}
 
 	return resolved{provenance: ProvenanceUnpriced}, false
