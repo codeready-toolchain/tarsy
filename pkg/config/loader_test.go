@@ -893,6 +893,66 @@ agent_chains: {}
 		require.NotNil(t, cfg.Runbooks)
 		assert.Equal(t, "", cfg.Runbooks.RepoURL)
 		assert.Equal(t, 1*time.Minute, cfg.Runbooks.CacheTTL)
+
+		require.NotNil(t, cfg.CostEstimation)
+		assert.True(t, cfg.CostEstimation.Enabled, "cost estimation enabled by default when omitted")
+	})
+
+	t.Run("cost_estimation block parsed from YAML", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  cost_estimation:
+    enabled: false
+    model_rates:
+      gemini-3.1-pro-preview:
+        input_per_million: 2.0
+        output_per_million: 12.0
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.CostEstimation)
+		assert.False(t, cfg.CostEstimation.Enabled)
+		require.Contains(t, cfg.CostEstimation.ModelRates, "gemini-3.1-pro-preview")
+		assert.Equal(t, 2.0, cfg.CostEstimation.ModelRates["gemini-3.1-pro-preview"].InputPerMillion)
+		assert.Equal(t, 12.0, cfg.CostEstimation.ModelRates["gemini-3.1-pro-preview"].OutputPerMillion)
+	})
+
+	t.Run("cost_estimation enabled true when block present without enabled", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  cost_estimation:
+    model_rates:
+      gpt-4o:
+        input_per_million: 2.5
+        output_per_million: 10.0
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.CostEstimation)
+		assert.True(t, cfg.CostEstimation.Enabled)
 	})
 }
 

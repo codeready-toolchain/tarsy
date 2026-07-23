@@ -60,6 +60,10 @@ func (v *Validator) ValidateAll() error {
 		return fmt.Errorf("slack validation failed: %w", err)
 	}
 
+	if err := v.validateCostEstimation(); err != nil {
+		return fmt.Errorf("cost estimation validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -880,6 +884,27 @@ func (v *Validator) validateSlack() error {
 
 	if token := os.Getenv(s.TokenEnv); token == "" {
 		return fmt.Errorf("system.slack.token_env: environment variable %s is not set", s.TokenEnv)
+	}
+
+	return nil
+}
+
+func (v *Validator) validateCostEstimation() error {
+	ce := v.cfg.CostEstimation
+	if ce == nil {
+		return nil
+	}
+
+	for name, rate := range ce.ModelRates {
+		if name == "" {
+			return fmt.Errorf("system.cost_estimation.model_rates: model name must not be empty")
+		}
+		if rate.InputPerMillion < 0 {
+			return fmt.Errorf("system.cost_estimation.model_rates.%s.input_per_million must be >= 0", name)
+		}
+		if rate.OutputPerMillion < 0 {
+			return fmt.Errorf("system.cost_estimation.model_rates.%s.output_per_million must be >= 0", name)
+		}
 	}
 
 	return nil

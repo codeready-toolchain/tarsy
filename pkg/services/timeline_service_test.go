@@ -342,7 +342,7 @@ func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 
 		// Create real interaction entities for foreign key constraints
 		messageService := NewMessageService(client.Client)
-		interactionService := NewInteractionService(client.Client, messageService)
+		interactionService := NewInteractionService(client.Client, messageService, nil)
 
 		llmInt, err := interactionService.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
 			SessionID:       session.ID,

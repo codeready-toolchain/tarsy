@@ -203,6 +203,60 @@ func (_u *LLMInteractionUpdate) ClearTotalTokens() *LLMInteractionUpdate {
 	return _u
 }
 
+// SetThinkingTokens sets the "thinking_tokens" field.
+func (_u *LLMInteractionUpdate) SetThinkingTokens(v int) *LLMInteractionUpdate {
+	_u.mutation.ResetThinkingTokens()
+	_u.mutation.SetThinkingTokens(v)
+	return _u
+}
+
+// SetNillableThinkingTokens sets the "thinking_tokens" field if the given value is not nil.
+func (_u *LLMInteractionUpdate) SetNillableThinkingTokens(v *int) *LLMInteractionUpdate {
+	if v != nil {
+		_u.SetThinkingTokens(*v)
+	}
+	return _u
+}
+
+// AddThinkingTokens adds value to the "thinking_tokens" field.
+func (_u *LLMInteractionUpdate) AddThinkingTokens(v int) *LLMInteractionUpdate {
+	_u.mutation.AddThinkingTokens(v)
+	return _u
+}
+
+// ClearThinkingTokens clears the value of the "thinking_tokens" field.
+func (_u *LLMInteractionUpdate) ClearThinkingTokens() *LLMInteractionUpdate {
+	_u.mutation.ClearThinkingTokens()
+	return _u
+}
+
+// SetEstimatedCostUsd sets the "estimated_cost_usd" field.
+func (_u *LLMInteractionUpdate) SetEstimatedCostUsd(v float64) *LLMInteractionUpdate {
+	_u.mutation.ResetEstimatedCostUsd()
+	_u.mutation.SetEstimatedCostUsd(v)
+	return _u
+}
+
+// SetNillableEstimatedCostUsd sets the "estimated_cost_usd" field if the given value is not nil.
+func (_u *LLMInteractionUpdate) SetNillableEstimatedCostUsd(v *float64) *LLMInteractionUpdate {
+	if v != nil {
+		_u.SetEstimatedCostUsd(*v)
+	}
+	return _u
+}
+
+// AddEstimatedCostUsd adds value to the "estimated_cost_usd" field.
+func (_u *LLMInteractionUpdate) AddEstimatedCostUsd(v float64) *LLMInteractionUpdate {
+	_u.mutation.AddEstimatedCostUsd(v)
+	return _u
+}
+
+// ClearEstimatedCostUsd clears the value of the "estimated_cost_usd" field.
+func (_u *LLMInteractionUpdate) ClearEstimatedCostUsd() *LLMInteractionUpdate {
+	_u.mutation.ClearEstimatedCostUsd()
+	return _u
+}
+
 // SetDurationMs sets the "duration_ms" field.
 func (_u *LLMInteractionUpdate) SetDurationMs(v int) *LLMInteractionUpdate {
 	_u.mutation.ResetDurationMs()
@@ -410,6 +464,24 @@ func (_u *LLMInteractionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.TotalTokensCleared() {
 		_spec.ClearField(llminteraction.FieldTotalTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ThinkingTokens(); ok {
+		_spec.SetField(llminteraction.FieldThinkingTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedThinkingTokens(); ok {
+		_spec.AddField(llminteraction.FieldThinkingTokens, field.TypeInt, value)
+	}
+	if _u.mutation.ThinkingTokensCleared() {
+		_spec.ClearField(llminteraction.FieldThinkingTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.EstimatedCostUsd(); ok {
+		_spec.SetField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedEstimatedCostUsd(); ok {
+		_spec.AddField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.EstimatedCostUsdCleared() {
+		_spec.ClearField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.DurationMs(); ok {
 		_spec.SetField(llminteraction.FieldDurationMs, field.TypeInt, value)
@@ -695,6 +767,60 @@ func (_u *LLMInteractionUpdateOne) ClearTotalTokens() *LLMInteractionUpdateOne {
 	return _u
 }
 
+// SetThinkingTokens sets the "thinking_tokens" field.
+func (_u *LLMInteractionUpdateOne) SetThinkingTokens(v int) *LLMInteractionUpdateOne {
+	_u.mutation.ResetThinkingTokens()
+	_u.mutation.SetThinkingTokens(v)
+	return _u
+}
+
+// SetNillableThinkingTokens sets the "thinking_tokens" field if the given value is not nil.
+func (_u *LLMInteractionUpdateOne) SetNillableThinkingTokens(v *int) *LLMInteractionUpdateOne {
+	if v != nil {
+		_u.SetThinkingTokens(*v)
+	}
+	return _u
+}
+
+// AddThinkingTokens adds value to the "thinking_tokens" field.
+func (_u *LLMInteractionUpdateOne) AddThinkingTokens(v int) *LLMInteractionUpdateOne {
+	_u.mutation.AddThinkingTokens(v)
+	return _u
+}
+
+// ClearThinkingTokens clears the value of the "thinking_tokens" field.
+func (_u *LLMInteractionUpdateOne) ClearThinkingTokens() *LLMInteractionUpdateOne {
+	_u.mutation.ClearThinkingTokens()
+	return _u
+}
+
+// SetEstimatedCostUsd sets the "estimated_cost_usd" field.
+func (_u *LLMInteractionUpdateOne) SetEstimatedCostUsd(v float64) *LLMInteractionUpdateOne {
+	_u.mutation.ResetEstimatedCostUsd()
+	_u.mutation.SetEstimatedCostUsd(v)
+	return _u
+}
+
+// SetNillableEstimatedCostUsd sets the "estimated_cost_usd" field if the given value is not nil.
+func (_u *LLMInteractionUpdateOne) SetNillableEstimatedCostUsd(v *float64) *LLMInteractionUpdateOne {
+	if v != nil {
+		_u.SetEstimatedCostUsd(*v)
+	}
+	return _u
+}
+
+// AddEstimatedCostUsd adds value to the "estimated_cost_usd" field.
+func (_u *LLMInteractionUpdateOne) AddEstimatedCostUsd(v float64) *LLMInteractionUpdateOne {
+	_u.mutation.AddEstimatedCostUsd(v)
+	return _u
+}
+
+// ClearEstimatedCostUsd clears the value of the "estimated_cost_usd" field.
+func (_u *LLMInteractionUpdateOne) ClearEstimatedCostUsd() *LLMInteractionUpdateOne {
+	_u.mutation.ClearEstimatedCostUsd()
+	return _u
+}
+
 // SetDurationMs sets the "duration_ms" field.
 func (_u *LLMInteractionUpdateOne) SetDurationMs(v int) *LLMInteractionUpdateOne {
 	_u.mutation.ResetDurationMs()
@@ -932,6 +1058,24 @@ func (_u *LLMInteractionUpdateOne) sqlSave(ctx context.Context) (_node *LLMInter
 	}
 	if _u.mutation.TotalTokensCleared() {
 		_spec.ClearField(llminteraction.FieldTotalTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ThinkingTokens(); ok {
+		_spec.SetField(llminteraction.FieldThinkingTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedThinkingTokens(); ok {
+		_spec.AddField(llminteraction.FieldThinkingTokens, field.TypeInt, value)
+	}
+	if _u.mutation.ThinkingTokensCleared() {
+		_spec.ClearField(llminteraction.FieldThinkingTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.EstimatedCostUsd(); ok {
+		_spec.SetField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedEstimatedCostUsd(); ok {
+		_spec.AddField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.EstimatedCostUsdCleared() {
+		_spec.ClearField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.DurationMs(); ok {
 		_spec.SetField(llminteraction.FieldDurationMs, field.TypeInt, value)

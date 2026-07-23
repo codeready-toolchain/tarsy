@@ -24,7 +24,7 @@ func TestServiceIntegration(t *testing.T) {
 	stageService := NewStageService(client.Client)
 	messageService := NewMessageService(client.Client)
 	timelineService := NewTimelineService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	eventService := NewEventService(client.Client)
 
 	t.Run("full session lifecycle", func(t *testing.T) {

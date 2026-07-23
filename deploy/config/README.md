@@ -57,10 +57,13 @@ These files are **tracked in git** and serve as templates:
 
 Main configuration file containing:
 
+- **`system:`** - Infrastructure settings (GitHub, runbooks, Slack, retention, **cost estimation**)
 - **`defaults:`** - System-wide default values
 - **`mcp_servers:`** - MCP server configurations
 - **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
 - **`agent_chains:`** - Multi-stage agent chain definitions
+
+LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See [Session Usage Cost](../../docs/session-usage-cost.md) for overrides, catalog/snapshot behavior, and estimate caveats.
 
 ```yaml
 defaults:

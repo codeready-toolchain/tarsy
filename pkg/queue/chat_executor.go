@@ -22,6 +22,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/memory"
@@ -79,6 +80,7 @@ type ChatMessageExecutor struct {
 	chatService        *services.ChatService
 	messageService     *services.MessageService
 	interactionService *services.InteractionService
+	costBook           *cost.Book
 
 	// Active execution tracking (for cancellation + shutdown)
 	mu          sync.RWMutex
@@ -120,9 +122,16 @@ func NewChatMessageExecutor(
 		stageService:       services.NewStageService(dbClient),
 		chatService:        services.NewChatService(dbClient),
 		messageService:     msgService,
-		interactionService: services.NewInteractionService(dbClient, msgService),
+		interactionService: services.NewInteractionService(dbClient, msgService, nil),
 		activeExecs:        make(map[string]context.CancelFunc),
 	}
+}
+
+// SetCostBook sets the price book used when persisting LLM interaction costs.
+// Rebuilds the interaction service so subsequent writes use the book.
+func (e *ChatMessageExecutor) SetCostBook(book *cost.Book) {
+	e.costBook = book
+	e.interactionService = services.NewInteractionService(e.dbClient, e.messageService, book)
 }
 
 // resolveRunbook resolves runbook content for a session using the RunbookService.

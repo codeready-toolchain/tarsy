@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/codeready-toolchain/tarsy/test/util"
 	"github.com/google/uuid"
@@ -117,11 +118,16 @@ func (m *mockToolExecutorFunc) Close() error { return nil }
 // newTestExecCtx creates a test ExecutionContext backed by a real test database.
 // Defaults: MaxIterations=20, IterationTimeout=6m, LLMCallTimeout=5m, ToolCallTimeout=1m.
 // Tests that need different limits should override execCtx.Config.MaxIterations.
-func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecutor) *agent.ExecutionContext {
+// Optional costBook wires InteractionService cost estimation (nil = disabled).
+func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecutor, costBook ...*cost.Book) *agent.ExecutionContext {
 	t.Helper()
 
 	entClient, _ := util.SetupTestDatabase(t)
-	svc := newTestServiceBundle(t, entClient)
+	var book *cost.Book
+	if len(costBook) > 0 {
+		book = costBook[0]
+	}
+	svc := newTestServiceBundleWithCost(t, entClient, book)
 
 	ctx := context.Background()
 
@@ -237,11 +243,16 @@ func (m *mockSubAgentCollector) HasPending() bool {
 
 func newTestServiceBundle(t *testing.T, entClient *ent.Client) *agent.ServiceBundle {
 	t.Helper()
+	return newTestServiceBundleWithCost(t, entClient, nil)
+}
+
+func newTestServiceBundleWithCost(t *testing.T, entClient *ent.Client, costBook *cost.Book) *agent.ServiceBundle {
+	t.Helper()
 	msgSvc := services.NewMessageService(entClient)
 	return &agent.ServiceBundle{
 		Timeline:    services.NewTimelineService(entClient),
 		Message:     msgSvc,
-		Interaction: services.NewInteractionService(entClient, msgSvc),
+		Interaction: services.NewInteractionService(entClient, msgSvc, costBook),
 		Stage:       services.NewStageService(entClient),
 	}
 }

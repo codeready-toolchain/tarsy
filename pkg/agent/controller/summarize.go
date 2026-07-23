@@ -376,7 +376,7 @@ func recordSummarizationInteraction(
 ) {
 	durationMs := int(time.Since(startTime).Milliseconds())
 
-	var inputTokens, outputTokens, totalTokens *int
+	var inputTokens, outputTokens, totalTokens, thinkingTokens *int
 	var textLen int
 
 	if resp != nil {
@@ -384,6 +384,7 @@ func recordSummarizationInteraction(
 			inputTokens = &resp.Usage.InputTokens
 			outputTokens = &resp.Usage.OutputTokens
 			totalTokens = &resp.Usage.TotalTokens
+			thinkingTokens = &resp.Usage.ThinkingTokens
 		}
 		textLen = len(resp.Text)
 	}
@@ -416,10 +417,11 @@ func recordSummarizationInteraction(
 			"text_length":      textLen,
 			"tool_calls_count": 0,
 		},
-		InputTokens:  inputTokens,
-		OutputTokens: outputTokens,
-		TotalTokens:  totalTokens,
-		DurationMs:   &durationMs,
+		InputTokens:    inputTokens,
+		OutputTokens:   outputTokens,
+		TotalTokens:    totalTokens,
+		ThinkingTokens: thinkingTokens,
+		DurationMs:     &durationMs,
 	})
 	if err != nil {
 		slog.Error("Failed to record summarization LLM interaction",

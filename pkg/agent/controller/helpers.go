@@ -50,7 +50,7 @@ func recordLLMInteraction(
 	durationMs := int(time.Since(startTime).Milliseconds())
 
 	var thinkingPtr *string
-	var inputTokens, outputTokens, totalTokens *int
+	var inputTokens, outputTokens, totalTokens, thinkingTokens *int
 	var textLen, toolCallsCount int
 
 	if resp != nil {
@@ -61,6 +61,7 @@ func recordLLMInteraction(
 			inputTokens = &resp.Usage.InputTokens
 			outputTokens = &resp.Usage.OutputTokens
 			totalTokens = &resp.Usage.TotalTokens
+			thinkingTokens = &resp.Usage.ThinkingTokens
 		}
 		textLen = len(resp.Text)
 		toolCallsCount = len(resp.ToolCalls)
@@ -113,6 +114,7 @@ func recordLLMInteraction(
 		InputTokens:      inputTokens,
 		OutputTokens:     outputTokens,
 		TotalTokens:      totalTokens,
+		ThinkingTokens:   thinkingTokens,
 		DurationMs:       &durationMs,
 	})
 	if err != nil {

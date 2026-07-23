@@ -15,6 +15,7 @@ type CreateLLMInteractionRequest struct {
 	InputTokens      *int           `json:"input_tokens,omitempty"`
 	OutputTokens     *int           `json:"output_tokens,omitempty"`
 	TotalTokens      *int           `json:"total_tokens,omitempty"`
+	ThinkingTokens   *int           `json:"thinking_tokens,omitempty"`
 	DurationMs       *int           `json:"duration_ms,omitempty"`
 	ErrorMessage     *string        `json:"error_message,omitempty"`
 }

@@ -350,6 +350,8 @@ var (
 		{Name: "input_tokens", Type: field.TypeInt, Nullable: true},
 		{Name: "output_tokens", Type: field.TypeInt, Nullable: true},
 		{Name: "total_tokens", Type: field.TypeInt, Nullable: true},
+		{Name: "thinking_tokens", Type: field.TypeInt, Nullable: true},
+		{Name: "estimated_cost_usd", Type: field.TypeFloat64, Nullable: true},
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "execution_id", Type: field.TypeString, Nullable: true},
@@ -365,25 +367,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "llm_interactions_agent_executions_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[13]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[15]},
 				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "llm_interactions_alert_sessions_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[14]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[16]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "llm_interactions_messages_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[15]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[17]},
 				RefColumns: []*schema.Column{MessagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "llm_interactions_stages_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[16]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[18]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -392,17 +394,17 @@ var (
 			{
 				Name:    "llminteraction_execution_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[13], LlmInteractionsColumns[1]},
+				Columns: []*schema.Column{LlmInteractionsColumns[15], LlmInteractionsColumns[1]},
 			},
 			{
 				Name:    "llminteraction_stage_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[16], LlmInteractionsColumns[1]},
+				Columns: []*schema.Column{LlmInteractionsColumns[18], LlmInteractionsColumns[1]},
 			},
 			{
 				Name:    "llminteraction_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[14], LlmInteractionsColumns[1]},
+				Columns: []*schema.Column{LlmInteractionsColumns[16], LlmInteractionsColumns[1]},
 			},
 		},
 	}

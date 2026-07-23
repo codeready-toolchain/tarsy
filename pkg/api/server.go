@@ -20,6 +20,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
@@ -52,6 +53,7 @@ type Server struct {
 	scoringService     *services.ScoringService        // nil until set (score read endpoint)
 	cancelNotifier     events.SessionCancelNotifier    // nil until set (cross-pod cancel)
 	memoryService      *memory.Service                 // nil until set (memory endpoints + review refinement)
+	costBook           *cost.Book                      // nil until set (cost estimation / Config Viewer)
 	dashboardDir       string                          // path to dashboard build dir (empty = no static serving)
 	wsOriginPatterns   []string                        // allowed WebSocket origin patterns
 }
@@ -145,6 +147,11 @@ func (s *Server) SetScoringService(svc *services.ScoringService) {
 // SetMemoryService sets the memory service for memory CRUD endpoints and review-triggered refinement.
 func (s *Server) SetMemoryService(svc *memory.Service) {
 	s.memoryService = svc
+}
+
+// SetCostBook sets the price book for Config Viewer catalog status.
+func (s *Server) SetCostBook(book *cost.Book) {
+	s.costBook = book
 }
 
 // SetDashboardDir sets the path to the dashboard build directory and
