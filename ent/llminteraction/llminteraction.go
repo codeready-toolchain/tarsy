@@ -43,6 +43,10 @@ const (
 	FieldOutputTokens = "output_tokens"
 	// FieldTotalTokens holds the string denoting the total_tokens field in the database.
 	FieldTotalTokens = "total_tokens"
+	// FieldThinkingTokens holds the string denoting the thinking_tokens field in the database.
+	FieldThinkingTokens = "thinking_tokens"
+	// FieldEstimatedCostUsd holds the string denoting the estimated_cost_usd field in the database.
+	FieldEstimatedCostUsd = "estimated_cost_usd"
 	// FieldDurationMs holds the string denoting the duration_ms field in the database.
 	FieldDurationMs = "duration_ms"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -123,6 +127,8 @@ var Columns = []string{
 	FieldInputTokens,
 	FieldOutputTokens,
 	FieldTotalTokens,
+	FieldThinkingTokens,
+	FieldEstimatedCostUsd,
 	FieldDurationMs,
 	FieldErrorMessage,
 }
@@ -233,6 +239,16 @@ func ByOutputTokens(opts ...sql.OrderTermOption) OrderOption {
 // ByTotalTokens orders the results by the total_tokens field.
 func ByTotalTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalTokens, opts...).ToFunc()
+}
+
+// ByThinkingTokens orders the results by the thinking_tokens field.
+func ByThinkingTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldThinkingTokens, opts...).ToFunc()
+}
+
+// ByEstimatedCostUsd orders the results by the estimated_cost_usd field.
+func ByEstimatedCostUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEstimatedCostUsd, opts...).ToFunc()
 }
 
 // ByDurationMs orders the results by the duration_ms field.

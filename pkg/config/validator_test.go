@@ -2473,6 +2473,83 @@ func TestValidateSlack_IntegrationWithValidateAll(t *testing.T) {
 	assert.Contains(t, err.Error(), "system.slack.channel is required")
 }
 
+func TestValidateCostEstimation(t *testing.T) {
+	tests := []struct {
+		name    string
+		ce      *CostEstimationConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "nil passes",
+			ce:      nil,
+			wantErr: false,
+		},
+		{
+			name: "valid rates pass",
+			ce: &CostEstimationConfig{
+				Enabled: true,
+				ModelRates: map[string]ModelRateConfig{
+					"gemini-3.1-pro-preview": {InputPerMillion: 2.0, OutputPerMillion: 12.0},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "zero rates pass",
+			ce: &CostEstimationConfig{
+				ModelRates: map[string]ModelRateConfig{
+					"free-model": {InputPerMillion: 0, OutputPerMillion: 0},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty model name fails",
+			ce: &CostEstimationConfig{
+				ModelRates: map[string]ModelRateConfig{
+					"": {InputPerMillion: 1.0, OutputPerMillion: 1.0},
+				},
+			},
+			wantErr: true,
+			errMsg:  "model name must not be empty",
+		},
+		{
+			name: "negative input rate fails",
+			ce: &CostEstimationConfig{
+				ModelRates: map[string]ModelRateConfig{
+					"bad": {InputPerMillion: -1.0, OutputPerMillion: 1.0},
+				},
+			},
+			wantErr: true,
+			errMsg:  "input_per_million must be >= 0",
+		},
+		{
+			name: "negative output rate fails",
+			ce: &CostEstimationConfig{
+				ModelRates: map[string]ModelRateConfig{
+					"bad": {InputPerMillion: 1.0, OutputPerMillion: -0.5},
+				},
+			},
+			wantErr: true,
+			errMsg:  "output_per_million must be >= 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{CostEstimation: tt.ce}
+			err := NewValidator(cfg).validateCostEstimation()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateOrchestratorDefaults(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -1,0 +1,109 @@
+# Session Usage Cost Estimation
+
+TARSy can attach an **estimated USD cost** to each LLM interaction at write time, using list prices from a price book. Estimates are for operator judgment — they are **not** invoice truth.
+
+Cost fields are persisted on `llm_interactions` in this release. Session list/detail and the Usage dashboard surfaces that *display* estimated cost land in follow-up work; Config Viewer already exposes the effective toggle, overrides, and catalog status via `GET /api/v1/system/config`.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Configuration](#configuration)
+- [Price book](#price-book)
+- [How estimates are computed](#how-estimates-are-computed)
+- [Thinking tokens](#thinking-tokens)
+- [Known gaps](#known-gaps)
+- [Completeness](#completeness)
+
+## Overview
+
+When cost estimation is **enabled** (default):
+
+1. On each LLM interaction write, TARSy resolves rates for `model_name`.
+2. It computes `estimated_cost_usd` from input / output / thinking tokens.
+3. The value is stored on the row (point-in-time). Later price-book changes do not rewrite history.
+
+When cost estimation is **disabled**:
+
+- Token usage is still persisted (including thinking tokens when reported).
+- `estimated_cost_usd` is left null (no pricing math).
+
+## Configuration
+
+```yaml
+system:
+  cost_estimation:
+    enabled: true   # default true if the whole block is omitted
+    model_rates:    # optional flat overrides; exact TARSy model_name
+      gemini-3.1-pro-preview:
+        input_per_million: 2.0
+        output_per_million: 12.0
+```
+
+- Overrides are **per-million USD** (converted to per-token internally).
+- Overrides win over the remote catalog and the bundled snapshot.
+- YAML changes require a process restart (catalog TTL refresh does not reload YAML).
+
+See also [`deploy/config/tarsy.yaml.example`](../deploy/config/tarsy.yaml.example).
+
+## Price book
+
+Resolve order:
+
+1. **YAML overrides** — exact `model_name`
+2. **Remote LiteLLM catalog** — fetched asynchronously at startup, refreshed every 24h
+3. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure
+
+Catalog URL:
+
+`https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json`
+
+Model matching: exact key first, then conservative `*/{model}` / provider-prefix heuristics. If multiple heuristic candidates disagree on rates, the model stays **unpriced** rather than guessing.
+
+Config Viewer (`system.cost_estimation`) shows `enabled`, override rates, and catalog status (`source`, `entry_count`, `last_fetch`, `last_error`).
+
+## How estimates are computed
+
+```
+cost_usd =
+    input_tokens    * rates.input
+  + output_tokens   * rates.output
+  + thinking_tokens * rates.reasoning   # only when thinking_tokens > 0
+```
+
+Reasoning rate = LiteLLM `output_cost_per_reasoning_token` when present, otherwise the output rate.
+
+**Context tiers (B-scoped):**
+
+1. If the catalog has `*_above_{N}k_tokens` and `input_tokens` ≥ threshold → use those rates (e.g. Gemini 3.1 Pro at 200k).
+2. Else if `tiered_pricing` ranges exist → pick the single matching tier (no blending).
+3. Else → flat base rates.
+
+Priority / flex / batch rates and YAML override tiers are out of scope for v1.
+
+## Thinking tokens
+
+- Column: `llm_interactions.thinking_tokens` (nullable).
+- Populated from provider usage when available (Google native maps `thoughts_token_count`).
+- LangChain backends typically report `0` today — no LangChain thinking extraction in v1.
+- Thinking tokens are included in cost when > 0.
+
+## Known gaps
+
+| Gap | Impact |
+|-----|--------|
+| Cache read/write tokens | Not persisted; estimates may undercount models that discount cached input |
+| LangChain thinking usage | Often stored as 0; cost uses input/output only |
+| Negotiated enterprise rates | Catalog is public list price — use YAML overrides |
+| Historical sessions | Pre-feature rows stay null until a future backfill |
+
+## Completeness
+
+Session/Usage APIs will expose completeness separately (follow-up). Semantics:
+
+| Completeness | Meaning |
+|--------------|---------|
+| `complete` | All token-bearing interactions have non-null `estimated_cost_usd` |
+| `partial` | Some token-bearing rows are unpriced (null cost) |
+| `none` | No priced token-bearing rows |
+
+Unpriced includes: unknown models, heuristic conflicts, estimation disabled at write time, and pre-feature rows. Completeness is derived from **counts**, not from `COALESCE(SUM(estimated_cost_usd), 0)`.

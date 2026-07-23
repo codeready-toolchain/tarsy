@@ -258,7 +258,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 
 	// Trace/observability and timeline endpoints.
 	messageService := services.NewMessageService(entClient)
-	interactionService := services.NewInteractionService(entClient, messageService)
+	interactionService := services.NewInteractionService(entClient, messageService, nil)
 	stageService := services.NewStageService(entClient)
 	timelineService := services.NewTimelineService(entClient)
 	server.SetInteractionService(interactionService)

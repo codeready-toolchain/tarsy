@@ -173,6 +173,34 @@ func (_c *LLMInteractionCreate) SetNillableTotalTokens(v *int) *LLMInteractionCr
 	return _c
 }
 
+// SetThinkingTokens sets the "thinking_tokens" field.
+func (_c *LLMInteractionCreate) SetThinkingTokens(v int) *LLMInteractionCreate {
+	_c.mutation.SetThinkingTokens(v)
+	return _c
+}
+
+// SetNillableThinkingTokens sets the "thinking_tokens" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableThinkingTokens(v *int) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetThinkingTokens(*v)
+	}
+	return _c
+}
+
+// SetEstimatedCostUsd sets the "estimated_cost_usd" field.
+func (_c *LLMInteractionCreate) SetEstimatedCostUsd(v float64) *LLMInteractionCreate {
+	_c.mutation.SetEstimatedCostUsd(v)
+	return _c
+}
+
+// SetNillableEstimatedCostUsd sets the "estimated_cost_usd" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableEstimatedCostUsd(v *float64) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetEstimatedCostUsd(*v)
+	}
+	return _c
+}
+
 // SetDurationMs sets the "duration_ms" field.
 func (_c *LLMInteractionCreate) SetDurationMs(v int) *LLMInteractionCreate {
 	_c.mutation.SetDurationMs(v)
@@ -399,6 +427,14 @@ func (_c *LLMInteractionCreate) createSpec() (*LLMInteraction, *sqlgraph.CreateS
 	if value, ok := _c.mutation.TotalTokens(); ok {
 		_spec.SetField(llminteraction.FieldTotalTokens, field.TypeInt, value)
 		_node.TotalTokens = &value
+	}
+	if value, ok := _c.mutation.ThinkingTokens(); ok {
+		_spec.SetField(llminteraction.FieldThinkingTokens, field.TypeInt, value)
+		_node.ThinkingTokens = &value
+	}
+	if value, ok := _c.mutation.EstimatedCostUsd(); ok {
+		_spec.SetField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)
+		_node.EstimatedCostUsd = &value
 	}
 	if value, ok := _c.mutation.DurationMs(); ok {
 		_spec.SetField(llminteraction.FieldDurationMs, field.TypeInt, value)

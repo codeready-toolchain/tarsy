@@ -342,6 +342,16 @@ export interface SystemSettingsView {
     event_ttl: string;
     cleanup_interval: string;
   } | null;
+  cost_estimation?: {
+    enabled: boolean;
+    model_rates?: Record<string, { input_per_million: number; output_per_million: number }>;
+    catalog: {
+      source: string;
+      entry_count: number;
+      last_fetch?: string | null;
+      last_error?: string;
+    };
+  } | null;
   dashboard_url?: string;
   allowed_ws_origins: string[];
 }

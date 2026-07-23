@@ -199,7 +199,7 @@ func (s *Server) defaultToolsHandler(c *echo.Context) error {
 // systemConfigHandler handles GET /api/v1/system/config.
 // Returns a sanitized snapshot of the effective in-memory configuration.
 func (s *Server) systemConfigHandler(c *echo.Context) error {
-	return c.JSON(http.StatusOK, buildSystemConfigResponse(s.cfg))
+	return c.JSON(http.StatusOK, buildSystemConfigResponse(s.cfg, s.costBook))
 }
 
 // systemConfigSkillHandler handles GET /api/v1/system/config/skills/:name.

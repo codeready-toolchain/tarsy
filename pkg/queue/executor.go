@@ -17,6 +17,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/memory"
@@ -38,6 +39,7 @@ type RealSessionExecutor struct {
 	subAgentRegistry *config.SubAgentRegistry
 	memoryService    *memory.Service
 	memoryConfig     *config.MemoryConfig
+	costBook         *cost.Book
 }
 
 // NewRealSessionExecutor creates a new session executor.
@@ -60,6 +62,12 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 		memoryService:    memoryService,
 		memoryConfig:     memoryConfig,
 	}
+}
+
+// SetCostBook sets the price book used when persisting LLM interaction costs.
+// May be nil (estimation skipped).
+func (e *RealSessionExecutor) SetCostBook(book *cost.Book) {
+	e.costBook = book
 }
 
 // resolveRunbook resolves runbook content for a session using the RunbookService.
@@ -186,7 +194,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	stageService := services.NewStageService(e.dbClient)
 	messageService := services.NewMessageService(e.dbClient)
 	timelineService := services.NewTimelineService(e.dbClient)
-	interactionService := services.NewInteractionService(e.dbClient, messageService)
+	interactionService := services.NewInteractionService(e.dbClient, messageService, e.costBook)
 	runbookContent := e.resolveRunbook(ctx, session)
 
 	// 3. Sequential chain loop

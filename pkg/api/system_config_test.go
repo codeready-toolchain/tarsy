@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 )
 
 func TestSanitizeTransport(t *testing.T) {
@@ -285,7 +286,7 @@ func TestSystemConfigHandler(t *testing.T) {
 			},
 		}
 
-		resp := buildSystemConfigResponse(s.cfg)
+		resp := buildSystemConfigResponse(s.cfg, nil)
 		assert.Equal(t, "***", resp.MCPServers["bad"].Transport.Command)
 	})
 
@@ -304,6 +305,45 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.Empty(t, resp.Agents)
 		assert.Empty(t, resp.Chains)
 		assert.Empty(t, resp.MCPServers)
+	})
+
+	t.Run("includes cost_estimation from book status", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"gemini-3.1-pro-preview": {InputPerMillion: 2.0, OutputPerMillion: 12.0},
+			},
+		})
+		require.NoError(t, err)
+
+		s := &Server{
+			cfg: &config.Config{
+				CostEstimation: &config.CostEstimationConfig{Enabled: true},
+			},
+			costBook: book,
+		}
+		resp := buildSystemConfigResponse(s.cfg, s.costBook)
+		require.NotNil(t, resp.System.CostEstimation)
+		assert.True(t, resp.System.CostEstimation.Enabled)
+		require.Contains(t, resp.System.CostEstimation.ModelRates, "gemini-3.1-pro-preview")
+		assert.Equal(t, 2.0, resp.System.CostEstimation.ModelRates["gemini-3.1-pro-preview"].InputPerMillion)
+		assert.Equal(t, "snapshot", resp.System.CostEstimation.Catalog.Source)
+		assert.Greater(t, resp.System.CostEstimation.Catalog.EntryCount, 0)
+	})
+
+	t.Run("cost_estimation falls back to config when book nil", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			CostEstimation: &config.CostEstimationConfig{
+				Enabled: false,
+				ModelRates: map[string]config.ModelRateConfig{
+					"gpt-4o": {InputPerMillion: 2.5, OutputPerMillion: 10.0},
+				},
+			},
+		}, nil)
+		require.NotNil(t, resp.System.CostEstimation)
+		assert.False(t, resp.System.CostEstimation.Enabled)
+		assert.Equal(t, 2.5, resp.System.CostEstimation.ModelRates["gpt-4o"].InputPerMillion)
+		assert.Equal(t, "none", resp.System.CostEstimation.Catalog.Source)
 	})
 
 	t.Run("includes chains defaults memory and orchestrator duration strings", func(t *testing.T) {
@@ -383,7 +423,7 @@ func TestSystemConfigHandler(t *testing.T) {
 			},
 		}
 
-		resp := buildSystemConfigResponse(s.cfg)
+		resp := buildSystemConfigResponse(s.cfg, nil)
 
 		require.NotNil(t, resp.Defaults)
 		assert.Equal(t, "google-default", resp.Defaults.LLMProvider)
@@ -457,7 +497,7 @@ func TestSystemConfigHandler(t *testing.T) {
 					MaxToolResultTokens: 1000,
 				},
 			}),
-		})
+		}, nil)
 		provider := resp.LLMProviders["custom"]
 		assert.Equal(t, "https://llm.example.com/v1", provider.BaseURL)
 		raw, err := json.Marshal(provider)

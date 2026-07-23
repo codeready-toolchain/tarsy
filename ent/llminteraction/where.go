@@ -115,6 +115,16 @@ func TotalTokens(v int) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEQ(FieldTotalTokens, v))
 }
 
+// ThinkingTokens applies equality check predicate on the "thinking_tokens" field. It's identical to ThinkingTokensEQ.
+func ThinkingTokens(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldThinkingTokens, v))
+}
+
+// EstimatedCostUsd applies equality check predicate on the "estimated_cost_usd" field. It's identical to EstimatedCostUsdEQ.
+func EstimatedCostUsd(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldEstimatedCostUsd, v))
+}
+
 // DurationMs applies equality check predicate on the "duration_ms" field. It's identical to DurationMsEQ.
 func DurationMs(v int) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEQ(FieldDurationMs, v))
@@ -773,6 +783,106 @@ func TotalTokensIsNil() predicate.LLMInteraction {
 // TotalTokensNotNil applies the NotNil predicate on the "total_tokens" field.
 func TotalTokensNotNil() predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldNotNull(FieldTotalTokens))
+}
+
+// ThinkingTokensEQ applies the EQ predicate on the "thinking_tokens" field.
+func ThinkingTokensEQ(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldThinkingTokens, v))
+}
+
+// ThinkingTokensNEQ applies the NEQ predicate on the "thinking_tokens" field.
+func ThinkingTokensNEQ(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNEQ(FieldThinkingTokens, v))
+}
+
+// ThinkingTokensIn applies the In predicate on the "thinking_tokens" field.
+func ThinkingTokensIn(vs ...int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIn(FieldThinkingTokens, vs...))
+}
+
+// ThinkingTokensNotIn applies the NotIn predicate on the "thinking_tokens" field.
+func ThinkingTokensNotIn(vs ...int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotIn(FieldThinkingTokens, vs...))
+}
+
+// ThinkingTokensGT applies the GT predicate on the "thinking_tokens" field.
+func ThinkingTokensGT(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGT(FieldThinkingTokens, v))
+}
+
+// ThinkingTokensGTE applies the GTE predicate on the "thinking_tokens" field.
+func ThinkingTokensGTE(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGTE(FieldThinkingTokens, v))
+}
+
+// ThinkingTokensLT applies the LT predicate on the "thinking_tokens" field.
+func ThinkingTokensLT(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLT(FieldThinkingTokens, v))
+}
+
+// ThinkingTokensLTE applies the LTE predicate on the "thinking_tokens" field.
+func ThinkingTokensLTE(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLTE(FieldThinkingTokens, v))
+}
+
+// ThinkingTokensIsNil applies the IsNil predicate on the "thinking_tokens" field.
+func ThinkingTokensIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldThinkingTokens))
+}
+
+// ThinkingTokensNotNil applies the NotNil predicate on the "thinking_tokens" field.
+func ThinkingTokensNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldThinkingTokens))
+}
+
+// EstimatedCostUsdEQ applies the EQ predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdEQ(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldEstimatedCostUsd, v))
+}
+
+// EstimatedCostUsdNEQ applies the NEQ predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdNEQ(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNEQ(FieldEstimatedCostUsd, v))
+}
+
+// EstimatedCostUsdIn applies the In predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdIn(vs ...float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIn(FieldEstimatedCostUsd, vs...))
+}
+
+// EstimatedCostUsdNotIn applies the NotIn predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdNotIn(vs ...float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotIn(FieldEstimatedCostUsd, vs...))
+}
+
+// EstimatedCostUsdGT applies the GT predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdGT(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGT(FieldEstimatedCostUsd, v))
+}
+
+// EstimatedCostUsdGTE applies the GTE predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdGTE(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGTE(FieldEstimatedCostUsd, v))
+}
+
+// EstimatedCostUsdLT applies the LT predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdLT(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLT(FieldEstimatedCostUsd, v))
+}
+
+// EstimatedCostUsdLTE applies the LTE predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdLTE(v float64) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLTE(FieldEstimatedCostUsd, v))
+}
+
+// EstimatedCostUsdIsNil applies the IsNil predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldEstimatedCostUsd))
+}
+
+// EstimatedCostUsdNotNil applies the NotNil predicate on the "estimated_cost_usd" field.
+func EstimatedCostUsdNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldEstimatedCostUsd))
 }
 
 // DurationMsEQ applies the EQ predicate on the "duration_ms" field.

@@ -5,11 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================
@@ -395,4 +399,84 @@ func TestResolveEffectiveNativeTools(t *testing.T) {
 		result := resolveEffectiveNativeTools(execCtx)
 		assert.Equal(t, map[string]bool{"google_search": true}, result)
 	})
+}
+
+func TestRecordLLMInteraction_PersistsThinkingAndCost(t *testing.T) {
+	book, err := cost.NewBook(&cost.Config{
+		Enabled: true,
+		ModelRates: map[string]cost.ModelRateOverride{
+			"test-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+		},
+	})
+	require.NoError(t, err)
+
+	execCtx := newTestExecCtx(t, nil, nil, book)
+	ctx := t.Context()
+
+	recordLLMInteraction(ctx, execCtx, 1, llminteraction.InteractionTypeIteration, 3, &LLMResponse{
+		Text: "ok",
+		Usage: &agent.TokenUsage{
+			InputTokens:    1_000_000,
+			OutputTokens:   500_000,
+			TotalTokens:    1_500_000,
+			ThinkingTokens: 100_000,
+		},
+	}, nil, time.Now().Add(-50*time.Millisecond))
+
+	rows, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	row := rows[0]
+	require.NotNil(t, row.ThinkingTokens)
+	assert.Equal(t, 100_000, *row.ThinkingTokens)
+	require.NotNil(t, row.EstimatedCostUsd)
+	// 1.0 + 1.0 + 0.2 (thinking at output override rate) = 2.2
+	assert.InDelta(t, 2.2, *row.EstimatedCostUsd, 1e-9)
+	assert.Equal(t, "test-model", row.ModelName)
+}
+
+func TestRecordLLMInteraction_NilUsageSkipsTokens(t *testing.T) {
+	execCtx := newTestExecCtx(t, nil, nil)
+	ctx := t.Context()
+
+	recordLLMInteraction(ctx, execCtx, 0, llminteraction.InteractionTypeIteration, 1, &LLMResponse{
+		Text: "no usage",
+	}, nil, time.Now())
+
+	rows, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Nil(t, rows[0].InputTokens)
+	assert.Nil(t, rows[0].ThinkingTokens)
+	assert.Nil(t, rows[0].EstimatedCostUsd)
+}
+
+func TestRecordLLMInteraction_ZeroThinkingTokensLeftNil(t *testing.T) {
+	book, err := cost.NewBook(&cost.Config{
+		Enabled: true,
+		ModelRates: map[string]cost.ModelRateOverride{
+			"test-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+		},
+	})
+	require.NoError(t, err)
+
+	execCtx := newTestExecCtx(t, nil, nil, book)
+	ctx := t.Context()
+
+	recordLLMInteraction(ctx, execCtx, 1, llminteraction.InteractionTypeIteration, 1, &LLMResponse{
+		Text: "ok",
+		Usage: &agent.TokenUsage{
+			InputTokens:    1000,
+			OutputTokens:   500,
+			TotalTokens:    1500,
+			ThinkingTokens: 0,
+		},
+	}, nil, time.Now())
+
+	rows, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Nil(t, rows[0].ThinkingTokens)
+	require.NotNil(t, rows[0].EstimatedCostUsd)
 }

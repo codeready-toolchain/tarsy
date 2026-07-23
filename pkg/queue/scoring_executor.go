@@ -20,6 +20,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -49,6 +50,7 @@ type ScoringExecutor struct {
 	interactionService *services.InteractionService
 	messageService     *services.MessageService
 	runbookService     *runbook.Service
+	costBook           *cost.Book
 
 	memoryService  *memory.Service
 	memoryConfig   *config.MemoryConfig
@@ -92,7 +94,7 @@ func NewScoringExecutor(
 		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry),
 		stageService:       stageService,
 		timelineService:    timelineService,
-		interactionService: services.NewInteractionService(dbClient, msgService),
+		interactionService: services.NewInteractionService(dbClient, msgService, nil),
 		messageService:     msgService,
 		runbookService:     runbookService,
 		memoryService:      memoryService,
@@ -100,6 +102,13 @@ func NewScoringExecutor(
 		contextBuilder:     NewInvestigationContextBuilder(cfg, dbClient, stageService, timelineService, runbookService),
 		activeCancels:      make(map[string]context.CancelFunc),
 	}
+}
+
+// SetCostBook sets the price book used when persisting LLM interaction costs.
+// Rebuilds the interaction service so subsequent writes use the book.
+func (e *ScoringExecutor) SetCostBook(book *cost.Book) {
+	e.costBook = book
+	e.interactionService = services.NewInteractionService(e.dbClient, e.messageService, book)
 }
 
 // ScoreSessionAsync launches scoring in a background goroutine.

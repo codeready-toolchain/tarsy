@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/cleanup"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/masking"
@@ -288,8 +289,26 @@ func main() {
 		}
 	}
 
+	// 5e. Price book for LLM usage cost estimation (async catalog fetch + snapshot fallback)
+	costBook, costErr := cost.NewBook(costConfigFrom(cfg.CostEstimation))
+	if costErr != nil {
+		slog.Error("Failed to initialize cost estimation price book", "error", costErr)
+		os.Exit(1)
+	}
+	costBook.Start(ctx)
+	defer costBook.Stop()
+	overrideCount := 0
+	if cfg.CostEstimation != nil {
+		overrideCount = len(cfg.CostEstimation.ModelRates)
+	}
+	slog.Info("Cost estimation price book initialized",
+		"enabled", costBook.Enabled(),
+		"overrides", overrideCount)
+
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService, memoryService, memCfg)
+	executor.SetCostBook(costBook)
 	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService, memoryService)
+	scoringExecutor.SetCostBook(costBook)
 
 	// 6. Start worker pool (before HTTP server)
 	workerPool := queue.NewWorkerPool(podID, dbClient.Client, cfg.Queue, executor, scoringExecutor, eventPublisher, slackService)
@@ -314,6 +333,7 @@ func main() {
 		},
 		runbookService, memoryService, memCfg,
 	)
+	chatExecutor.SetCostBook(costBook)
 	slog.Info("Chat message executor initialized")
 
 	// 6b. Register cross-pod cancellation handler.
@@ -342,10 +362,11 @@ func main() {
 	if memoryService != nil {
 		httpServer.SetMemoryService(memoryService)
 	}
+	httpServer.SetCostBook(costBook)
 
 	// 7a. Wire trace and timeline endpoints.
 	messageService := services.NewMessageService(dbClient.Client)
-	interactionService := services.NewInteractionService(dbClient.Client, messageService)
+	interactionService := services.NewInteractionService(dbClient.Client, messageService, costBook)
 	stageService := services.NewStageService(dbClient.Client)
 	timelineService := services.NewTimelineService(dbClient.Client)
 	httpServer.SetInteractionService(interactionService)
@@ -449,4 +470,22 @@ func main() {
 	}
 
 	slog.Info("Shutdown complete")
+}
+
+// costConfigFrom maps resolved YAML cost-estimation settings into pkg/cost.Config.
+func costConfigFrom(cfg *config.CostEstimationConfig) *cost.Config {
+	if cfg == nil {
+		return &cost.Config{Enabled: true}
+	}
+	rates := make(map[string]cost.ModelRateOverride, len(cfg.ModelRates))
+	for name, rate := range cfg.ModelRates {
+		rates[name] = cost.ModelRateOverride{
+			InputPerMillion:  rate.InputPerMillion,
+			OutputPerMillion: rate.OutputPerMillion,
+		}
+	}
+	return &cost.Config{
+		Enabled:    cfg.Enabled,
+		ModelRates: rates,
+	}
 }

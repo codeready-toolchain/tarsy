@@ -8,6 +8,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/google/uuid"
 )
@@ -16,13 +17,16 @@ import (
 type InteractionService struct {
 	client         *ent.Client
 	messageService *MessageService
+	costBook       *cost.Book // nil = cost estimation disabled
 }
 
-// NewInteractionService creates a new InteractionService
-func NewInteractionService(client *ent.Client, messageService *MessageService) *InteractionService {
+// NewInteractionService creates a new InteractionService.
+// costBook may be nil (estimation skipped; thinking tokens still persisted when provided).
+func NewInteractionService(client *ent.Client, messageService *MessageService, costBook *cost.Book) *InteractionService {
 	return &InteractionService{
 		client:         client,
 		messageService: messageService,
+		costBook:       costBook,
 	}
 }
 
@@ -61,11 +65,18 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 	if req.TotalTokens != nil {
 		builder = builder.SetTotalTokens(*req.TotalTokens)
 	}
+	if req.ThinkingTokens != nil {
+		builder = builder.SetThinkingTokens(*req.ThinkingTokens)
+	}
 	if req.DurationMs != nil {
 		builder = builder.SetDurationMs(*req.DurationMs)
 	}
 	if req.ErrorMessage != nil {
 		builder = builder.SetErrorMessage(*req.ErrorMessage)
+	}
+
+	if estimated := s.estimateCost(req); estimated != nil {
+		builder = builder.SetEstimatedCostUsd(*estimated)
 	}
 
 	interaction, err := builder.Save(ctx)
@@ -74,6 +85,30 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 	}
 
 	return interaction, nil
+}
+
+// estimateCost returns a point-in-time USD estimate, or nil when estimation is
+// disabled, no usage metadata was reported, or the model is unpriced.
+func (s *InteractionService) estimateCost(req models.CreateLLMInteractionRequest) *float64 {
+	if s.costBook == nil || !s.costBook.Enabled() {
+		return nil
+	}
+	// No usage fields at all → skip estimation (distinct from explicit zeros).
+	if req.InputTokens == nil && req.OutputTokens == nil && req.ThinkingTokens == nil {
+		return nil
+	}
+	input, output, thinking := 0, 0, 0
+	if req.InputTokens != nil {
+		input = *req.InputTokens
+	}
+	if req.OutputTokens != nil {
+		output = *req.OutputTokens
+	}
+	if req.ThinkingTokens != nil {
+		thinking = *req.ThinkingTokens
+	}
+	costUSD, _ := s.costBook.Estimate(req.ModelName, input, output, thinking)
+	return costUSD
 }
 
 // CreateMCPInteraction creates a new MCP interaction

@@ -75,6 +75,14 @@ func (LLMInteraction) Fields() []ent.Field {
 		field.Int("total_tokens").
 			Optional().
 			Nillable(),
+		field.Int("thinking_tokens").
+			Optional().
+			Nillable().
+			Comment("Provider thinking/reasoning tokens when reported (e.g. Google native)"),
+		field.Float("estimated_cost_usd").
+			Optional().
+			Nillable().
+			Comment("Point-in-time list-price estimate; null if unpriced or estimation disabled"),
 		field.Int("duration_ms").
 			Optional().
 			Nillable(),

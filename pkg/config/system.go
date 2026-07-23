@@ -20,3 +20,16 @@ type SlackConfig struct {
 	TokenEnv string // Env var name for Slack bot token (default: "SLACK_BOT_TOKEN")
 	Channel  string // Slack channel ID (e.g., "C12345678")
 }
+
+// CostEstimationConfig holds resolved LLM cost-estimation settings.
+// Enabled defaults to true when system.cost_estimation is omitted.
+type CostEstimationConfig struct {
+	Enabled    bool
+	ModelRates map[string]ModelRateConfig // exact model_name → flat per-million USD overrides
+}
+
+// ModelRateConfig is a flat per-million USD override for one model.
+type ModelRateConfig struct {
+	InputPerMillion  float64
+	OutputPerMillion float64
+}

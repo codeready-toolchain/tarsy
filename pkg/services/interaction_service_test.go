@@ -9,6 +9,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
@@ -19,7 +20,7 @@ import (
 func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
@@ -81,10 +82,159 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 	})
 }
 
+func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	messageService := NewMessageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	input, output, thinking := 1_000_000, 500_000, 100_000
+
+	t.Run("prices when book enabled and model overridden", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+
+		interaction, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &input,
+			OutputTokens:    &output,
+			ThinkingTokens:  &thinking,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, interaction.ThinkingTokens)
+		assert.Equal(t, thinking, *interaction.ThinkingTokens)
+		require.NotNil(t, interaction.EstimatedCostUsd)
+		// 1.0 + 0.5*2.0 + 0.1*2.0 (reasoning falls back to output) = 2.2
+		assert.InDelta(t, 2.2, *interaction.EstimatedCostUsd, 1e-9)
+	})
+
+	t.Run("thinking persisted when estimation disabled", func(t *testing.T) {
+		disabled, err := cost.NewBook(&cost.Config{Enabled: false})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, disabled)
+
+		off, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &input,
+			OutputTokens:    &output,
+			ThinkingTokens:  &thinking,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, off.ThinkingTokens)
+		assert.Nil(t, off.EstimatedCostUsd)
+	})
+
+	t.Run("unpriced model leaves cost null", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{Enabled: true})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+
+		unpriced, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "unknown-model-xyz",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &input,
+			OutputTokens:    &output,
+		})
+		require.NoError(t, err)
+		assert.Nil(t, unpriced.EstimatedCostUsd)
+	})
+
+	t.Run("nil book skips estimation", func(t *testing.T) {
+		svc := NewInteractionService(client.Client, messageService, nil)
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "gemini-3.6-flash",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &input,
+			ThinkingTokens:  &thinking,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row.ThinkingTokens)
+		assert.Nil(t, row.EstimatedCostUsd)
+	})
+
+	t.Run("no usage metadata skips estimation", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+		})
+		require.NoError(t, err)
+		assert.Nil(t, row.InputTokens)
+		assert.Nil(t, row.OutputTokens)
+		assert.Nil(t, row.ThinkingTokens)
+		assert.Nil(t, row.EstimatedCostUsd)
+	})
+
+	t.Run("explicit zero tokens still estimate", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+		zero := 0
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &zero,
+			OutputTokens:    &zero,
+			ThinkingTokens:  &zero,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row.EstimatedCostUsd)
+		assert.InDelta(t, 0.0, *row.EstimatedCostUsd, 1e-12)
+	})
+}
+
 func TestInteractionService_CreateLLMInteraction_SessionLevel(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	sessionService := setupTestSessionService(t, client.Client)
 	ctx := context.Background()
 
@@ -120,7 +270,7 @@ func TestInteractionService_CreateLLMInteraction_SessionLevel(t *testing.T) {
 func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
@@ -193,7 +343,7 @@ func TestInteractionService_CreateMCPInteraction(t *testing.T) {
 func TestInteractionService_GetInteractionsList(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
@@ -265,7 +415,7 @@ func TestInteractionService_GetInteractionsList(t *testing.T) {
 func TestInteractionService_GetInteractionDetail(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()
@@ -349,7 +499,7 @@ func TestInteractionService_GetInteractionDetail(t *testing.T) {
 func TestInteractionService_ReconstructConversation(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	messageService := NewMessageService(client.Client)
-	interactionService := NewInteractionService(client.Client, messageService)
+	interactionService := NewInteractionService(client.Client, messageService, nil)
 	sessionService := setupTestSessionService(t, client.Client)
 	stageService := NewStageService(client.Client)
 	ctx := context.Background()

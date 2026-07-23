@@ -8646,6 +8646,10 @@ type LLMInteractionMutation struct {
 	addoutput_tokens       *int
 	total_tokens           *int
 	addtotal_tokens        *int
+	thinking_tokens        *int
+	addthinking_tokens     *int
+	estimated_cost_usd     *float64
+	addestimated_cost_usd  *float64
 	duration_ms            *int
 	addduration_ms         *int
 	error_message          *string
@@ -9441,6 +9445,146 @@ func (m *LLMInteractionMutation) ResetTotalTokens() {
 	delete(m.clearedFields, llminteraction.FieldTotalTokens)
 }
 
+// SetThinkingTokens sets the "thinking_tokens" field.
+func (m *LLMInteractionMutation) SetThinkingTokens(i int) {
+	m.thinking_tokens = &i
+	m.addthinking_tokens = nil
+}
+
+// ThinkingTokens returns the value of the "thinking_tokens" field in the mutation.
+func (m *LLMInteractionMutation) ThinkingTokens() (r int, exists bool) {
+	v := m.thinking_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThinkingTokens returns the old "thinking_tokens" field's value of the LLMInteraction entity.
+// If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LLMInteractionMutation) OldThinkingTokens(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThinkingTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThinkingTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThinkingTokens: %w", err)
+	}
+	return oldValue.ThinkingTokens, nil
+}
+
+// AddThinkingTokens adds i to the "thinking_tokens" field.
+func (m *LLMInteractionMutation) AddThinkingTokens(i int) {
+	if m.addthinking_tokens != nil {
+		*m.addthinking_tokens += i
+	} else {
+		m.addthinking_tokens = &i
+	}
+}
+
+// AddedThinkingTokens returns the value that was added to the "thinking_tokens" field in this mutation.
+func (m *LLMInteractionMutation) AddedThinkingTokens() (r int, exists bool) {
+	v := m.addthinking_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearThinkingTokens clears the value of the "thinking_tokens" field.
+func (m *LLMInteractionMutation) ClearThinkingTokens() {
+	m.thinking_tokens = nil
+	m.addthinking_tokens = nil
+	m.clearedFields[llminteraction.FieldThinkingTokens] = struct{}{}
+}
+
+// ThinkingTokensCleared returns if the "thinking_tokens" field was cleared in this mutation.
+func (m *LLMInteractionMutation) ThinkingTokensCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldThinkingTokens]
+	return ok
+}
+
+// ResetThinkingTokens resets all changes to the "thinking_tokens" field.
+func (m *LLMInteractionMutation) ResetThinkingTokens() {
+	m.thinking_tokens = nil
+	m.addthinking_tokens = nil
+	delete(m.clearedFields, llminteraction.FieldThinkingTokens)
+}
+
+// SetEstimatedCostUsd sets the "estimated_cost_usd" field.
+func (m *LLMInteractionMutation) SetEstimatedCostUsd(f float64) {
+	m.estimated_cost_usd = &f
+	m.addestimated_cost_usd = nil
+}
+
+// EstimatedCostUsd returns the value of the "estimated_cost_usd" field in the mutation.
+func (m *LLMInteractionMutation) EstimatedCostUsd() (r float64, exists bool) {
+	v := m.estimated_cost_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEstimatedCostUsd returns the old "estimated_cost_usd" field's value of the LLMInteraction entity.
+// If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LLMInteractionMutation) OldEstimatedCostUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEstimatedCostUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEstimatedCostUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEstimatedCostUsd: %w", err)
+	}
+	return oldValue.EstimatedCostUsd, nil
+}
+
+// AddEstimatedCostUsd adds f to the "estimated_cost_usd" field.
+func (m *LLMInteractionMutation) AddEstimatedCostUsd(f float64) {
+	if m.addestimated_cost_usd != nil {
+		*m.addestimated_cost_usd += f
+	} else {
+		m.addestimated_cost_usd = &f
+	}
+}
+
+// AddedEstimatedCostUsd returns the value that was added to the "estimated_cost_usd" field in this mutation.
+func (m *LLMInteractionMutation) AddedEstimatedCostUsd() (r float64, exists bool) {
+	v := m.addestimated_cost_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearEstimatedCostUsd clears the value of the "estimated_cost_usd" field.
+func (m *LLMInteractionMutation) ClearEstimatedCostUsd() {
+	m.estimated_cost_usd = nil
+	m.addestimated_cost_usd = nil
+	m.clearedFields[llminteraction.FieldEstimatedCostUsd] = struct{}{}
+}
+
+// EstimatedCostUsdCleared returns if the "estimated_cost_usd" field was cleared in this mutation.
+func (m *LLMInteractionMutation) EstimatedCostUsdCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldEstimatedCostUsd]
+	return ok
+}
+
+// ResetEstimatedCostUsd resets all changes to the "estimated_cost_usd" field.
+func (m *LLMInteractionMutation) ResetEstimatedCostUsd() {
+	m.estimated_cost_usd = nil
+	m.addestimated_cost_usd = nil
+	delete(m.clearedFields, llminteraction.FieldEstimatedCostUsd)
+}
+
 // SetDurationMs sets the "duration_ms" field.
 func (m *LLMInteractionMutation) SetDurationMs(i int) {
 	m.duration_ms = &i
@@ -9769,7 +9913,7 @@ func (m *LLMInteractionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LLMInteractionMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 18)
 	if m.session != nil {
 		fields = append(fields, llminteraction.FieldSessionID)
 	}
@@ -9811,6 +9955,12 @@ func (m *LLMInteractionMutation) Fields() []string {
 	}
 	if m.total_tokens != nil {
 		fields = append(fields, llminteraction.FieldTotalTokens)
+	}
+	if m.thinking_tokens != nil {
+		fields = append(fields, llminteraction.FieldThinkingTokens)
+	}
+	if m.estimated_cost_usd != nil {
+		fields = append(fields, llminteraction.FieldEstimatedCostUsd)
 	}
 	if m.duration_ms != nil {
 		fields = append(fields, llminteraction.FieldDurationMs)
@@ -9854,6 +10004,10 @@ func (m *LLMInteractionMutation) Field(name string) (ent.Value, bool) {
 		return m.OutputTokens()
 	case llminteraction.FieldTotalTokens:
 		return m.TotalTokens()
+	case llminteraction.FieldThinkingTokens:
+		return m.ThinkingTokens()
+	case llminteraction.FieldEstimatedCostUsd:
+		return m.EstimatedCostUsd()
 	case llminteraction.FieldDurationMs:
 		return m.DurationMs()
 	case llminteraction.FieldErrorMessage:
@@ -9895,6 +10049,10 @@ func (m *LLMInteractionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldOutputTokens(ctx)
 	case llminteraction.FieldTotalTokens:
 		return m.OldTotalTokens(ctx)
+	case llminteraction.FieldThinkingTokens:
+		return m.OldThinkingTokens(ctx)
+	case llminteraction.FieldEstimatedCostUsd:
+		return m.OldEstimatedCostUsd(ctx)
 	case llminteraction.FieldDurationMs:
 		return m.OldDurationMs(ctx)
 	case llminteraction.FieldErrorMessage:
@@ -10006,6 +10164,20 @@ func (m *LLMInteractionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTotalTokens(v)
 		return nil
+	case llminteraction.FieldThinkingTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThinkingTokens(v)
+		return nil
+	case llminteraction.FieldEstimatedCostUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEstimatedCostUsd(v)
+		return nil
 	case llminteraction.FieldDurationMs:
 		v, ok := value.(int)
 		if !ok {
@@ -10037,6 +10209,12 @@ func (m *LLMInteractionMutation) AddedFields() []string {
 	if m.addtotal_tokens != nil {
 		fields = append(fields, llminteraction.FieldTotalTokens)
 	}
+	if m.addthinking_tokens != nil {
+		fields = append(fields, llminteraction.FieldThinkingTokens)
+	}
+	if m.addestimated_cost_usd != nil {
+		fields = append(fields, llminteraction.FieldEstimatedCostUsd)
+	}
 	if m.addduration_ms != nil {
 		fields = append(fields, llminteraction.FieldDurationMs)
 	}
@@ -10054,6 +10232,10 @@ func (m *LLMInteractionMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedOutputTokens()
 	case llminteraction.FieldTotalTokens:
 		return m.AddedTotalTokens()
+	case llminteraction.FieldThinkingTokens:
+		return m.AddedThinkingTokens()
+	case llminteraction.FieldEstimatedCostUsd:
+		return m.AddedEstimatedCostUsd()
 	case llminteraction.FieldDurationMs:
 		return m.AddedDurationMs()
 	}
@@ -10085,6 +10267,20 @@ func (m *LLMInteractionMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddTotalTokens(v)
+		return nil
+	case llminteraction.FieldThinkingTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddThinkingTokens(v)
+		return nil
+	case llminteraction.FieldEstimatedCostUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEstimatedCostUsd(v)
 		return nil
 	case llminteraction.FieldDurationMs:
 		v, ok := value.(int)
@@ -10124,6 +10320,12 @@ func (m *LLMInteractionMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(llminteraction.FieldTotalTokens) {
 		fields = append(fields, llminteraction.FieldTotalTokens)
+	}
+	if m.FieldCleared(llminteraction.FieldThinkingTokens) {
+		fields = append(fields, llminteraction.FieldThinkingTokens)
+	}
+	if m.FieldCleared(llminteraction.FieldEstimatedCostUsd) {
+		fields = append(fields, llminteraction.FieldEstimatedCostUsd)
 	}
 	if m.FieldCleared(llminteraction.FieldDurationMs) {
 		fields = append(fields, llminteraction.FieldDurationMs)
@@ -10168,6 +10370,12 @@ func (m *LLMInteractionMutation) ClearField(name string) error {
 		return nil
 	case llminteraction.FieldTotalTokens:
 		m.ClearTotalTokens()
+		return nil
+	case llminteraction.FieldThinkingTokens:
+		m.ClearThinkingTokens()
+		return nil
+	case llminteraction.FieldEstimatedCostUsd:
+		m.ClearEstimatedCostUsd()
 		return nil
 	case llminteraction.FieldDurationMs:
 		m.ClearDurationMs()
@@ -10224,6 +10432,12 @@ func (m *LLMInteractionMutation) ResetField(name string) error {
 		return nil
 	case llminteraction.FieldTotalTokens:
 		m.ResetTotalTokens()
+		return nil
+	case llminteraction.FieldThinkingTokens:
+		m.ResetThinkingTokens()
+		return nil
+	case llminteraction.FieldEstimatedCostUsd:
+		m.ResetEstimatedCostUsd()
 		return nil
 	case llminteraction.FieldDurationMs:
 		m.ResetDurationMs()

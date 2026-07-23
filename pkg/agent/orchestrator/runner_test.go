@@ -891,7 +891,7 @@ func setupIntegrationRunner(
 	stageService := services.NewStageService(dbClient.Client)
 	timelineService := services.NewTimelineService(dbClient.Client)
 	messageService := services.NewMessageService(dbClient.Client)
-	interactionService := services.NewInteractionService(dbClient.Client, messageService)
+	interactionService := services.NewInteractionService(dbClient.Client, messageService, nil)
 	mcpRegistry := config.NewMCPServerRegistry(nil)
 	sessionService := services.NewSessionService(
 		dbClient.Client,

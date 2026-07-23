@@ -21,6 +21,9 @@ type Config struct {
 	// Slack notification configuration (resolved from system.slack)
 	Slack *SlackConfig
 
+	// Cost estimation configuration (resolved from system.cost_estimation)
+	CostEstimation *CostEstimationConfig
+
 	// Retention and cleanup configuration (resolved from system.retention)
 	Retention *RetentionConfig
 

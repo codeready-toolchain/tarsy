@@ -25,12 +25,26 @@ type TarsyYAMLConfig struct {
 
 // SystemYAMLConfig groups system-wide infrastructure settings.
 type SystemYAMLConfig struct {
-	DashboardURL     string              `yaml:"dashboard_url"`
-	AllowedWSOrigins []string            `yaml:"allowed_ws_origins"`
-	GitHub           *GitHubYAMLConfig   `yaml:"github"`
-	Runbooks         *RunbooksYAMLConfig `yaml:"runbooks"`
-	Slack            *SlackYAMLConfig    `yaml:"slack"`
-	Retention        *RetentionConfig    `yaml:"retention"`
+	DashboardURL     string                    `yaml:"dashboard_url"`
+	AllowedWSOrigins []string                  `yaml:"allowed_ws_origins"`
+	GitHub           *GitHubYAMLConfig         `yaml:"github"`
+	Runbooks         *RunbooksYAMLConfig       `yaml:"runbooks"`
+	Slack            *SlackYAMLConfig          `yaml:"slack"`
+	CostEstimation   *CostEstimationYAMLConfig `yaml:"cost_estimation"`
+	Retention        *RetentionConfig          `yaml:"retention"`
+}
+
+// CostEstimationYAMLConfig holds cost-estimation settings from YAML.
+// Enabled is a *bool: nil (or whole block omitted) means enabled (default true).
+type CostEstimationYAMLConfig struct {
+	Enabled    *bool                          `yaml:"enabled,omitempty"`
+	ModelRates map[string]ModelRateYAMLConfig `yaml:"model_rates,omitempty"`
+}
+
+// ModelRateYAMLConfig is a flat per-million USD override from YAML.
+type ModelRateYAMLConfig struct {
+	InputPerMillion  float64 `yaml:"input_per_million"`
+	OutputPerMillion float64 `yaml:"output_per_million"`
 }
 
 // SlackYAMLConfig holds Slack notification settings from YAML.
@@ -184,10 +198,11 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks + Slack + Retention + DashboardURL + WS Origins)
+	// Resolve system config (GitHub + Runbooks + Slack + CostEstimation + Retention + DashboardURL + WS Origins)
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
 	slackCfg := resolveSlackConfig(tarsyConfig.System)
+	costEstimationCfg := resolveCostEstimationConfig(tarsyConfig.System)
 	retentionCfg := resolveRetentionConfig(tarsyConfig.System)
 	dashboardURL := resolveDashboardURL(tarsyConfig.System)
 	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
@@ -199,6 +214,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		GitHub:              githubCfg,
 		Runbooks:            runbooksCfg,
 		Slack:               slackCfg,
+		CostEstimation:      costEstimationCfg,
 		Retention:           retentionCfg,
 		DashboardURL:        dashboardURL,
 		AllowedWSOrigins:    allowedWSOrigins,
@@ -338,6 +354,29 @@ func resolveSlackConfig(sys *SystemYAMLConfig) *SlackConfig {
 	}
 	if s.Channel != "" {
 		cfg.Channel = s.Channel
+	}
+
+	return cfg
+}
+
+// resolveCostEstimationConfig resolves cost-estimation config from system YAML.
+// Default: enabled=true when the block is omitted entirely.
+func resolveCostEstimationConfig(sys *SystemYAMLConfig) *CostEstimationConfig {
+	cfg := &CostEstimationConfig{
+		Enabled:    true,
+		ModelRates: map[string]ModelRateConfig{},
+	}
+
+	if sys == nil || sys.CostEstimation == nil {
+		return cfg
+	}
+
+	ce := sys.CostEstimation
+	if ce.Enabled != nil {
+		cfg.Enabled = *ce.Enabled
+	}
+	for name, rate := range ce.ModelRates {
+		cfg.ModelRates[name] = ModelRateConfig(rate)
 	}
 
 	return cfg

@@ -79,6 +79,18 @@ system:
     token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
     channel: "C12345678"           # Slack channel ID (required when enabled)
 
+  # LLM usage cost estimation (list-price estimates, not invoice truth).
+  # Enabled by default when this block is omitted. When disabled, token usage
+  # is still tracked but estimated USD is not computed or shown.
+  # See docs/session-usage-cost.md for caveats, tiers, and airgap/snapshot notes.
+  cost_estimation:
+    enabled: true
+    # Optional flat per-million USD overrides (exact model_name; wins over catalog).
+    # model_rates:
+    #   gemini-3.1-pro-preview:
+    #     input_per_million: 2.0
+    #     output_per_million: 12.0
+
   # Data retention and cleanup (all values below are defaults)
   retention:
     session_retention_days: 365      # Soft-delete completed sessions older than N days

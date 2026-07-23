@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 )
 
 // --- Response DTOs (allowlist; snake_case JSON) ---
@@ -234,12 +235,34 @@ type QueueView struct {
 
 // SystemView is GitHub/Slack/runbooks/retention/dashboard settings.
 type SystemView struct {
-	GitHub           *GitHubView    `json:"github,omitempty"`
-	Slack            *SlackView     `json:"slack,omitempty"`
-	Runbooks         *RunbooksView  `json:"runbooks,omitempty"`
-	Retention        *RetentionView `json:"retention,omitempty"`
-	DashboardURL     string         `json:"dashboard_url,omitempty"`
-	AllowedWSOrigins []string       `json:"allowed_ws_origins"`
+	GitHub           *GitHubView         `json:"github,omitempty"`
+	Slack            *SlackView          `json:"slack,omitempty"`
+	Runbooks         *RunbooksView       `json:"runbooks,omitempty"`
+	Retention        *RetentionView      `json:"retention,omitempty"`
+	CostEstimation   *CostEstimationView `json:"cost_estimation,omitempty"`
+	DashboardURL     string              `json:"dashboard_url,omitempty"`
+	AllowedWSOrigins []string            `json:"allowed_ws_origins"`
+}
+
+// CostEstimationView is cost-estimation settings + catalog status for Config Viewer.
+type CostEstimationView struct {
+	Enabled    bool                     `json:"enabled"`
+	ModelRates map[string]ModelRateView `json:"model_rates,omitempty"`
+	Catalog    CostCatalogStatusView    `json:"catalog"`
+}
+
+// ModelRateView is a flat per-million USD override.
+type ModelRateView struct {
+	InputPerMillion  float64 `json:"input_per_million"`
+	OutputPerMillion float64 `json:"output_per_million"`
+}
+
+// CostCatalogStatusView describes the in-memory price catalog.
+type CostCatalogStatusView struct {
+	Source     string  `json:"source"`
+	EntryCount int     `json:"entry_count"`
+	LastFetch  *string `json:"last_fetch,omitempty"` // RFC3339
+	LastError  string  `json:"last_error,omitempty"`
 }
 
 // GitHubView shows token env name only.
@@ -270,7 +293,7 @@ type RetentionView struct {
 
 // --- Builder ---
 
-func buildSystemConfigResponse(cfg *config.Config) SystemConfigResponse {
+func buildSystemConfigResponse(cfg *config.Config, costBook *cost.Book) SystemConfigResponse {
 	resp := SystemConfigResponse{
 		Agents:       map[string]AgentView{},
 		Chains:       map[string]ChainView{},
@@ -287,7 +310,7 @@ func buildSystemConfigResponse(cfg *config.Config) SystemConfigResponse {
 
 	resp.Defaults = buildDefaultsView(cfg.Defaults)
 	resp.Queue = buildQueueView(cfg.Queue)
-	resp.System = buildSystemView(cfg)
+	resp.System = buildSystemView(cfg, costBook)
 
 	if cfg.AgentRegistry != nil {
 		agents := cfg.AgentRegistry.GetAll()
@@ -392,7 +415,7 @@ func buildQueueView(q *config.QueueConfig) *QueueView {
 	}
 }
 
-func buildSystemView(cfg *config.Config) SystemView {
+func buildSystemView(cfg *config.Config, costBook *cost.Book) SystemView {
 	view := SystemView{
 		DashboardURL:     cfg.DashboardURL,
 		AllowedWSOrigins: cfg.AllowedWSOrigins,
@@ -424,7 +447,55 @@ func buildSystemView(cfg *config.Config) SystemView {
 			CleanupInterval:      durationString(cfg.Retention.CleanupInterval),
 		}
 	}
+	view.CostEstimation = buildCostEstimationView(cfg.CostEstimation, costBook)
 	return view
+}
+
+func buildCostEstimationView(cfg *config.CostEstimationConfig, book *cost.Book) *CostEstimationView {
+	if book != nil {
+		st := book.Status()
+		rates := make(map[string]ModelRateView, len(st.ModelRates))
+		for k, v := range st.ModelRates {
+			rates[k] = ModelRateView{
+				InputPerMillion:  v.InputPerMillion,
+				OutputPerMillion: v.OutputPerMillion,
+			}
+		}
+		cat := CostCatalogStatusView{
+			Source:     st.Catalog.Source,
+			EntryCount: st.Catalog.EntryCount,
+			LastError:  st.Catalog.LastError,
+		}
+		if st.Catalog.LastFetch != nil {
+			s := st.Catalog.LastFetch.UTC().Format(time.RFC3339)
+			cat.LastFetch = &s
+		}
+		return &CostEstimationView{
+			Enabled:    st.Enabled,
+			ModelRates: rates,
+			Catalog:    cat,
+		}
+	}
+
+	// Config-only fallback (book not wired yet).
+	enabled := true
+	rates := map[string]ModelRateView{}
+	if cfg != nil {
+		enabled = cfg.Enabled
+		for k, v := range cfg.ModelRates {
+			rates[k] = ModelRateView{
+				InputPerMillion:  v.InputPerMillion,
+				OutputPerMillion: v.OutputPerMillion,
+			}
+		}
+	}
+	return &CostEstimationView{
+		Enabled:    enabled,
+		ModelRates: rates,
+		Catalog: CostCatalogStatusView{
+			Source: "none",
+		},
+	}
 }
 
 func buildAgentView(a *config.AgentConfig) AgentView {
