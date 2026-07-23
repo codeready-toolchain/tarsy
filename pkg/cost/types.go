@@ -7,6 +7,7 @@ import "time"
 // Provenance identifies how rates were resolved for an estimate.
 type Provenance string
 
+// Provenance values returned by Book.Estimate.
 const (
 	ProvenanceOverride Provenance = "override"
 	ProvenanceCatalog  Provenance = "catalog"

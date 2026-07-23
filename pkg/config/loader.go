@@ -376,10 +376,7 @@ func resolveCostEstimationConfig(sys *SystemYAMLConfig) *CostEstimationConfig {
 		cfg.Enabled = *ce.Enabled
 	}
 	for name, rate := range ce.ModelRates {
-		cfg.ModelRates[name] = ModelRateConfig{
-			InputPerMillion:  rate.InputPerMillion,
-			OutputPerMillion: rate.OutputPerMillion,
-		}
+		cfg.ModelRates[name] = ModelRateConfig(rate)
 	}
 
 	return cfg

@@ -99,10 +99,7 @@ func (b *Book) Status() Status {
 
 	rates := make(map[string]RateView, len(b.overrides))
 	for k, v := range b.overrides {
-		rates[k] = RateView{
-			InputPerMillion:  v.InputPerMillion,
-			OutputPerMillion: v.OutputPerMillion,
-		}
+		rates[k] = RateView(v)
 	}
 
 	src := "snapshot"

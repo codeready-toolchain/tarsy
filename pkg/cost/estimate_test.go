@@ -38,7 +38,7 @@ func TestEstimate(t *testing.T) {
 			want:     0.001 + 0.006,
 		},
 		{
-			name: "all zero tokens",
+			name:  "all zero tokens",
 			rates: Rates{Input: 1e-6, Output: 2e-6, Reasoning: 3e-6},
 			want:  0,
 		},

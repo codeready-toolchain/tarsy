@@ -105,7 +105,7 @@ func TestRatesForInput(t *testing.T) {
 }
 
 func TestFetchCatalog_MaxBody(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(strings.Repeat("x", 100)))
 	}))
@@ -117,7 +117,7 @@ func TestFetchCatalog_MaxBody(t *testing.T) {
 }
 
 func TestFetchCatalog_OK(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"m":{"input_cost_per_token":1e-6,"output_cost_per_token":2e-6}}`))
 	}))
