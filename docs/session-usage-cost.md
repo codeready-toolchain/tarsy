@@ -2,7 +2,7 @@
 
 TARSy can attach an **estimated USD cost** to each LLM interaction at write time, using list prices from a price book. Estimates are for operator judgment — they are **not** invoice truth.
 
-Cost fields are persisted on `llm_interactions` in this release. Session list/detail and the Usage dashboard surfaces that *display* estimated cost land in follow-up work; Config Viewer already exposes the effective toggle, overrides, and catalog status via `GET /api/v1/system/config`.
+Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The Usage dashboard page and `GET /api/v1/usage/summary` land in follow-up work. Config Viewer already exposes the effective toggle, overrides, and catalog status via `GET /api/v1/system/config`.
 
 ## Table of Contents
 
@@ -10,6 +10,7 @@ Cost fields are persisted on `llm_interactions` in this release. Session list/de
 - [Configuration](#configuration)
 - [Price book](#price-book)
 - [How estimates are computed](#how-estimates-are-computed)
+- [Session APIs](#session-apis)
 - [Thinking tokens](#thinking-tokens)
 - [Known gaps](#known-gaps)
 - [Completeness](#completeness)
@@ -80,6 +81,18 @@ Reasoning rate = LiteLLM `output_cost_per_reasoning_token` when present, otherwi
 
 Priority / flex / batch rates and YAML override tiers are out of scope for v1.
 
+## Session APIs
+
+When cost estimation is **enabled**, these responses include cost fields next to existing token totals:
+
+| Response | Fields |
+|----------|--------|
+| `GET /api/v1/sessions` (`DashboardListResponse`) | root `cost_estimation_enabled`; each item: `estimated_cost_usd`, `cost_completeness` |
+| `GET /api/v1/sessions/:id` (`SessionDetailResponse`) | root `cost_estimation_enabled` + session-level `estimated_cost_usd`, `cost_completeness`, `unpriced_interaction_count`; same on each `ExecutionOverview` (parent rollup includes nested sub-agents) |
+| `GET /api/v1/sessions/:id/summary` (`SessionSummaryResponse`) | same session-level cost fields as detail |
+
+When estimation is **disabled**: responses set `cost_estimation_enabled: false` and omit the other cost keys. Aggregates use `SUM(estimated_cost_usd)` of non-null values; completeness uses priced vs token-bearing interaction counts (see [Completeness](#completeness)).
+
 ## Thinking tokens
 
 - Column: `llm_interactions.thinking_tokens` (nullable).
@@ -98,7 +111,7 @@ Priority / flex / batch rates and YAML override tiers are out of scope for v1.
 
 ## Completeness
 
-Session/Usage APIs will expose completeness separately (follow-up). Semantics:
+Session list/detail/summary and `ExecutionOverview` expose `cost_completeness` (Usage API follows later). Semantics:
 
 | Completeness | Meaning |
 |--------------|---------|
@@ -106,4 +119,4 @@ Session/Usage APIs will expose completeness separately (follow-up). Semantics:
 | `partial` | Some token-bearing rows are unpriced (null cost) |
 | `none` | No priced token-bearing rows |
 
-Unpriced includes: unknown models, heuristic conflicts, estimation disabled at write time, and pre-feature rows. Completeness is derived from **counts**, not from `COALESCE(SUM(estimated_cost_usd), 0)`.
+A **token-bearing** interaction has any of `input_tokens`, `output_tokens`, or `thinking_tokens` > 0. Explicit `$0` is priced (complete); SQL `NULL` is unpriced. Unpriced includes: unknown models, heuristic conflicts, estimation disabled at write time, and pre-feature rows. Completeness is derived from **counts**, not from `COALESCE(SUM(estimated_cost_usd), 0)`.

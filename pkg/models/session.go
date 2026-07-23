@@ -70,49 +70,52 @@ type DashboardListParams struct {
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
 type DashboardSessionItem struct {
-	ID                    string     `json:"id"`
-	AlertType             *string    `json:"alert_type"`
-	ChainID               string     `json:"chain_id"`
-	Status                string     `json:"status"`
-	Author                *string    `json:"author"`
-	CreatedAt             time.Time  `json:"created_at"`
-	StartedAt             *time.Time `json:"started_at"`
-	CompletedAt           *time.Time `json:"completed_at"`
-	DurationMs            *int64     `json:"duration_ms"`
-	ErrorMessage          *string    `json:"error_message"`
-	ExecutiveSummary      *string    `json:"executive_summary"`
-	LLMInteractionCount   int        `json:"llm_interaction_count"`
-	MCPInteractionCount   int        `json:"mcp_interaction_count"`
-	InputTokens           int64      `json:"input_tokens"`
-	OutputTokens          int64      `json:"output_tokens"`
-	TotalTokens           int64      `json:"total_tokens"`
-	TotalStages           int        `json:"total_stages"`
-	CompletedStages       int        `json:"completed_stages"`
-	HasParallelStages     bool       `json:"has_parallel_stages"`
-	HasSubAgents          bool       `json:"has_sub_agents"`
-	HasActionStages       bool       `json:"has_action_stages"`
-	ActionsExecuted       *bool      `json:"actions_executed"`
-	ChatMessageCount      int        `json:"chat_message_count"`
-	ProviderFallbackCount int        `json:"provider_fallback_count"`
-	CurrentStageIndex     *int       `json:"current_stage_index"`
-	CurrentStageID        *string    `json:"current_stage_id"`
-	MatchedInContent      bool       `json:"matched_in_content"`
-	LatestScore           *int       `json:"latest_score"`
-	ScoringStatus         *string    `json:"scoring_status"`
-	ReviewStatus          *string    `json:"review_status"`
-	Assignee              *string    `json:"assignee"`
-	QualityRating         *string    `json:"quality_rating"`
-	ActionTaken           *string    `json:"action_taken"`
-	InvestigationFeedback *string    `json:"investigation_feedback"`
-	FeedbackEdited        bool       `json:"feedback_edited"`
-	FeedbackEditedBy      *string    `json:"feedback_edited_by"`
-	FeedbackEditedAt      *time.Time `json:"feedback_edited_at"`
+	ID                    string           `json:"id"`
+	AlertType             *string          `json:"alert_type"`
+	ChainID               string           `json:"chain_id"`
+	Status                string           `json:"status"`
+	Author                *string          `json:"author"`
+	CreatedAt             time.Time        `json:"created_at"`
+	StartedAt             *time.Time       `json:"started_at"`
+	CompletedAt           *time.Time       `json:"completed_at"`
+	DurationMs            *int64           `json:"duration_ms"`
+	ErrorMessage          *string          `json:"error_message"`
+	ExecutiveSummary      *string          `json:"executive_summary"`
+	LLMInteractionCount   int              `json:"llm_interaction_count"`
+	MCPInteractionCount   int              `json:"mcp_interaction_count"`
+	InputTokens           int64            `json:"input_tokens"`
+	OutputTokens          int64            `json:"output_tokens"`
+	TotalTokens           int64            `json:"total_tokens"`
+	EstimatedCostUsd      *float64         `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness      CostCompleteness `json:"cost_completeness,omitempty"`
+	TotalStages           int              `json:"total_stages"`
+	CompletedStages       int              `json:"completed_stages"`
+	HasParallelStages     bool             `json:"has_parallel_stages"`
+	HasSubAgents          bool             `json:"has_sub_agents"`
+	HasActionStages       bool             `json:"has_action_stages"`
+	ActionsExecuted       *bool            `json:"actions_executed"`
+	ChatMessageCount      int              `json:"chat_message_count"`
+	ProviderFallbackCount int              `json:"provider_fallback_count"`
+	CurrentStageIndex     *int             `json:"current_stage_index"`
+	CurrentStageID        *string          `json:"current_stage_id"`
+	MatchedInContent      bool             `json:"matched_in_content"`
+	LatestScore           *int             `json:"latest_score"`
+	ScoringStatus         *string          `json:"scoring_status"`
+	ReviewStatus          *string          `json:"review_status"`
+	Assignee              *string          `json:"assignee"`
+	QualityRating         *string          `json:"quality_rating"`
+	ActionTaken           *string          `json:"action_taken"`
+	InvestigationFeedback *string          `json:"investigation_feedback"`
+	FeedbackEdited        bool             `json:"feedback_edited"`
+	FeedbackEditedBy      *string          `json:"feedback_edited_by"`
+	FeedbackEditedAt      *time.Time       `json:"feedback_edited_at"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
 type DashboardListResponse struct {
-	Sessions   []DashboardSessionItem `json:"sessions"`
-	Pagination PaginationInfo         `json:"pagination"`
+	Sessions              []DashboardSessionItem `json:"sessions"`
+	Pagination            PaginationInfo         `json:"pagination"`
+	CostEstimationEnabled bool                   `json:"cost_estimation_enabled"`
 }
 
 // PaginationInfo describes pagination state.
@@ -178,23 +181,27 @@ type SessionDetailResponse struct {
 	CompletedAt *time.Time `json:"completed_at"`
 
 	// Computed fields
-	DurationMs          *int64  `json:"duration_ms"`
-	ChatEnabled         bool    `json:"chat_enabled"`
-	ChatID              *string `json:"chat_id"`
-	ChatMessageCount    int     `json:"chat_message_count"`
-	TotalStages         int     `json:"total_stages"`
-	CompletedStages     int     `json:"completed_stages"`
-	FailedStages        int     `json:"failed_stages"`
-	HasParallelStages   bool    `json:"has_parallel_stages"`
-	HasActionStages     bool    `json:"has_action_stages"`
-	ActionsExecuted     *bool   `json:"actions_executed"`
-	InputTokens         int64   `json:"input_tokens"`
-	OutputTokens        int64   `json:"output_tokens"`
-	TotalTokens         int64   `json:"total_tokens"`
-	LLMInteractionCount int     `json:"llm_interaction_count"`
-	MCPInteractionCount int     `json:"mcp_interaction_count"`
-	CurrentStageIndex   *int    `json:"current_stage_index"`
-	CurrentStageID      *string `json:"current_stage_id"`
+	DurationMs               *int64           `json:"duration_ms"`
+	ChatEnabled              bool             `json:"chat_enabled"`
+	ChatID                   *string          `json:"chat_id"`
+	ChatMessageCount         int              `json:"chat_message_count"`
+	TotalStages              int              `json:"total_stages"`
+	CompletedStages          int              `json:"completed_stages"`
+	FailedStages             int              `json:"failed_stages"`
+	HasParallelStages        bool             `json:"has_parallel_stages"`
+	HasActionStages          bool             `json:"has_action_stages"`
+	ActionsExecuted          *bool            `json:"actions_executed"`
+	InputTokens              int64            `json:"input_tokens"`
+	OutputTokens             int64            `json:"output_tokens"`
+	TotalTokens              int64            `json:"total_tokens"`
+	CostEstimationEnabled    bool             `json:"cost_estimation_enabled"`
+	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
+	UnpricedInteractionCount *int             `json:"unpriced_interaction_count,omitempty"`
+	LLMInteractionCount      int              `json:"llm_interaction_count"`
+	MCPInteractionCount      int              `json:"mcp_interaction_count"`
+	CurrentStageIndex        *int             `json:"current_stage_index"`
+	CurrentStageID           *string          `json:"current_stage_id"`
 
 	// Scoring fields
 	LatestScore   *int    `json:"latest_score"`
@@ -232,40 +239,47 @@ type StageOverview struct {
 
 // ExecutionOverview is a summary of an agent execution within a stage.
 type ExecutionOverview struct {
-	ExecutionID         string              `json:"execution_id"`
-	AgentName           string              `json:"agent_name"`
-	AgentIndex          int                 `json:"agent_index"`
-	Status              string              `json:"status"`
-	LLMBackend          string              `json:"llm_backend"`
-	LLMProvider         *string             `json:"llm_provider"`
-	StartedAt           *time.Time          `json:"started_at"`
-	CompletedAt         *time.Time          `json:"completed_at"`
-	DurationMs          *int64              `json:"duration_ms"`
-	ErrorMessage        *string             `json:"error_message"`
-	InputTokens         int64               `json:"input_tokens"`
-	OutputTokens        int64               `json:"output_tokens"`
-	TotalTokens         int64               `json:"total_tokens"`
-	ParentExecutionID   *string             `json:"parent_execution_id,omitempty"`
-	Task                *string             `json:"task,omitempty"`
-	OriginalLLMProvider *string             `json:"original_llm_provider,omitempty"`
-	OriginalLLMBackend  *string             `json:"original_llm_backend,omitempty"`
-	FallbackReason      *string             `json:"fallback_reason,omitempty"`
-	FallbackErrorCode   *string             `json:"fallback_error_code,omitempty"`
-	FallbackAttempt     *int                `json:"fallback_attempt,omitempty"`
-	SubAgents           []ExecutionOverview `json:"sub_agents,omitempty"`
+	ExecutionID              string              `json:"execution_id"`
+	AgentName                string              `json:"agent_name"`
+	AgentIndex               int                 `json:"agent_index"`
+	Status                   string              `json:"status"`
+	LLMBackend               string              `json:"llm_backend"`
+	LLMProvider              *string             `json:"llm_provider"`
+	StartedAt                *time.Time          `json:"started_at"`
+	CompletedAt              *time.Time          `json:"completed_at"`
+	DurationMs               *int64              `json:"duration_ms"`
+	ErrorMessage             *string             `json:"error_message"`
+	InputTokens              int64               `json:"input_tokens"`
+	OutputTokens             int64               `json:"output_tokens"`
+	TotalTokens              int64               `json:"total_tokens"`
+	EstimatedCostUsd         *float64            `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness         CostCompleteness    `json:"cost_completeness,omitempty"`
+	UnpricedInteractionCount *int                `json:"unpriced_interaction_count,omitempty"`
+	ParentExecutionID        *string             `json:"parent_execution_id,omitempty"`
+	Task                     *string             `json:"task,omitempty"`
+	OriginalLLMProvider      *string             `json:"original_llm_provider,omitempty"`
+	OriginalLLMBackend       *string             `json:"original_llm_backend,omitempty"`
+	FallbackReason           *string             `json:"fallback_reason,omitempty"`
+	FallbackErrorCode        *string             `json:"fallback_error_code,omitempty"`
+	FallbackAttempt          *int                `json:"fallback_attempt,omitempty"`
+	SubAgents                []ExecutionOverview `json:"sub_agents,omitempty"`
 }
 
 // SessionSummaryResponse is returned by GET /api/v1/sessions/:id/summary.
 type SessionSummaryResponse struct {
-	SessionID         string          `json:"session_id"`
-	TotalInteractions int             `json:"total_interactions"`
-	LLMInteractions   int             `json:"llm_interactions"`
-	MCPInteractions   int             `json:"mcp_interactions"`
-	InputTokens       int64           `json:"input_tokens"`
-	OutputTokens      int64           `json:"output_tokens"`
-	TotalTokens       int64           `json:"total_tokens"`
-	TotalDurationMs   *int64          `json:"total_duration_ms"`
-	ChainStatistics   ChainStatistics `json:"chain_statistics"`
+	SessionID                string           `json:"session_id"`
+	TotalInteractions        int              `json:"total_interactions"`
+	LLMInteractions          int              `json:"llm_interactions"`
+	MCPInteractions          int              `json:"mcp_interactions"`
+	InputTokens              int64            `json:"input_tokens"`
+	OutputTokens             int64            `json:"output_tokens"`
+	TotalTokens              int64            `json:"total_tokens"`
+	CostEstimationEnabled    bool             `json:"cost_estimation_enabled"`
+	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
+	UnpricedInteractionCount *int             `json:"unpriced_interaction_count,omitempty"`
+	TotalDurationMs          *int64           `json:"total_duration_ms"`
+	ChainStatistics          ChainStatistics  `json:"chain_statistics"`
 
 	// Score fields — present only when a completed score exists for the session.
 	TotalScore    *int    `json:"total_score,omitempty"`
@@ -287,6 +301,29 @@ type ChainStatistics struct {
 	CompletedStages   int  `json:"completed_stages"`
 	FailedStages      int  `json:"failed_stages"`
 	CurrentStageIndex *int `json:"current_stage_index"`
+}
+
+// CostCompleteness describes whether all token-bearing LLM interactions have prices.
+type CostCompleteness string
+
+// Cost completeness values for session/execution cost aggregates.
+const (
+	CostCompletenessComplete CostCompleteness = "complete"
+	CostCompletenessPartial  CostCompleteness = "partial"
+	CostCompletenessNone     CostCompleteness = "none"
+)
+
+// DeriveCostCompleteness maps priced vs token-bearing interaction counts to a completeness enum.
+// tokenBearing is the count of interactions with any of input/output/thinking tokens > 0.
+// priced is the count of those with non-null estimated_cost_usd.
+func DeriveCostCompleteness(tokenBearing, priced int) CostCompleteness {
+	if priced == 0 {
+		return CostCompletenessNone
+	}
+	if priced == tokenBearing {
+		return CostCompletenessComplete
+	}
+	return CostCompletenessPartial
 }
 
 // --- Review workflow DTOs ---

@@ -26,9 +26,10 @@ import (
 
 // SessionService manages alert session lifecycle
 type SessionService struct {
-	client            *ent.Client
-	chainRegistry     *config.ChainRegistry
-	mcpServerRegistry *config.MCPServerRegistry
+	client                *ent.Client
+	chainRegistry         *config.ChainRegistry
+	mcpServerRegistry     *config.MCPServerRegistry
+	costEstimationEnabled bool // default true (YAML default); override via SetCostEstimationEnabled
 }
 
 // NewSessionService creates a new SessionService with configuration registries
@@ -37,10 +38,16 @@ func NewSessionService(client *ent.Client, chainRegistry *config.ChainRegistry, 
 		panic("NewSessionService: chainRegistry and mcpServerRegistry must not be nil")
 	}
 	return &SessionService{
-		client:            client,
-		chainRegistry:     chainRegistry,
-		mcpServerRegistry: mcpServerRegistry,
+		client:                client,
+		chainRegistry:         chainRegistry,
+		mcpServerRegistry:     mcpServerRegistry,
+		costEstimationEnabled: true,
 	}
+}
+
+// SetCostEstimationEnabled controls whether session/execution responses include cost fields.
+func (s *SessionService) SetCostEstimationEnabled(enabled bool) {
+	s.costEstimationEnabled = enabled
 }
 
 // CreateSession creates a new alert session with initial stage and agent execution
@@ -447,7 +454,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 	}
 
 	// Compute token and interaction stats via aggregate queries.
-	llmCount, inputTokens, outputTokens, totalTokens, err := s.aggregateLLMStats(ctx, sessionID)
+	llmStats, err := s.aggregateLLMStats(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -456,8 +463,8 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		return nil, err
 	}
 
-	// Aggregate per-execution token stats in a single query.
-	execTokens, err := s.aggregateExecutionTokenStats(ctx, sessionID)
+	// Aggregate per-execution usage stats in a single query.
+	execStats, err := s.aggregateExecutionUsageStats(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -510,16 +517,24 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		if stg.Edges.AgentExecutions != nil {
 			execOverviews = make([]models.ExecutionOverview, 0, len(stg.Edges.AgentExecutions))
 			for _, exec := range stg.Edges.AgentExecutions {
-				overview := buildExecutionOverview(exec, execTokens, fallbackMeta)
+				overview := buildExecutionOverview(exec, execStats, fallbackMeta, s.costEstimationEnabled)
+				rolled := execStats[exec.ID]
 
 				if exec.Edges.SubAgents != nil {
 					overview.SubAgents = make([]models.ExecutionOverview, 0, len(exec.Edges.SubAgents))
 					for _, sub := range exec.Edges.SubAgents {
-						subOverview := buildExecutionOverview(sub, execTokens, fallbackMeta)
+						subOverview := buildExecutionOverview(sub, execStats, fallbackMeta, s.costEstimationEnabled)
 						overview.InputTokens += subOverview.InputTokens
 						overview.OutputTokens += subOverview.OutputTokens
 						overview.TotalTokens += subOverview.TotalTokens
+						subStats := execStats[sub.ID]
+						rolled.Cost += subStats.Cost
+						rolled.TokenBearing += subStats.TokenBearing
+						rolled.Priced += subStats.Priced
 						overview.SubAgents = append(overview.SubAgents, subOverview)
+					}
+					if s.costEstimationEnabled {
+						applyExecutionCostFields(&overview, rolled)
 					}
 				}
 
@@ -630,7 +645,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		feedbackEditedAt = &latestEdit.CreatedAt
 	}
 
-	return &models.SessionDetailResponse{
+	resp := &models.SessionDetailResponse{
 		ID:                      session.ID,
 		AlertData:               session.AlertData,
 		AlertType:               alertType,
@@ -657,10 +672,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		HasParallelStages:       hasParallel,
 		HasActionStages:         hasActionStages,
 		ActionsExecuted:         actionsExecuted,
-		InputTokens:             inputTokens,
-		OutputTokens:            outputTokens,
-		TotalTokens:             totalTokens,
-		LLMInteractionCount:     llmCount,
+		InputTokens:             llmStats.InputTokens,
+		OutputTokens:            llmStats.OutputTokens,
+		TotalTokens:             llmStats.TotalTokens,
+		CostEstimationEnabled:   s.costEstimationEnabled,
+		LLMInteractionCount:     llmStats.Count,
 		MCPInteractionCount:     mcpCount,
 		CurrentStageIndex:       session.CurrentStageIndex,
 		CurrentStageID:          session.CurrentStageID,
@@ -676,7 +692,11 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		FeedbackEditedBy:        feedbackEditedBy,
 		FeedbackEditedAt:        feedbackEditedAt,
 		Stages:                  stages,
-	}, nil
+	}
+	if s.costEstimationEnabled {
+		applySessionCostFields(resp, llmStats)
+	}
+	return resp, nil
 }
 
 // GetSessionSummary returns lightweight statistics for a session.
@@ -695,7 +715,7 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	llmCount, inputTokens, outputTokens, totalTokens, err := s.aggregateLLMStats(ctx, sessionID)
+	llmStats, err := s.aggregateLLMStats(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -723,20 +743,28 @@ func (s *SessionService) GetSessionSummary(ctx context.Context, sessionID string
 	}
 
 	resp := &models.SessionSummaryResponse{
-		SessionID:         sessionID,
-		TotalInteractions: llmCount + mcpCount,
-		LLMInteractions:   llmCount,
-		MCPInteractions:   mcpCount,
-		InputTokens:       inputTokens,
-		OutputTokens:      outputTokens,
-		TotalTokens:       totalTokens,
-		TotalDurationMs:   durationMs,
+		SessionID:             sessionID,
+		TotalInteractions:     llmStats.Count + mcpCount,
+		LLMInteractions:       llmStats.Count,
+		MCPInteractions:       mcpCount,
+		InputTokens:           llmStats.InputTokens,
+		OutputTokens:          llmStats.OutputTokens,
+		TotalTokens:           llmStats.TotalTokens,
+		CostEstimationEnabled: s.costEstimationEnabled,
+		TotalDurationMs:       durationMs,
 		ChainStatistics: models.ChainStatistics{
 			TotalStages:       totalStages,
 			CompletedStages:   completedStages,
 			FailedStages:      failedStages,
 			CurrentStageIndex: session.CurrentStageIndex,
 		},
+	}
+	if s.costEstimationEnabled {
+		cost := llmStats.CostUsd
+		resp.EstimatedCostUsd = &cost
+		resp.CostCompleteness = models.DeriveCostCompleteness(llmStats.TokenBearing, llmStats.Priced)
+		unpriced := llmStats.TokenBearing - llmStats.Priced
+		resp.UnpricedInteractionCount = &unpriced
 	}
 
 	if scores := session.Edges.SessionScores; len(scores) > 0 {
@@ -869,6 +897,9 @@ type dashboardRow struct {
 	LLMInputTokens        int64      `sql:"llm_input_tokens"`
 	LLMOutputTokens       int64      `sql:"llm_output_tokens"`
 	LLMTotalTokens        int64      `sql:"llm_total_tokens"`
+	LLMCostUsd            float64    `sql:"llm_cost_usd"`
+	LLMTokenBearing       int        `sql:"llm_token_bearing"`
+	LLMPriced             int        `sql:"llm_priced"`
 	MCPCount              int        `sql:"mcp_count"`
 	TotalStages           int        `sql:"total_stages"`
 	CompletedStages       int        `sql:"completed_stages"`
@@ -1083,6 +1114,26 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				fmt.Sprintf("(SELECT COALESCE(SUM(total_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
 				"llm_total_tokens",
 			)
+			if s.costEstimationEnabled {
+				sel.AppendSelectAs(
+					fmt.Sprintf("(SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM llm_interactions WHERE session_id = %s)", sid),
+					"llm_cost_usd",
+				)
+				sel.AppendSelectAs(
+					fmt.Sprintf(
+						"(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s AND %s)",
+						sid, tokenBearingPredicateSQL,
+					),
+					"llm_token_bearing",
+				)
+				sel.AppendSelectAs(
+					fmt.Sprintf(
+						"(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s AND %s AND estimated_cost_usd IS NOT NULL)",
+						sid, tokenBearingPredicateSQL,
+					),
+					"llm_priced",
+				)
+			}
 
 			// MCP interaction count.
 			sel.AppendSelectAs(
@@ -1196,7 +1247,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			durationMs = &ms
 		}
 
-		items = append(items, models.DashboardSessionItem{
+		item := models.DashboardSessionItem{
 			ID:                    row.ID,
 			AlertType:             row.AlertType,
 			ChainID:               row.ChainID,
@@ -1234,7 +1285,13 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			FeedbackEdited:        row.FeedbackEdited != 0,
 			FeedbackEditedBy:      row.FeedbackEditedBy,
 			FeedbackEditedAt:      row.FeedbackEditedAt,
-		})
+		}
+		if s.costEstimationEnabled {
+			cost := row.LLMCostUsd
+			item.EstimatedCostUsd = &cost
+			item.CostCompleteness = models.DeriveCostCompleteness(row.LLMTokenBearing, row.LLMPriced)
+		}
+		items = append(items, item)
 	}
 
 	totalPages := 0
@@ -1243,7 +1300,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	}
 
 	return &models.DashboardListResponse{
-		Sessions: items,
+		Sessions:              items,
+		CostEstimationEnabled: s.costEstimationEnabled,
 		Pagination: models.PaginationInfo{
 			Page:       page,
 			PageSize:   pageSize,
@@ -1255,50 +1313,88 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 
 // --- Aggregate helpers ---
 
-// aggregateLLMStats returns LLM interaction count and token sums for a session.
-func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string) (count int, inputTokens, outputTokens, totalTokens int64, err error) {
-	// SUM returns NULL when all values are NULL (nullable token columns).
-	// Use sql.NullInt64 to avoid scan errors and default to 0.
+// tokenBearingPredicateSQL matches LLM rows that contribute to cost completeness.
+const tokenBearingPredicateSQL = `(COALESCE(input_tokens, 0) > 0 OR COALESCE(output_tokens, 0) > 0 OR COALESCE(thinking_tokens, 0) > 0)`
+
+// llmSessionStats holds session-level LLM interaction aggregates.
+type llmSessionStats struct {
+	Count        int
+	InputTokens  int64
+	OutputTokens int64
+	TotalTokens  int64
+	CostUsd      float64
+	TokenBearing int
+	Priced       int
+}
+
+// aggregateLLMStats returns LLM interaction count, token sums, and cost completeness counts.
+func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string) (llmSessionStats, error) {
+	// SUM returns NULL when all values are NULL (nullable columns).
 	var results []struct {
-		Count     int              `json:"count"`
-		InputSum  stdsql.NullInt64 `json:"input_sum"`
-		OutputSum stdsql.NullInt64 `json:"output_sum"`
-		TotalSum  stdsql.NullInt64 `json:"total_sum"`
+		Count        int                `json:"count"`
+		InputSum     stdsql.NullInt64   `json:"input_sum"`
+		OutputSum    stdsql.NullInt64   `json:"output_sum"`
+		TotalSum     stdsql.NullInt64   `json:"total_sum"`
+		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
+		TokenBearing int                `json:"token_bearing"`
+		Priced       int                `json:"priced"`
 	}
 
-	err = s.client.LLMInteraction.Query().
+	err := s.client.LLMInteraction.Query().
 		Where(llminteraction.SessionIDEQ(sessionID)).
 		Aggregate(
 			ent.As(ent.Count(), "count"),
 			ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
 			ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
 			ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
+			ent.As(ent.Sum(llminteraction.FieldEstimatedCostUsd), "cost_sum"),
+			ent.As(func(_ *sql.Selector) string {
+				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + ")"
+			}, "token_bearing"),
+			ent.As(func(_ *sql.Selector) string {
+				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + " AND estimated_cost_usd IS NOT NULL)"
+			}, "priced"),
 		).
 		Scan(ctx, &results)
 	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("failed to aggregate LLM stats: %w", err)
+		return llmSessionStats{}, fmt.Errorf("failed to aggregate LLM stats: %w", err)
 	}
 
-	if len(results) > 0 {
-		return results[0].Count, results[0].InputSum.Int64, results[0].OutputSum.Int64, results[0].TotalSum.Int64, nil
+	if len(results) == 0 {
+		return llmSessionStats{}, nil
 	}
-	return 0, 0, 0, 0, nil
+	r := results[0]
+	return llmSessionStats{
+		Count:        r.Count,
+		InputTokens:  r.InputSum.Int64,
+		OutputTokens: r.OutputSum.Int64,
+		TotalTokens:  r.TotalSum.Int64,
+		CostUsd:      r.CostSum.Float64,
+		TokenBearing: r.TokenBearing,
+		Priced:       r.Priced,
+	}, nil
 }
 
-// executionTokenStats holds per-execution token sums.
-type executionTokenStats struct {
-	Input  int64
-	Output int64
-	Total  int64
+// executionUsageStats holds per-execution token and cost aggregates.
+type executionUsageStats struct {
+	Input        int64
+	Output       int64
+	Total        int64
+	Cost         float64
+	TokenBearing int
+	Priced       int
 }
 
-// aggregateExecutionTokenStats returns per-execution token sums for a session.
-func (s *SessionService) aggregateExecutionTokenStats(ctx context.Context, sessionID string) (map[string]executionTokenStats, error) {
+// aggregateExecutionUsageStats returns per-execution token/cost sums for a session.
+func (s *SessionService) aggregateExecutionUsageStats(ctx context.Context, sessionID string) (map[string]executionUsageStats, error) {
 	var rows []struct {
-		ExecutionID stdsql.NullString `json:"execution_id"`
-		InputSum    stdsql.NullInt64  `json:"input_sum"`
-		OutputSum   stdsql.NullInt64  `json:"output_sum"`
-		TotalSum    stdsql.NullInt64  `json:"total_sum"`
+		ExecutionID  stdsql.NullString  `json:"execution_id"`
+		InputSum     stdsql.NullInt64   `json:"input_sum"`
+		OutputSum    stdsql.NullInt64   `json:"output_sum"`
+		TotalSum     stdsql.NullInt64   `json:"total_sum"`
+		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
+		TokenBearing int                `json:"token_bearing"`
+		Priced       int                `json:"priced"`
 	}
 
 	err := s.client.LLMInteraction.Query().
@@ -1308,24 +1404,50 @@ func (s *SessionService) aggregateExecutionTokenStats(ctx context.Context, sessi
 			ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
 			ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
 			ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
+			ent.As(ent.Sum(llminteraction.FieldEstimatedCostUsd), "cost_sum"),
+			ent.As(func(_ *sql.Selector) string {
+				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + ")"
+			}, "token_bearing"),
+			ent.As(func(_ *sql.Selector) string {
+				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + " AND estimated_cost_usd IS NOT NULL)"
+			}, "priced"),
 		).
 		Scan(ctx, &rows)
 	if err != nil {
-		return nil, fmt.Errorf("failed to aggregate execution token stats: %w", err)
+		return nil, fmt.Errorf("failed to aggregate execution usage stats: %w", err)
 	}
 
-	result := make(map[string]executionTokenStats, len(rows))
+	result := make(map[string]executionUsageStats, len(rows))
 	for _, row := range rows {
 		if !row.ExecutionID.Valid {
 			continue
 		}
-		result[row.ExecutionID.String] = executionTokenStats{
-			Input:  row.InputSum.Int64,
-			Output: row.OutputSum.Int64,
-			Total:  row.TotalSum.Int64,
+		result[row.ExecutionID.String] = executionUsageStats{
+			Input:        row.InputSum.Int64,
+			Output:       row.OutputSum.Int64,
+			Total:        row.TotalSum.Int64,
+			Cost:         row.CostSum.Float64,
+			TokenBearing: row.TokenBearing,
+			Priced:       row.Priced,
 		}
 	}
 	return result, nil
+}
+
+func applySessionCostFields(resp *models.SessionDetailResponse, stats llmSessionStats) {
+	cost := stats.CostUsd
+	resp.EstimatedCostUsd = &cost
+	resp.CostCompleteness = models.DeriveCostCompleteness(stats.TokenBearing, stats.Priced)
+	unpriced := stats.TokenBearing - stats.Priced
+	resp.UnpricedInteractionCount = &unpriced
+}
+
+func applyExecutionCostFields(overview *models.ExecutionOverview, stats executionUsageStats) {
+	cost := stats.Cost
+	overview.EstimatedCostUsd = &cost
+	overview.CostCompleteness = models.DeriveCostCompleteness(stats.TokenBearing, stats.Priced)
+	unpriced := stats.TokenBearing - stats.Priced
+	overview.UnpricedInteractionCount = &unpriced
 }
 
 // countMCPInteractions returns the MCP interaction count for a session.
@@ -1425,8 +1547,13 @@ func (s *SessionService) loadFallbackMetadata(ctx context.Context, sessionID str
 }
 
 // buildExecutionOverview creates an ExecutionOverview from an AgentExecution entity.
-func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]executionTokenStats, fallbackMeta map[string]fallbackEventMeta) models.ExecutionOverview {
-	tokens := execTokens[exec.ID]
+func buildExecutionOverview(
+	exec *ent.AgentExecution,
+	execStats map[string]executionUsageStats,
+	fallbackMeta map[string]fallbackEventMeta,
+	costEstimationEnabled bool,
+) models.ExecutionOverview {
+	stats := execStats[exec.ID]
 	var durationMs *int64
 	if exec.DurationMs != nil {
 		v := int64(*exec.DurationMs)
@@ -1443,13 +1570,16 @@ func buildExecutionOverview(exec *ent.AgentExecution, execTokens map[string]exec
 		CompletedAt:         exec.CompletedAt,
 		DurationMs:          durationMs,
 		ErrorMessage:        exec.ErrorMessage,
-		InputTokens:         tokens.Input,
-		OutputTokens:        tokens.Output,
-		TotalTokens:         tokens.Total,
+		InputTokens:         stats.Input,
+		OutputTokens:        stats.Output,
+		TotalTokens:         stats.Total,
 		ParentExecutionID:   exec.ParentExecutionID,
 		Task:                exec.Task,
 		OriginalLLMProvider: exec.OriginalLlmProvider,
 		OriginalLLMBackend:  exec.OriginalLlmBackend,
+	}
+	if costEstimationEnabled {
+		applyExecutionCostFields(&overview, stats)
 	}
 
 	if fm, ok := fallbackMeta[exec.ID]; ok {

@@ -218,6 +218,9 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	// 6. Domain services.
 	alertService := services.NewAlertService(entClient, tc.cfg.ChainRegistry, tc.cfg.Defaults, nil)
 	sessionService := services.NewSessionService(entClient, tc.cfg.ChainRegistry, tc.cfg.MCPServerRegistry)
+	if tc.cfg.CostEstimation != nil {
+		sessionService.SetCostEstimationEnabled(tc.cfg.CostEstimation.Enabled)
+	}
 	chatService := services.NewChatService(entClient)
 
 	// 7. RunbookService (nil config/token → uses defaults).

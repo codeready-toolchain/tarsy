@@ -1670,6 +1670,433 @@ func TestSessionService_GetSessionSummary(t *testing.T) {
 	})
 }
 
+func TestSessionService_CostAggregation(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	t.Run("multi-model partial completeness on detail and summary", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-partial")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "priced-model", 100, 50, 150, floatPtr(0.012), 0)
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "unpriced-model", 200, 100, 300, nil, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.True(t, detail.CostEstimationEnabled)
+		require.NotNil(t, detail.EstimatedCostUsd)
+		assert.InDelta(t, 0.012, *detail.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessPartial, detail.CostCompleteness)
+		require.NotNil(t, detail.UnpricedInteractionCount)
+		assert.Equal(t, 1, *detail.UnpricedInteractionCount)
+
+		summary, err := service.GetSessionSummary(ctx, sessionID)
+		require.NoError(t, err)
+		assert.True(t, summary.CostEstimationEnabled)
+		require.NotNil(t, summary.EstimatedCostUsd)
+		assert.InDelta(t, 0.012, *summary.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessPartial, summary.CostCompleteness)
+		require.NotNil(t, summary.UnpricedInteractionCount)
+		assert.Equal(t, 1, *summary.UnpricedInteractionCount)
+
+		require.Len(t, detail.Stages, 1)
+		require.Len(t, detail.Stages[0].Executions, 1)
+		eo := detail.Stages[0].Executions[0]
+		require.NotNil(t, eo.EstimatedCostUsd)
+		assert.InDelta(t, 0.012, *eo.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessPartial, eo.CostCompleteness)
+		require.NotNil(t, eo.UnpricedInteractionCount)
+		assert.Equal(t, 1, *eo.UnpricedInteractionCount)
+	})
+
+	t.Run("pre-feature null cost rows yield none completeness", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-none")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "old-model", 100, 50, 150, nil, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		require.NotNil(t, detail.EstimatedCostUsd)
+		assert.Equal(t, 0.0, *detail.EstimatedCostUsd)
+		assert.Equal(t, models.CostCompletenessNone, detail.CostCompleteness)
+		require.NotNil(t, detail.UnpricedInteractionCount)
+		assert.Equal(t, 1, *detail.UnpricedInteractionCount)
+	})
+
+	t.Run("explicit zero cost is complete not unpriced", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-zero")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "free-model", 10, 5, 15, floatPtr(0.0), 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		require.NotNil(t, detail.EstimatedCostUsd)
+		assert.Equal(t, 0.0, *detail.EstimatedCostUsd)
+		assert.Equal(t, models.CostCompletenessComplete, detail.CostCompleteness)
+		require.NotNil(t, detail.UnpricedInteractionCount)
+		assert.Equal(t, 0, *detail.UnpricedInteractionCount)
+
+		list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.True(t, list.CostEstimationEnabled)
+		var item *models.DashboardSessionItem
+		for i := range list.Sessions {
+			if list.Sessions[i].ID == sessionID {
+				item = &list.Sessions[i]
+				break
+			}
+		}
+		require.NotNil(t, item, "session should appear in list")
+		require.NotNil(t, item.EstimatedCostUsd)
+		assert.Equal(t, 0.0, *item.EstimatedCostUsd)
+		assert.Equal(t, models.CostCompletenessComplete, item.CostCompleteness)
+	})
+
+	t.Run("parent execution rolls up sub-agent cost", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("cost rollup").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Orchestration").
+			SetStageIndex(1).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		parent := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("Orchestrator").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		sub := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("SubAgent").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetParentExecutionID(parent.ID).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		seedLLMInteraction(t, client.Client, sess.ID, stg.ID, parent.ID, "parent-model", 100, 30, 130, floatPtr(0.01), 0)
+		seedLLMInteraction(t, client.Client, sess.ID, stg.ID, sub.ID, "sub-model", 200, 50, 250, nil, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		require.NotNil(t, detail.EstimatedCostUsd)
+		assert.InDelta(t, 0.01, *detail.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessPartial, detail.CostCompleteness)
+
+		require.Len(t, detail.Stages[0].Executions, 1)
+		orch := detail.Stages[0].Executions[0]
+		require.NotNil(t, orch.EstimatedCostUsd)
+		assert.InDelta(t, 0.01, *orch.EstimatedCostUsd, 1e-9, "parent should include sub-agent priced cost")
+		assert.Equal(t, models.CostCompletenessPartial, orch.CostCompleteness)
+		require.NotNil(t, orch.UnpricedInteractionCount)
+		assert.Equal(t, 1, *orch.UnpricedInteractionCount)
+
+		require.Len(t, orch.SubAgents, 1)
+		require.NotNil(t, orch.SubAgents[0].EstimatedCostUsd)
+		assert.Equal(t, 0.0, *orch.SubAgents[0].EstimatedCostUsd)
+		assert.Equal(t, models.CostCompletenessNone, orch.SubAgents[0].CostCompleteness)
+	})
+
+	t.Run("disabled estimation omits cost fields", func(t *testing.T) {
+		disabled := setupTestSessionService(t, client.Client)
+		disabled.SetCostEstimationEnabled(false)
+
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-disabled")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "priced-model", 100, 50, 150, floatPtr(0.05), 0)
+
+		detail, err := disabled.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.False(t, detail.CostEstimationEnabled)
+		assert.Nil(t, detail.EstimatedCostUsd)
+		assert.Empty(t, detail.CostCompleteness)
+		assert.Nil(t, detail.UnpricedInteractionCount)
+		require.Len(t, detail.Stages[0].Executions, 1)
+		assert.Nil(t, detail.Stages[0].Executions[0].EstimatedCostUsd)
+
+		summary, err := disabled.GetSessionSummary(ctx, sessionID)
+		require.NoError(t, err)
+		assert.False(t, summary.CostEstimationEnabled)
+		assert.Nil(t, summary.EstimatedCostUsd)
+		assert.Empty(t, summary.CostCompleteness)
+
+		list, err := disabled.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.False(t, list.CostEstimationEnabled)
+		for _, s := range list.Sessions {
+			if s.ID == sessionID {
+				assert.Nil(t, s.EstimatedCostUsd)
+				assert.Empty(t, s.CostCompleteness)
+				return
+			}
+		}
+		t.Fatal("session not found in list")
+	})
+
+	t.Run("list aggregates cost sum and completeness", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-list")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "m1", 100, 50, 150, floatPtr(0.02), 0)
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "m2", 50, 25, 75, floatPtr(0.03), 0)
+
+		list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		assert.True(t, list.CostEstimationEnabled)
+
+		for _, s := range list.Sessions {
+			if s.ID == sessionID {
+				require.NotNil(t, s.EstimatedCostUsd)
+				assert.InDelta(t, 0.05, *s.EstimatedCostUsd, 1e-9)
+				assert.Equal(t, models.CostCompletenessComplete, s.CostCompleteness)
+				return
+			}
+		}
+		t.Fatal("session not found in list")
+	})
+
+	t.Run("zero-token rows excluded from completeness denominator", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-zero-tokens")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "priced-model", 100, 50, 150, floatPtr(0.01), 0)
+		// Failed/empty call: no tokens, null cost — must not make completeness partial.
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "empty-call", 0, 0, 0, nil, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		require.NotNil(t, detail.EstimatedCostUsd)
+		assert.InDelta(t, 0.01, *detail.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessComplete, detail.CostCompleteness)
+		require.NotNil(t, detail.UnpricedInteractionCount)
+		assert.Equal(t, 0, *detail.UnpricedInteractionCount)
+	})
+
+	t.Run("thinking-tokens-only row counts as token-bearing", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-thinking")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "thinking-model", 0, 0, 0, nil, 40)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.Equal(t, models.CostCompletenessNone, detail.CostCompleteness)
+		require.NotNil(t, detail.UnpricedInteractionCount)
+		assert.Equal(t, 1, *detail.UnpricedInteractionCount)
+
+		list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		for _, s := range list.Sessions {
+			if s.ID == sessionID {
+				assert.Equal(t, models.CostCompletenessNone, s.CostCompleteness)
+				require.NotNil(t, s.EstimatedCostUsd)
+				assert.Equal(t, 0.0, *s.EstimatedCostUsd)
+				return
+			}
+		}
+		t.Fatal("session not found in list")
+	})
+
+	t.Run("list shows partial when some rows unpriced", func(t *testing.T) {
+		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-list-partial")
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "priced", 100, 50, 150, floatPtr(0.04), 0)
+		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "unpriced", 10, 5, 15, nil, 0)
+
+		list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		for _, s := range list.Sessions {
+			if s.ID == sessionID {
+				require.NotNil(t, s.EstimatedCostUsd)
+				assert.InDelta(t, 0.04, *s.EstimatedCostUsd, 1e-9)
+				assert.Equal(t, models.CostCompletenessPartial, s.CostCompleteness)
+				return
+			}
+		}
+		t.Fatal("session not found in list")
+	})
+
+	t.Run("parent rolls up priced sub-agent cost into complete", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("cost rollup complete").
+			SetAlertType("pod-crash").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("Orchestration").
+			SetStageIndex(1).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		parent := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("Orchestrator").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		sub := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("SubAgent").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendLangChain)).
+			SetParentExecutionID(parent.ID).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		seedLLMInteraction(t, client.Client, sess.ID, stg.ID, parent.ID, "parent-model", 100, 30, 130, floatPtr(0.01), 0)
+		seedLLMInteraction(t, client.Client, sess.ID, stg.ID, sub.ID, "sub-model", 200, 50, 250, floatPtr(0.02), 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		require.NotNil(t, detail.EstimatedCostUsd)
+		assert.InDelta(t, 0.03, *detail.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessComplete, detail.CostCompleteness)
+
+		orch := detail.Stages[0].Executions[0]
+		require.NotNil(t, orch.EstimatedCostUsd)
+		assert.InDelta(t, 0.03, *orch.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessComplete, orch.CostCompleteness)
+		require.NotNil(t, orch.UnpricedInteractionCount)
+		assert.Equal(t, 0, *orch.UnpricedInteractionCount)
+		require.Len(t, orch.SubAgents, 1)
+		require.NotNil(t, orch.SubAgents[0].EstimatedCostUsd)
+		assert.InDelta(t, 0.02, *orch.SubAgents[0].EstimatedCostUsd, 1e-9)
+		assert.Equal(t, models.CostCompletenessComplete, orch.SubAgents[0].CostCompleteness)
+	})
+}
+
+func seedSessionSkeleton(t *testing.T, client *ent.Client, alertData string) (sessionID, stageID, execID string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now()
+	started := now.Add(-5 * time.Second)
+	completed := now
+	sessionID = uuid.New().String()
+
+	sess := client.AlertSession.Create().
+		SetID(sessionID).
+		SetAlertData(alertData).
+		SetAlertType("pod-crash").
+		SetChainID("k8s-analysis").
+		SetAgentType("kubernetes").
+		SetStatus(alertsession.StatusCompleted).
+		SetStartedAt(started).
+		SetCompletedAt(completed).
+		SaveX(ctx)
+
+	stg := client.Stage.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sess.ID).
+		SetStageName("analysis").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStatus(stage.StatusCompleted).
+		SetStartedAt(started).
+		SetCompletedAt(completed).
+		SaveX(ctx)
+
+	exec := client.AgentExecution.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sess.ID).
+		SetStageID(stg.ID).
+		SetAgentName("TestAgent").
+		SetAgentIndex(1).
+		SetLlmBackend(string(config.LLMBackendLangChain)).
+		SetStartedAt(started).
+		SetStatus("completed").
+		SaveX(ctx)
+
+	return sess.ID, stg.ID, exec.ID
+}
+
+func seedLLMInteraction(
+	t *testing.T,
+	client *ent.Client,
+	sessionID, stageID, execID, modelName string,
+	inputTokens, outputTokens, totalTokens int,
+	costUSD *float64,
+	thinkingTokens int,
+) {
+	t.Helper()
+	create := client.LLMInteraction.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stageID).
+		SetExecutionID(execID).
+		SetInteractionType(llminteraction.InteractionTypeIteration).
+		SetModelName(modelName).
+		SetLlmRequest(map[string]interface{}{}).
+		SetLlmResponse(map[string]interface{}{}).
+		SetInputTokens(inputTokens).
+		SetOutputTokens(outputTokens).
+		SetTotalTokens(totalTokens)
+	if costUSD != nil {
+		create = create.SetEstimatedCostUsd(*costUSD)
+	}
+	if thinkingTokens > 0 {
+		create = create.SetThinkingTokens(thinkingTokens)
+	}
+	create.SaveX(context.Background())
+}
+
+func floatPtr(v float64) *float64 { return &v }
+
 func TestSessionService_GetActiveSessions(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)
