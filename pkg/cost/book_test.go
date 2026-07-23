@@ -296,14 +296,46 @@ func TestBook_EstimateConcurrentWithRefresh(t *testing.T) {
 	book.OverrideHTTPClientForTest(srv.Client())
 	book.SetCatalogURLForTest(srv.URL)
 
+	// Seed the remote catalog so concurrent Estimates always have a priced path.
+	book.refreshOnce(t.Context())
+	st := book.Status()
+	require.True(t, st.Enabled)
+	require.Equal(t, "catalog", st.Catalog.Source)
+	require.Equal(t, 1, st.Catalog.EntryCount)
+	require.Empty(t, st.Catalog.LastError)
+	require.NotNil(t, st.Catalog.LastFetch)
+
+	const (
+		snapshotCost = 100*1.5e-6 + 50*7.5e-6 // gemini-3.6-flash snapshot rates
+		catalogCost  = 1000*1e-6 + 100*2e-6   // concurrent-model mock catalog rates
+	)
+
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
 			for range 50 {
 				book.refreshOnce(t.Context())
-				_, _ = book.Estimate("gemini-3.6-flash", 100, 50, 0)
-				_, _ = book.Estimate("concurrent-model", 1000, 100, 0)
-				_ = book.Status()
+
+				snapCost, snapProv := book.Estimate("gemini-3.6-flash", 100, 50, 0)
+				assert.NotNil(t, snapCost)
+				assert.Equal(t, Provenance("snapshot:gemini-3.6-flash"), snapProv)
+				if snapCost != nil {
+					assert.InDelta(t, snapshotCost, *snapCost, 1e-12)
+				}
+
+				catCost, catProv := book.Estimate("concurrent-model", 1000, 100, 0)
+				assert.NotNil(t, catCost)
+				assert.Equal(t, Provenance("catalog:concurrent-model"), catProv)
+				if catCost != nil {
+					assert.InDelta(t, catalogCost, *catCost, 1e-12)
+				}
+
+				st := book.Status()
+				assert.True(t, st.Enabled)
+				assert.Equal(t, "catalog", st.Catalog.Source)
+				assert.Equal(t, 1, st.Catalog.EntryCount)
+				assert.Empty(t, st.Catalog.LastError)
+				assert.NotNil(t, st.Catalog.LastFetch)
 			}
 		})
 	}
