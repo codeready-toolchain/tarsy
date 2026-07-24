@@ -122,8 +122,12 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		require.Contains(t, byModel, "unpriced-model")
 		require.NotNil(t, byModel["priced-model"].Priced)
 		assert.True(t, *byModel["priced-model"].Priced)
+		require.NotNil(t, byModel["priced-model"].UnpricedInteractionCount)
+		assert.Equal(t, 0, *byModel["priced-model"].UnpricedInteractionCount)
 		require.NotNil(t, byModel["unpriced-model"].Priced)
 		assert.False(t, *byModel["unpriced-model"].Priced)
+		require.NotNil(t, byModel["unpriced-model"].UnpricedInteractionCount)
+		assert.Equal(t, 1, *byModel["unpriced-model"].UnpricedInteractionCount)
 
 		require.Len(t, summary.TopSessions, 1)
 		assert.Equal(t, models.CostCompletenessPartial, summary.TopSessions[0].CostCompleteness)

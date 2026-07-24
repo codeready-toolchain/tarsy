@@ -56,6 +56,7 @@ export interface UsageModelBreakdown {
   total_tokens: number;
   estimated_cost_usd?: number | null;
   priced?: boolean;
+  unpriced_interaction_count?: number;
 }
 
 /** Per-alert-type rollup within a usage window. */

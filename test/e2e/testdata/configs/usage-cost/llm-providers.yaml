@@ -1,0 +1,6 @@
+llm_providers:
+  test-provider:
+    type: google
+    model: test-model
+    max_tool_result_tokens: 10000
+    base_url: "https://api:E2E_SENTINEL_BASE_URL@llm.example.com/v1?api_key=E2E_SENTINEL_BASE_QUERY"

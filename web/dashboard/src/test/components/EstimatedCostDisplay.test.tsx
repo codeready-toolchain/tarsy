@@ -29,7 +29,7 @@ describe('EstimatedCostDisplay', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders Est. label for complete estimates', () => {
+  it('renders plain dollar value for complete estimates', () => {
     render(
       <EstimatedCostDisplay
         enabled
@@ -37,7 +37,7 @@ describe('EstimatedCostDisplay', () => {
         costCompleteness="complete"
       />,
     );
-    expect(screen.getByText('Est. $1.23')).toBeInTheDocument();
+    expect(screen.getByText('$1.23')).toBeInTheDocument();
     expect(screen.queryByLabelText('Incomplete cost estimate')).not.toBeInTheDocument();
   });
 
@@ -49,7 +49,20 @@ describe('EstimatedCostDisplay', () => {
         costCompleteness="partial"
       />,
     );
-    expect(screen.getByText('Est. $0.0042')).toBeInTheDocument();
+    expect(screen.getByText('$0.0042')).toBeInTheDocument();
     expect(screen.getByLabelText('Incomplete cost estimate')).toBeInTheDocument();
+  });
+
+  it('renders trailing "cost" label for the labeled variant', () => {
+    render(
+      <EstimatedCostDisplay
+        enabled
+        estimatedCostUsd={1.23}
+        costCompleteness="complete"
+        variant="labeled"
+      />,
+    );
+    expect(screen.getByText('$1.23')).toBeInTheDocument();
+    expect(screen.getByText('cost')).toBeInTheDocument();
   });
 });

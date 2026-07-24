@@ -381,7 +381,6 @@ export default function SessionHeader({
                     estimatedCostUsd={session.estimated_cost_usd}
                     costCompleteness={session.cost_completeness}
                     variant="labeled"
-                    size="small"
                   />
                 </Box>
               ) : <Box />}

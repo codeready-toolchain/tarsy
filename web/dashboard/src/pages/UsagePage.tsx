@@ -29,6 +29,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AccessTime from '@mui/icons-material/AccessTime';
@@ -51,6 +52,20 @@ import type { UsageRankBy, UsageSummaryResponse } from '../types/api.ts';
 function defaultThirtyDayRange(): { start: Date; end: Date; preset: string } {
   const range = USAGE_TIME_PRESETS.find((p) => p.value === '30d')!.getDateRange();
   return { start: range.start, end: range.end, preset: '30d' };
+}
+
+/** "~$X" for the Usage page's large, colored cost displays — tilde reads clearly at this size/weight. */
+function approxCostUsd(usd: number | null | undefined): string {
+  const formatted = formatEstimatedCostUsd(usd);
+  return formatted === '—' ? formatted : `~${formatted}`;
+}
+
+/** Explains exactly what "Incomplete" means for a model's priced status. */
+function incompletePricingTooltip(unpricedCount: number | undefined): string {
+  const suffix = 'so its total cost likely undercounts.';
+  return unpricedCount != null && unpricedCount > 0
+    ? `${unpricedCount} token-bearing interaction${unpricedCount === 1 ? '' : 's'} for this model had no resolved rate (missing from the price catalog/overrides), ${suffix}`
+    : `Some token-bearing interactions for this model had no resolved rate (missing from the price catalog/overrides), ${suffix}`;
 }
 
 export function UsagePage() {
@@ -246,7 +261,7 @@ export function UsagePage() {
                   {costEnabled && (
                     <StatCard
                       label="Est. cost"
-                      value={formatEstimatedCostUsd(summary.totals.estimated_cost_usd)}
+                      value={approxCostUsd(summary.totals.estimated_cost_usd)}
                       warning={summary.totals.cost_completeness === 'partial'}
                       caption={
                         summary.totals.cost_completeness === 'partial' &&
@@ -290,20 +305,18 @@ export function UsagePage() {
                     <TableCell align="right">{formatTokens(row.output_tokens)}</TableCell>
                     {costEnabled && (
                       <>
-                        <TableCell align="right">
-                          {row.estimated_cost_usd != null
-                            ? formatEstimatedCostUsd(row.estimated_cost_usd)
-                            : '—'}
-                        </TableCell>
+                        <TableCell align="right">{approxCostUsd(row.estimated_cost_usd)}</TableCell>
                         <TableCell align="center">
                           {row.priced === false ? (
-                            <Chip
-                              size="small"
-                              icon={<WarningAmberRounded />}
-                              label="Incomplete"
-                              color="warning"
-                              variant="outlined"
-                            />
+                            <Tooltip title={incompletePricingTooltip(row.unpriced_interaction_count)} arrow>
+                              <Chip
+                                size="small"
+                                icon={<WarningAmberRounded />}
+                                label="Incomplete"
+                                color="warning"
+                                variant="outlined"
+                              />
+                            </Tooltip>
                           ) : (
                             <Chip size="small" label="Priced" color="success" variant="outlined" />
                           )}
@@ -336,11 +349,7 @@ export function UsagePage() {
                       <TableCell>{row.alert_type || '—'}</TableCell>
                       <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                       {costEnabled && (
-                        <TableCell align="right">
-                          {row.estimated_cost_usd != null
-                            ? formatEstimatedCostUsd(row.estimated_cost_usd)
-                            : '—'}
-                        </TableCell>
+                        <TableCell align="right">{approxCostUsd(row.estimated_cost_usd)}</TableCell>
                       )}
                     </TableRow>
                   ))}
@@ -360,11 +369,7 @@ export function UsagePage() {
                       <TableCell>{row.chain_id}</TableCell>
                       <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                       {costEnabled && (
-                        <TableCell align="right">
-                          {row.estimated_cost_usd != null
-                            ? formatEstimatedCostUsd(row.estimated_cost_usd)
-                            : '—'}
-                        </TableCell>
+                        <TableCell align="right">{approxCostUsd(row.estimated_cost_usd)}</TableCell>
                       )}
                     </TableRow>
                   ))}

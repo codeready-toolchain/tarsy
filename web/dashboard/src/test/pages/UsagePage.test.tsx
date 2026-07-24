@@ -123,7 +123,7 @@ describe('UsagePage', () => {
     expect(end - start).toBeLessThan(31 * dayMs);
 
     expect(await screen.findByText('Totals')).toBeInTheDocument();
-    expect(screen.getAllByText('Est. $1.23').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('~$1.23').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
       'Last 30 days',
     );
@@ -144,6 +144,34 @@ describe('UsagePage', () => {
       expect(mockGetUsageSummary).toHaveBeenCalledTimes(2);
     });
     expect(mockGetUsageSummary.mock.calls[1][0].rank_by).toBe('tokens');
+  });
+
+  it('shows a tooltip on the Incomplete chip explaining exactly what is unpriced', async () => {
+    const user = userEvent.setup();
+    mockGetUsageSummary.mockResolvedValue(
+      makeSummary({
+        by_model: [
+          {
+            model_name: 'gemini-flash',
+            input_tokens: 100,
+            output_tokens: 50,
+            total_tokens: 150,
+            estimated_cost_usd: 1.23,
+            priced: false,
+            unpriced_interaction_count: 3,
+          },
+        ],
+      }),
+    );
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+
+    await user.hover(await screen.findByText('Incomplete'));
+
+    expect(
+      await screen.findByText(/3 token-bearing interactions for this model had no resolved rate/),
+    ).toBeInTheDocument();
   });
 
   it('hides cost columns when estimation is disabled', async () => {
@@ -181,7 +209,7 @@ describe('UsagePage', () => {
     renderUsagePage();
     await screen.findByText('Totals');
 
-    expect(screen.queryByText(/Est\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/[~≈]\$/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Rank top sessions')).not.toBeInTheDocument();
 
     const modelSection = screen.getByText('By model').closest('.MuiPaper-root');

@@ -167,6 +167,9 @@ export function formatTokensCompact(tokens: number | null | undefined): string {
 /**
  * Compact USD format for estimated cost surfaces.
  * Small amounts keep extra precision so sub-cent estimates remain readable.
+ * Plain "$X" — callers that want an "approximate" glyph prefix it themselves,
+ * since the right glyph/weight/color depends on how prominently it's displayed
+ * (see EstimatedCostDisplay for the small/inline case).
  */
 export function formatEstimatedCostUsd(usd: number | null | undefined): string {
   if (usd == null || !Number.isFinite(usd)) return '—';

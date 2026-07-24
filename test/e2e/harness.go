@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/api"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/database"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
@@ -226,16 +227,23 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	// 7. RunbookService (nil config/token → uses defaults).
 	runbookService := runbook.NewService(tc.cfg.Runbooks, "", tc.cfg.Defaults.Runbook)
 
-	// 8. Session executor.
-	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService, tc.memoryService, tc.memoryConfig)
+	// 8. Price book for LLM usage cost estimation.
+	// Skip Book.Start (remote catalog fetch) — overrides + bundled snapshot are enough for e2e.
+	costBook, err := cost.NewBook(costConfigFrom(tc.cfg.CostEstimation))
+	require.NoError(t, err, "initialize cost estimation price book")
 
-	// 8a. Scoring executor — created when any chain has scoring enabled.
+	// 9. Session executor.
+	sessionExecutor := queue.NewRealSessionExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, mcpFactory, runbookService, tc.memoryService, tc.memoryConfig)
+	sessionExecutor.SetCostBook(costBook)
+
+	// 9a. Scoring executor — created when any chain has scoring enabled.
 	var scoringExecutor *queue.ScoringExecutor
 	if hasScoringEnabled(tc.cfg) {
 		scoringExecutor = queue.NewScoringExecutor(tc.cfg, entClient, tc.llmClient, eventPublisher, runbookService, tc.memoryService)
+		scoringExecutor.SetCostBook(costBook)
 	}
 
-	// 9. Worker pool.
+	// 10. Worker pool.
 	podID := tc.podID
 	if podID == "" {
 		podID = fmt.Sprintf("e2e-test-%s", t.Name())
@@ -243,7 +251,7 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, scoringExecutor, eventPublisher, tc.slackService)
 	require.NoError(t, workerPool.Start(ctx))
 
-	// 10. Chat executor.
+	// 11. Chat executor.
 	chatExecutor := queue.NewChatMessageExecutor(
 		tc.cfg, entClient, tc.llmClient, mcpFactory, eventPublisher,
 		queue.ChatMessageExecutorConfig{
@@ -252,16 +260,18 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		},
 		runbookService, tc.memoryService, tc.memoryConfig,
 	)
+	chatExecutor.SetCostBook(costBook)
 
-	// 11. HTTP server on random port.
+	// 12. HTTP server on random port.
 	server := api.NewServer(tc.cfg, dbClient, alertService, sessionService, workerPool, connManager)
 	server.SetChatService(chatService)
 	server.SetChatExecutor(chatExecutor)
 	server.SetEventPublisher(eventPublisher)
+	server.SetCostBook(costBook)
 
 	// Trace/observability and timeline endpoints.
 	messageService := services.NewMessageService(entClient)
-	interactionService := services.NewInteractionService(entClient, messageService, nil)
+	interactionService := services.NewInteractionService(entClient, messageService, costBook)
 	stageService := services.NewStageService(entClient)
 	timelineService := services.NewTimelineService(entClient)
 	server.SetInteractionService(interactionService)
@@ -351,4 +361,22 @@ func hasScoringEnabled(cfg *config.Config) bool {
 		}
 	}
 	return false
+}
+
+// costConfigFrom maps resolved YAML cost-estimation settings into pkg/cost.Config.
+func costConfigFrom(cfg *config.CostEstimationConfig) *cost.Config {
+	if cfg == nil {
+		return &cost.Config{Enabled: true}
+	}
+	rates := make(map[string]cost.ModelRateOverride, len(cfg.ModelRates))
+	for name, rate := range cfg.ModelRates {
+		rates[name] = cost.ModelRateOverride{
+			InputPerMillion:  rate.InputPerMillion,
+			OutputPerMillion: rate.OutputPerMillion,
+		}
+	}
+	return &cost.Config{
+		Enabled:    cfg.Enabled,
+		ModelRates: rates,
+	}
 }
