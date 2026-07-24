@@ -50,6 +50,11 @@ func (s *SessionService) SetCostEstimationEnabled(enabled bool) {
 	s.costEstimationEnabled = enabled
 }
 
+// CostEstimationEnabled reports whether cost fields are included in API responses.
+func (s *SessionService) CostEstimationEnabled() bool {
+	return s.costEstimationEnabled
+}
+
 // CreateSession creates a new alert session with initial stage and agent execution
 func (s *SessionService) CreateSession(_ context.Context, req models.CreateSessionRequest) (*ent.AlertSession, error) {
 	// Validate input

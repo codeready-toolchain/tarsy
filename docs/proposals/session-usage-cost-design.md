@@ -286,7 +286,7 @@ Depends on PR 1's columns. Mechanical extension of existing aggregation code to 
 
 New fields are additive JSON; the dashboard doesn't consume them yet, so nothing changes visibly.
 
-### PR 3 — Usage API
+### PR 3 — Usage API ✅ Done
 
 Depends on PR 1's columns (independent of PR 2). A new endpoint with its own aggregation/ranking logic, not an extension of existing code — different review lens from PR 2.
 
