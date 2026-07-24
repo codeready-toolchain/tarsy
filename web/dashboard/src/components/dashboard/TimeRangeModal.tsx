@@ -47,6 +47,8 @@ export interface TimeRangeModalProps {
   onClose: () => void;
   startDate?: Date | null;
   endDate?: Date | null;
+  /** Preset value currently applied, if the applied range came from a preset (vs. custom dates). */
+  activePreset?: string | null;
   onApply: (startDate: Date | null, endDate: Date | null, preset?: string) => void;
   /** Override presets (defaults to Alert History quick ranges). */
   presets?: TimePreset[];
@@ -110,8 +112,17 @@ export const DEFAULT_TIME_PRESETS: TimePreset[] = [
   },
 ];
 
-/** Usage page presets (7d / 30d / MTD / last calendar month). */
+/** Usage page presets (1d / 7d / 30d / MTD / last calendar month). */
 export const USAGE_TIME_PRESETS: TimePreset[] = [
+  {
+    label: 'Last day',
+    value: '1d',
+    description: 'Last 24 hours',
+    getDateRange: () => ({
+      start: subDays(new Date(), 1),
+      end: new Date(),
+    }),
+  },
   {
     label: 'Last 7 days',
     value: '7d',
@@ -160,6 +171,35 @@ function sameDate(a?: Date | null, b?: Date | null): boolean {
 }
 
 /**
+ * Human-readable description of the currently-applied range, for display
+ * outside the modal (filter buttons/chips) and inside it (the "currently
+ * applied" banner). Presets are shown by their friendly label; custom
+ * ranges are formatted as dates (with times included only when a boundary
+ * isn't at midnight, so plain day ranges stay compact).
+ */
+export function formatAppliedRange(
+  startDate: Date | null | undefined,
+  endDate: Date | null | undefined,
+  presetValue: string | null | undefined,
+  presets: TimePreset[] = DEFAULT_TIME_PRESETS,
+): string | null {
+  if (presetValue) {
+    const preset = presets.find((p) => p.value === presetValue);
+    if (preset) return preset.label;
+  }
+  if (!startDate && !endDate) return null;
+
+  const isMidnight = (d: Date) =>
+    d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
+  const showTime = [startDate, endDate].some((d) => d != null && !isMidnight(d));
+  const fmt = showTime ? 'MMM d, yyyy HH:mm' : 'MMM d, yyyy';
+
+  if (startDate && endDate) return `${format(startDate, fmt)} \u2013 ${format(endDate, fmt)}`;
+  if (startDate) return `From ${format(startDate, fmt)}`;
+  return `Until ${format(endDate!, fmt)}`;
+}
+
+/**
  * TimeRangeModal — Advanced Time Range Selection
  * Provides both preset time ranges and custom date/time selection in a modal dialog.
  */
@@ -168,6 +208,7 @@ export function TimeRangeModal({
   onClose,
   startDate,
   endDate,
+  activePreset = null,
   onApply,
   presets = DEFAULT_TIME_PRESETS,
 }: TimeRangeModalProps) {
@@ -177,27 +218,42 @@ export function TimeRangeModal({
   const [mode, setMode] = useState<'preset' | 'custom'>('preset');
   const timePresets = presets;
 
-  // Reset state when modal opens (null = not yet synced).
+  // Reset state when modal opens (null = not yet synced), restoring whichever
+  // tab/selection matches what's actually applied — so reopening the dialog
+  // shows the currently-in-effect range instead of always defaulting to
+  // "Quick Select" with nothing highlighted.
   // Compare dates by timestamp so new Date instances with the same value don't retrigger.
   const [resetSnapshot, setResetSnapshot] = useState<{
     open: boolean;
     startDate?: Date | null;
     endDate?: Date | null;
+    activePreset?: string | null;
   } | null>(null);
   if (
     resetSnapshot === null ||
     open !== resetSnapshot.open ||
     !sameDate(startDate, resetSnapshot.startDate) ||
-    !sameDate(endDate, resetSnapshot.endDate)
+    !sameDate(endDate, resetSnapshot.endDate) ||
+    activePreset !== resetSnapshot.activePreset
   ) {
-    setResetSnapshot({ open, startDate, endDate });
+    setResetSnapshot({ open, startDate, endDate, activePreset });
     if (open) {
       setCustomStartDate(startDate || null);
       setCustomEndDate(endDate || null);
-      setSelectedPreset(null);
-      setMode('preset');
+      if (activePreset && timePresets.some((p) => p.value === activePreset)) {
+        setSelectedPreset(activePreset);
+        setMode('preset');
+      } else if (startDate || endDate) {
+        setSelectedPreset(null);
+        setMode('custom');
+      } else {
+        setSelectedPreset(null);
+        setMode('preset');
+      }
     }
   }
+
+  const appliedRangeLabel = formatAppliedRange(startDate, endDate, activePreset, timePresets);
 
   // Handle preset selection
   const handlePresetSelect = (preset: TimePreset) => {
@@ -268,6 +324,27 @@ export function TimeRangeModal({
         </DialogTitle>
 
         <DialogContent sx={{ pb: 1 }}>
+          {/* Currently applied — always visible, independent of which tab is open */}
+          <Box
+            sx={{
+              mb: 3,
+              p: 1.5,
+              borderRadius: 1,
+              bgcolor: 'action.hover',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 1,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Currently applied
+            </Typography>
+            <Typography variant="body2" fontWeight={600}>
+              {appliedRangeLabel ?? 'All time'}
+            </Typography>
+          </Box>
+
           {/* Mode Selection */}
           <Box sx={{ mb: 3 }}>
             <Stack direction="row" spacing={1}>
@@ -326,7 +403,7 @@ export function TimeRangeModal({
 
               {selectedPreset && (
                 <Alert severity="info" sx={{ mt: 2 }}>
-                  <strong>Selected:</strong>{' '}
+                  <strong>Will apply:</strong>{' '}
                   {timePresets.find((p) => p.value === selectedPreset)?.description}
                   <br />
                   <strong>From:</strong>{' '}
@@ -396,7 +473,7 @@ export function TimeRangeModal({
 
               {customStartDate && customEndDate && isValidCustomRange() && (
                 <Alert severity="success" sx={{ mt: 2 }}>
-                  <strong>Custom Range:</strong>
+                  <strong>Will apply:</strong>
                   <br />
                   <strong>From:</strong> {format(customStartDate, 'MMM dd, yyyy HH:mm')}
                   <br />
