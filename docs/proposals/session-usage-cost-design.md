@@ -293,7 +293,7 @@ Depends on PR 1's columns (independent of PR 2). A new endpoint with its own agg
 1. `GET /api/v1/usage/summary` (session `created_at` window, soft-delete exclusion, GROUP BYs, top-20 + `rank_by`).
 2. Service/integration tests (windows, multi-model, null costs, `rank_by`).
 
-### PR 4 — Dashboard: Est. $ surfaces, Usage page, Config Viewer
+### PR 4 — Dashboard: Est. $ surfaces, Usage page, Config Viewer ✅ Done
 
 Depends on PR 2 + PR 3 response fields.
 

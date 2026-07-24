@@ -2,6 +2,9 @@
  * Session-related types derived from Go models (pkg/models/session.go).
  */
 
+/** Cost completeness for session / execution aggregates. */
+export type CostCompleteness = 'complete' | 'partial' | 'none';
+
 /** Single session in the dashboard list with pre-computed stats. */
 export interface DashboardSessionItem {
   id: string;
@@ -20,6 +23,8 @@ export interface DashboardSessionItem {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  estimated_cost_usd?: number | null;
+  cost_completeness?: CostCompleteness;
   total_stages: number;
   completed_stages: number;
   has_parallel_stages: boolean;
@@ -103,6 +108,10 @@ export interface SessionDetailResponse {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cost_estimation_enabled?: boolean;
+  estimated_cost_usd?: number | null;
+  cost_completeness?: CostCompleteness;
+  unpriced_interaction_count?: number;
   llm_interaction_count: number;
   mcp_interaction_count: number;
   current_stage_index: number | null;
@@ -157,6 +166,9 @@ export interface ExecutionOverview {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  estimated_cost_usd?: number | null;
+  cost_completeness?: CostCompleteness;
+  unpriced_interaction_count?: number;
   parent_execution_id?: string | null;
   task?: string | null;
   original_llm_provider?: string | null;
@@ -176,6 +188,10 @@ export interface SessionSummaryResponse {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cost_estimation_enabled?: boolean;
+  estimated_cost_usd?: number | null;
+  cost_completeness?: CostCompleteness;
+  unpriced_interaction_count?: number;
   total_duration_ms: number | null;
   chain_statistics: ChainStatistics;
   total_score?: number | null;

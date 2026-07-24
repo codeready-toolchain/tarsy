@@ -186,6 +186,8 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 			item.EstimatedCostUsd = &cost
 			priced := row.TokenBearing > 0 && row.Priced == row.TokenBearing
 			item.Priced = &priced
+			unpriced := row.TokenBearing - row.Priced
+			item.UnpricedInteractionCount = &unpriced
 		}
 		out = append(out, item)
 	}

@@ -53,6 +53,7 @@ import {
   getDefaultTools,
   getSystemConfig,
   getSystemConfigSkill,
+  getUsageSummary,
 } from '../../services/api';
 
 function getMockClient() {
@@ -211,6 +212,31 @@ describe('API methods', () => {
       client.get.mockResolvedValue({ data: { name: 'my skill', body: '...' } });
       await getSystemConfigSkill('my skill');
       expect(client.get).toHaveBeenCalledWith('/api/v1/system/config/skills/my%20skill');
+    });
+  });
+
+  describe('getUsageSummary', () => {
+    it('calls usage summary endpoint with params', async () => {
+      const data = {
+        cost_estimation_enabled: true,
+        window: { start: '2026-01-01T00:00:00Z', end: '2026-01-31T00:00:00Z' },
+        rank_by: 'cost',
+        totals: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+        by_model: [],
+        by_alert_type: [],
+        by_chain: [],
+        top_sessions: [],
+      };
+      client.get.mockResolvedValue({ data });
+      const params = {
+        start_date: '2026-01-01T00:00:00Z',
+        end_date: '2026-01-31T00:00:00Z',
+        alert_type: 'kubernetes',
+        rank_by: 'tokens' as const,
+      };
+      const result = await getUsageSummary(params);
+      expect(client.get).toHaveBeenCalledWith('/api/v1/usage/summary', { params });
+      expect(result).toEqual(data);
     });
   });
 });

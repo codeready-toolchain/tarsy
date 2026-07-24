@@ -2,7 +2,7 @@
  * API request/response wrapper types.
  */
 
-import type { DashboardSessionItem } from './session.ts';
+import type { CostCompleteness, DashboardSessionItem } from './session.ts';
 import type { MCPSelectionConfig } from './system.ts';
 
 /** Pagination info in list responses. */
@@ -17,6 +17,83 @@ export interface PaginationInfo {
 export interface DashboardListResponse {
   sessions: DashboardSessionItem[];
   pagination: PaginationInfo;
+  cost_estimation_enabled?: boolean;
+}
+
+/** Ranking for Usage summary top sessions. */
+export type UsageRankBy = 'cost' | 'tokens';
+
+/** Query parameters for GET /api/v1/usage/summary. */
+export interface UsageSummaryParams {
+  start_date: string;
+  end_date: string;
+  alert_type?: string;
+  chain_id?: string;
+  rank_by?: UsageRankBy;
+}
+
+/** Window echoed by the usage summary endpoint. */
+export interface UsageWindow {
+  start: string;
+  end: string;
+}
+
+/** Fleet-wide token/cost rollup for a usage window. */
+export interface UsageTotals {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd?: number | null;
+  cost_completeness?: CostCompleteness;
+  unpriced_interaction_count?: number;
+}
+
+/** Per-model rollup within a usage window. */
+export interface UsageModelBreakdown {
+  model_name: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd?: number | null;
+  priced?: boolean;
+  unpriced_interaction_count?: number;
+}
+
+/** Per-alert-type rollup within a usage window. */
+export interface UsageAlertBreakdown {
+  alert_type: string;
+  total_tokens: number;
+  estimated_cost_usd?: number | null;
+}
+
+/** Per-chain rollup within a usage window. */
+export interface UsageChainBreakdown {
+  chain_id: string;
+  total_tokens: number;
+  estimated_cost_usd?: number | null;
+}
+
+/** One of the capped top sessions in a usage window. */
+export interface UsageTopSession {
+  session_id: string;
+  alert_type: string | null;
+  chain_id: string;
+  total_tokens: number;
+  estimated_cost_usd?: number | null;
+  cost_completeness?: CostCompleteness;
+  created_at: string;
+}
+
+/** Response from GET /api/v1/usage/summary. */
+export interface UsageSummaryResponse {
+  cost_estimation_enabled: boolean;
+  window: UsageWindow;
+  rank_by: UsageRankBy;
+  totals: UsageTotals;
+  by_model: UsageModelBreakdown[];
+  by_alert_type: UsageAlertBreakdown[];
+  by_chain: UsageChainBreakdown[];
+  top_sessions: UsageTopSession[];
 }
 
 /** Query parameters for the dashboard session list. */

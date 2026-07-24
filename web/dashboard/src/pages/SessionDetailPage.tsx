@@ -1660,6 +1660,7 @@ export function SessionDetailPage() {
                   searchTerm={debouncedSearchTerm}
                   defaultCollapsed={wasTerminalOnMount && session.status === SESSION_STATUS.COMPLETED}
                   expandCounter={timelineExpandCounter}
+                  costEstimationEnabled={session.cost_estimation_enabled === true}
                   {...(hasFinalContent ? {
                     onJumpToSummary: handleJumpToSummary,
                     hasExecutiveSummary: !!session.executive_summary,

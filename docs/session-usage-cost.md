@@ -2,7 +2,7 @@
 
 TARSy can attach an **estimated USD cost** to each LLM interaction at write time, using list prices from a price book. Estimates are for operator judgment — they are **not** invoice truth.
 
-Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. Fleet dig-in uses `GET /api/v1/usage/summary` (Usage dashboard page lands in follow-up work). Config Viewer already exposes the effective toggle, overrides, and catalog status via `GET /api/v1/system/config`.
+Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The dashboard shows soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when estimation is enabled. Fleet dig-in is available on the **Usage** page (`/usage`, hamburger → Usage) via `GET /api/v1/usage/summary`. Config Viewer exposes the effective toggle, overrides, and catalog status under System → Cost estimation (`GET /api/v1/system/config`).
 
 ## Table of Contents
 
@@ -100,7 +100,7 @@ When estimation is **disabled**: responses set `cost_estimation_enabled: false` 
 GET /api/v1/usage/summary?start_date=&end_date=&alert_type=&chain_id=&rank_by=cost|tokens
 ```
 
-Server-side fleet aggregates for one date window (the Usage page does not load-all-then-filter).
+Server-side fleet aggregates for one date window. The dashboard **Usage** page (`/usage`) calls this endpoint for the selected window (presets: Last 7d / 30d / MTD / last calendar month; default 30d) with optional `alert_type` / `chain_id` filters and server-side `rank_by` for the top-20 table — it does not load-all-then-filter.
 
 | Param | Required | Notes |
 |-------|----------|--------|
@@ -115,6 +115,7 @@ Rules:
 - Soft-deleted sessions are always excluded.
 - All `interaction_type` values count (same as session token SUMs).
 - Response sections: `totals`, `by_model`, `by_alert_type`, `by_chain`, and capped `top_sessions` (hardcoded top **20**; no `limit` param).
+- `by_model[]` rows carry `priced` (bool: all token-bearing rows for that model are priced) and `unpriced_interaction_count` (count of token-bearing rows for that model with no resolved rate); the dashboard surfaces the count in the "Incomplete" chip's tooltip.
 - Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
 

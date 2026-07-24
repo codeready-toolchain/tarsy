@@ -98,6 +98,8 @@ interface ConversationTimelineProps {
   defaultCollapsed?: boolean;
   /** Increment to expand the timeline from outside (e.g. when user sends a chat message) */
   expandCounter?: number;
+  /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay in sub-agent cards) */
+  costEstimationEnabled?: boolean;
 }
 
 /**
@@ -137,6 +139,7 @@ export default function ConversationTimeline({
   hasExecutiveSummary,
   defaultCollapsed,
   expandCounter = 0,
+  costEstimationEnabled = false,
 }: ConversationTimelineProps) {
   // --- Whole-timeline collapse (for terminal sessions opened directly) ---
   const [timelineCollapsed, setTimelineCollapsed] = useState(defaultCollapsed ?? false);
@@ -644,6 +647,7 @@ export default function ConversationTimeline({
                   onSelectedAgentChange={handleSelectedAgentChange}
                   searchTerm={searchTerm}
                   stageType={group.stageType}
+                  costEstimationEnabled={costEstimationEnabled}
                 />
               </Collapse>
             </Box>

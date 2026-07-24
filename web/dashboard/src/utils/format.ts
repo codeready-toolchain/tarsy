@@ -159,3 +159,30 @@ export function formatTokensCompact(tokens: number | null | undefined): string {
   }
   return String(tokens);
 }
+
+// ────────────────────────────────────────────────────────────
+// Estimated cost (USD)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Compact USD format for estimated cost surfaces.
+ * Small amounts keep extra precision so sub-cent estimates remain readable.
+ * Plain "$X" — callers that want an "approximate" glyph prefix it themselves,
+ * since the right glyph/weight/color depends on how prominently it's displayed
+ * (see EstimatedCostDisplay for the small/inline case).
+ */
+export function formatEstimatedCostUsd(usd: number | null | undefined): string {
+  if (usd == null || !Number.isFinite(usd)) return '—';
+  const abs = Math.abs(usd);
+  let fractionDigits: number;
+  if (abs === 0) {
+    fractionDigits = 2;
+  } else if (abs < 0.01) {
+    fractionDigits = 4;
+  } else if (abs < 1) {
+    fractionDigits = 3;
+  } else {
+    fractionDigits = 2;
+  }
+  return `$${usd.toFixed(fractionDigits)}`;
+}

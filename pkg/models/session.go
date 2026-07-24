@@ -386,12 +386,13 @@ type UsageTotals struct {
 
 // UsageModelBreakdown is a per-model rollup within the window.
 type UsageModelBreakdown struct {
-	ModelName        string   `json:"model_name"`
-	InputTokens      int64    `json:"input_tokens"`
-	OutputTokens     int64    `json:"output_tokens"`
-	TotalTokens      int64    `json:"total_tokens"`
-	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
-	Priced           *bool    `json:"priced,omitempty"` // true when all token-bearing rows for the model are priced
+	ModelName                string   `json:"model_name"`
+	InputTokens              int64    `json:"input_tokens"`
+	OutputTokens             int64    `json:"output_tokens"`
+	TotalTokens              int64    `json:"total_tokens"`
+	EstimatedCostUsd         *float64 `json:"estimated_cost_usd,omitempty"`
+	Priced                   *bool    `json:"priced,omitempty"`                     // true when all token-bearing rows for the model are priced
+	UnpricedInteractionCount *int     `json:"unpriced_interaction_count,omitempty"` // count of token-bearing interactions for this model with no resolved rate
 }
 
 // UsageAlertBreakdown is a per-alert-type rollup within the window.

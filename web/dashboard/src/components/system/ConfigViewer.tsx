@@ -33,6 +33,7 @@ import { highlightYaml } from '../shared/JsonDisplay/utils';
 import { getSystemConfig, getSystemConfigSkill, handleAPIError } from '../../services/api.ts';
 import type {
   SystemConfigResponse,
+  SystemSettingsView,
   SkillMetaView,
   MCPServerConfigView,
   AgentConfigView,
@@ -221,7 +222,7 @@ function StructuredConfig({ config }: { config: SystemConfigResponse }) {
       </ConfigSection>
 
       <ConfigSection title="System" count={1}>
-        <KeyValueBlock data={config.system} />
+        <SystemDetails system={config.system} />
       </ConfigSection>
 
       <ConfigSection title="Agents" count={Object.keys(config.agents).length}>
@@ -359,6 +360,60 @@ function KeyValueBlock({ data }: { data: unknown }) {
     <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
       {String(data)}
     </Typography>
+  );
+}
+
+function SystemDetails({ system }: { system: SystemSettingsView }) {
+  const { cost_estimation: costEstimation, ...rest } = system;
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <KeyValueBlock data={rest} />
+      {costEstimation && <CostEstimationDetails costEstimation={costEstimation} />}
+    </Box>
+  );
+}
+
+function CostEstimationDetails({
+  costEstimation,
+}: {
+  costEstimation: NonNullable<SystemSettingsView['cost_estimation']>;
+}) {
+  const rates = costEstimation.model_rates
+    ? Object.entries(costEstimation.model_rates)
+    : [];
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5 }}>
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Cost estimation
+      </Typography>
+      <Field label="enabled" value={String(costEstimation.enabled)} />
+      <Field
+        label="model_rates"
+        value={
+          rates.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              (none)
+            </Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {rates.map(([model, rate]) => (
+                <Typography
+                  key={model}
+                  variant="body2"
+                  sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                >
+                  {model}: in {rate.input_per_million}/M · out {rate.output_per_million}/M
+                </Typography>
+              ))}
+            </Box>
+          )
+        }
+      />
+      <Field label="catalog.source" value={costEstimation.catalog.source} />
+      <Field label="catalog.entry_count" value={costEstimation.catalog.entry_count} />
+      <Field label="catalog.last_fetch" value={costEstimation.catalog.last_fetch} />
+      <Field label="catalog.last_error" value={costEstimation.catalog.last_error} />
+    </Paper>
   );
 }
 

@@ -1,0 +1,33 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  max_iterations: 1
+
+# Deterministic per-million overrides for the scripted e2e model (test-model).
+# Avoids relying on LiteLLM catalog matching for cost assertions.
+system:
+  cost_estimation:
+    enabled: true
+    model_rates:
+      test-model:
+        input_per_million: 1.0
+        output_per_million: 2.0
+
+mcp_servers:
+  # Dummy entry so built-in agents pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  SimpleAgent:
+    custom_instructions: "You are SimpleAgent, performing a quick analysis."
+
+agent_chains:
+  usage-cost-chain:
+    alert_types: [test-usage-cost]
+    stages:
+      - name: analysis
+        agents:
+          - name: SimpleAgent

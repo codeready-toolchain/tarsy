@@ -190,6 +190,17 @@ func (app *TestApp) GetSystemConfig(t *testing.T) map[string]interface{} {
 	return app.getJSON(t, "/api/v1/system/config", http.StatusOK)
 }
 
+// GetUsageSummary calls GET /api/v1/usage/summary with the given query string
+// (e.g. "start_date=...&end_date=...&rank_by=cost").
+func (app *TestApp) GetUsageSummary(t *testing.T, queryParams string) map[string]interface{} {
+	t.Helper()
+	path := "/api/v1/usage/summary"
+	if queryParams != "" {
+		path += "?" + queryParams
+	}
+	return app.getJSON(t, path, http.StatusOK)
+}
+
 // GetSystemConfigSkill calls GET /api/v1/system/config/skills/:name.
 func (app *TestApp) GetSystemConfigSkill(t *testing.T, name string, expectedStatus int) map[string]interface{} {
 	t.Helper()
@@ -587,6 +598,26 @@ func toInt(v interface{}) int {
 	case json.Number:
 		i, _ := n.Int64()
 		return int(i)
+	default:
+		return 0
+	}
+}
+
+// toFloat converts a JSON-decoded numeric value to float64.
+// Returns 0 if the value is nil or not a recognized numeric type.
+func toFloat(v interface{}) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case json.Number:
+		f, _ := n.Float64()
+		return f
 	default:
 		return 0
 	}

@@ -36,6 +36,7 @@ import {
   Menu as MenuIcon,
   Send as SendIcon,
   Dns as DnsIcon,
+  BarChart as BarChartIcon,
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
 } from '@mui/icons-material';
@@ -160,6 +161,10 @@ export function DashboardView() {
     window.open('/system', '_blank', 'noopener,noreferrer');
     handleMenuClose();
   };
+  const handleUsage = () => {
+    window.open('/usage', '_blank', 'noopener,noreferrer');
+    handleMenuClose();
+  };
 
   // ── Active sessions state ──
   const [activeSessions, setActiveSessions] = useState<ActiveSessionItem[]>([]);
@@ -171,6 +176,7 @@ export function DashboardView() {
   const [historicalSessions, setHistoricalSessions] = useState<DashboardSessionItem[]>([]);
   const [historicalLoading, setHistoricalLoading] = useState(true);
   const [historicalError, setHistoricalError] = useState<string | null>(null);
+  const [costEstimationEnabled, setCostEstimationEnabled] = useState(false);
 
   // ── Progress data from WebSocket ──
   const [progressData, setProgressData] = useState<Record<string, SessionProgressPayload>>({});
@@ -276,6 +282,7 @@ export function DashboardView() {
 
       if (filtersOk && pageOk && sortOk) {
         setHistoricalSessions(data.sessions);
+        setCostEstimationEnabled(data.cost_estimation_enabled === true);
         setPagination((prev) => ({
           ...prev,
           totalItems: data.pagination.total_items,
@@ -1038,6 +1045,12 @@ export function DashboardView() {
           </ListItemIcon>
           <ListItemText>Manual Alert Submission</ListItemText>
         </MenuItem>
+        <MenuItem onClick={handleUsage}>
+          <ListItemIcon>
+            <BarChartIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Usage</ListItemText>
+        </MenuItem>
         <MenuItem onClick={handleSystemStatus}>
           <ListItemIcon>
             <DnsIcon fontSize="small" />
@@ -1075,6 +1088,7 @@ export function DashboardView() {
               filteredCount={pagination.totalItems}
               sortState={sortState}
               pagination={pagination}
+              costEstimationEnabled={costEstimationEnabled}
               onRefresh={handleRefreshHistorical}
               onSortChange={handleSortChange}
               onPageChange={handlePageChange}

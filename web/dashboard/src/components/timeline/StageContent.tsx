@@ -13,6 +13,7 @@ import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
+import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import TimelineItem from './TimelineItem';
 import SubAgentCard from './SubAgentCard';
 import ErrorCard from './ErrorCard';
@@ -54,6 +55,8 @@ interface StageContentProps {
   searchTerm?: string;
   /** Parent stage type (investigation, chat, action, etc.) for context-aware labels */
   stageType?: string;
+  /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay) */
+  costEstimationEnabled?: boolean;
 }
 
 interface TabPanelProps {
@@ -267,6 +270,7 @@ const StageContent: React.FC<StageContentProps> = ({
   onSelectedAgentChange,
   searchTerm,
   stageType,
+  costEstimationEnabled = false,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -515,6 +519,7 @@ const StageContent: React.FC<StageContentProps> = ({
         expandAllToolCalls={expandAllToolCalls}
         isItemCollapsible={isItemCollapsible}
         searchTerm={searchTerm}
+        costEstimationEnabled={costEstimationEnabled}
       />
     );
   };
@@ -755,8 +760,14 @@ const StageContent: React.FC<StageContentProps> = ({
                   )}
                 </Box>
                 {hasTokens && tokenData ? (
-                  <Box display="flex" alignItems="center" gap={0.5} flexShrink={0}>
+                  <Box display="flex" alignItems="center" gap={1} flexShrink={0}>
                     <TokenUsageDisplay tokenData={tokenData} variant="labeled" size="small" />
+                    <EstimatedCostDisplay
+                      enabled={costEstimationEnabled === true}
+                      estimatedCostUsd={eo?.estimated_cost_usd}
+                      costCompleteness={eo?.cost_completeness}
+                      size="small"
+                    />
                   </Box>
                 ) : !eo && (() => {
                   const streamCount = (streamingByExecution.get(execution.executionId) || []).length;
