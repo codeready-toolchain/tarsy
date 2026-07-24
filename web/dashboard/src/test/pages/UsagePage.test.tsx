@@ -35,6 +35,21 @@ vi.mock('../../contexts/VersionContext.tsx', () => ({
   }),
 }));
 
+/** Captures the handler UsagePage registers on the 'sessions' channel so tests
+ * can simulate incoming WebSocket events without a real socket connection. */
+let capturedSessionHandler: ((data: Record<string, unknown>) => void) | null = null;
+vi.mock('../../services/websocket.ts', () => ({
+  websocketService: {
+    subscribeToChannel: (_channel: string, handler: (data: Record<string, unknown>) => void) => {
+      capturedSessionHandler = handler;
+      return () => {
+        capturedSessionHandler = null;
+      };
+    },
+    connect: () => {},
+  },
+}));
+
 import { getFilterOptions, getUsageSummary } from '../../services/api';
 import { UsagePage } from '../../pages/UsagePage';
 
@@ -144,6 +159,51 @@ describe('UsagePage', () => {
       expect(mockGetUsageSummary).toHaveBeenCalledTimes(2);
     });
     expect(mockGetUsageSummary.mock.calls[1][0].rank_by).toBe('tokens');
+  });
+
+  it('refetches and shows a brief notice when a session completes via WebSocket', async () => {
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+    expect(mockGetUsageSummary).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Updated — new session data available')).not.toBeInTheDocument();
+
+    expect(capturedSessionHandler).not.toBeNull();
+    capturedSessionHandler?.({
+      type: 'session.status',
+      session_id: 'abcdef12-3456-7890-abcd-ef1234567890',
+      status: 'completed',
+      timestamp: '2026-07-23T12:00:00Z',
+    });
+
+    await waitFor(
+      () => {
+        expect(mockGetUsageSummary).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 4000 },
+    );
+    expect(await screen.findByText('Updated — new session data available')).toBeInTheDocument();
+  });
+
+  it('ignores non-terminal session status events (no refetch, no notice)', async () => {
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+    expect(mockGetUsageSummary).toHaveBeenCalledTimes(1);
+
+    capturedSessionHandler?.({
+      type: 'session.status',
+      session_id: 'abcdef12-3456-7890-abcd-ef1234567890',
+      status: 'in_progress',
+      timestamp: '2026-07-23T12:00:00Z',
+    });
+
+    // Give the (unused) throttle window time to elapse; the call count should stay at 1.
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    expect(mockGetUsageSummary).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Updated — new session data available')).not.toBeInTheDocument();
   });
 
   it('shows a tooltip on the Incomplete chip explaining exactly what is unpriced', async () => {

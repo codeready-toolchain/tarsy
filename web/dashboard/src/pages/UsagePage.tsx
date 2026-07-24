@@ -5,7 +5,7 @@
  * Date presets are Usage-oriented (7d / 30d / MTD / last calendar month); default 30d.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
@@ -21,6 +21,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -35,6 +36,7 @@ import {
 import AccessTime from '@mui/icons-material/AccessTime';
 import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
 import FilterList from '@mui/icons-material/FilterList';
+import AutorenewRounded from '@mui/icons-material/AutorenewRounded';
 
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
@@ -45,9 +47,17 @@ import {
 } from '../components/dashboard/TimeRangeModal.tsx';
 import EstimatedCostDisplay from '../components/shared/EstimatedCostDisplay.tsx';
 import { getFilterOptions, getUsageSummary, handleAPIError } from '../services/api.ts';
+import { websocketService } from '../services/websocket.ts';
+import { EVENT_SESSION_STATUS } from '../constants/eventTypes.ts';
+import { isTerminalStatus, type SessionStatus } from '../constants/sessionStatus.ts';
 import { formatEstimatedCostUsd, formatTimestamp, formatTokens } from '../utils/format.ts';
 import { sessionDetailPath } from '../constants/routes.ts';
 import type { UsageRankBy, UsageSummaryResponse } from '../types/api.ts';
+import type { SessionStatusPayload } from '../types/events.ts';
+
+/** Throttle for re-fetching the summary in response to WebSocket session events —
+ * batches bursts of completions (e.g. a whole chain finishing) into one refetch. */
+const WS_REFRESH_THROTTLE_MS = 2000;
 
 function defaultThirtyDayRange(): { start: Date; end: Date; preset: string } {
   const range = USAGE_TIME_PRESETS.find((p) => p.value === '30d')!.getDateRange();
@@ -105,7 +115,7 @@ export function UsagePage() {
     };
   }, []);
 
-  const fetchSummary = useCallback(async () => {
+  const fetchSummary = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
@@ -117,9 +127,11 @@ export function UsagePage() {
         rank_by: rankBy,
       });
       setSummary(data);
+      return true;
     } catch (err) {
       setError(handleAPIError(err));
       setSummary(null);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -128,6 +140,44 @@ export function UsagePage() {
   useEffect(() => {
     void fetchSummary();
   }, [fetchSummary]);
+
+  // Ref so the WebSocket handler (subscribed once, below) always calls the
+  // latest fetchSummary — without re-subscribing every time filters change.
+  const fetchSummaryRef = useRef(fetchSummary);
+  useEffect(() => {
+    fetchSummaryRef.current = fetchSummary;
+  }, [fetchSummary]);
+
+  const [liveUpdateNotice, setLiveUpdateNotice] = useState(false);
+
+  // Live updates: a session reaching a terminal state can change fleet
+  // totals/breakdowns, so refetch (throttled) and surface a brief, dismissible
+  // notice — the page doesn't otherwise indicate it refreshed itself.
+  useEffect(() => {
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const handleSessionEvent = (data: Record<string, unknown>) => {
+      if (data.type !== EVENT_SESSION_STATUS) return;
+      const { status } = data as unknown as SessionStatusPayload;
+      if (!isTerminalStatus(status as SessionStatus)) return;
+
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(() => {
+        refreshTimeout = null;
+        void fetchSummaryRef.current().then((success) => {
+          if (success) setLiveUpdateNotice(true);
+        });
+      }, WS_REFRESH_THROTTLE_MS);
+    };
+
+    const unsubChannel = websocketService.subscribeToChannel('sessions', handleSessionEvent);
+    websocketService.connect();
+
+    return () => {
+      unsubChannel();
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+    };
+  }, []);
 
   const handleTimeRangeApply = (start: Date | null, end: Date | null, preset?: string) => {
     if (start && end) {
@@ -444,6 +494,23 @@ export function UsagePage() {
         onApply={handleTimeRangeApply}
         presets={USAGE_TIME_PRESETS}
       />
+
+      <Snackbar
+        open={liveUpdateNotice}
+        autoHideDuration={3000}
+        onClose={() => setLiveUpdateNotice(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setLiveUpdateNotice(false)}
+          severity="info"
+          variant="filled"
+          icon={<AutorenewRounded fontSize="inherit" />}
+          sx={{ width: '100%' }}
+        >
+          Updated — new session data available
+        </Alert>
+      </Snackbar>
 
       <FloatingSubmitAlertFab />
     </Box>
