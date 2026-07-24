@@ -31,10 +31,11 @@ import type { SessionFilter, PaginationState, SortState } from '../../types/dash
 import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
 
 /**
- * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | Eval Score | Review | Actions
+ * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | [Est. Cost] | Eval Score | Review | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
+ * Est. Cost column only renders when cost estimation is enabled.
  */
-const TOTAL_COLUMNS = 10;
+const BASE_TOTAL_COLUMNS = 10;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -67,6 +68,7 @@ export function HistoricalAlertsList({
   onPageSizeChange,
   onReviewClick,
 }: HistoricalAlertsListProps) {
+  const totalColumns = BASE_TOTAL_COLUMNS + (costEstimationEnabled ? 1 : 0);
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
       {/* Header */}
@@ -241,6 +243,11 @@ export function HistoricalAlertsList({
                   {/* Tokens — not sortable */}
                   <TableCell sx={{ fontWeight: 600 }}>Tokens</TableCell>
 
+                  {/* Est. Cost — not sortable; only shown when estimation is enabled */}
+                  {costEstimationEnabled && (
+                    <TableCell sx={{ fontWeight: 600 }}>Est. Cost</TableCell>
+                  )}
+
                   <QualityGroupHeaders
                     sortField={sortState.field}
                     sortDirection={sortState.direction}
@@ -255,7 +262,7 @@ export function HistoricalAlertsList({
               <TableBody>
                 {sessions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={TOTAL_COLUMNS} align="center">
+                    <TableCell colSpan={totalColumns} align="center">
                       <Box sx={{ py: 6, textAlign: 'center' }}>
                         {hasActiveFilters(filters) ? (
                           <>

@@ -191,33 +191,43 @@ export function SessionListItem({
         </Typography>
       </TableCell>
 
-      {/* Tokens + Est. cost */}
+      {/* Tokens */}
       <TableCell>
         {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-            <TokenUsageDisplay
-              tokenData={{
-                input_tokens: session.input_tokens,
-                output_tokens: session.output_tokens,
-                total_tokens: session.total_tokens,
-              }}
-              variant="inline"
-              size="small"
-              showBreakdown={false}
-            />
-            <EstimatedCostDisplay
-              enabled={costEstimationEnabled}
-              estimatedCostUsd={session.estimated_cost_usd}
-              costCompleteness={session.cost_completeness}
-              size="small"
-            />
-          </Box>
+          <TokenUsageDisplay
+            tokenData={{
+              input_tokens: session.input_tokens,
+              output_tokens: session.output_tokens,
+              total_tokens: session.total_tokens,
+            }}
+            variant="inline"
+            size="small"
+            showBreakdown={false}
+          />
         ) : (
           <Typography variant="body2" color="text.secondary">
             —
           </Typography>
         )}
       </TableCell>
+
+      {/* Est. Cost — only rendered when cost estimation is enabled */}
+      {costEstimationEnabled && (
+        <TableCell>
+          {session.estimated_cost_usd != null && session.cost_completeness != null && session.cost_completeness !== 'none' ? (
+            <EstimatedCostDisplay
+              enabled
+              estimatedCostUsd={session.estimated_cost_usd}
+              costCompleteness={session.cost_completeness}
+              size="small"
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              —
+            </Typography>
+          )}
+        </TableCell>
+      )}
 
       {/* Eval Score */}
       <ScoreCell
