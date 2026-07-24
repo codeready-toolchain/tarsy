@@ -33,6 +33,7 @@ import {
 } from '@mui/material';
 import AccessTime from '@mui/icons-material/AccessTime';
 import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
+import FilterList from '@mui/icons-material/FilterList';
 
 import { SharedHeader } from '../components/layout/SharedHeader.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
@@ -131,6 +132,11 @@ export function UsagePage() {
   const timeRangeLabel = datePreset
     ? USAGE_TIME_PRESETS.find((p) => p.value === datePreset)?.label ?? `Range: ${datePreset}`
     : 'Custom range';
+  const hasActiveFilters = !!alertType || !!chainId;
+  const handleClearFilters = () => {
+    setAlertType(null);
+    setChainId(null);
+  };
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default', px: 2, py: 2 }}>
@@ -140,10 +146,21 @@ export function UsagePage() {
         <Stack spacing={3}>
           {/* Filters */}
           <Paper variant="outlined" sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <FilterList fontSize="small" />
+                Filters
+              </Typography>
+              {hasActiveFilters && (
+                <Button size="small" onClick={handleClearFilters}>
+                  Clear filters
+                </Button>
+              )}
+            </Box>
             <Stack
               direction={{ xs: 'column', md: 'row' }}
               spacing={2}
-              alignItems={{ md: 'center' }}
+              alignItems={{ md: 'flex-end' }}
               flexWrap="wrap"
               useFlexGap
             >
@@ -152,6 +169,7 @@ export function UsagePage() {
                 startIcon={<AccessTime />}
                 onClick={() => setTimeRangeOpen(true)}
                 aria-label="Select time range"
+                sx={{ height: 40 }}
               >
                 {timeRangeLabel}
               </Button>
@@ -211,39 +229,35 @@ export function UsagePage() {
             <>
               {/* Totals */}
               <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Totals
-                </Typography>
-                <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap alignItems="center">
-                  <Typography variant="body1">
-                    <strong>{formatTokens(summary.totals.total_tokens)}</strong>{' '}
-                    <Typography component="span" color="text.secondary" variant="body2">
-                      tokens
-                    </Typography>
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {formatTokens(summary.totals.input_tokens)} in ·{' '}
-                    {formatTokens(summary.totals.output_tokens)} out
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Typography variant="h6">Totals</Typography>
+                  {loading && <CircularProgress size={16} />}
+                </Box>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                    gap: 2,
+                  }}
+                >
+                  <StatCard label="Total tokens" value={formatTokens(summary.totals.total_tokens)} />
+                  <StatCard label="Input tokens" value={formatTokens(summary.totals.input_tokens)} />
+                  <StatCard label="Output tokens" value={formatTokens(summary.totals.output_tokens)} />
                   {costEnabled && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <EstimatedCostDisplay
-                        enabled
-                        estimatedCostUsd={summary.totals.estimated_cost_usd}
-                        costCompleteness={summary.totals.cost_completeness}
-                        variant="labeled"
-                      />
-                      {summary.totals.cost_completeness === 'partial' &&
+                    <StatCard
+                      label="Est. cost"
+                      value={formatEstimatedCostUsd(summary.totals.estimated_cost_usd)}
+                      warning={summary.totals.cost_completeness === 'partial'}
+                      caption={
+                        summary.totals.cost_completeness === 'partial' &&
                         summary.totals.unpriced_interaction_count != null &&
-                        summary.totals.unpriced_interaction_count > 0 && (
-                          <Typography variant="caption" color="warning.main">
-                            ({summary.totals.unpriced_interaction_count} unpriced)
-                          </Typography>
-                        )}
-                    </Box>
+                        summary.totals.unpriced_interaction_count > 0
+                          ? `${summary.totals.unpriced_interaction_count} unpriced`
+                          : undefined
+                      }
+                    />
                   )}
-                  {loading && <CircularProgress size={18} />}
-                </Stack>
+                </Box>
               </Paper>
 
               {/* By model */}
@@ -251,25 +265,37 @@ export function UsagePage() {
                 title="By model"
                 columns={
                   costEnabled
-                    ? ['Model', 'Tokens', 'In', 'Out', 'Est. cost', 'Priced']
-                    : ['Model', 'Tokens', 'In', 'Out']
+                    ? [
+                        { label: 'Model' },
+                        { label: 'Tokens', align: 'right' },
+                        { label: 'In', align: 'right' },
+                        { label: 'Out', align: 'right' },
+                        { label: 'Est. cost', align: 'right' },
+                        { label: 'Priced', align: 'center' },
+                      ]
+                    : [
+                        { label: 'Model' },
+                        { label: 'Tokens', align: 'right' },
+                        { label: 'In', align: 'right' },
+                        { label: 'Out', align: 'right' },
+                      ]
                 }
                 empty={summary.by_model.length === 0}
               >
                 {summary.by_model.map((row) => (
-                  <TableRow key={row.model_name}>
+                  <TableRow key={row.model_name} hover>
                     <TableCell>{row.model_name}</TableCell>
-                    <TableCell>{formatTokens(row.total_tokens)}</TableCell>
-                    <TableCell>{formatTokens(row.input_tokens)}</TableCell>
-                    <TableCell>{formatTokens(row.output_tokens)}</TableCell>
+                    <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
+                    <TableCell align="right">{formatTokens(row.input_tokens)}</TableCell>
+                    <TableCell align="right">{formatTokens(row.output_tokens)}</TableCell>
                     {costEnabled && (
                       <>
-                        <TableCell>
+                        <TableCell align="right">
                           {row.estimated_cost_usd != null
                             ? formatEstimatedCostUsd(row.estimated_cost_usd)
                             : '—'}
                         </TableCell>
-                        <TableCell>
+                        <TableCell align="center">
                           {row.priced === false ? (
                             <Chip
                               size="small"
@@ -288,60 +314,88 @@ export function UsagePage() {
                 ))}
               </BreakdownTable>
 
-              {/* By alert type */}
-              <BreakdownTable
-                title="By alert type"
-                columns={costEnabled ? ['Alert type', 'Tokens', 'Est. cost'] : ['Alert type', 'Tokens']}
-                empty={summary.by_alert_type.length === 0}
+              {/* By alert type + By chain — side by side, both are narrow */}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                  gap: 3,
+                }}
               >
-                {summary.by_alert_type.map((row) => (
-                  <TableRow key={row.alert_type || '(none)'}>
-                    <TableCell>{row.alert_type || '—'}</TableCell>
-                    <TableCell>{formatTokens(row.total_tokens)}</TableCell>
-                    {costEnabled && (
-                      <TableCell>
-                        {row.estimated_cost_usd != null
-                          ? formatEstimatedCostUsd(row.estimated_cost_usd)
-                          : '—'}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </BreakdownTable>
+                <BreakdownTable
+                  title="By alert type"
+                  columns={
+                    costEnabled
+                      ? [{ label: 'Alert type' }, { label: 'Tokens', align: 'right' }, { label: 'Est. cost', align: 'right' }]
+                      : [{ label: 'Alert type' }, { label: 'Tokens', align: 'right' }]
+                  }
+                  empty={summary.by_alert_type.length === 0}
+                >
+                  {summary.by_alert_type.map((row) => (
+                    <TableRow key={row.alert_type || '(none)'} hover>
+                      <TableCell>{row.alert_type || '—'}</TableCell>
+                      <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
+                      {costEnabled && (
+                        <TableCell align="right">
+                          {row.estimated_cost_usd != null
+                            ? formatEstimatedCostUsd(row.estimated_cost_usd)
+                            : '—'}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </BreakdownTable>
 
-              {/* By chain */}
-              <BreakdownTable
-                title="By chain"
-                columns={costEnabled ? ['Chain', 'Tokens', 'Est. cost'] : ['Chain', 'Tokens']}
-                empty={summary.by_chain.length === 0}
-              >
-                {summary.by_chain.map((row) => (
-                  <TableRow key={row.chain_id}>
-                    <TableCell>{row.chain_id}</TableCell>
-                    <TableCell>{formatTokens(row.total_tokens)}</TableCell>
-                    {costEnabled && (
-                      <TableCell>
-                        {row.estimated_cost_usd != null
-                          ? formatEstimatedCostUsd(row.estimated_cost_usd)
-                          : '—'}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </BreakdownTable>
+                <BreakdownTable
+                  title="By chain"
+                  columns={
+                    costEnabled
+                      ? [{ label: 'Chain' }, { label: 'Tokens', align: 'right' }, { label: 'Est. cost', align: 'right' }]
+                      : [{ label: 'Chain' }, { label: 'Tokens', align: 'right' }]
+                  }
+                  empty={summary.by_chain.length === 0}
+                >
+                  {summary.by_chain.map((row) => (
+                    <TableRow key={row.chain_id} hover>
+                      <TableCell>{row.chain_id}</TableCell>
+                      <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
+                      {costEnabled && (
+                        <TableCell align="right">
+                          {row.estimated_cost_usd != null
+                            ? formatEstimatedCostUsd(row.estimated_cost_usd)
+                            : '—'}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </BreakdownTable>
+              </Box>
 
               {/* Top sessions */}
               <BreakdownTable
                 title={`Top sessions (${summary.top_sessions.length})`}
                 columns={
                   costEnabled
-                    ? ['Session', 'Alert type', 'Chain', 'Tokens', 'Est. cost', 'Created']
-                    : ['Session', 'Alert type', 'Chain', 'Tokens', 'Created']
+                    ? [
+                        { label: 'Session' },
+                        { label: 'Alert type' },
+                        { label: 'Chain' },
+                        { label: 'Tokens', align: 'right' },
+                        { label: 'Est. cost', align: 'right' },
+                        { label: 'Created', align: 'right' },
+                      ]
+                    : [
+                        { label: 'Session' },
+                        { label: 'Alert type' },
+                        { label: 'Chain' },
+                        { label: 'Tokens', align: 'right' },
+                        { label: 'Created', align: 'right' },
+                      ]
                 }
                 empty={summary.top_sessions.length === 0}
               >
                 {summary.top_sessions.map((row) => (
-                  <TableRow key={row.session_id}>
+                  <TableRow key={row.session_id} hover>
                     <TableCell>
                       <Link
                         component={RouterLink}
@@ -354,9 +408,9 @@ export function UsagePage() {
                     </TableCell>
                     <TableCell>{row.alert_type || '—'}</TableCell>
                     <TableCell>{row.chain_id}</TableCell>
-                    <TableCell>{formatTokens(row.total_tokens)}</TableCell>
+                    <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                     {costEnabled && (
-                      <TableCell>
+                      <TableCell align="right">
                         <EstimatedCostDisplay
                           enabled
                           estimatedCostUsd={row.estimated_cost_usd}
@@ -365,7 +419,7 @@ export function UsagePage() {
                         />
                       </TableCell>
                     )}
-                    <TableCell>{formatTimestamp(row.created_at, 'short')}</TableCell>
+                    <TableCell align="right">{formatTimestamp(row.created_at, 'short')}</TableCell>
                   </TableRow>
                 ))}
               </BreakdownTable>
@@ -390,6 +444,11 @@ export function UsagePage() {
   );
 }
 
+interface BreakdownColumn {
+  label: string;
+  align?: 'left' | 'right' | 'center';
+}
+
 function BreakdownTable({
   title,
   columns,
@@ -397,12 +456,12 @@ function BreakdownTable({
   children,
 }: {
   title: string;
-  columns: string[];
+  columns: BreakdownColumn[];
   empty: boolean;
   children: ReactNode;
 }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
+    <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
       <Typography variant="h6" gutterBottom>
         {title}
       </Typography>
@@ -412,11 +471,27 @@ function BreakdownTable({
         </Typography>
       ) : (
         <TableContainer>
-          <Table size="small">
+          <Table
+            size="small"
+            sx={{
+              '& thead th': {
+                fontWeight: 700,
+                fontSize: '0.7rem',
+                textTransform: 'uppercase',
+                letterSpacing: 0.4,
+                color: 'text.secondary',
+                borderBottomWidth: 2,
+              },
+              '& tbody td': { fontVariantNumeric: 'tabular-nums' },
+              '& tbody tr:last-child td': { borderBottom: 0 },
+            }}
+          >
             <TableHead>
               <TableRow>
                 {columns.map((col) => (
-                  <TableCell key={col}>{col}</TableCell>
+                  <TableCell key={col.label} align={col.align ?? 'left'}>
+                    {col.label}
+                  </TableCell>
                 ))}
               </TableRow>
             </TableHead>
@@ -425,5 +500,47 @@ function BreakdownTable({
         </TableContainer>
       )}
     </Paper>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  warning,
+  caption,
+}: {
+  label: string;
+  value: string;
+  warning?: boolean;
+  caption?: string;
+}) {
+  return (
+    <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, display: 'block' }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        variant="h5"
+        fontWeight={700}
+        color={warning ? 'warning.main' : 'text.primary'}
+        sx={{ mt: 0.25, lineHeight: 1.2 }}
+      >
+        {value}
+      </Typography>
+      {caption && (
+        <Typography
+          variant="caption"
+          color="warning.main"
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mt: 0.25 }}
+        >
+          <WarningAmberRounded sx={{ fontSize: '0.9rem' }} />
+          {caption}
+        </Typography>
+      )}
+    </Box>
   );
 }
