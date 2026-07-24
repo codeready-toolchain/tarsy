@@ -189,7 +189,8 @@ export function formatAppliedRange(
   }
   if (!startDate && !endDate) return null;
 
-  const isMidnight = (d: Date) => d.getHours() === 0 && d.getMinutes() === 0;
+  const isMidnight = (d: Date) =>
+    d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
   const showTime = [startDate, endDate].some((d) => d != null && !isMidnight(d));
   const fmt = showTime ? 'MMM d, yyyy HH:mm' : 'MMM d, yyyy';
 
