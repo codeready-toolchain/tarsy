@@ -44,6 +44,7 @@ import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlert
 import {
   TimeRangeModal,
   USAGE_TIME_PRESETS,
+  formatAppliedRange,
 } from '../components/dashboard/TimeRangeModal.tsx';
 import EstimatedCostDisplay from '../components/shared/EstimatedCostDisplay.tsx';
 import { getFilterOptions, getUsageSummary, handleAPIError } from '../services/api.ts';
@@ -194,9 +195,11 @@ export function UsagePage() {
   };
 
   const costEnabled = summary?.cost_estimation_enabled === true;
-  const timeRangeLabel = datePreset
-    ? USAGE_TIME_PRESETS.find((p) => p.value === datePreset)?.label ?? `Range: ${datePreset}`
-    : 'Custom range';
+  // Always reflects the actual applied range — the preset label, or the
+  // real dates when a custom range is in effect — never a generic "Custom
+  // range" placeholder that hides what's actually being shown.
+  const timeRangeLabel =
+    formatAppliedRange(startDate, endDate, datePreset, USAGE_TIME_PRESETS) ?? 'Select time range';
   const hasActiveFilters = !!alertType || !!chainId;
   const handleClearFilters = () => {
     setAlertType(null);
@@ -491,6 +494,7 @@ export function UsagePage() {
         onClose={() => setTimeRangeOpen(false)}
         startDate={startDate}
         endDate={endDate}
+        activePreset={datePreset}
         onApply={handleTimeRangeApply}
         presets={USAGE_TIME_PRESETS}
       />

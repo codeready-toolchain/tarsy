@@ -24,9 +24,9 @@ import {
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import { Search, Clear, FilterList } from '@mui/icons-material';
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { StatusFilter } from './StatusFilter.tsx';
-import { TimeRangeModal } from './TimeRangeModal.tsx';
+import { TimeRangeModal, formatAppliedRange } from './TimeRangeModal.tsx';
 import type { SessionFilter } from '../../types/dashboard.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import { hasActiveFilters } from '../../utils/search.ts';
@@ -112,12 +112,15 @@ export function FilterPanel({
     onFiltersChange({ ...filters, start_date: null, end_date: null, date_preset: null });
   };
 
-  // ── Time range button label (matches old dashboard) ──
-  const timeRangeLabel = filters.date_preset
-    ? `Range: ${filters.date_preset}`
-    : filters.start_date || filters.end_date
-      ? 'Custom Range'
-      : 'Time Range';
+  // ── Time range button label — always reflects what's actually applied
+  // (preset label, or real dates for a custom range) instead of a generic
+  // "Custom Range" placeholder that hides the selection. ──
+  const appliedRangeLabel = formatAppliedRange(
+    filters.start_date ? parseISO(filters.start_date) : null,
+    filters.end_date ? parseISO(filters.end_date) : null,
+    filters.date_preset,
+  );
+  const timeRangeLabel = appliedRangeLabel ?? 'Time Range';
 
   return (
     <>
@@ -286,17 +289,9 @@ export function FilterPanel({
                   variant="outlined"
                 />
               )}
-              {(filters.start_date || filters.end_date || filters.date_preset) && (
+              {appliedRangeLabel && (
                 <Chip
-                  label={
-                    filters.date_preset
-                      ? `Range: ${filters.date_preset}`
-                      : filters.start_date && filters.end_date
-                        ? `${format(parseISO(filters.start_date), 'MMM d')} - ${format(parseISO(filters.end_date), 'MMM d')}`
-                        : filters.start_date
-                          ? `From: ${format(parseISO(filters.start_date), 'MMM d, yyyy')}`
-                          : `Until: ${format(parseISO(filters.end_date!), 'MMM d, yyyy')}`
-                  }
+                  label={`Range: ${appliedRangeLabel}`}
                   onDelete={handleClearDateRange}
                   size="small"
                   color="secondary"
@@ -314,6 +309,7 @@ export function FilterPanel({
         onClose={() => setTimeRangeModalOpen(false)}
         startDate={filters.start_date ? parseISO(filters.start_date) : null}
         endDate={filters.end_date ? parseISO(filters.end_date) : null}
+        activePreset={filters.date_preset}
         onApply={handleTimeRangeApply}
       />
     </>
