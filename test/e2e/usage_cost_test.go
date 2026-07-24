@@ -37,10 +37,10 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 	// Session A: lower tokens, higher cost (thinking tokens priced at output rate).
 	// Session B: higher tokens, lower cost — separates rank_by=cost vs rank_by=tokens.
 	type sessionSpec struct {
-		alertData                                 string
-		investText, summaryText                   string
-		invIn, invOut, invTotal, invThinking      int
-		sumIn, sumOut, sumTotal                   int
+		alertData                            string
+		investText, summaryText              string
+		invIn, invOut, invTotal, invThinking int
+		sumIn, sumOut, sumTotal              int
 	}
 	specs := []sessionSpec{
 		{

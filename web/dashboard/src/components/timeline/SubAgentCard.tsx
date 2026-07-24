@@ -43,6 +43,8 @@ interface SubAgentCardProps {
   expandAllToolCalls?: boolean;
   isItemCollapsible?: (item: FlowItem) => boolean;
   searchTerm?: string;
+  /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay) */
+  costEstimationEnabled?: boolean;
 }
 
 const SubAgentCard: React.FC<SubAgentCardProps> = ({
@@ -58,6 +60,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   expandAllToolCalls = false,
   isItemCollapsible,
   searchTerm,
+  costEstimationEnabled = false,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [prevExpandAllToolCalls, setPrevExpandAllToolCalls] = useState(expandAllToolCalls);
@@ -191,6 +194,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             }}>
               <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
               <EstimatedCostDisplay
+                enabled={costEstimationEnabled === true}
                 estimatedCostUsd={eo?.estimated_cost_usd}
                 costCompleteness={eo?.cost_completeness}
                 size="small"
