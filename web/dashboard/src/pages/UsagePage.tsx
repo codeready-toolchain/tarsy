@@ -206,21 +206,6 @@ export function UsagePage() {
                 onChange={(_, value) => setChainId(value)}
                 renderInput={(params) => <TextField {...params} label="Chain" />}
               />
-
-              {costEnabled && (
-                <FormControl size="small" sx={{ minWidth: 160 }}>
-                  <InputLabel id="usage-rank-by-label">Rank top sessions</InputLabel>
-                  <Select
-                    labelId="usage-rank-by-label"
-                    label="Rank top sessions"
-                    value={rankBy ?? summary?.rank_by ?? 'cost'}
-                    onChange={(e) => setRankBy(e.target.value as UsageRankBy)}
-                  >
-                    <MenuItem value="cost">By cost</MenuItem>
-                    <MenuItem value="tokens">By tokens</MenuItem>
-                  </Select>
-                </FormControl>
-              )}
             </Stack>
           </Paper>
 
@@ -379,6 +364,22 @@ export function UsagePage() {
               {/* Top sessions */}
               <BreakdownTable
                 title={`Top sessions (${summary.top_sessions.length})`}
+                action={
+                  costEnabled && (
+                    <FormControl size="small" sx={{ minWidth: 160 }}>
+                      <InputLabel id="usage-rank-by-label">Rank top sessions</InputLabel>
+                      <Select
+                        labelId="usage-rank-by-label"
+                        label="Rank top sessions"
+                        value={rankBy ?? summary?.rank_by ?? 'cost'}
+                        onChange={(e) => setRankBy(e.target.value as UsageRankBy)}
+                      >
+                        <MenuItem value="cost">By cost</MenuItem>
+                        <MenuItem value="tokens">By tokens</MenuItem>
+                      </Select>
+                    </FormControl>
+                  )
+                }
                 columns={
                   costEnabled
                     ? [
@@ -456,20 +457,24 @@ interface BreakdownColumn {
 
 function BreakdownTable({
   title,
+  action,
   columns,
   empty,
   children,
 }: {
   title: string;
+  /** Optional control affecting only this table's rows (e.g. a sort order), rendered next to the title. */
+  action?: ReactNode;
   columns: BreakdownColumn[];
   empty: boolean;
   children: ReactNode;
 }) {
   return (
     <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-      <Typography variant="h6" gutterBottom>
-        {title}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h6">{title}</Typography>
+        {action}
+      </Box>
       {empty ? (
         <Typography variant="body2" color="text.secondary">
           No data in this window.
