@@ -303,7 +303,30 @@ func (s *SessionService) usageTopSessions(
 		Limit(usageTopSessionsCap).
 		Modify(func(sel *sql.Selector) {
 			t := sel.TableName()
-			sid := fmt.Sprintf("%q.%q", t, alertsession.FieldID)
+			agg := sql.Table("agg")
+
+			// CTE aggregates llm_interactions once per session; SELECT and ORDER BY
+			// both read from those columns (no repeated correlated SUM/COUNT).
+			subq := sql.Select(llminteraction.FieldSessionID).
+				From(sql.Table(llminteraction.Table)).
+				GroupBy(llminteraction.FieldSessionID)
+			subq.AppendSelectExprAs(sql.Expr("COALESCE(SUM(total_tokens), 0)"), "total_sum")
+			if s.costEstimationEnabled {
+				subq.AppendSelectExprAs(sql.Expr("COALESCE(SUM(estimated_cost_usd), 0)"), "cost_sum")
+				subq.AppendSelectExprAs(
+					sql.Expr(fmt.Sprintf("COUNT(*) FILTER (WHERE %s)", tokenBearingPredicateSQL)),
+					"token_bearing",
+				)
+				subq.AppendSelectExprAs(
+					sql.Expr(fmt.Sprintf(
+						"COUNT(*) FILTER (WHERE %s AND estimated_cost_usd IS NOT NULL)",
+						tokenBearingPredicateSQL,
+					)),
+					"priced",
+				)
+			}
+			sel.Prefix(sql.With("agg").As(subq))
+			sel.LeftJoin(agg).On(sel.C(alertsession.FieldID), agg.C(llminteraction.FieldSessionID))
 
 			sel.Select(
 				sql.As(sel.C(alertsession.FieldID), "session_id"),
@@ -311,42 +334,18 @@ func (s *SessionService) usageTopSessions(
 				sel.C(alertsession.FieldChainID),
 				sel.C(alertsession.FieldCreatedAt),
 			)
-			sel.AppendSelectAs(
-				fmt.Sprintf("(SELECT COALESCE(SUM(total_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
-				"total_sum",
-			)
+			sel.AppendSelectExprAs(sql.Expr(fmt.Sprintf("COALESCE(%s, 0)", agg.C("total_sum"))), "total_sum")
 			if s.costEstimationEnabled {
-				sel.AppendSelectAs(
-					fmt.Sprintf("(SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM llm_interactions WHERE session_id = %s)", sid),
-					"cost_sum",
-				)
-				sel.AppendSelectAs(
-					fmt.Sprintf(
-						"(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s AND %s)",
-						sid, tokenBearingPredicateSQL,
-					),
-					"token_bearing",
-				)
-				sel.AppendSelectAs(
-					fmt.Sprintf(
-						"(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s AND %s AND estimated_cost_usd IS NOT NULL)",
-						sid, tokenBearingPredicateSQL,
-					),
-					"priced",
-				)
+				sel.AppendSelectExprAs(sql.Expr(fmt.Sprintf("COALESCE(%s, 0)", agg.C("cost_sum"))), "cost_sum")
+				sel.AppendSelectExprAs(sql.Expr(fmt.Sprintf("COALESCE(%s, 0)", agg.C("token_bearing"))), "token_bearing")
+				sel.AppendSelectExprAs(sql.Expr(fmt.Sprintf("COALESCE(%s, 0)", agg.C("priced"))), "priced")
 			}
 
 			switch rankBy {
 			case models.UsageRankByCost:
-				sel.OrderExpr(sql.Expr(fmt.Sprintf(
-					"(SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM llm_interactions WHERE session_id = %s) DESC",
-					sid,
-				)))
+				sel.OrderExpr(sql.Expr(fmt.Sprintf("COALESCE(%s, 0) DESC", agg.C("cost_sum"))))
 			default:
-				sel.OrderExpr(sql.Expr(fmt.Sprintf(
-					"(SELECT COALESCE(SUM(total_tokens), 0) FROM llm_interactions WHERE session_id = %s) DESC",
-					sid,
-				)))
+				sel.OrderExpr(sql.Expr(fmt.Sprintf("COALESCE(%s, 0) DESC", agg.C("total_sum"))))
 			}
 			sel.OrderExpr(sql.Expr(fmt.Sprintf("%q.%q DESC", t, alertsession.FieldCreatedAt)))
 		}).
@@ -357,9 +356,13 @@ func (s *SessionService) usageTopSessions(
 
 	out := make([]models.UsageTopSession, 0, len(rows))
 	for _, row := range rows {
+		alertType := row.AlertType
+		if alertType != nil && *alertType == "" {
+			alertType = nil
+		}
 		item := models.UsageTopSession{
 			SessionID:   row.ID,
-			AlertType:   row.AlertType,
+			AlertType:   alertType,
 			ChainID:     row.ChainID,
 			TotalTokens: row.TotalSum.Int64,
 			CreatedAt:   row.CreatedAt,

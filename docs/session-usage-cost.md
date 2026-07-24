@@ -96,7 +96,7 @@ When estimation is **disabled**: responses set `cost_estimation_enabled: false` 
 
 ## Usage API
 
-```
+```text
 GET /api/v1/usage/summary?start_date=&end_date=&alert_type=&chain_id=&rank_by=cost|tokens
 ```
 
@@ -105,7 +105,7 @@ Server-side fleet aggregates for one date window (the Usage page does not load-a
 | Param | Required | Notes |
 |-------|----------|--------|
 | `start_date` | yes | RFC3339; session `created_at >= start_date` |
-| `end_date` | yes | RFC3339; session `created_at < end_date` (half-open, same as Alert History) |
+| `end_date` | yes | RFC3339; session `created_at < end_date` (half-open, same as Alert History). Window length (`end - start`) must not exceed 365 days. |
 | `alert_type` | no | Exact match filter |
 | `chain_id` | no | Exact match filter |
 | `rank_by` | no | `cost` or `tokens`. Default: `cost` when estimation enabled, else `tokens`. `rank_by=cost` is rejected when estimation is disabled. |

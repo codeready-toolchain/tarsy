@@ -397,6 +397,24 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.InDelta(t, 0.35, *summary.Totals.EstimatedCostUsd, 1e-9)
 	})
 
+	t.Run("empty alert_type normalized to nil in top_sessions", func(t *testing.T) {
+		ac := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, ac.Client)
+
+		sid, stageID, execID := seedUsageSession(t, ac.Client, usageSeed{
+			AlertData: "empty-alert-type",
+			AlertType: "",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow,
+		})
+		seedLLMInteraction(t, ac.Client, sid, stageID, execID, "m", 10, 5, 15, floatPtr(0.01), 0)
+
+		summary, err := svc.GetUsageSummary(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, summary.TopSessions, 1)
+		assert.Nil(t, summary.TopSessions[0].AlertType)
+	})
+
 	t.Run("top_sessions capped at 20", func(t *testing.T) {
 		tc := testdb.NewTestClient(t)
 		svc := setupTestSessionService(t, tc.Client)

@@ -9,6 +9,9 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
+// maxUsageSummaryWindow is the maximum allowed end_date - start_date span.
+const maxUsageSummaryWindow = 365 * 24 * time.Hour
+
 // usageSummaryHandler handles GET /api/v1/usage/summary.
 func (s *Server) usageSummaryHandler(c *echo.Context) error {
 	startRaw := c.QueryParam("start_date")
@@ -31,6 +34,9 @@ func (s *Server) usageSummaryHandler(c *echo.Context) error {
 
 	if !start.Before(end) {
 		return echo.NewHTTPError(http.StatusBadRequest, "start_date must be before end_date")
+	}
+	if end.Sub(start) > maxUsageSummaryWindow {
+		return echo.NewHTTPError(http.StatusBadRequest, "date window must not exceed 365 days")
 	}
 
 	params := models.UsageSummaryParams{

@@ -1,16 +1,20 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	echo "github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
+	testdb "github.com/codeready-toolchain/tarsy/test/database"
 )
 
 func TestUsageSummaryHandler_Validation(t *testing.T) {
@@ -65,6 +69,12 @@ func TestUsageSummaryHandler_Validation(t *testing.T) {
 			wantErr: http.StatusBadRequest,
 			errMsg:  "invalid rank_by",
 		},
+		{
+			name:    "window longer than 365 days",
+			query:   "start_date=2024-01-01T00:00:00Z&end_date=2025-01-02T00:00:00Z",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "date window must not exceed 365 days",
+		},
 	}
 
 	for _, tt := range tests {
@@ -86,7 +96,7 @@ func TestUsageSummaryHandler_Validation(t *testing.T) {
 	}
 
 	t.Run("rank_by=cost rejected when estimation disabled", func(t *testing.T) {
-		svc := newUsageTestSessionService()
+		svc := newUsageTestSessionService(&ent.Client{})
 		svc.SetCostEstimationEnabled(false)
 		disabled := &Server{sessionService: svc}
 
@@ -106,6 +116,9 @@ func TestUsageSummaryHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("valid rank_by values pass validation", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		server := &Server{sessionService: newUsageTestSessionService(client.Client)}
+
 		for _, v := range []string{"", "cost", "tokens"} {
 			t.Run("rank_by="+v, func(t *testing.T) {
 				query := validWindow
@@ -117,26 +130,23 @@ func TestUsageSummaryHandler_Validation(t *testing.T) {
 				rec := httptest.NewRecorder()
 				c := e.NewContext(req, rec)
 
-				err := func() (retErr error) {
-					defer func() { recover() }()
-					return s.usageSummaryHandler(c)
-				}()
+				err := server.usageSummaryHandler(c)
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusOK, rec.Code)
 
-				if err != nil {
-					he, ok := err.(*echo.HTTPError)
-					if ok {
-						assert.NotContains(t, he.Message, "invalid rank_by",
-							"rank_by=%q should be accepted", v)
-						assert.NotContains(t, he.Message, "start_date",
-							"valid window should pass date validation")
-					}
+				var resp models.UsageSummaryResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				if v == "" {
+					assert.Equal(t, models.UsageRankByCost, resp.RankBy)
+				} else {
+					assert.Equal(t, models.UsageRankBy(v), resp.RankBy)
 				}
 			})
 		}
 	})
 }
 
-func newUsageTestSessionService() *services.SessionService {
+func newUsageTestSessionService(client *ent.Client) *services.SessionService {
 	chainRegistry := config.NewChainRegistry(map[string]*config.ChainConfig{
 		"k8s-analysis": {
 			AlertTypes: []string{"kubernetes"},
@@ -158,5 +168,5 @@ func newUsageTestSessionService() *services.SessionService {
 			},
 		},
 	})
-	return services.NewSessionService(&ent.Client{}, chainRegistry, mcpServerRegistry)
+	return services.NewSessionService(client, chainRegistry, mcpServerRegistry)
 }
