@@ -13,6 +13,7 @@ import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
+import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import TimelineItem from './TimelineItem';
 import CopyButton from '../shared/CopyButton';
 import ErrorCard from './ErrorCard';
@@ -186,9 +187,14 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             <Box sx={{
               px: 1.5, py: 0.75,
               bgcolor: alpha(accentColor, 0.04),
-              display: 'flex', alignItems: 'center', gap: 1,
+              display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
             }}>
               <TokenUsageDisplay tokenData={tokenData} variant="inline" size="small" />
+              <EstimatedCostDisplay
+                estimatedCostUsd={eo?.estimated_cost_usd}
+                costCompleteness={eo?.cost_completeness}
+                size="small"
+              />
             </Box>
           )}
 

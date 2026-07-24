@@ -32,6 +32,7 @@ import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
 import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
+import EstimatedCostDisplay from '../shared/EstimatedCostDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
@@ -39,6 +40,7 @@ import { actionStageChipStyles } from './sessionActionChipSx.ts';
 interface SessionListItemProps {
   session: DashboardSessionItem;
   searchTerm: string;
+  costEstimationEnabled?: boolean;
   onReviewClick?: (session: DashboardSessionItem) => void;
 }
 
@@ -49,7 +51,12 @@ const iconOnlyChipSx = {
   '& .MuiChip-icon': { mx: 0 },
 } as const;
 
-export function SessionListItem({ session, searchTerm, onReviewClick }: SessionListItemProps) {
+export function SessionListItem({
+  session,
+  searchTerm,
+  costEstimationEnabled = false,
+  onReviewClick,
+}: SessionListItemProps) {
   const navigate = useNavigate();
 
   const handleRowClick = () => {
@@ -184,19 +191,27 @@ export function SessionListItem({ session, searchTerm, onReviewClick }: SessionL
         </Typography>
       </TableCell>
 
-      {/* Tokens */}
+      {/* Tokens + Est. cost */}
       <TableCell>
         {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
-          <TokenUsageDisplay
-            tokenData={{
-              input_tokens: session.input_tokens,
-              output_tokens: session.output_tokens,
-              total_tokens: session.total_tokens,
-            }}
-            variant="inline"
-            size="small"
-            showBreakdown={false}
-          />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+            <TokenUsageDisplay
+              tokenData={{
+                input_tokens: session.input_tokens,
+                output_tokens: session.output_tokens,
+                total_tokens: session.total_tokens,
+              }}
+              variant="inline"
+              size="small"
+              showBreakdown={false}
+            />
+            <EstimatedCostDisplay
+              enabled={costEstimationEnabled}
+              estimatedCostUsd={session.estimated_cost_usd}
+              costCompleteness={session.cost_completeness}
+              size="small"
+            />
+          </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
             —

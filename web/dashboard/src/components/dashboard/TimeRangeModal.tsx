@@ -25,7 +25,22 @@ import { Close, AccessTime, CalendarToday } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, subMinutes, subHours, subDays, isBefore } from 'date-fns';
+import {
+  format,
+  subMinutes,
+  subHours,
+  subDays,
+  isBefore,
+  startOfMonth,
+  subMonths,
+} from 'date-fns';
+
+export interface TimePreset {
+  label: string;
+  value: string;
+  description: string;
+  getDateRange: () => { start: Date; end: Date };
+}
 
 export interface TimeRangeModalProps {
   open: boolean;
@@ -33,14 +48,111 @@ export interface TimeRangeModalProps {
   startDate?: Date | null;
   endDate?: Date | null;
   onApply: (startDate: Date | null, endDate: Date | null, preset?: string) => void;
+  /** Override presets (defaults to Alert History quick ranges). */
+  presets?: TimePreset[];
 }
 
-interface TimePreset {
-  label: string;
-  value: string;
-  description: string;
-  getDateRange: () => { start: Date; end: Date };
-}
+/** Default Alert History presets (10m … 30d). */
+export const DEFAULT_TIME_PRESETS: TimePreset[] = [
+  {
+    label: 'Last 10 minutes',
+    value: '10m',
+    description: 'Last 10 minutes',
+    getDateRange: () => ({
+      start: subMinutes(new Date(), 10),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last hour',
+    value: '1h',
+    description: 'Last hour',
+    getDateRange: () => ({
+      start: subHours(new Date(), 1),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last 12 hours',
+    value: '12h',
+    description: 'Last 12 hours',
+    getDateRange: () => ({
+      start: subHours(new Date(), 12),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last day',
+    value: '1d',
+    description: 'Last 24 hours',
+    getDateRange: () => ({
+      start: subDays(new Date(), 1),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last 7 days',
+    value: '7d',
+    description: 'Last week',
+    getDateRange: () => ({
+      start: subDays(new Date(), 7),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last 30 days',
+    value: '30d',
+    description: 'Last month',
+    getDateRange: () => ({
+      start: subDays(new Date(), 30),
+      end: new Date(),
+    }),
+  },
+];
+
+/** Usage page presets (7d / 30d / MTD / last calendar month). */
+export const USAGE_TIME_PRESETS: TimePreset[] = [
+  {
+    label: 'Last 7 days',
+    value: '7d',
+    description: 'Last 7 days',
+    getDateRange: () => ({
+      start: subDays(new Date(), 7),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last 30 days',
+    value: '30d',
+    description: 'Last 30 days',
+    getDateRange: () => ({
+      start: subDays(new Date(), 30),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Month to date',
+    value: 'mtd',
+    description: 'From the start of this calendar month',
+    getDateRange: () => ({
+      start: startOfMonth(new Date()),
+      end: new Date(),
+    }),
+  },
+  {
+    label: 'Last calendar month',
+    value: 'last_month',
+    description: 'Previous calendar month',
+    getDateRange: () => {
+      const prev = subMonths(new Date(), 1);
+      return {
+        start: startOfMonth(prev),
+        // Half-open end: first instant of current month
+        end: startOfMonth(new Date()),
+      };
+    },
+  },
+];
 
 /** Compare optional dates by timestamp; null/undefined only match the same sentinel. */
 function sameDate(a?: Date | null, b?: Date | null): boolean {
@@ -57,69 +169,13 @@ export function TimeRangeModal({
   startDate,
   endDate,
   onApply,
+  presets = DEFAULT_TIME_PRESETS,
 }: TimeRangeModalProps) {
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [customStartDate, setCustomStartDate] = useState<Date | null>(startDate || null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(endDate || null);
   const [mode, setMode] = useState<'preset' | 'custom'>('preset');
-
-  // Time presets — matching old dashboard
-  const timePresets: TimePreset[] = [
-    {
-      label: 'Last 10 minutes',
-      value: '10m',
-      description: 'Last 10 minutes',
-      getDateRange: () => ({
-        start: subMinutes(new Date(), 10),
-        end: new Date(),
-      }),
-    },
-    {
-      label: 'Last hour',
-      value: '1h',
-      description: 'Last hour',
-      getDateRange: () => ({
-        start: subHours(new Date(), 1),
-        end: new Date(),
-      }),
-    },
-    {
-      label: 'Last 12 hours',
-      value: '12h',
-      description: 'Last 12 hours',
-      getDateRange: () => ({
-        start: subHours(new Date(), 12),
-        end: new Date(),
-      }),
-    },
-    {
-      label: 'Last day',
-      value: '1d',
-      description: 'Last 24 hours',
-      getDateRange: () => ({
-        start: subDays(new Date(), 1),
-        end: new Date(),
-      }),
-    },
-    {
-      label: 'Last 7 days',
-      value: '7d',
-      description: 'Last week',
-      getDateRange: () => ({
-        start: subDays(new Date(), 7),
-        end: new Date(),
-      }),
-    },
-    {
-      label: 'Last 30 days',
-      value: '30d',
-      description: 'Last month',
-      getDateRange: () => ({
-        start: subDays(new Date(), 30),
-        end: new Date(),
-      }),
-    },
-  ];
+  const timePresets = presets;
 
   // Reset state when modal opens (null = not yet synced).
   // Compare dates by timestamp so new Date instances with the same value don't retrigger.

@@ -44,6 +44,7 @@ interface HistoricalAlertsListProps {
   filteredCount: number;
   sortState: SortState;
   pagination: PaginationState;
+  costEstimationEnabled?: boolean;
   onRefresh: () => void;
   onSortChange: (field: string) => void;
   onPageChange: (page: number) => void;
@@ -59,6 +60,7 @@ export function HistoricalAlertsList({
   filteredCount,
   sortState,
   pagination,
+  costEstimationEnabled = false,
   onRefresh,
   onSortChange,
   onPageChange,
@@ -284,6 +286,7 @@ export function HistoricalAlertsList({
                       key={session.id}
                       session={session}
                       searchTerm={filters.search}
+                      costEstimationEnabled={costEstimationEnabled}
                       onReviewClick={onReviewClick}
                     />
                   ))

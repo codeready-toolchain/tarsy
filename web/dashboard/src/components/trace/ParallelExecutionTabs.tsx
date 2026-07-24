@@ -23,6 +23,7 @@ import {
 import type { TraceStageGroup } from '../../types/trace';
 import type { SessionDetailResponse, ExecutionOverview } from '../../types/session';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
+import EstimatedCostDisplay, { rollupExecutionCost } from '../shared/EstimatedCostDisplay';
 import { formatDurationMs, formatTimestamp } from '../../utils/format';
 import {
   findExecutionOverview,
@@ -54,6 +55,7 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
   const statusCounts = getExecutionStatusCounts(executionOverviews);
   const aggregateTokens = getAggregateTotalTokens(executionOverviews);
   const aggregateDuration = getAggregateDuration(executionOverviews);
+  const aggregateCost = rollupExecutionCost(executionOverviews);
 
   const currentExecution = stage.executions[activeTab];
   const currentOverview = currentExecution
@@ -142,11 +144,19 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
 
           {/* Tokens */}
           {aggregateTokens.total_tokens > 0 && (
-            <TokenUsageDisplay
-              tokenData={aggregateTokens}
-              variant="inline"
-              size="small"
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TokenUsageDisplay
+                tokenData={aggregateTokens}
+                variant="inline"
+                size="small"
+              />
+              <EstimatedCostDisplay
+                enabled={session.cost_estimation_enabled === true}
+                estimatedCostUsd={aggregateCost.estimatedCostUsd}
+                costCompleteness={aggregateCost.costCompleteness}
+                size="small"
+              />
+            </Box>
           )}
         </Box>
       </Box>
@@ -246,18 +256,26 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
               </Box>
 
               {currentOverview.total_tokens > 0 && (
-                <TokenUsageDisplay
-                  tokenData={{
-                    input_tokens: currentOverview.input_tokens,
-                    output_tokens: currentOverview.output_tokens,
-                    total_tokens: currentOverview.total_tokens,
-                  }}
-                  variant="compact"
-                  size="small"
-                  showBreakdown
-                  label="Tokens"
-                  color="info"
-                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <TokenUsageDisplay
+                    tokenData={{
+                      input_tokens: currentOverview.input_tokens,
+                      output_tokens: currentOverview.output_tokens,
+                      total_tokens: currentOverview.total_tokens,
+                    }}
+                    variant="compact"
+                    size="small"
+                    showBreakdown
+                    label="Tokens"
+                    color="info"
+                  />
+                  <EstimatedCostDisplay
+                    enabled={session.cost_estimation_enabled === true}
+                    estimatedCostUsd={currentOverview.estimated_cost_usd}
+                    costCompleteness={currentOverview.cost_completeness}
+                    size="small"
+                  />
+                </Box>
               )}
             </Stack>
           </Box>

@@ -27,6 +27,7 @@ import type { TraceStageGroup } from '../../types/trace';
 import type { SessionDetailResponse, ExecutionOverview } from '../../types/session';
 import { STAGE_TYPE } from '../../constants/eventTypes';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
+import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import { formatDurationMs, formatTimestamp } from '../../utils/format';
 import {
   findStageOverview,
@@ -253,18 +254,26 @@ export default function StageAccordion({
                   </Box>
 
                   {singleOverview.total_tokens > 0 && (
-                    <TokenUsageDisplay
-                      tokenData={{
-                        input_tokens: singleOverview.input_tokens,
-                        output_tokens: singleOverview.output_tokens,
-                        total_tokens: singleOverview.total_tokens,
-                      }}
-                      variant="compact"
-                      size="small"
-                      showBreakdown
-                      label="Tokens"
-                      color="info"
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <TokenUsageDisplay
+                        tokenData={{
+                          input_tokens: singleOverview.input_tokens,
+                          output_tokens: singleOverview.output_tokens,
+                          total_tokens: singleOverview.total_tokens,
+                        }}
+                        variant="compact"
+                        size="small"
+                        showBreakdown
+                        label="Tokens"
+                        color="info"
+                      />
+                      <EstimatedCostDisplay
+                        enabled={session.cost_estimation_enabled === true}
+                        estimatedCostUsd={singleOverview.estimated_cost_usd}
+                        costCompleteness={singleOverview.cost_completeness}
+                        size="small"
+                      />
+                    </Box>
                   )}
                 </Stack>
               </Box>

@@ -26,6 +26,8 @@ import type {
   UpdateReviewRequest,
   UpdateReviewResponse,
   ReviewActivityResponse,
+  UsageSummaryParams,
+  UsageSummaryResponse,
 } from '../types/api.ts';
 import type {
   SessionDetailResponse,
@@ -136,6 +138,13 @@ export function handleAPIError(error: unknown): string {
 export async function getSessions(params: DashboardListParams): Promise<DashboardListResponse> {
   const response = await retryOnTemporaryError(() =>
     client.get<DashboardListResponse>('/api/v1/sessions', { params }),
+  );
+  return response.data;
+}
+
+export async function getUsageSummary(params: UsageSummaryParams): Promise<UsageSummaryResponse> {
+  const response = await retryOnTemporaryError(() =>
+    client.get<UsageSummaryResponse>('/api/v1/usage/summary', { params }),
   );
   return response.data;
 }

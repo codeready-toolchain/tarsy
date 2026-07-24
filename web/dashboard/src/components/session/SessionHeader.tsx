@@ -28,6 +28,7 @@ import { AlertDataContent } from './OriginalAlertCard';
 import { StatusBadge } from '../common/StatusBadge';
 import ProgressIndicator from '../common/ProgressIndicator';
 import { formatTimestamp, formatTokensCompact } from '../../utils/format';
+import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import { cancelSession, triggerScoring, handleAPIError } from '../../services/api';
 import {
   SESSION_STATUS,
@@ -347,7 +348,7 @@ export default function SessionHeader({
                 borderColor: 'divider',
               }}
             >
-              {/* Left: tokens */}
+              {/* Left: tokens + Est. cost */}
               {session.total_tokens > 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                   <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -375,6 +376,13 @@ export default function SessionHeader({
                       <Typography variant="caption" color="text.disabled">out</Typography>
                     </Box>
                   )}
+                  <EstimatedCostDisplay
+                    enabled={session.cost_estimation_enabled === true}
+                    estimatedCostUsd={session.estimated_cost_usd}
+                    costCompleteness={session.cost_completeness}
+                    variant="labeled"
+                    size="small"
+                  />
                 </Box>
               ) : <Box />}
 

@@ -9,6 +9,7 @@ export const ROUTES = {
   SESSION_SCORING: '/sessions/:id/scoring',
   SUBMIT_ALERT: '/submit-alert',
   SYSTEM_STATUS: '/system',
+  USAGE: '/usage',
 } as const;
 
 /** Build a session detail path. */

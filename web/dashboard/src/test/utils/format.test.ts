@@ -9,6 +9,7 @@ import {
   formatDurationMs,
   formatTokens,
   formatTokensCompact,
+  formatEstimatedCostUsd,
   compactTimeAgo,
   timeAgo,
   liveDuration,
@@ -283,5 +284,29 @@ describe('formatTokensCompact', () => {
     expect(formatTokensCompact(1_000_000)).toBe('1.0M');
     expect(formatTokensCompact(1_500_000)).toBe('1.5M');
     expect(formatTokensCompact(10_500_000)).toBe('10.5M');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatEstimatedCostUsd
+// ---------------------------------------------------------------------------
+
+describe('formatEstimatedCostUsd', () => {
+  it('returns "—" for null/undefined', () => {
+    expect(formatEstimatedCostUsd(null)).toBe('—');
+    expect(formatEstimatedCostUsd(undefined)).toBe('—');
+  });
+
+  it('formats zero with two decimals', () => {
+    expect(formatEstimatedCostUsd(0)).toBe('$0.00');
+  });
+
+  it('keeps extra precision for sub-cent amounts', () => {
+    expect(formatEstimatedCostUsd(0.0042)).toBe('$0.0042');
+  });
+
+  it('formats mid-range and dollar amounts', () => {
+    expect(formatEstimatedCostUsd(0.123)).toBe('$0.123');
+    expect(formatEstimatedCostUsd(1.234)).toBe('$1.23');
   });
 });
