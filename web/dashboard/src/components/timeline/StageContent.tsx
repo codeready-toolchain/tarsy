@@ -13,6 +13,7 @@ import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
+import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import TimelineItem from './TimelineItem';
 import SubAgentCard from './SubAgentCard';
 import ErrorCard from './ErrorCard';
@@ -755,8 +756,13 @@ const StageContent: React.FC<StageContentProps> = ({
                   )}
                 </Box>
                 {hasTokens && tokenData ? (
-                  <Box display="flex" alignItems="center" gap={0.5} flexShrink={0}>
+                  <Box display="flex" alignItems="center" gap={1} flexShrink={0}>
                     <TokenUsageDisplay tokenData={tokenData} variant="labeled" size="small" />
+                    <EstimatedCostDisplay
+                      estimatedCostUsd={eo?.estimated_cost_usd}
+                      costCompleteness={eo?.cost_completeness}
+                      size="small"
+                    />
                   </Box>
                 ) : !eo && (() => {
                   const streamCount = (streamingByExecution.get(execution.executionId) || []).length;
