@@ -63,7 +63,7 @@ Main configuration file containing:
 - **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
 - **`agent_chains:`** - Multi-stage agent chain definitions
 
-LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See [Session Usage Cost](../../docs/session-usage-cost.md) for overrides, catalog/snapshot behavior, and estimate caveats.
+LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See [Session Usage Cost](../../docs/session-usage-cost.md) (and [ADR-0020](../../docs/adr/0020-session-usage-cost.md)) for overrides, catalog/snapshot behavior, and estimate caveats.
 
 ```yaml
 defaults:

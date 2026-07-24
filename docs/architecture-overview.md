@@ -194,7 +194,8 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Trace view** with hierarchical LLM/MCP interaction details for debugging, including nested sub-agent traces
 - **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, failure tags, tool improvement report), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
-- **System status page** showing MCP server health and system warnings
+- **Usage page** (`/usage`) for date-window fleet token and estimated-cost dig-in; soft Est. $ next to tokens on list/detail/execution surfaces when cost estimation is enabled
+- **System status page** with MCP server health and a read-only Config Viewer tab
 - **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `reviewed`), self-claim assignment, complete with `quality_rating` and `action_taken`, and real-time updates via `review.status` WebSocket events
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 
@@ -212,7 +213,13 @@ TARSy can automatically send Slack notifications when alert processing starts (f
 
 **For complete Slack setup guide**: See [Slack Integration Documentation](slack-integration.md)
 
-### 12. Prometheus Metrics
+### 12. Session Usage Cost
+
+TARSy estimates USD cost for LLM interactions at write time (list prices from a LiteLLM catalog + YAML overrides + bundled snapshot). Soft **Est. $** appears next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled (default on). A dedicated **Usage** page (`/usage`) provides date-window fleet dig-in (tokens and estimated cost) via `GET /api/v1/usage/summary`. Estimates are not invoice truth.
+
+**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md) and [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md).
+
+### 13. Prometheus Metrics
 
 TARSy exports Prometheus metrics via a `/metrics` endpoint on the existing HTTP server (port 8080, unauthenticated). Metrics cover session lifecycle, worker pool health, LLM call performance, MCP tool reliability, HTTP request patterns, and WebSocket connections.
 
@@ -227,7 +234,7 @@ Custom histogram buckets are tuned per metric type (LLM 1–180s, MCP 0.1–60s,
 
 **For detailed design**: See [ADR-0010: Prometheus Metrics](adr/0010-prometheus-metrics.md)
 
-### 13. Session Scoring & Evaluation
+### 14. Session Scoring & Evaluation
 
 After an investigation completes, TARSy can automatically evaluate the quality of the investigation through session scoring. The scoring uses an outcome-first evaluation framework: conclusion quality determines the score range (60-100 correct / 35-59 partial / 0-34 wrong), then process quality (evidence gathering, tool utilization, analytical reasoning, investigation completeness) places the score within that range. The judge produces a detailed score analysis with failure tags for aggregation, and a tool improvement report identifying both missing MCP tools and improvements to existing tools.
 
@@ -242,7 +249,7 @@ After an investigation completes, TARSy can automatically evaluate the quality o
 
 **For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md)
 
-### 14. Investigation Memory
+### 15. Investigation Memory
 
 TARSy learns from past investigations through a memory system that extracts, stores, and retrieves discrete learnings across sessions. After each scored investigation, a **Reflector** (separate LLM call within the scoring stage) analyzes the investigation and its quality evaluation to extract reusable learnings — facts about infrastructure, successful investigation strategies, and anti-patterns to avoid.
 

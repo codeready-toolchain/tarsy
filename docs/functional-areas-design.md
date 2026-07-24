@@ -1007,6 +1007,7 @@ AlertSession (session metadata, status, alert data)
 | PATCH | `/api/v1/sessions/review` | Review workflow transition for one or more sessions (claim/unclaim/complete/reopen/update_feedback/acknowledge) |
 | GET | `/api/v1/sessions/:id/review-activity` | Review activity audit log |
 | GET | `/api/v1/sessions/triage/:group` | Per-group paginated triage view (investigating/needs_review/in_progress/reviewed) |
+| GET | `/api/v1/usage/summary` | Fleet usage aggregates for a date window (tokens + estimated cost when enabled) |
 | GET | `/health` | Health check (DB, worker pool) |
 
 ---
@@ -1102,7 +1103,8 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 | `/sessions/:id/trace` | TracePage | Trace view with LLM/MCP interaction details |
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
 | `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, failure tags, tool improvement report), re-score trigger |
-| `/system` | SystemStatusPage | MCP server health, tools, system warnings |
+| `/usage` | UsagePage | Fleet token/cost dig-in over date windows (hamburger → Usage) |
+| `/system` | SystemStatusPage | MCP health + read-only Config Viewer (tabs) |
 
 #### Data Flow
 
@@ -1114,6 +1116,8 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
+- **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`. See [Session Usage Cost Estimation](session-usage-cost.md) and [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md).
+- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, catalog status). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md).
 
 #### Text Search
 
@@ -1138,10 +1142,11 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - API routes registered first take priority over the SPA fallback
 
 **Key Implementation Files**:
-- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx` for scoring reports)
+- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx`, `UsagePage.tsx`)
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
 - `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
 - `web/dashboard/src/components/session/SessionSearchBar.tsx` -- In-session search bar with match navigation
+- `web/dashboard/src/components/shared/EstimatedCostDisplay.tsx` -- Soft Est. $ next to token usage
 - `web/dashboard/src/utils/rehypeSearchHighlight.ts` -- Rehype plugin for search term highlighting in markdown
 - `web/dashboard/src/services/websocketService.ts` -- WebSocket with reconnect + catchup
 - `web/dashboard/src/services/api.ts` -- Axios-based API client with retry
