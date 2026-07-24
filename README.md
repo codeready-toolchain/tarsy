@@ -89,6 +89,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 ### Observability & Operations
 - **Prometheus Metrics**: `/metrics` endpoint exposing session lifecycle, LLM performance, MCP tool reliability, worker pool health, HTTP request patterns, and WebSocket connections with custom histogram buckets
 - **SRE Dashboard**: Real-time monitoring with live LLM streaming and interactive chain timeline visualization
+- **Usage & Estimated Cost**: Soft Est. $ next to session/execution token usage (enabled by default); dedicated Usage page for date-window fleet dig-in. See [Session Usage Cost Estimation](docs/session-usage-cost.md)
 - **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Session Scoring**: Automated quality evaluation of completed investigations (0–100 score across four categories) with missing tools reports, re-scoring via API, and a dedicated scoring dashboard page
 - **Investigation Memory**: Cross-session learning — the Reflector extracts discrete learnings after each scored investigation; relevant memories are auto-injected into future investigations via hybrid retrieval (pgvector semantic similarity + keyword matching with RRF fusion). Human review feedback refines memory quality over time. Two agent tools: `recall_past_investigations` searches distilled knowledge (patterns, procedures, anti-patterns), and `search_past_sessions` searches past investigation sessions by entity identifiers (users, namespaces, workloads) with LLM-summarized results
@@ -161,7 +162,8 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `GET /api/v1/sessions/active` -- Currently active sessions
 - `GET /api/v1/sessions/filter-options` -- Available filter values
 - `GET /api/v1/sessions/:id` -- Session detail with chronological timeline
-- `GET /api/v1/sessions/:id/summary` -- Session statistics, token usage, chain stats, and score (if available)
+- `GET /api/v1/sessions/:id/summary` -- Session statistics, token usage, estimated cost (when enabled), chain stats, and score (if available)
+- `GET /api/v1/usage/summary` -- Fleet usage aggregates for a date window (tokens + estimated cost when enabled)
 - `GET /api/v1/sessions/:id/status` -- Lightweight polling status (id, status, final_analysis, executive_summary, error_message)
 - `POST /api/v1/sessions/:id/cancel` -- Cancel an active or paused session
 
