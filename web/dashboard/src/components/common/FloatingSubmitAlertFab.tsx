@@ -1,18 +1,17 @@
 import { Fab, Tooltip } from '@mui/material';
 import { NotificationAdd } from '@mui/icons-material';
+import { Link as RouterLink } from 'react-router-dom';
+import { ROUTES } from '../../constants/routes.ts';
 
 /**
  * Reusable floating action button for quick alert submission access.
- * Uses proper anchor-based navigation to prevent tabnabbing security issues.
  */
 export function FloatingSubmitAlertFab() {
   return (
     <Tooltip title="Submit Manual Alert" placement="left">
       <Fab
-        component="a"
-        href="/submit-alert"
-        target="_blank"
-        rel="noopener noreferrer"
+        component={RouterLink}
+        to={ROUTES.SUBMIT_ALERT}
         color="primary"
         aria-label="submit alert"
         sx={{

@@ -15,6 +15,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MouseEvent } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { ROUTES } from '../../constants/routes.ts';
 import {
   Container,
   AppBar,
@@ -152,18 +153,6 @@ export function DashboardView() {
   };
   const handleMenuClose = () => {
     setMenuAnchorEl(null);
-  };
-  const handleManualAlertSubmission = () => {
-    window.open('/submit-alert', '_blank', 'noopener,noreferrer');
-    handleMenuClose();
-  };
-  const handleSystemStatus = () => {
-    window.open('/system', '_blank', 'noopener,noreferrer');
-    handleMenuClose();
-  };
-  const handleUsage = () => {
-    window.open('/usage', '_blank', 'noopener,noreferrer');
-    handleMenuClose();
   };
 
   // ── Active sessions state ──
@@ -1035,23 +1024,25 @@ export function DashboardView() {
         anchorEl={menuAnchorEl}
         open={Boolean(menuAnchorEl)}
         onClose={handleMenuClose}
-        MenuListProps={{
-          'aria-labelledby': 'navigation-menu-button',
+        slotProps={{
+          list: {
+            'aria-labelledby': 'navigation-menu-button',
+          },
         }}
       >
-        <MenuItem onClick={handleManualAlertSubmission}>
+        <MenuItem component={RouterLink} to={ROUTES.SUBMIT_ALERT} onClick={handleMenuClose}>
           <ListItemIcon>
             <SendIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Manual Alert Submission</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handleUsage}>
+        <MenuItem component={RouterLink} to={ROUTES.USAGE} onClick={handleMenuClose}>
           <ListItemIcon>
             <BarChartIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Usage</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handleSystemStatus}>
+        <MenuItem component={RouterLink} to={ROUTES.SYSTEM_STATUS} onClick={handleMenuClose}>
           <ListItemIcon>
             <DnsIcon fontSize="small" />
           </ListItemIcon>
