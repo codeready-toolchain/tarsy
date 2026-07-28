@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -199,4 +200,138 @@ func TestResolveHeaderTemplates(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
+
+	t.Run("empty headers map", func(t *testing.T) {
+		got, err := resolveHeaderTemplates(nil, map[string]string{"SESSION_ID": "x"})
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("omits empty static values", func(t *testing.T) {
+		got, err := resolveHeaderTemplates(map[string]string{
+			"X-Empty": "",
+			"X-Ok":    "v",
+		}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"X-Ok": "v"}, got)
+	})
+
+	t.Run("malformed template", func(t *testing.T) {
+		_, err := resolveHeaderTemplates(map[string]string{
+			"X-Bad": "{{.SESSION_ID}",
+		}, map[string]string{"SESSION_ID": "x"})
+		require.Error(t, err)
+	})
+
+	t.Run("execute error", func(t *testing.T) {
+		_, err := resolveHeaderTemplates(map[string]string{
+			"X-Bad": "{{call .SESSION_ID}}",
+		}, map[string]string{"SESSION_ID": "not-a-func"})
+		require.Error(t, err)
+	})
+}
+
+func TestBuildHTTPClient_ResolveHeaderError(t *testing.T) {
+	badHeaders := map[string]string{"X-Bad": "{{.SESSION_ID}}{{"}
+
+	_, err := buildHTTPClient(config.TransportConfig{
+		Type:          config.TransportTypeHTTP,
+		URL:           "https://mcp.example.com/mcp",
+		CustomHeaders: badHeaders,
+	}, map[string]string{"SESSION_ID": "x"})
+	require.Error(t, err)
+
+	_, err = createHTTPTransport(config.TransportConfig{
+		Type:          config.TransportTypeHTTP,
+		URL:           "https://mcp.example.com/mcp",
+		CustomHeaders: badHeaders,
+	}, map[string]string{"SESSION_ID": "x"})
+	require.Error(t, err)
+
+	_, err = createSSETransport(config.TransportConfig{
+		Type:          config.TransportTypeSSE,
+		URL:           "https://mcp.example.com/sse",
+		CustomHeaders: badHeaders,
+	}, map[string]string{"SESSION_ID": "x"})
+	require.Error(t, err)
+}
+
+func TestBuildHTTPClient_SameOriginRedirectKeepsHeaders(t *testing.T) {
+	var hops atomic.Int32
+	var secondAuth, secondSession string
+
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		hops.Add(1)
+		http.Redirect(w, r, server.URL+"/end", http.StatusFound)
+	})
+	mux.HandleFunc("/end", func(w http.ResponseWriter, r *http.Request) {
+		hops.Add(1)
+		secondAuth = r.Header.Get("Authorization")
+		secondSession = r.Header.Get("X-Session-ID")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	cfg := config.TransportConfig{
+		Type:        config.TransportTypeHTTP,
+		URL:         server.URL,
+		BearerToken: "secret-token",
+		CustomHeaders: map[string]string{
+			"X-Session-ID": "{{.SESSION_ID}}",
+		},
+	}
+	client, err := buildHTTPClient(cfg, map[string]string{"SESSION_ID": "inv-same"})
+	require.NoError(t, err)
+
+	resp, err := client.Get(server.URL + "/start")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	assert.Equal(t, int32(2), hops.Load())
+	assert.Equal(t, "Bearer secret-token", secondAuth)
+	assert.Equal(t, "inv-same", secondSession)
+}
+
+func TestBuildHTTPClient_SecretHeadersNotSentOnCrossOriginRedirect(t *testing.T) {
+	var redirectAuth, redirectSession string
+	var originAuth, originSession string
+
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirectAuth = r.Header.Get("Authorization")
+		redirectSession = r.Header.Get("X-Session-ID")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(redirectTarget.Close)
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originAuth = r.Header.Get("Authorization")
+		originSession = r.Header.Get("X-Session-ID")
+		http.Redirect(w, r, redirectTarget.URL+"/elsewhere", http.StatusFound)
+	}))
+	t.Cleanup(origin.Close)
+
+	cfg := config.TransportConfig{
+		Type:        config.TransportTypeHTTP,
+		URL:         origin.URL,
+		BearerToken: "secret-token",
+		CustomHeaders: map[string]string{
+			"X-Session-ID": "{{.SESSION_ID}}",
+		},
+	}
+	client, err := buildHTTPClient(cfg, map[string]string{"SESSION_ID": "inv-abc123"})
+	require.NoError(t, err)
+
+	resp, err := client.Get(origin.URL)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	assert.Equal(t, "Bearer secret-token", originAuth)
+	assert.Equal(t, "inv-abc123", originSession)
+	assert.Empty(t, redirectAuth, "Authorization must not follow cross-origin redirect")
+	assert.Empty(t, redirectSession, "X-Session-ID must not follow cross-origin redirect")
 }

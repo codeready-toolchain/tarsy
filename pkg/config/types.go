@@ -21,7 +21,7 @@ type TransportConfig struct {
 	URL           string            `yaml:"url,omitempty"`
 	BearerToken   string            `yaml:"bearer_token,omitempty"`
 	VerifySSL     *bool             `yaml:"verify_ssl,omitempty"`
-	Timeout       int               `yaml:"timeout,omitempty"` // In seconds
+	Timeout       int               `yaml:"timeout,omitempty"`        // In seconds
 	CustomHeaders map[string]string `yaml:"custom_headers,omitempty"` // Per-request headers; supports {{.SESSION_ID}}
 }
 

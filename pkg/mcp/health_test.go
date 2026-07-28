@@ -171,3 +171,23 @@ func TestHealthMonitor_StartStop(t *testing.T) {
 
 	monitor.Stop()
 }
+
+func TestHealthMonitor_EnsureClientRecovers(t *testing.T) {
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"test-server": {
+			Transport: config.TransportConfig{
+				Type:    config.TransportTypeStdio,
+				Command: "true",
+			},
+		},
+	})
+	warningsSvc := services.NewSystemWarningsService()
+	factory := NewTestClientFactory(registry, func(c *Client) {})
+
+	monitor := NewHealthMonitor(factory, registry, warningsSvc)
+	require.Nil(t, monitor.client)
+
+	monitor.ensureClient(context.Background())
+	require.NotNil(t, monitor.client)
+	assert.Nil(t, monitor.client.sessionVars(), "health clients use empty session ID")
+}

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -104,11 +105,19 @@ func buildHTTPClient(cfg config.TransportConfig, sessionVars map[string]string) 
 		Transport: httpTransport,
 	}
 
+	// Restrict secret headers to the configured endpoint host so cross-origin
+	// redirects do not receive Authorization / X-Session-ID / etc.
+	endpointHost := ""
+	if u, err := url.Parse(cfg.URL); err == nil {
+		endpointHost = u.Host
+	}
+
 	// Bearer token via round-tripper wrapper
 	if cfg.BearerToken != "" {
 		client.Transport = &bearerTokenTransport{
 			base:  client.Transport,
 			token: cfg.BearerToken,
+			host:  endpointHost,
 		}
 	}
 
@@ -121,6 +130,7 @@ func buildHTTPClient(cfg config.TransportConfig, sessionVars map[string]string) 
 			client.Transport = &customHeadersTransport{
 				base:    client.Transport,
 				headers: headers,
+				host:    endpointHost,
 			}
 		}
 	}
@@ -169,27 +179,37 @@ func resolveHeaderTemplates(headers map[string]string, sessionVars map[string]st
 }
 
 // bearerTokenTransport wraps an http.RoundTripper to add Authorization headers.
+// When host is set, the token is only attached to requests for that host so
+// cross-origin redirects cannot receive the credential.
 type bearerTokenTransport struct {
 	base  http.RoundTripper
 	token string
+	host  string
 }
 
 func (t *bearerTokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
-	req.Header.Set("Authorization", "Bearer "+t.token)
+	if t.host == "" || req.URL.Host == t.host {
+		req.Header.Set("Authorization", "Bearer "+t.token)
+	}
 	return t.base.RoundTrip(req)
 }
 
 // customHeadersTransport wraps an http.RoundTripper to add resolved custom headers.
+// When host is set, headers are only attached to requests for that host so
+// cross-origin redirects cannot receive session/secret headers.
 type customHeadersTransport struct {
 	base    http.RoundTripper
 	headers map[string]string
+	host    string
 }
 
 func (t *customHeadersTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
-	for k, v := range t.headers {
-		req.Header.Set(k, v)
+	if t.host == "" || req.URL.Host == t.host {
+		for k, v := range t.headers {
+			req.Header.Set(k, v)
+		}
 	}
 	return t.base.RoundTrip(req)
 }

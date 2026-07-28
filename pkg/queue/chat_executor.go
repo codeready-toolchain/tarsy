@@ -241,6 +241,14 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	)
 	logger.Info("Chat executor: starting execution")
 
+	// Best-effort cleanup of session-scoped MCP sandboxes (cli-mcp-server).
+	// Runs on all exit paths; idle TTL remains the safety net on failure.
+	defer func() {
+		if e.cfg != nil && e.cfg.MCPServerRegistry != nil {
+			mcp.CleanupSessions(context.Background(), e.cfg.MCPServerRegistry, input.Session.ID, logger)
+		}
+	}()
+
 	// Create cancellable context with timeout
 	execCtx, cancel := context.WithTimeout(parentCtx, e.execConfig.SessionTimeout)
 	defer cancel()
