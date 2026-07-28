@@ -266,6 +266,31 @@ mcp_servers:
     summarization:
       size_threshold_tokens: 3000     # Summarize above 3000 tokens (default: 5000)
 
+  # Example: CLI sandbox MCP server (per-investigation bash pod)
+  # Requires TARSy custom_headers support and CLI_MCP_BEARER_TOKEN (SA token).
+  cli-mcp-server:
+    transport:
+      type: "http"
+      url: "https://cli-mcp-server:8443/mcp"
+      bearer_token: "{{.CLI_MCP_BEARER_TOKEN}}"
+      timeout: 90
+      verify_ssl: false
+      custom_headers:
+        X-Session-ID: "{{.SESSION_ID}}"  # Resolved per investigation; not an env var
+    instructions: |
+      This server provides a sandboxed shell environment for cluster investigation.
+      You have full bash access: pipes, redirects, chaining, and standard Unix tools (jq, grep, awk).
+      Available CLIs: oc, kubectl.
+      Your workspace at /workspace is ephemeral — use it for intermediate files during investigation.
+      All cluster access is read-only via RBAC.
+    data_masking:
+      enabled: true
+      pattern_groups: ["kubernetes", "security"]
+      patterns: ["certificate", "token", "email"]
+    summarization:
+      enabled: true
+      summary_max_token_limit: 1200
+
   # Example: HTTP-based MCP server
   monitoring-server:
     transport:

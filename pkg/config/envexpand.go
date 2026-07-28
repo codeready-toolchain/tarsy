@@ -7,6 +7,10 @@ import (
 	"text/template"
 )
 
+// PerSessionTemplateVars are config template keys resolved per MCP client
+// session (not from the process environment at config load time).
+var PerSessionTemplateVars = []string{"SESSION_ID"}
+
 // ExpandEnv expands environment variables in YAML content using Go templates.
 // Uses {{.VAR_NAME}} syntax to avoid collision with $ in regex patterns.
 //
@@ -47,6 +51,13 @@ func ExpandEnv(data []byte) []byte {
 			value := env[idx+1:]
 			envMap[key] = value
 		}
+	}
+
+	// Preserve per-session template variables so ExpandEnv does not blank them
+	// (missingkey=zero). These are resolved later when an MCP client is created
+	// for a specific investigation/chat session.
+	for _, key := range PerSessionTemplateVars {
+		envMap[key] = "{{." + key + "}}"
 	}
 
 	var buf bytes.Buffer

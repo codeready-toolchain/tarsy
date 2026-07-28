@@ -49,6 +49,18 @@ func TestExpandEnv(t *testing.T) {
 			want:  "endpoint: ",
 		},
 		{
+			name:  "SESSION_ID preserved for per-session resolution",
+			input: "X-Session-ID: {{.SESSION_ID}}",
+			env:   map[string]string{},
+			want:  "X-Session-ID: {{.SESSION_ID}}",
+		},
+		{
+			name:  "SESSION_ID not taken from process environment",
+			input: "X-Session-ID: {{.SESSION_ID}}",
+			env:   map[string]string{"SESSION_ID": "should-not-use"},
+			want:  "X-Session-ID: {{.SESSION_ID}}",
+		},
+		{
 			name:  "mixed present and missing variables",
 			input: "url: {{.PROTOCOL}}://{{.MISSING}}:{{.PORT}}",
 			env: map[string]string{

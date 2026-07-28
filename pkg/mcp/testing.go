@@ -25,8 +25,8 @@ func (c *Client) InjectSession(serverID string, sdkClient *mcpsdk.Client, sessio
 func NewTestClientFactory(registry *config.MCPServerRegistry, injectFn func(c *Client)) *ClientFactory {
 	return &ClientFactory{
 		registry: registry,
-		createClientFn: func(_ context.Context, _ []string) (*Client, error) {
-			c := newClient(registry)
+		createClientFn: func(_ context.Context, _ []string, sessionID string) (*Client, error) {
+			c := newClient(registry, sessionID)
 			injectFn(c)
 			return c, nil
 		},

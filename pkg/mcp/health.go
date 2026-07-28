@@ -80,7 +80,7 @@ func (m *HealthMonitor) Start(ctx context.Context) {
 	// Initialize dedicated health client
 	m.clientMu.Lock()
 	serverIDs := m.registry.ServerIDs()
-	client, err := m.factory.CreateClient(ctx, serverIDs)
+	client, err := m.factory.CreateClient(ctx, serverIDs, "")
 	if err != nil {
 		m.logger.Warn("Health monitor: failed to create initial client", "error", err)
 	}
@@ -155,7 +155,7 @@ func (m *HealthMonitor) ensureClient(ctx context.Context) {
 	}
 
 	serverIDs := m.registry.ServerIDs()
-	client, err := m.factory.CreateClient(ctx, serverIDs)
+	client, err := m.factory.CreateClient(ctx, serverIDs, "")
 	if err != nil {
 		m.logger.Warn("Health monitor: failed to recreate client", "error", err)
 		return

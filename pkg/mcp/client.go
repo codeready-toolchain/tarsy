@@ -21,7 +21,8 @@ import (
 // Each Client instance is scoped to a single session (alert processing or health check).
 // Thread-safe: sessions may be accessed from multiple goroutines during parallel stages.
 type Client struct {
-	registry *config.MCPServerRegistry
+	registry  *config.MCPServerRegistry
+	sessionID string // investigation/chat session ID for custom_headers (e.g. X-Session-ID)
 
 	mu            sync.RWMutex
 	sessions      map[string]*mcpsdk.ClientSession // serverID → session
@@ -40,15 +41,26 @@ type Client struct {
 }
 
 // newClient creates a new Client.
-func newClient(registry *config.MCPServerRegistry) *Client {
+// sessionID is the investigation/chat session ID used to resolve per-session
+// transport templates (custom_headers). Empty for health/startup clients.
+func newClient(registry *config.MCPServerRegistry, sessionID string) *Client {
 	return &Client{
 		registry:      registry,
+		sessionID:     sessionID,
 		sessions:      make(map[string]*mcpsdk.ClientSession),
 		clients:       make(map[string]*mcpsdk.Client),
 		failedServers: make(map[string]string),
 		toolCache:     make(map[string][]*mcpsdk.Tool),
 		logger:        slog.Default(),
 	}
+}
+
+// sessionVars returns template variables for resolving custom_headers.
+func (c *Client) sessionVars() map[string]string {
+	if c.sessionID == "" {
+		return nil
+	}
+	return map[string]string{"SESSION_ID": c.sessionID}
 }
 
 // Initialize connects to all configured MCP servers.
@@ -98,8 +110,8 @@ func (c *Client) initializeServerLocked(ctx context.Context, serverID string) er
 		return fmt.Errorf("server %q not found in registry: %w", serverID, err)
 	}
 
-	// Create transport
-	transport, err := createTransport(serverCfg.Transport)
+	// Create transport (resolves custom_headers with per-session vars)
+	transport, err := createTransport(serverCfg.Transport, c.sessionVars())
 	if err != nil {
 		return fmt.Errorf("failed to create transport for %q: %w", serverID, err)
 	}

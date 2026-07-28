@@ -392,7 +392,7 @@ func (r *SubAgentRunner) createSubAgentToolExecutor(
 	var executor agent.ToolExecutor
 	if r.deps.MCPFactory != nil && len(resolvedConfig.MCPServers) > 0 {
 		mcpExecutor, _, mcpErr := r.deps.MCPFactory.CreateToolExecutor(
-			ctx, resolvedConfig.MCPServers, nil,
+			ctx, resolvedConfig.MCPServers, nil, r.sessionID,
 		)
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor for sub-agent, using stub",

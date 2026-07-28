@@ -61,7 +61,7 @@ func connectClientDirect(t *testing.T, serverID string, transport *mcpsdk.InMemo
 	t.Helper()
 	ctx := context.Background()
 
-	client := newClient(config.NewMCPServerRegistry(nil))
+	client := newClient(config.NewMCPServerRegistry(nil), "")
 
 	sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{
 		Name: "tarsy-test", Version: "test",
@@ -168,7 +168,7 @@ func TestClient_CallTool_ErrorResult(t *testing.T) {
 }
 
 func TestClient_ListTools_NoSession(t *testing.T) {
-	client := newClient(config.NewMCPServerRegistry(nil))
+	client := newClient(config.NewMCPServerRegistry(nil), "")
 
 	_, err := client.ListTools(context.Background(), "nonexistent")
 	assert.Error(t, err)
@@ -176,7 +176,7 @@ func TestClient_ListTools_NoSession(t *testing.T) {
 }
 
 func TestClient_CallTool_NoSession(t *testing.T) {
-	client := newClient(config.NewMCPServerRegistry(nil))
+	client := newClient(config.NewMCPServerRegistry(nil), "")
 
 	_, err := client.CallTool(context.Background(), "nonexistent", "tool", nil)
 	assert.Error(t, err)
@@ -197,7 +197,7 @@ func TestClient_HasSession(t *testing.T) {
 }
 
 func TestClient_FailedServers(t *testing.T) {
-	client := newClient(config.NewMCPServerRegistry(nil))
+	client := newClient(config.NewMCPServerRegistry(nil), "")
 
 	// Initialize with a non-existent server (failures recorded, not returned)
 	client.Initialize(context.Background(), []string{"nonexistent-server"})

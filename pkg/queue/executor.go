@@ -173,6 +173,14 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	)
 	logger.Info("Session executor: starting execution")
 
+	// Best-effort cleanup of session-scoped MCP sandboxes (cli-mcp-server).
+	// Runs on all exit paths; idle TTL remains the safety net on failure.
+	defer func() {
+		if e.cfg != nil && e.cfg.MCPServerRegistry != nil {
+			mcp.CleanupSessions(context.Background(), e.cfg.MCPServerRegistry, session.ID, logger)
+		}
+	}()
+
 	// 1. Resolve chain configuration
 	chain, err := e.cfg.GetChain(session.ChainID)
 	if err != nil {
@@ -635,7 +643,7 @@ func (e *RealSessionExecutor) executeAgent(
 	}
 
 	// Create MCP tool executor
-	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, logger)
+	toolExecutor, failedServers := createToolExecutor(ctx, e.mcpFactory, serverIDs, toolFilter, input.session.ID, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
 	// Retrieve memories for auto-injection into system prompt (only for agent types

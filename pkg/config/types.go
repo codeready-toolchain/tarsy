@@ -18,10 +18,11 @@ type TransportConfig struct {
 	Env     map[string]string `yaml:"env,omitempty"` // Environment overrides for stdio subprocess
 
 	// For http/sse transport
-	URL         string `yaml:"url,omitempty"`
-	BearerToken string `yaml:"bearer_token,omitempty"`
-	VerifySSL   *bool  `yaml:"verify_ssl,omitempty"`
-	Timeout     int    `yaml:"timeout,omitempty"` // In seconds
+	URL           string            `yaml:"url,omitempty"`
+	BearerToken   string            `yaml:"bearer_token,omitempty"`
+	VerifySSL     *bool             `yaml:"verify_ssl,omitempty"`
+	Timeout       int               `yaml:"timeout,omitempty"` // In seconds
+	CustomHeaders map[string]string `yaml:"custom_headers,omitempty"` // Per-request headers; supports {{.SESSION_ID}}
 }
 
 // MaskingConfig defines data masking configuration for MCP servers

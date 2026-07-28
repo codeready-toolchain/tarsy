@@ -18,7 +18,7 @@ func newTestExecutor(t *testing.T, servers map[string]map[string]mcpsdk.ToolHand
 	t.Helper()
 
 	registry := config.NewMCPServerRegistry(nil)
-	client := newClient(registry)
+	client := newClient(registry, "")
 	var serverIDs []string
 
 	for serverID, tools := range servers {
@@ -269,7 +269,7 @@ func TestToolExecutor_ListTools_MultiServer(t *testing.T) {
 
 func TestToolExecutor_ListTools_WithFilter(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	client := newClient(registry)
+	client := newClient(registry, "")
 
 	ts := startTestServer(t, "kubernetes", map[string]mcpsdk.ToolHandler{
 		"get_pods": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
@@ -343,7 +343,7 @@ func newTestExecutorWithMasking(
 	maskingService := masking.NewService(registry, masking.AlertMaskingConfig{})
 
 	ts := startTestServer(t, serverID, tools)
-	client := newClient(registry)
+	client := newClient(registry, "")
 
 	sdkClient := mcpsdk.NewClient(&mcpsdk.Implementation{
 		Name: "tarsy-test", Version: "test",

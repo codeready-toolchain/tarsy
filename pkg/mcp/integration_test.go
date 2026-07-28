@@ -88,7 +88,7 @@ func TestIntegration_MultiServer_Routing(t *testing.T) {
 
 	// Build multi-server executor
 	registry := config.NewMCPServerRegistry(nil)
-	client := newClient(registry)
+	client := newClient(registry, "")
 	wireSession(t, client, "kubernetes", k8sServer.clientTransport)
 	wireSession(t, client, "github", ghServer.clientTransport)
 
@@ -188,12 +188,12 @@ func TestIntegration_PerSessionIsolation(t *testing.T) {
 	// Create two independent executors
 	registry := config.NewMCPServerRegistry(nil)
 
-	client1 := newClient(registry)
+	client1 := newClient(registry, "")
 	wireSession(t, client1, "server1", ts1.clientTransport)
 	exec1 := NewToolExecutor(client1, registry, []string{"server1"}, nil, nil)
 	t.Cleanup(func() { _ = exec1.Close() })
 
-	client2 := newClient(registry)
+	client2 := newClient(registry, "")
 	wireSession(t, client2, "server2", ts2.clientTransport)
 	exec2 := NewToolExecutor(client2, registry, []string{"server2"}, nil, nil)
 	t.Cleanup(func() { _ = exec2.Close() })
@@ -226,7 +226,7 @@ func TestIntegration_HealthMonitor_Lifecycle(t *testing.T) {
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 
 	// Wire healthy client
-	client := newClient(registry)
+	client := newClient(registry, "")
 	wireSession(t, client, "test-server", ts.clientTransport)
 	t.Cleanup(func() { _ = client.Close() })
 	monitor.client = client
@@ -286,7 +286,7 @@ func newTestExecutorFromTransport(t *testing.T, serverID string, transport *mcps
 	t.Helper()
 
 	registry := config.NewMCPServerRegistry(nil)
-	client := newClient(registry)
+	client := newClient(registry, "")
 	wireSession(t, client, serverID, transport)
 
 	executor := NewToolExecutor(client, registry, []string{serverID}, nil, nil)
@@ -322,7 +322,7 @@ func TestIntegration_ToolFilter(t *testing.T) {
 	})
 
 	registry := config.NewMCPServerRegistry(nil)
-	client := newClient(registry)
+	client := newClient(registry, "")
 	wireSession(t, client, "kubernetes", ts.clientTransport)
 
 	// Only allow get_pods
@@ -356,7 +356,7 @@ func TestIntegration_ToolFilter(t *testing.T) {
 // TestIntegration_FailedServers tests failed server tracking through the pipeline.
 func TestIntegration_FailedServers(t *testing.T) {
 	registry := config.NewMCPServerRegistry(nil)
-	client := newClient(registry)
+	client := newClient(registry, "")
 
 	// Initialize with a non-existent server (failures recorded, not returned)
 	client.Initialize(context.Background(), []string{"broken-server"})
@@ -386,7 +386,7 @@ func TestIntegration_HealthMonitor_ToolCaching(t *testing.T) {
 	monitor.pingTimeout = 5 * time.Second
 
 	// Wire client
-	client := newClient(registry)
+	client := newClient(registry, "")
 	wireSession(t, client, "test-server", ts.clientTransport)
 	t.Cleanup(func() { _ = client.Close() })
 	monitor.client = client
