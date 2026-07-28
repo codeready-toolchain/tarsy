@@ -151,7 +151,7 @@ func TestCleanupSessions(t *testing.T) {
 	assert.Equal(t, "inv-42", gotSessionHeader)
 }
 
-func TestCleanupSessions_SkipPaths(t *testing.T) {
+func TestCleanupSessions_SkipPaths(_ *testing.T) {
 	CleanupSessions(context.Background(), nil, "sess", nil)
 	CleanupSessions(context.Background(), config.NewMCPServerRegistry(nil), "", nil)
 
@@ -164,7 +164,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 	verifySSL := false
 
 	t.Run("unexpected status is logged and ignored", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		t.Cleanup(server.Close)
@@ -186,7 +186,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 
 	t.Run("404 treated as success", func(t *testing.T) {
 		var hit atomic.Bool
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			hit.Store(true)
 			w.WriteHeader(http.StatusNotFound)
 		}))
@@ -209,7 +209,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 	})
 
 	t.Run("200 ok treated as success", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"ok":true}`))
 		}))
@@ -230,8 +230,8 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		CleanupSessions(context.Background(), registry, "ok-sess", logger)
 	})
 
-	t.Run("transport do error is logged and ignored", func(t *testing.T) {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	t.Run("transport do error is logged and ignored", func(_ *testing.T) {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 		url := server.URL + "/mcp"
@@ -252,7 +252,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		CleanupSessions(context.Background(), registry, "down", logger)
 	})
 
-	t.Run("invalid mcp url is logged and ignored", func(t *testing.T) {
+	t.Run("invalid mcp url is logged and ignored", func(_ *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
@@ -267,7 +267,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		CleanupSessions(context.Background(), registry, "bad-url", logger)
 	})
 
-	t.Run("buildHTTPClient error is logged and ignored", func(t *testing.T) {
+	t.Run("buildHTTPClient error is logged and ignored", func(_ *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
