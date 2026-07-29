@@ -6,8 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -16,7 +14,7 @@ import (
 const sessionCleanupTimeout = 15 * time.Second
 
 // CleanupSessions best-effort deletes per-investigation sandbox sessions on
-// MCP servers that use session-scoped custom_headers (e.g. cli-mcp-server).
+// MCP servers that declare session_cleanup_url (e.g. cli-mcp-server).
 // Failures are logged and never returned — idle TTL remains the safety net.
 func CleanupSessions(ctx context.Context, registry *config.MCPServerRegistry, sessionID string, logger *slog.Logger) {
 	if registry == nil || sessionID == "" {
@@ -43,30 +41,24 @@ func CleanupSessions(ctx context.Context, registry *config.MCPServerRegistry, se
 	}
 }
 
-// needsSessionCleanup reports whether the transport is an HTTP(S) MCP server
-// that injects a session-scoped header (cli-mcp-server pattern).
+// needsSessionCleanup reports whether the transport opts into explicit session
+// cleanup via session_cleanup_url.
 func needsSessionCleanup(cfg config.TransportConfig) bool {
-	if cfg.Type != config.TransportTypeHTTP && cfg.Type != config.TransportTypeSSE {
-		return false
-	}
-	if cfg.URL == "" {
-		return false
-	}
-	for _, value := range cfg.CustomHeaders {
-		if strings.Contains(value, "{{.SESSION_ID}}") {
-			return true
-		}
-	}
-	return false
+	return cfg.SessionCleanupURL != ""
 }
 
 func deleteSession(ctx context.Context, cfg config.TransportConfig, sessionID string) error {
-	endpoint, err := sessionCleanupURL(cfg.URL, sessionID)
+	endpoint, err := resolveSessionCleanupURL(cfg.SessionCleanupURL, sessionID)
 	if err != nil {
 		return err
 	}
 
-	client, err := buildHTTPClient(cfg, map[string]string{"SESSION_ID": sessionID})
+	// Use the cleanup endpoint as the client URL so bearer/custom headers are
+	// host-scoped to the DELETE target (which may differ from the MCP /mcp path).
+	cleanupCfg := cfg
+	cleanupCfg.URL = endpoint
+
+	client, err := buildHTTPClient(cleanupCfg, map[string]string{"SESSION_ID": sessionID})
 	if err != nil {
 		return err
 	}
@@ -93,17 +85,20 @@ func deleteSession(ctx context.Context, cfg config.TransportConfig, sessionID st
 	return fmt.Errorf("unexpected status %d", resp.StatusCode)
 }
 
-// sessionCleanupURL derives DELETE /sessions/{id} from the MCP /mcp endpoint URL.
-func sessionCleanupURL(mcpURL, sessionID string) (string, error) {
-	u, err := url.Parse(mcpURL)
-	if err != nil {
-		return "", fmt.Errorf("parse mcp url: %w", err)
+// resolveSessionCleanupURL expands {{.SESSION_ID}} in the configured cleanup URL.
+func resolveSessionCleanupURL(rawURL, sessionID string) (string, error) {
+	if rawURL == "" {
+		return "", fmt.Errorf("session_cleanup_url is empty")
 	}
-	// Strip trailing /mcp (with or without trailing slash) to get the service base.
-	path := strings.TrimSuffix(u.Path, "/")
-	path = strings.TrimSuffix(path, "/mcp")
-	u.Path = strings.TrimSuffix(path, "/") + "/sessions/" + url.PathEscape(sessionID)
-	u.RawQuery = ""
-	u.Fragment = ""
-	return u.String(), nil
+	resolved, err := resolveHeaderTemplates(map[string]string{"url": rawURL}, map[string]string{
+		"SESSION_ID": sessionID,
+	})
+	if err != nil {
+		return "", err
+	}
+	endpoint := resolved["url"]
+	if endpoint == "" {
+		return "", fmt.Errorf("session_cleanup_url resolved to empty")
+	}
+	return endpoint, nil
 }

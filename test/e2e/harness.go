@@ -60,6 +60,7 @@ type testAppConfig struct {
 	cfg                   *config.Config
 	llmClient             *ScriptedLLMClient
 	mcpServers            map[string]map[string]mcpsdk.ToolHandler
+	mcpFactory            *mcp.ClientFactory
 	workerCount           int
 	maxConcurrentSessions int
 	sessionTimeout        time.Duration
@@ -88,6 +89,12 @@ func WithLLMClient(client *ScriptedLLMClient) TestAppOption {
 // Maps serverID → (toolName → handler).
 func WithMCPServers(servers map[string]map[string]mcpsdk.ToolHandler) TestAppOption {
 	return func(c *testAppConfig) { c.mcpServers = servers }
+}
+
+// WithMCPFactory sets a real MCP client factory (e.g. for HTTP transport e2e).
+// When set, it takes precedence over WithMCPServers.
+func WithMCPFactory(factory *mcp.ClientFactory) TestAppOption {
+	return func(c *testAppConfig) { c.mcpFactory = factory }
 }
 
 // WithWorkerCount sets the number of worker pool goroutines.
@@ -210,9 +217,12 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	require.NoError(t, notifyListener.Start(ctx))
 	connManager.SetListener(notifyListener)
 
-	// 5. MCP — in-memory servers if configured.
+	// 5. MCP — explicit factory, else in-memory servers if configured.
 	var mcpFactory *mcp.ClientFactory
-	if len(tc.mcpServers) > 0 {
+	switch {
+	case tc.mcpFactory != nil:
+		mcpFactory = tc.mcpFactory
+	case len(tc.mcpServers) > 0:
 		mcpFactory = SetupInMemoryMCP(t, tc.mcpServers)
 	}
 

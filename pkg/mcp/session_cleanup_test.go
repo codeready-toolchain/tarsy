@@ -15,20 +15,23 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
-func TestSessionCleanupURL(t *testing.T) {
-	got, err := sessionCleanupURL("https://cli-mcp-server:8443/mcp", "sess-1")
+func TestResolveSessionCleanupURL(t *testing.T) {
+	got, err := resolveSessionCleanupURL("https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}", "sess-1")
 	require.NoError(t, err)
 	assert.Equal(t, "https://cli-mcp-server:8443/sessions/sess-1", got)
 
-	got, err = sessionCleanupURL("https://cli-mcp-server:8443/mcp/", "sess-1")
-	require.NoError(t, err)
-	assert.Equal(t, "https://cli-mcp-server:8443/sessions/sess-1", got)
-
-	got, err = sessionCleanupURL("https://cli-mcp-server:8443/api/mcp?x=1#frag", "sess-2")
+	got, err = resolveSessionCleanupURL("https://cli-mcp-server:8443/api/sessions/{{.SESSION_ID}}", "sess-2")
 	require.NoError(t, err)
 	assert.Equal(t, "https://cli-mcp-server:8443/api/sessions/sess-2", got)
 
-	_, err = sessionCleanupURL("://bad", "sess-1")
+	got, err = resolveSessionCleanupURL("https://cli-mcp-server:8443/sessions/static", "ignored")
+	require.NoError(t, err)
+	assert.Equal(t, "https://cli-mcp-server:8443/sessions/static", got)
+
+	_, err = resolveSessionCleanupURL("", "sess-1")
+	require.Error(t, err)
+
+	_, err = resolveSessionCleanupURL("https://x/{{.SESSION_ID}}{{", "sess-1")
 	require.Error(t, err)
 }
 
@@ -39,39 +42,28 @@ func TestNeedsSessionCleanup(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "http with SESSION_ID header",
+			name: "http with session_cleanup_url",
 			cfg: config.TransportConfig{
-				Type: config.TransportTypeHTTP,
-				URL:  "https://cli-mcp-server:8443/mcp",
-				CustomHeaders: map[string]string{
-					"X-Session-ID": "{{.SESSION_ID}}",
-				},
+				Type:              config.TransportTypeHTTP,
+				URL:               "https://cli-mcp-server:8443/mcp",
+				SessionCleanupURL: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}",
 			},
 			want: true,
 		},
 		{
-			name: "sse with SESSION_ID header",
+			name: "sse with session_cleanup_url",
 			cfg: config.TransportConfig{
-				Type: config.TransportTypeSSE,
-				URL:  "https://cli-mcp-server:8443/sse",
-				CustomHeaders: map[string]string{
-					"X-Session-ID": "{{.SESSION_ID}}",
-				},
+				Type:              config.TransportTypeSSE,
+				URL:               "https://cli-mcp-server:8443/sse",
+				SessionCleanupURL: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}",
 			},
 			want: true,
 		},
 		{
-			name: "http without custom headers",
+			name: "http without session_cleanup_url",
 			cfg: config.TransportConfig{
 				Type: config.TransportTypeHTTP,
 				URL:  "https://kubernetes-mcp-server:8443/mcp",
-			},
-			want: false,
-		},
-		{
-			name: "http empty url",
-			cfg: config.TransportConfig{
-				Type: config.TransportTypeHTTP,
 				CustomHeaders: map[string]string{
 					"X-Session-ID": "{{.SESSION_ID}}",
 				},
@@ -79,21 +71,19 @@ func TestNeedsSessionCleanup(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "http headers without SESSION_ID template",
+			name: "stdio with session_cleanup_url still opts in",
+			cfg: config.TransportConfig{
+				Type:              config.TransportTypeStdio,
+				Command:           "npx",
+				SessionCleanupURL: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}",
+			},
+			want: true,
+		},
+		{
+			name: "empty session_cleanup_url",
 			cfg: config.TransportConfig{
 				Type: config.TransportTypeHTTP,
 				URL:  "https://cli-mcp-server:8443/mcp",
-				CustomHeaders: map[string]string{
-					"X-Tenant": "static",
-				},
-			},
-			want: false,
-		},
-		{
-			name: "stdio",
-			cfg: config.TransportConfig{
-				Type:    config.TransportTypeStdio,
-				Command: "npx",
 			},
 			want: false,
 		},
@@ -132,12 +122,17 @@ func TestCleanupSessions(t *testing.T) {
 				CustomHeaders: map[string]string{
 					"X-Session-ID": "{{.SESSION_ID}}",
 				},
+				SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
 			},
 		},
 		"other": {
 			Transport: config.TransportConfig{
 				Type: config.TransportTypeHTTP,
 				URL:  server.URL + "/mcp",
+				// custom_headers alone must not trigger cleanup
+				CustomHeaders: map[string]string{
+					"X-Session-ID": "{{.SESSION_ID}}",
+				},
 			},
 		},
 		"nil-entry": nil,
@@ -172,12 +167,10 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
-					Type:      config.TransportTypeHTTP,
-					URL:       server.URL + "/mcp",
-					VerifySSL: &verifySSL,
-					CustomHeaders: map[string]string{
-						"X-Session-ID": "{{.SESSION_ID}}",
-					},
+					Type:              config.TransportTypeHTTP,
+					URL:               server.URL + "/mcp",
+					VerifySSL:         &verifySSL,
+					SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
 				},
 			},
 		})
@@ -195,12 +188,10 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
-					Type:      config.TransportTypeHTTP,
-					URL:       server.URL + "/mcp",
-					VerifySSL: &verifySSL,
-					CustomHeaders: map[string]string{
-						"X-Session-ID": "{{.SESSION_ID}}",
-					},
+					Type:              config.TransportTypeHTTP,
+					URL:               server.URL + "/mcp",
+					VerifySSL:         &verifySSL,
+					SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
 				},
 			},
 		})
@@ -218,12 +209,10 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
-					Type:      config.TransportTypeHTTP,
-					URL:       server.URL + "/mcp",
-					VerifySSL: &verifySSL,
-					CustomHeaders: map[string]string{
-						"X-Session-ID": "{{.SESSION_ID}}",
-					},
+					Type:              config.TransportTypeHTTP,
+					URL:               server.URL + "/mcp",
+					VerifySSL:         &verifySSL,
+					SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
 				},
 			},
 		})
@@ -234,33 +223,30 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
-		url := server.URL + "/mcp"
+		cleanupURL := server.URL + "/sessions/{{.SESSION_ID}}"
+		mcpURL := server.URL + "/mcp"
 		server.Close() // force client.Do failure
 
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
-					Type:      config.TransportTypeHTTP,
-					URL:       url,
-					VerifySSL: &verifySSL,
-					CustomHeaders: map[string]string{
-						"X-Session-ID": "{{.SESSION_ID}}",
-					},
+					Type:              config.TransportTypeHTTP,
+					URL:               mcpURL,
+					VerifySSL:         &verifySSL,
+					SessionCleanupURL: cleanupURL,
 				},
 			},
 		})
 		CleanupSessions(context.Background(), registry, "down", logger)
 	})
 
-	t.Run("invalid mcp url is logged and ignored", func(_ *testing.T) {
+	t.Run("invalid cleanup url template is logged and ignored", func(_ *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"cli-mcp-server": {
 				Transport: config.TransportConfig{
-					Type: config.TransportTypeHTTP,
-					URL:  "://not-a-url",
-					CustomHeaders: map[string]string{
-						"X-Session-ID": "{{.SESSION_ID}}",
-					},
+					Type:              config.TransportTypeHTTP,
+					URL:               "https://cli-mcp-server:8443/mcp",
+					SessionCleanupURL: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}{{",
 				},
 			},
 		})
@@ -274,10 +260,9 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 					Type: config.TransportTypeHTTP,
 					URL:  "https://cli-mcp-server:8443/mcp",
 					CustomHeaders: map[string]string{
-						// Still matches needsSessionCleanup (contains {{.SESSION_ID}})
-						// but fails template parse (trailing unclosed action).
 						"X-Session-ID": "{{.SESSION_ID}}{{",
 					},
+					SessionCleanupURL: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}",
 				},
 			},
 		})
@@ -289,20 +274,23 @@ func TestDeleteSession_Direct(t *testing.T) {
 	verifySSL := false
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodDelete, r.Method)
+		assert.Equal(t, "/sessions/direct-1", r.URL.Path)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
 
 	err := deleteSession(context.Background(), config.TransportConfig{
-		Type:      config.TransportTypeHTTP,
-		URL:       server.URL + "/mcp",
-		VerifySSL: &verifySSL,
+		Type:              config.TransportTypeHTTP,
+		URL:               server.URL + "/mcp",
+		VerifySSL:         &verifySSL,
+		SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
 	}, "direct-1")
 	require.NoError(t, err)
 
 	err = deleteSession(context.Background(), config.TransportConfig{
-		Type: config.TransportTypeHTTP,
-		URL:  "://bad",
+		Type:              config.TransportTypeHTTP,
+		URL:               "https://example.com/mcp",
+		SessionCleanupURL: "{{.SESSION_ID}}{{",
 	}, "x")
 	require.Error(t, err)
 }

@@ -1,0 +1,33 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  max_iterations: 3
+
+mcp_servers:
+  # Built-in KubernetesAgent requires this server for validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+  # Placeholder URL is overwritten at runtime to the httptest MCP mock.
+  session-mcp:
+    transport:
+      type: http
+      url: "http://127.0.0.1:9/mcp"
+      bearer_token: "e2e-session-token"
+      custom_headers:
+        X-Session-ID: "{{.SESSION_ID}}"
+      session_cleanup_url: "http://127.0.0.1:9/sessions/{{.SESSION_ID}}"
+
+agents:
+  SessionAgent:
+    mcp_servers: [session-mcp]
+    custom_instructions: "You are SessionAgent. Use session-mcp tools when investigating."
+
+agent_chains:
+  session-headers-chain:
+    alert_types: [test-session-headers]
+    stages:
+      - name: investigation
+        agents:
+          - name: SessionAgent
