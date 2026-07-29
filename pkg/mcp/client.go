@@ -344,7 +344,7 @@ func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 // deletes per-execution MCP sandboxes (e.g. cli-mcp-server) when mcpSessionID
 // is set. Idempotent: a second Close skips sandbox DELETE.
 func (c *Client) Close() error {
-	firstErr, mcpSessionID, registry, serverIDs, logger := c.closeSessions()
+	mcpSessionID, registry, serverIDs, logger, firstErr := c.closeSessions()
 
 	// Sandbox cleanup outside mu — DELETE uses HTTP and must not hold client locks.
 	if mcpSessionID != "" {
@@ -358,11 +358,11 @@ func (c *Client) Close() error {
 // Returns the sandbox session key, requested server IDs, and registry for
 // cleanup after unlock. Clears mcpSessionID so a second Close is a no-op for DELETE.
 func (c *Client) closeSessions() (
-	firstErr error,
 	mcpSessionID string,
 	registry *config.MCPServerRegistry,
 	serverIDs []string,
 	logger *slog.Logger,
+	firstErr error,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -392,7 +392,7 @@ func (c *Client) closeSessions() (
 	}
 	c.requestedServers = make(map[string]struct{})
 
-	return firstErr, mcpSessionID, c.registry, serverIDs, c.logger
+	return mcpSessionID, c.registry, serverIDs, c.logger, firstErr
 }
 
 // InvalidateToolCache removes the cached tool list for a server,
