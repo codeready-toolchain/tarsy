@@ -182,7 +182,7 @@ func TestHealthMonitor_EnsureClientRecovers(t *testing.T) {
 		},
 	})
 	warningsSvc := services.NewSystemWarningsService()
-	factory := NewTestClientFactory(registry, func(_ *Client) {})
+	factory := NewTestClientFactory(registry, func(_ *Client, _ string) {})
 
 	monitor := NewHealthMonitor(factory, registry, warningsSvc)
 	require.Nil(t, monitor.client)

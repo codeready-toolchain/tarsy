@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	"github.com/codeready-toolchain/tarsy/pkg/services"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
@@ -621,7 +622,29 @@ func TestSubAgentRunner_CancelAll_Idempotent(t *testing.T) {
 	r.CancelAll()
 }
 
-// ─── createSubAgentToolExecutor: memory wrapping ────────────────────────────
+// ─── createSubAgentToolExecutor: MCP session ID + memory wrapping ───────────
+
+func TestCreateSubAgentToolExecutor_ForwardsExecutionID(t *testing.T) {
+	var gotSessionID string
+	factory := mcp.NewTestClientFactory(config.NewMCPServerRegistry(nil), func(_ *mcp.Client, mcpSessionID string) {
+		gotSessionID = mcpSessionID
+	})
+
+	r := newMinimalRunner(1)
+	r.deps.MCPFactory = factory
+	r.sessionID = "investigation-must-not-be-used"
+
+	cfg := &agent.ResolvedAgentConfig{
+		AgentName:  "SessionWorker",
+		MCPServers: []string{"cli-mcp-server"},
+	}
+	exec := r.createSubAgentToolExecutor(t.Context(), cfg, "sub-exec-42", slog.Default())
+	require.NotNil(t, exec)
+	t.Cleanup(func() { _ = exec.Close() })
+	assert.Equal(t, "sub-exec-42", gotSessionID,
+		"sub-agent MCP client must use sub-agent execution ID as sandbox session key")
+	assert.NotEqual(t, r.sessionID, gotSessionID)
+}
 
 func TestCreateSubAgentToolExecutor_SkipsMemoryForNativeOnly(t *testing.T) {
 	wrapped := false

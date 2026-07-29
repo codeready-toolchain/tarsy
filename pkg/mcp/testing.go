@@ -24,14 +24,14 @@ func (c *Client) InjectSession(serverID string, sdkClient *mcpsdk.Client, sessio
 // NewTestClientFactory creates a ClientFactory that uses injectFn to wire
 // sessions into each new Client instead of calling Initialize().
 // Each call to CreateClient/CreateToolExecutor invokes injectFn on the
-// freshly-created Client, allowing tests to inject in-memory MCP sessions.
-func NewTestClientFactory(registry *config.MCPServerRegistry, injectFn func(c *Client)) *ClientFactory {
+// freshly-created Client with the mcpSessionID used for that client.
+func NewTestClientFactory(registry *config.MCPServerRegistry, injectFn func(c *Client, mcpSessionID string)) *ClientFactory {
 	return &ClientFactory{
 		registry: registry,
 		createClientFn: func(_ context.Context, serverIDs []string, mcpSessionID string) (*Client, error) {
 			c := newClient(registry, mcpSessionID)
 			c.recordRequestedServers(serverIDs)
-			injectFn(c)
+			injectFn(c, mcpSessionID)
 			return c, nil
 		},
 	}

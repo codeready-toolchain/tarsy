@@ -52,7 +52,7 @@ func SetupInMemoryMCP(t *testing.T, servers map[string]map[string]mcpsdk.ToolHan
 	registry := config.NewMCPServerRegistry(mcpConfigs)
 
 	// Create a ClientFactory that spins up fresh in-memory transports per call.
-	return mcp.NewTestClientFactory(registry, func(c *mcp.Client) {
+	return mcp.NewTestClientFactory(registry, func(c *mcp.Client, _ string) {
 		for _, spec := range specs {
 			server := mcpsdk.NewServer(&mcpsdk.Implementation{
 				Name: spec.serverID, Version: "test",

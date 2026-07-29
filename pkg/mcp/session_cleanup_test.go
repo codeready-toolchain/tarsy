@@ -146,6 +146,59 @@ func TestCleanupSessions(t *testing.T) {
 	assert.Equal(t, "exec-42", gotSessionHeader)
 }
 
+// TestCleanupSessions_AuthHeadersScopedToCleanupHost verifies DELETE auth and
+// custom headers follow the cleanup URL host when it differs from the MCP URL.
+func TestCleanupSessions_AuthHeadersScopedToCleanupHost(t *testing.T) {
+	var mcpDeleted atomic.Bool
+	mcpServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			mcpDeleted.Store(true)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(mcpServer.Close)
+
+	var deleted atomic.Bool
+	var gotAuth, gotSessionHeader string
+	cleanupServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete && r.URL.Path == "/sessions/exec-host" {
+			deleted.Store(true)
+			gotAuth = r.Header.Get("Authorization")
+			gotSessionHeader = r.Header.Get("X-Session-ID")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(cleanupServer.Close)
+
+	require.NotEqual(t, mcpServer.URL, cleanupServer.URL, "test requires distinct hosts")
+
+	verifySSL := false
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"cli-mcp-server": {
+			Transport: config.TransportConfig{
+				Type:        config.TransportTypeHTTP,
+				URL:         mcpServer.URL + "/mcp",
+				BearerToken: "cleanup-tok",
+				VerifySSL:   &verifySSL,
+				CustomHeaders: map[string]string{
+					"X-Session-ID": "{{.SESSION_ID}}",
+				},
+				SessionCleanupURL: cleanupServer.URL + "/sessions/{{.SESSION_ID}}",
+			},
+		},
+	})
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	CleanupSessions(context.Background(), registry, "exec-host", []string{"cli-mcp-server"}, logger)
+
+	assert.True(t, deleted.Load(), "DELETE must hit cleanup host")
+	assert.False(t, mcpDeleted.Load(), "DELETE must not hit MCP host")
+	assert.Equal(t, "Bearer cleanup-tok", gotAuth)
+	assert.Equal(t, "exec-host", gotSessionHeader)
+}
+
 func TestCleanupSessions_OnlyRequestedServers(t *testing.T) {
 	var deleted atomic.Bool
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -367,6 +420,51 @@ func TestClient_Close_TriggersSessionCleanup(t *testing.T) {
 	deleteCount.Store(0)
 	require.NoError(t, exec.Close())
 	assert.Equal(t, int32(1), deleteCount.Load(), "ToolExecutor.Close must DELETE sandbox for agent execution ID")
+}
+
+func TestClient_Close_CleansUpMultipleRequestedServers(t *testing.T) {
+	var deleteCount atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete && r.URL.Path == "/sessions/exec-multi" {
+			deleteCount.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	verifySSL := false
+	cleanupURL := server.URL + "/sessions/{{.SESSION_ID}}"
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"cli-a": {
+			Transport: config.TransportConfig{
+				Type:              config.TransportTypeHTTP,
+				URL:               server.URL + "/mcp-a",
+				VerifySSL:         &verifySSL,
+				SessionCleanupURL: cleanupURL,
+			},
+		},
+		"cli-b": {
+			Transport: config.TransportConfig{
+				Type:              config.TransportTypeHTTP,
+				URL:               server.URL + "/mcp-b",
+				VerifySSL:         &verifySSL,
+				SessionCleanupURL: cleanupURL,
+			},
+		},
+		"no-cleanup": {
+			Transport: config.TransportConfig{
+				Type: config.TransportTypeHTTP,
+				URL:  server.URL + "/mcp-c",
+			},
+		},
+	})
+
+	client := newClient(registry, "exec-multi")
+	client.recordRequestedServers([]string{"cli-a", "cli-b", "no-cleanup"})
+	require.NoError(t, client.Close())
+	assert.Equal(t, int32(2), deleteCount.Load(), "Close must DELETE once per opted-in requested server")
 }
 
 func TestClient_Close_SkipsCleanupForUnrequestedServers(t *testing.T) {
