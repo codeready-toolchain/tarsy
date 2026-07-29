@@ -8,7 +8,8 @@ import (
 )
 
 // PerSessionTemplateVars are config template keys resolved per MCP client
-// session (not from the process environment at config load time).
+// (agent execution ID for SESSION_ID; not from the process environment at
+// config load time).
 var PerSessionTemplateVars = []string{"SESSION_ID"}
 
 // ExpandEnv expands environment variables in YAML content using Go templates.

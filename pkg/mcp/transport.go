@@ -18,8 +18,9 @@ import (
 )
 
 // createTransport creates an MCP SDK transport from config.
-// sessionVars supplies per-session template values (e.g. SESSION_ID) used to
-// resolve custom_headers. May be nil or empty for health/startup clients.
+// sessionVars supplies per-execution template values (e.g. SESSION_ID = agent
+// execution ID) used to resolve custom_headers. May be nil or empty for
+// health/startup clients.
 func createTransport(cfg config.TransportConfig, sessionVars map[string]string) (mcpsdk.Transport, error) {
 	switch cfg.Type {
 	case config.TransportTypeStdio:

@@ -13,8 +13,9 @@ import (
 
 const sessionCleanupTimeout = 15 * time.Second
 
-// CleanupSessions best-effort deletes per-investigation sandbox sessions on
+// CleanupSessions best-effort deletes per-execution sandbox sessions on
 // MCP servers that declare session_cleanup_url (e.g. cli-mcp-server).
+// sessionID is the agent execution ID used as X-Session-ID.
 // Failures are logged and never returned — idle TTL remains the safety net.
 func CleanupSessions(ctx context.Context, registry *config.MCPServerRegistry, sessionID string, logger *slog.Logger) {
 	if registry == nil || sessionID == "" {

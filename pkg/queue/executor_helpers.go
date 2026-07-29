@@ -27,17 +27,18 @@ import (
 
 // createToolExecutor creates an MCP tool executor or falls back to a stub.
 // Package-level function shared by RealSessionExecutor and ChatMessageExecutor.
-// sessionID is forwarded for per-session custom_headers (e.g. X-Session-ID).
+// mcpSessionID is the agent execution ID used for per-execution custom_headers
+// (e.g. X-Session-ID for cli-mcp sandbox isolation).
 func createToolExecutor(
 	ctx context.Context,
 	mcpFactory *mcp.ClientFactory,
 	serverIDs []string,
 	toolFilter map[string][]string,
-	sessionID string,
+	mcpSessionID string,
 	logger *slog.Logger,
 ) (agent.ToolExecutor, map[string]string) {
 	if mcpFactory != nil && len(serverIDs) > 0 {
-		mcpExecutor, mcpClient, mcpErr := mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter, sessionID)
+		mcpExecutor, mcpClient, mcpErr := mcpFactory.CreateToolExecutor(ctx, serverIDs, toolFilter, mcpSessionID)
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor, using stub", "error", mcpErr)
 			return agent.NewStubToolExecutor(nil), nil

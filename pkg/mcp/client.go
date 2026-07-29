@@ -18,11 +18,11 @@ import (
 )
 
 // Client manages MCP SDK sessions for multiple servers.
-// Each Client instance is scoped to a single session (alert processing or health check).
+// Each Client instance is scoped to a single agent execution (or health check).
 // Thread-safe: sessions may be accessed from multiple goroutines during parallel stages.
 type Client struct {
 	registry  *config.MCPServerRegistry
-	sessionID string // investigation/chat session ID for custom_headers (e.g. X-Session-ID)
+	sessionID string // agent execution ID for custom_headers (e.g. X-Session-ID); empty for health/startup
 
 	mu            sync.RWMutex
 	sessions      map[string]*mcpsdk.ClientSession // serverID → session
@@ -41,8 +41,8 @@ type Client struct {
 }
 
 // newClient creates a new Client.
-// sessionID is the investigation/chat session ID used to resolve per-session
-// transport templates (custom_headers). Empty for health/startup clients.
+// sessionID is the agent execution ID used to resolve per-execution transport
+// templates (custom_headers, e.g. X-Session-ID). Empty for health/startup clients.
 func newClient(registry *config.MCPServerRegistry, sessionID string) *Client {
 	return &Client{
 		registry:      registry,
@@ -321,19 +321,31 @@ func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 	return c.initializeServerLocked(reinitCtx, serverID)
 }
 
-// Close shuts down all sessions and transports gracefully.
+// Close shuts down all sessions and transports gracefully, then best-effort
+// deletes per-execution MCP sandboxes (e.g. cli-mcp-server) when sessionID is set.
 func (c *Client) Close() error {
+	firstErr, sessionID, registry, logger := c.closeSessions()
+
+	// Sandbox cleanup outside mu — DELETE uses HTTP and must not hold client locks.
+	if sessionID != "" {
+		CleanupSessions(context.Background(), registry, sessionID, logger)
+	}
+
+	return firstErr
+}
+
+// closeSessions closes MCP sessions and clears client state under mu.
+// Returns the sandbox session key and registry for cleanup after unlock.
+func (c *Client) closeSessions() (firstErr error, sessionID string, registry *config.MCPServerRegistry, logger *slog.Logger) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	var firstErr error
 	for id, session := range c.sessions {
 		if err := session.Close(); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("close session %q: %w", id, err)
 		}
 	}
 
-	// Clear all state
 	c.sessions = make(map[string]*mcpsdk.ClientSession)
 	c.clients = make(map[string]*mcpsdk.Client)
 	c.failedServers = make(map[string]string)
@@ -344,7 +356,7 @@ func (c *Client) Close() error {
 	c.toolCache = make(map[string][]*mcpsdk.Tool)
 	c.toolCacheMu.Unlock()
 
-	return firstErr
+	return firstErr, c.sessionID, c.registry, c.logger
 }
 
 // InvalidateToolCache removes the cached tool list for a server,

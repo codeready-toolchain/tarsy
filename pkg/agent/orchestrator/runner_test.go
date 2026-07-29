@@ -642,7 +642,7 @@ func TestCreateSubAgentToolExecutor_SkipsMemoryForNativeOnly(t *testing.T) {
 				},
 			},
 		}
-		r.createSubAgentToolExecutor(t.Context(), cfg, slog.Default())
+		r.createSubAgentToolExecutor(t.Context(), cfg, "exec-native", slog.Default())
 		assert.False(t, wrapped, "memory wrapping should be skipped for native-only agents")
 	})
 
@@ -652,7 +652,7 @@ func TestCreateSubAgentToolExecutor_SkipsMemoryForNativeOnly(t *testing.T) {
 			AgentName:   "GeneralWorker",
 			LLMProvider: &config.LLMProviderConfig{},
 		}
-		r.createSubAgentToolExecutor(t.Context(), cfg, slog.Default())
+		r.createSubAgentToolExecutor(t.Context(), cfg, "exec-general", slog.Default())
 		assert.True(t, wrapped, "memory wrapping should apply for non-native agents")
 	})
 
@@ -667,7 +667,7 @@ func TestCreateSubAgentToolExecutor_SkipsMemoryForNativeOnly(t *testing.T) {
 				},
 			},
 		}
-		r.createSubAgentToolExecutor(t.Context(), cfg, slog.Default())
+		r.createSubAgentToolExecutor(t.Context(), cfg, "exec-hybrid", slog.Default())
 		assert.True(t, wrapped, "memory wrapping should apply when MCP servers are present")
 	})
 }

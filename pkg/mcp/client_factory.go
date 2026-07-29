@@ -7,7 +7,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/masking"
 )
 
-// ClientFactory creates Client instances for sessions.
+// ClientFactory creates Client instances for agent executions.
 type ClientFactory struct {
 	registry       *config.MCPServerRegistry
 	maskingService *masking.Service
@@ -25,9 +25,9 @@ func NewClientFactory(registry *config.MCPServerRegistry, maskingService *maskin
 }
 
 // CreateClient creates a new Client connected to the specified servers.
-// sessionID is used to resolve per-session custom_headers (e.g. X-Session-ID).
-// Pass an empty string for health checks and startup validation.
-// The caller is responsible for calling Close() when done.
+// sessionID is the agent execution ID used to resolve per-execution custom_headers
+// (e.g. X-Session-ID). Pass an empty string for health checks and startup validation.
+// The caller is responsible for calling Close() when done (also triggers sandbox cleanup).
 func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string, sessionID string) (*Client, error) {
 	if f.createClientFn != nil {
 		return f.createClientFn(ctx, serverIDs, sessionID)
@@ -37,9 +37,9 @@ func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string, se
 	return client, nil
 }
 
-// CreateToolExecutor creates a fully-wired ToolExecutor for a session.
+// CreateToolExecutor creates a fully-wired ToolExecutor for an agent execution.
 // This is the primary entry point used by the session executor.
-// sessionID is forwarded to the MCP HTTP client for custom_headers resolution.
+// sessionID is the agent execution ID forwarded for custom_headers resolution.
 func (f *ClientFactory) CreateToolExecutor(
 	ctx context.Context,
 	serverIDs []string,

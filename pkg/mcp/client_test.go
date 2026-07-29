@@ -59,8 +59,8 @@ func TestClient_SessionVars(t *testing.T) {
 	empty := newClient(config.NewMCPServerRegistry(nil), "")
 	assert.Nil(t, empty.sessionVars())
 
-	withSession := newClient(config.NewMCPServerRegistry(nil), "inv-99")
-	assert.Equal(t, map[string]string{"SESSION_ID": "inv-99"}, withSession.sessionVars())
+	withSession := newClient(config.NewMCPServerRegistry(nil), "exec-99")
+	assert.Equal(t, map[string]string{"SESSION_ID": "exec-99"}, withSession.sessionVars())
 }
 
 // connectClientDirect creates an Client with a pre-wired in-memory transport.

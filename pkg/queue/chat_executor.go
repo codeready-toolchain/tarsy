@@ -241,14 +241,6 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	)
 	logger.Info("Chat executor: starting execution")
 
-	// Best-effort cleanup of session-scoped MCP sandboxes (cli-mcp-server).
-	// Runs on all exit paths; idle TTL remains the safety net on failure.
-	defer func() {
-		if e.cfg != nil && e.cfg.MCPServerRegistry != nil {
-			mcp.CleanupSessions(context.Background(), e.cfg.MCPServerRegistry, input.Session.ID, logger)
-		}
-	}()
-
 	// Create cancellable context with timeout
 	execCtx, cancel := context.WithTimeout(parentCtx, e.execConfig.SessionTimeout)
 	defer cancel()
@@ -362,8 +354,8 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	defer cancelHeartbeat()
 	go e.runChatHeartbeat(heartbeatCtx, input.Chat.ID)
 
-	// 7. Create MCP ToolExecutor (shared helper, same as investigation)
-	toolExecutor, failedServers := createToolExecutor(execCtx, e.mcpFactory, serverIDs, toolFilter, input.Session.ID, logger)
+	// 7. Create MCP ToolExecutor (sandbox session key = agent execution ID)
+	toolExecutor, failedServers := createToolExecutor(execCtx, e.mcpFactory, serverIDs, toolFilter, exec.ID, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
 	var chatSubCollector agent.SubAgentResultCollector

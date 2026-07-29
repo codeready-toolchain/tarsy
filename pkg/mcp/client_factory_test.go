@@ -22,12 +22,12 @@ func TestClientFactory_CreateToolExecutor_PropagatesSessionID(t *testing.T) {
 		},
 	}
 
-	exec, client, err := factory.CreateToolExecutor(context.Background(), nil, nil, "inv-factory")
+	exec, client, err := factory.CreateToolExecutor(context.Background(), nil, nil, "exec-factory")
 	require.NoError(t, err)
 	require.NotNil(t, exec)
 	require.NotNil(t, client)
-	assert.Equal(t, "inv-factory", gotSessionID)
-	assert.Equal(t, map[string]string{"SESSION_ID": "inv-factory"}, client.sessionVars())
+	assert.Equal(t, "exec-factory", gotSessionID)
+	assert.Equal(t, map[string]string{"SESSION_ID": "exec-factory"}, client.sessionVars())
 }
 
 func TestClientFactory_CreateToolExecutor_Error(t *testing.T) {
@@ -38,7 +38,7 @@ func TestClientFactory_CreateToolExecutor_Error(t *testing.T) {
 		},
 	}
 
-	exec, client, err := factory.CreateToolExecutor(context.Background(), nil, nil, "inv-x")
+	exec, client, err := factory.CreateToolExecutor(context.Background(), nil, nil, "exec-x")
 	require.Error(t, err)
 	assert.Nil(t, exec)
 	assert.Nil(t, client)

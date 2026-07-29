@@ -254,7 +254,7 @@ func (r *SubAgentRunner) runSubAgent(
 		"sub_agent", exec.agentName,
 	)
 
-	toolExecutor := r.createSubAgentToolExecutor(ctx, resolvedConfig, logger)
+	toolExecutor := r.createSubAgentToolExecutor(ctx, resolvedConfig, exec.executionID, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
 	// MemoryBriefing is intentionally omitted: Tier 4 memories are matched
@@ -384,15 +384,17 @@ func (r *SubAgentRunner) publishSubAgentStatus(ctx context.Context, executionID 
 
 // createSubAgentToolExecutor builds a ToolExecutor for the sub-agent's MCP servers,
 // optionally wrapped with a SkillToolExecutor for on-demand skills.
+// mcpSessionID is the sub-agent execution ID used for sandbox isolation (X-Session-ID).
 func (r *SubAgentRunner) createSubAgentToolExecutor(
 	ctx context.Context,
 	resolvedConfig *agent.ResolvedAgentConfig,
+	mcpSessionID string,
 	logger *slog.Logger,
 ) agent.ToolExecutor {
 	var executor agent.ToolExecutor
 	if r.deps.MCPFactory != nil && len(resolvedConfig.MCPServers) > 0 {
 		mcpExecutor, _, mcpErr := r.deps.MCPFactory.CreateToolExecutor(
-			ctx, resolvedConfig.MCPServers, nil, r.sessionID,
+			ctx, resolvedConfig.MCPServers, nil, mcpSessionID,
 		)
 		if mcpErr != nil {
 			logger.Warn("Failed to create MCP tool executor for sub-agent, using stub",

@@ -19,7 +19,7 @@ import (
 var _ agent.ToolExecutor = (*ToolExecutor)(nil)
 
 // ToolExecutor implements agent.ToolExecutor backed by real MCP servers.
-// Created per-session by ClientFactory.
+// Created per agent execution by ClientFactory.
 type ToolExecutor struct {
 	client   *Client
 	registry *config.MCPServerRegistry

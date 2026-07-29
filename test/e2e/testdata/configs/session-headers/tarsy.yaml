@@ -23,11 +23,53 @@ agents:
   SessionAgent:
     mcp_servers: [session-mcp]
     custom_instructions: "You are SessionAgent. Use session-mcp tools when investigating."
+  SessionAgentA:
+    mcp_servers: [session-mcp]
+    custom_instructions: "You are SessionAgentA. Use session-mcp tools when investigating."
+  SessionAgentB:
+    mcp_servers: [session-mcp]
+    custom_instructions: "You are SessionAgentB. Use session-mcp tools when investigating."
+  ChatAgent:
+    mcp_servers: [session-mcp]
+    custom_instructions: "You are ChatAgent. Use session-mcp tools for follow-ups."
+  SessionOrchestrator:
+    description: "Orchestrator for session-header isolation e2e"
+    mcp_servers: [session-mcp]
+    custom_instructions: "You are SessionOrchestrator. Dispatch sub-agents and use session-mcp when needed."
+    orchestrator:
+      max_concurrent_agents: 5
+      agent_timeout: 300s
+  SessionWorker:
+    description: "Sub-agent with session-mcp"
+    mcp_servers: [session-mcp]
+    max_iterations: 2
+    custom_instructions: "You are SessionWorker. Use session-mcp tools for deep work."
 
 agent_chains:
   session-headers-chain:
     alert_types: [test-session-headers]
+    chat:
+      enabled: true
+      agent: "ChatAgent"
+      llm_backend: "google-native"
     stages:
       - name: investigation
         agents:
           - name: SessionAgent
+
+  session-headers-parallel-chain:
+    alert_types: [test-session-headers-parallel]
+    stages:
+      - name: investigation
+        agents:
+          - name: SessionAgentA
+          - name: SessionAgentB
+
+  session-headers-orchestrator-chain:
+    alert_types: [test-session-headers-orchestrator]
+    stages:
+      - name: orchestrate
+        agents:
+          - name: SessionOrchestrator
+            sub_agents:
+              - name: SessionWorker

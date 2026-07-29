@@ -266,7 +266,7 @@ mcp_servers:
     summarization:
       size_threshold_tokens: 3000     # Summarize above 3000 tokens (default: 5000)
 
-  # Example: CLI sandbox MCP server (per-investigation bash pod)
+  # Example: CLI sandbox MCP server (one bash pod per agent/sub-agent execution)
   # Requires TARSy custom_headers support and CLI_MCP_BEARER_TOKEN (SA token).
   cli-mcp-server:
     transport:
@@ -279,8 +279,9 @@ mcp_servers:
       # instead of disabling verification (MITM can steal bearer + X-Session-ID).
       verify_ssl: false
       custom_headers:
-        X-Session-ID: "{{.SESSION_ID}}"  # Resolved per investigation; not an env var
-      # Optional: DELETE this URL after each investigation/chat (best-effort).
+        # SESSION_ID is the agent execution ID (not the investigation session ID).
+        X-Session-ID: "{{.SESSION_ID}}"
+      # Optional: DELETE when the agent/sub-agent MCP client closes (best-effort).
       session_cleanup_url: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}"
     instructions: |
       This server provides a sandboxed shell environment for cluster investigation.

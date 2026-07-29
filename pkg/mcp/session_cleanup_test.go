@@ -294,3 +294,64 @@ func TestDeleteSession_Direct(t *testing.T) {
 	}, "x")
 	require.Error(t, err)
 }
+
+func TestClient_Close_TriggersSessionCleanup(t *testing.T) {
+	var deleted atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete && r.URL.Path == "/sessions/exec-close-1" {
+			deleted.Store(true)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	verifySSL := false
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"cli-mcp-server": {
+			Transport: config.TransportConfig{
+				Type:              config.TransportTypeHTTP,
+				URL:               server.URL + "/mcp",
+				VerifySSL:         &verifySSL,
+				SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
+			},
+		},
+	})
+
+	client := newClient(registry, "exec-close-1")
+	require.NoError(t, client.Close())
+	assert.True(t, deleted.Load(), "Client.Close must DELETE sandbox for agent execution ID")
+
+	exec := NewToolExecutor(newClient(registry, "exec-close-1"), registry, nil, nil, nil)
+	deleted.Store(false)
+	require.NoError(t, exec.Close())
+	assert.True(t, deleted.Load(), "ToolExecutor.Close must DELETE sandbox for agent execution ID")
+}
+
+func TestClient_Close_SkipsCleanupWithoutSessionID(t *testing.T) {
+	var deleted atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleted.Store(true)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	verifySSL := false
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"cli-mcp-server": {
+			Transport: config.TransportConfig{
+				Type:              config.TransportTypeHTTP,
+				URL:               server.URL + "/mcp",
+				VerifySSL:         &verifySSL,
+				SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
+			},
+		},
+	})
+
+	client := newClient(registry, "") // health/startup clients
+	require.NoError(t, client.Close())
+	assert.False(t, deleted.Load(), "empty sessionID must not trigger sandbox DELETE")
+}
