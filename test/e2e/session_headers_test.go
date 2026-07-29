@@ -296,9 +296,13 @@ func TestE2E_SessionHeaders_ParallelAgents(t *testing.T) {
 	assert.Contains(t, uniqueHeaders, agentA.ID)
 	assert.Contains(t, uniqueHeaders, agentB.ID)
 	assert.NotContains(t, uniqueHeaders, sessionID)
+	assert.Len(t, uniqueHeaders, 2, "exactly two sandbox IDs for two parallel agents")
 
 	assertHeadersAreExecutionIDs(t, recorder.headers(), executionIDs(execs), sessionID)
-	assert.NotContains(t, recorder.deletes(), sessionID)
+	deletes := recorder.deletes()
+	assert.NotContains(t, deletes, sessionID)
+	assert.ElementsMatch(t, []string{agentA.ID, agentB.ID}, deletes,
+		"exactly one DELETE per parallel agent execution")
 }
 
 // TestE2E_SessionHeaders_SubAgents verifies orchestrator parent and sub-agent

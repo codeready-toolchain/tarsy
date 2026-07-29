@@ -280,8 +280,10 @@ mcp_servers:
       verify_ssl: false
       custom_headers:
         # SESSION_ID is the agent execution ID (not the investigation session ID).
+        # Health/startup MCP probes omit this header; cli-mcp only requires it for bash tools.
         X-Session-ID: "{{.SESSION_ID}}"
       # Optional: DELETE when the agent/sub-agent MCP client closes (best-effort).
+      # Only runs for servers this execution actually requested.
       session_cleanup_url: "https://cli-mcp-server:8443/sessions/{{.SESSION_ID}}"
     instructions: |
       This server provides a sandboxed shell environment for cluster investigation.

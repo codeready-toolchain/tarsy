@@ -100,7 +100,7 @@ func TestCleanupSessions(t *testing.T) {
 	var gotAuth, gotSessionHeader string
 
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete && r.URL.Path == "/sessions/inv-42" {
+		if r.Method == http.MethodDelete && r.URL.Path == "/sessions/exec-42" {
 			deleted.Store(true)
 			gotAuth = r.Header.Get("Authorization")
 			gotSessionHeader = r.Header.Get("X-Session-ID")
@@ -139,19 +139,46 @@ func TestCleanupSessions(t *testing.T) {
 	})
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	CleanupSessions(context.Background(), registry, "inv-42", logger)
+	CleanupSessions(context.Background(), registry, "exec-42", []string{"cli-mcp-server", "other", "nil-entry"}, logger)
 
-	assert.True(t, deleted.Load(), "expected DELETE /sessions/inv-42")
+	assert.True(t, deleted.Load(), "expected DELETE /sessions/exec-42")
 	assert.Equal(t, "Bearer tok", gotAuth)
-	assert.Equal(t, "inv-42", gotSessionHeader)
+	assert.Equal(t, "exec-42", gotSessionHeader)
+}
+
+func TestCleanupSessions_OnlyRequestedServers(t *testing.T) {
+	var deleted atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleted.Store(true)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	verifySSL := false
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"cli-mcp-server": {
+			Transport: config.TransportConfig{
+				Type:              config.TransportTypeHTTP,
+				URL:               server.URL + "/mcp",
+				VerifySSL:         &verifySSL,
+				SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
+			},
+		},
+	})
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// Agent only used kubernetes-server — must not DELETE on cli-mcp.
+	CleanupSessions(context.Background(), registry, "exec-k8s-only", []string{"kubernetes-server"}, logger)
+	assert.False(t, deleted.Load(), "cleanup must not touch unrequested servers")
 }
 
 func TestCleanupSessions_SkipPaths(_ *testing.T) {
-	CleanupSessions(context.Background(), nil, "sess", nil)
-	CleanupSessions(context.Background(), config.NewMCPServerRegistry(nil), "", nil)
-
-	// nil logger uses slog.Default(); empty registry is a no-op.
-	CleanupSessions(context.Background(), config.NewMCPServerRegistry(nil), "sess", nil)
+	CleanupSessions(context.Background(), nil, "sess", []string{"cli"}, nil)
+	CleanupSessions(context.Background(), config.NewMCPServerRegistry(nil), "", []string{"cli"}, nil)
+	CleanupSessions(context.Background(), config.NewMCPServerRegistry(nil), "sess", nil, nil)
+	CleanupSessions(context.Background(), config.NewMCPServerRegistry(nil), "sess", []string{}, nil)
 }
 
 func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
@@ -174,7 +201,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 				},
 			},
 		})
-		CleanupSessions(context.Background(), registry, "inv-err", logger)
+		CleanupSessions(context.Background(), registry, "exec-err", []string{"cli-mcp-server"}, logger)
 	})
 
 	t.Run("404 treated as success", func(t *testing.T) {
@@ -195,7 +222,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 				},
 			},
 		})
-		CleanupSessions(context.Background(), registry, "gone", logger)
+		CleanupSessions(context.Background(), registry, "gone", []string{"cli-mcp-server"}, logger)
 		assert.True(t, hit.Load())
 	})
 
@@ -216,7 +243,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 				},
 			},
 		})
-		CleanupSessions(context.Background(), registry, "ok-sess", logger)
+		CleanupSessions(context.Background(), registry, "ok-sess", []string{"cli-mcp-server"}, logger)
 	})
 
 	t.Run("transport do error is logged and ignored", func(_ *testing.T) {
@@ -237,7 +264,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 				},
 			},
 		})
-		CleanupSessions(context.Background(), registry, "down", logger)
+		CleanupSessions(context.Background(), registry, "down", []string{"cli-mcp-server"}, logger)
 	})
 
 	t.Run("invalid cleanup url template is logged and ignored", func(_ *testing.T) {
@@ -250,7 +277,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 				},
 			},
 		})
-		CleanupSessions(context.Background(), registry, "bad-url", logger)
+		CleanupSessions(context.Background(), registry, "bad-url", []string{"cli-mcp-server"}, logger)
 	})
 
 	t.Run("buildHTTPClient error is logged and ignored", func(_ *testing.T) {
@@ -266,7 +293,7 @@ func TestCleanupSessions_ErrorAndStatusPaths(t *testing.T) {
 				},
 			},
 		})
-		CleanupSessions(context.Background(), registry, "bad-header", logger)
+		CleanupSessions(context.Background(), registry, "bad-header", []string{"cli-mcp-server"}, logger)
 	})
 }
 
@@ -296,10 +323,10 @@ func TestDeleteSession_Direct(t *testing.T) {
 }
 
 func TestClient_Close_TriggersSessionCleanup(t *testing.T) {
-	var deleted atomic.Bool
+	var deleteCount atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete && r.URL.Path == "/sessions/exec-close-1" {
-			deleted.Store(true)
+			deleteCount.Add(1)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -317,16 +344,57 @@ func TestClient_Close_TriggersSessionCleanup(t *testing.T) {
 				SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
 			},
 		},
+		"kubernetes-server": {
+			Transport: config.TransportConfig{
+				Type: config.TransportTypeHTTP,
+				URL:  server.URL + "/k8s",
+			},
+		},
 	})
 
 	client := newClient(registry, "exec-close-1")
+	client.recordRequestedServers([]string{"cli-mcp-server"})
 	require.NoError(t, client.Close())
-	assert.True(t, deleted.Load(), "Client.Close must DELETE sandbox for agent execution ID")
+	assert.Equal(t, int32(1), deleteCount.Load(), "Client.Close must DELETE sandbox for agent execution ID")
 
-	exec := NewToolExecutor(newClient(registry, "exec-close-1"), registry, nil, nil, nil)
-	deleted.Store(false)
+	// Second Close must not DELETE again (idempotent).
+	require.NoError(t, client.Close())
+	assert.Equal(t, int32(1), deleteCount.Load(), "second Close must not re-DELETE")
+
+	execClient := newClient(registry, "exec-close-1")
+	execClient.recordRequestedServers([]string{"cli-mcp-server"})
+	exec := NewToolExecutor(execClient, registry, []string{"cli-mcp-server"}, nil, nil)
+	deleteCount.Store(0)
 	require.NoError(t, exec.Close())
-	assert.True(t, deleted.Load(), "ToolExecutor.Close must DELETE sandbox for agent execution ID")
+	assert.Equal(t, int32(1), deleteCount.Load(), "ToolExecutor.Close must DELETE sandbox for agent execution ID")
+}
+
+func TestClient_Close_SkipsCleanupForUnrequestedServers(t *testing.T) {
+	var deleted atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleted.Store(true)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	verifySSL := false
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"cli-mcp-server": {
+			Transport: config.TransportConfig{
+				Type:              config.TransportTypeHTTP,
+				URL:               server.URL + "/mcp",
+				VerifySSL:         &verifySSL,
+				SessionCleanupURL: server.URL + "/sessions/{{.SESSION_ID}}",
+			},
+		},
+	})
+
+	client := newClient(registry, "exec-k8s-only")
+	client.recordRequestedServers([]string{"kubernetes-server"})
+	require.NoError(t, client.Close())
+	assert.False(t, deleted.Load(), "must not DELETE cli-mcp when it was not requested")
 }
 
 func TestClient_Close_SkipsCleanupWithoutSessionID(t *testing.T) {
@@ -352,6 +420,7 @@ func TestClient_Close_SkipsCleanupWithoutSessionID(t *testing.T) {
 	})
 
 	client := newClient(registry, "") // health/startup clients
+	client.recordRequestedServers([]string{"cli-mcp-server"})
 	require.NoError(t, client.Close())
-	assert.False(t, deleted.Load(), "empty sessionID must not trigger sandbox DELETE")
+	assert.False(t, deleted.Load(), "empty mcpSessionID must not trigger sandbox DELETE")
 }

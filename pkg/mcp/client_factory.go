@@ -15,7 +15,7 @@ type ClientFactory struct {
 	// createClientFn overrides the default client creation logic.
 	// When non-nil, it is called instead of newClient + Initialize.
 	// Used by test infrastructure (see testing.go).
-	createClientFn func(ctx context.Context, serverIDs []string, sessionID string) (*Client, error)
+	createClientFn func(ctx context.Context, serverIDs []string, mcpSessionID string) (*Client, error)
 }
 
 // NewClientFactory creates a new factory.
@@ -25,28 +25,30 @@ func NewClientFactory(registry *config.MCPServerRegistry, maskingService *maskin
 }
 
 // CreateClient creates a new Client connected to the specified servers.
-// sessionID is the agent execution ID used to resolve per-execution custom_headers
-// (e.g. X-Session-ID). Pass an empty string for health checks and startup validation.
-// The caller is responsible for calling Close() when done (also triggers sandbox cleanup).
-func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string, sessionID string) (*Client, error) {
+// mcpSessionID is the agent execution ID used to resolve per-execution custom_headers
+// (e.g. X-Session-ID). Pass an empty string for health checks and startup validation
+// (no sandbox header; cli-mcp only requires X-Session-ID for bash tool calls).
+// The caller is responsible for calling Close() when done (also triggers sandbox cleanup
+// for requested servers that declare session_cleanup_url).
+func (f *ClientFactory) CreateClient(ctx context.Context, serverIDs []string, mcpSessionID string) (*Client, error) {
 	if f.createClientFn != nil {
-		return f.createClientFn(ctx, serverIDs, sessionID)
+		return f.createClientFn(ctx, serverIDs, mcpSessionID)
 	}
-	client := newClient(f.registry, sessionID)
+	client := newClient(f.registry, mcpSessionID)
 	client.Initialize(ctx, serverIDs)
 	return client, nil
 }
 
 // CreateToolExecutor creates a fully-wired ToolExecutor for an agent execution.
 // This is the primary entry point used by the session executor.
-// sessionID is the agent execution ID forwarded for custom_headers resolution.
+// mcpSessionID is the agent execution ID forwarded for custom_headers resolution.
 func (f *ClientFactory) CreateToolExecutor(
 	ctx context.Context,
 	serverIDs []string,
 	toolFilter map[string][]string,
-	sessionID string,
+	mcpSessionID string,
 ) (*ToolExecutor, *Client, error) {
-	client, err := f.CreateClient(ctx, serverIDs, sessionID)
+	client, err := f.CreateClient(ctx, serverIDs, mcpSessionID)
 	if err != nil {
 		return nil, nil, err
 	}

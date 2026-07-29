@@ -49,7 +49,7 @@ func TestExpandEnv(t *testing.T) {
 			want:  "endpoint: ",
 		},
 		{
-			name:  "SESSION_ID preserved for per-session resolution",
+			name:  "SESSION_ID preserved for per-execution resolution",
 			input: "X-Session-ID: {{.SESSION_ID}}",
 			env:   map[string]string{},
 			want:  "X-Session-ID: {{.SESSION_ID}}",

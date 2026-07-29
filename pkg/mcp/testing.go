@@ -16,6 +16,9 @@ func (c *Client) InjectSession(serverID string, sdkClient *mcpsdk.Client, sessio
 	defer c.mu.Unlock()
 	c.sessions[serverID] = session
 	c.clients[serverID] = sdkClient
+	if serverID != "" {
+		c.requestedServers[serverID] = struct{}{}
+	}
 }
 
 // NewTestClientFactory creates a ClientFactory that uses injectFn to wire
@@ -25,8 +28,9 @@ func (c *Client) InjectSession(serverID string, sdkClient *mcpsdk.Client, sessio
 func NewTestClientFactory(registry *config.MCPServerRegistry, injectFn func(c *Client)) *ClientFactory {
 	return &ClientFactory{
 		registry: registry,
-		createClientFn: func(_ context.Context, _ []string, sessionID string) (*Client, error) {
-			c := newClient(registry, sessionID)
+		createClientFn: func(_ context.Context, serverIDs []string, mcpSessionID string) (*Client, error) {
+			c := newClient(registry, mcpSessionID)
+			c.recordRequestedServers(serverIDs)
 			injectFn(c)
 			return c, nil
 		},

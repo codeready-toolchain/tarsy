@@ -13,32 +13,46 @@ import (
 
 const sessionCleanupTimeout = 15 * time.Second
 
-// CleanupSessions best-effort deletes per-execution sandbox sessions on
-// MCP servers that declare session_cleanup_url (e.g. cli-mcp-server).
-// sessionID is the agent execution ID used as X-Session-ID.
+// CleanupSessions best-effort deletes per-execution sandbox sessions on the
+// given MCP servers that declare session_cleanup_url (e.g. cli-mcp-server).
+// mcpSessionID is the agent execution ID used as X-Session-ID.
+// Only serverIDs requested by the closing client are considered — other
+// registry servers are left alone.
 // Failures are logged and never returned — idle TTL remains the safety net.
-func CleanupSessions(ctx context.Context, registry *config.MCPServerRegistry, sessionID string, logger *slog.Logger) {
-	if registry == nil || sessionID == "" {
+func CleanupSessions(
+	ctx context.Context,
+	registry *config.MCPServerRegistry,
+	mcpSessionID string,
+	serverIDs []string,
+	logger *slog.Logger,
+) {
+	if registry == nil || mcpSessionID == "" || len(serverIDs) == 0 {
 		return
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	for serverID, serverCfg := range registry.GetAll() {
-		if serverCfg == nil || !needsSessionCleanup(serverCfg.Transport) {
+	// Cap total cleanup time so a hung endpoint cannot stall workers for
+	// longer than one cleanup timeout across all servers.
+	cleanupCtx, cancel := context.WithTimeout(ctx, sessionCleanupTimeout)
+	defer cancel()
+
+	for _, serverID := range serverIDs {
+		serverCfg, err := registry.Get(serverID)
+		if err != nil || serverCfg == nil || !needsSessionCleanup(serverCfg.Transport) {
 			continue
 		}
-		if err := deleteSession(ctx, serverCfg.Transport, sessionID); err != nil {
+		if err := deleteSession(cleanupCtx, serverCfg.Transport, mcpSessionID); err != nil {
 			logger.Warn("MCP session cleanup failed",
 				"server", serverID,
-				"session_id", sessionID,
+				"mcp_session_id", mcpSessionID,
 				"error", err)
 			continue
 		}
 		logger.Info("MCP session cleaned up",
 			"server", serverID,
-			"session_id", sessionID)
+			"mcp_session_id", mcpSessionID)
 	}
 }
 
@@ -48,8 +62,8 @@ func needsSessionCleanup(cfg config.TransportConfig) bool {
 	return cfg.SessionCleanupURL != ""
 }
 
-func deleteSession(ctx context.Context, cfg config.TransportConfig, sessionID string) error {
-	endpoint, err := resolveSessionCleanupURL(cfg.SessionCleanupURL, sessionID)
+func deleteSession(ctx context.Context, cfg config.TransportConfig, mcpSessionID string) error {
+	endpoint, err := resolveSessionCleanupURL(cfg.SessionCleanupURL, mcpSessionID)
 	if err != nil {
 		return err
 	}
@@ -59,7 +73,7 @@ func deleteSession(ctx context.Context, cfg config.TransportConfig, sessionID st
 	cleanupCfg := cfg
 	cleanupCfg.URL = endpoint
 
-	client, err := buildHTTPClient(cleanupCfg, map[string]string{"SESSION_ID": sessionID})
+	client, err := buildHTTPClient(cleanupCfg, map[string]string{"SESSION_ID": mcpSessionID})
 	if err != nil {
 		return err
 	}
@@ -87,12 +101,12 @@ func deleteSession(ctx context.Context, cfg config.TransportConfig, sessionID st
 }
 
 // resolveSessionCleanupURL expands {{.SESSION_ID}} in the configured cleanup URL.
-func resolveSessionCleanupURL(rawURL, sessionID string) (string, error) {
+func resolveSessionCleanupURL(rawURL, mcpSessionID string) (string, error) {
 	if rawURL == "" {
 		return "", fmt.Errorf("session_cleanup_url is empty")
 	}
 	resolved, err := resolveHeaderTemplates(map[string]string{"url": rawURL}, map[string]string{
-		"SESSION_ID": sessionID,
+		"SESSION_ID": mcpSessionID,
 	})
 	if err != nil {
 		return "", err

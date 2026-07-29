@@ -212,6 +212,7 @@ func main() {
 	// on the dashboard. The HealthMonitor handles recovery and warning cleanup.
 	mcpServerIDs := cfg.AllMCPServerIDs()
 	if len(mcpServerIDs) > 0 {
+		// Empty mcpSessionID omits X-Session-ID (no sandbox allocation/cleanup).
 		validationClient, err := mcpFactory.CreateClient(ctx, mcpServerIDs, "")
 		if err != nil {
 			slog.Warn("MCP client creation failed — starting degraded", "error", err)

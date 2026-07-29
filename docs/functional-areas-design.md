@@ -648,7 +648,7 @@ graph TB
 | File | Purpose |
 |------|---------|
 | `client.go` | Client -- MCP SDK session manager, per-server mutex |
-| `client_factory.go` | ClientFactory -- per-session client creation |
+| `client_factory.go` | ClientFactory -- per agent-execution client creation |
 | `executor.go` | ToolExecutor -- implements `agent.ToolExecutor` |
 | `params.go` | ActionInput parameter parsing (JSON/YAML/key-value/raw cascade) |
 | `router.go` | Tool name normalization (`server__tool` to `server.tool`), splitting, validation |

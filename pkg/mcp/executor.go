@@ -159,7 +159,8 @@ func (e *ToolExecutor) ListTools(ctx context.Context) ([]agent.ToolDefinition, e
 	return allTools, nil
 }
 
-// Close releases resources (MCP transports, subprocesses).
+// Close releases MCP transports/subprocesses and best-effort deletes
+// per-execution sandboxes for servers with session_cleanup_url.
 func (e *ToolExecutor) Close() error {
 	if e.client != nil {
 		return e.client.Close()

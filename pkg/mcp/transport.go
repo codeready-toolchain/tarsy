@@ -18,9 +18,9 @@ import (
 )
 
 // createTransport creates an MCP SDK transport from config.
-// sessionVars supplies per-execution template values (e.g. SESSION_ID = agent
+// sessionVars supplies per-execution template values (SESSION_ID = agent
 // execution ID) used to resolve custom_headers. May be nil or empty for
-// health/startup clients.
+// health/startup clients (blank X-Session-ID is omitted).
 func createTransport(cfg config.TransportConfig, sessionVars map[string]string) (mcpsdk.Transport, error) {
 	switch cfg.Type {
 	case config.TransportTypeStdio:
@@ -145,8 +145,8 @@ func buildHTTPClient(cfg config.TransportConfig, sessionVars map[string]string) 
 }
 
 // resolveHeaderTemplates expands {{.VAR}} templates in header values using
-// sessionVars. Empty results are omitted so health/startup clients without a
-// session ID do not send blank headers (e.g. X-Session-ID: "").
+// sessionVars. Empty results are omitted so health/startup clients without an
+// mcp session ID do not send blank headers (e.g. X-Session-ID: "").
 func resolveHeaderTemplates(headers map[string]string, sessionVars map[string]string) (map[string]string, error) {
 	if len(headers) == 0 {
 		return nil, nil

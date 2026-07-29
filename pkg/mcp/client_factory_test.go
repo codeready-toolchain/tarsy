@@ -16,9 +16,9 @@ func TestClientFactory_CreateToolExecutor_PropagatesSessionID(t *testing.T) {
 	var gotSessionID string
 	factory := &ClientFactory{
 		registry: registry,
-		createClientFn: func(_ context.Context, _ []string, sessionID string) (*Client, error) {
-			gotSessionID = sessionID
-			return newClient(registry, sessionID), nil
+		createClientFn: func(_ context.Context, _ []string, mcpSessionID string) (*Client, error) {
+			gotSessionID = mcpSessionID
+			return newClient(registry, mcpSessionID), nil
 		},
 	}
 

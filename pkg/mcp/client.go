@@ -21,16 +21,17 @@ import (
 // Each Client instance is scoped to a single agent execution (or health check).
 // Thread-safe: sessions may be accessed from multiple goroutines during parallel stages.
 type Client struct {
-	registry  *config.MCPServerRegistry
-	sessionID string // agent execution ID for custom_headers (e.g. X-Session-ID); empty for health/startup
+	registry     *config.MCPServerRegistry
+	mcpSessionID string // agent execution ID for custom_headers (e.g. X-Session-ID); empty for health/startup
 
-	mu            sync.RWMutex
-	sessions      map[string]*mcpsdk.ClientSession // serverID → session
-	clients       map[string]*mcpsdk.Client        // serverID → client (for reconnection)
-	failedServers map[string]string                // serverID → error message
+	mu               sync.RWMutex
+	sessions         map[string]*mcpsdk.ClientSession // serverID → session
+	clients          map[string]*mcpsdk.Client        // serverID → client (for reconnection)
+	failedServers    map[string]string                // serverID → error message
+	requestedServers map[string]struct{}              // servers this client was asked to use
 
 	// Tool cache (populated on first ListTools, never invalidated — each Client
-	// instance is short-lived per session, so the cache is naturally fresh)
+	// instance is short-lived per agent execution, so the cache is naturally fresh)
 	toolCache   map[string][]*mcpsdk.Tool
 	toolCacheMu sync.RWMutex
 
@@ -41,34 +42,50 @@ type Client struct {
 }
 
 // newClient creates a new Client.
-// sessionID is the agent execution ID used to resolve per-execution transport
+// mcpSessionID is the agent execution ID used to resolve per-execution transport
 // templates (custom_headers, e.g. X-Session-ID). Empty for health/startup clients.
-func newClient(registry *config.MCPServerRegistry, sessionID string) *Client {
+func newClient(registry *config.MCPServerRegistry, mcpSessionID string) *Client {
 	return &Client{
-		registry:      registry,
-		sessionID:     sessionID,
-		sessions:      make(map[string]*mcpsdk.ClientSession),
-		clients:       make(map[string]*mcpsdk.Client),
-		failedServers: make(map[string]string),
-		toolCache:     make(map[string][]*mcpsdk.Tool),
-		logger:        slog.Default(),
+		registry:         registry,
+		mcpSessionID:     mcpSessionID,
+		sessions:         make(map[string]*mcpsdk.ClientSession),
+		clients:          make(map[string]*mcpsdk.Client),
+		failedServers:    make(map[string]string),
+		requestedServers: make(map[string]struct{}),
+		toolCache:        make(map[string][]*mcpsdk.Tool),
+		logger:           slog.Default(),
 	}
 }
 
 // sessionVars returns template variables for resolving custom_headers.
 func (c *Client) sessionVars() map[string]string {
-	if c.sessionID == "" {
+	if c.mcpSessionID == "" {
 		return nil
 	}
-	return map[string]string{"SESSION_ID": c.sessionID}
+	return map[string]string{"SESSION_ID": c.mcpSessionID}
+}
+
+// recordRequestedServers remembers server IDs for scoped sandbox cleanup on Close.
+func (c *Client) recordRequestedServers(serverIDs []string) {
+	if len(serverIDs) == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, id := range serverIDs {
+		if id != "" {
+			c.requestedServers[id] = struct{}{}
+		}
+	}
 }
 
 // Initialize connects to all configured MCP servers.
 // Servers that fail to connect are recorded in failedServers (retrievable via
 // FailedServers()). The caller decides how to handle partial failures:
 //   - Startup: check FailedServers() and log warnings (non-fatal, TARSy starts degraded)
-//   - Per-session: partial initialization is acceptable
+//   - Per agent execution: partial initialization is acceptable
 func (c *Client) Initialize(ctx context.Context, serverIDs []string) {
+	c.recordRequestedServers(serverIDs)
 	for _, serverID := range serverIDs {
 		if err := c.InitializeServer(ctx, serverID); err != nil {
 			c.mu.Lock()
@@ -84,6 +101,8 @@ func (c *Client) Initialize(ctx context.Context, serverIDs []string) {
 // Returns nil if already connected. Used for lazy initialization and recovery.
 // Uses per-server mutex to prevent concurrent initialization of the same server.
 func (c *Client) InitializeServer(ctx context.Context, serverID string) error {
+	c.recordRequestedServers([]string{serverID})
+
 	// Acquire per-server mutex to serialize initialization attempts
 	muI, _ := c.reinitMu.LoadOrStore(serverID, &sync.Mutex{})
 	mu := muI.(*sync.Mutex)
@@ -110,7 +129,7 @@ func (c *Client) initializeServerLocked(ctx context.Context, serverID string) er
 		return fmt.Errorf("server %q not found in registry: %w", serverID, err)
 	}
 
-	// Create transport (resolves custom_headers with per-session vars)
+	// Create transport (resolves custom_headers with per-execution vars)
 	transport, err := createTransport(serverCfg.Transport, c.sessionVars())
 	if err != nil {
 		return fmt.Errorf("failed to create transport for %q: %w", serverID, err)
@@ -322,21 +341,29 @@ func (c *Client) recreateSession(ctx context.Context, serverID string) error {
 }
 
 // Close shuts down all sessions and transports gracefully, then best-effort
-// deletes per-execution MCP sandboxes (e.g. cli-mcp-server) when sessionID is set.
+// deletes per-execution MCP sandboxes (e.g. cli-mcp-server) when mcpSessionID
+// is set. Idempotent: a second Close skips sandbox DELETE.
 func (c *Client) Close() error {
-	firstErr, sessionID, registry, logger := c.closeSessions()
+	firstErr, mcpSessionID, registry, serverIDs, logger := c.closeSessions()
 
 	// Sandbox cleanup outside mu — DELETE uses HTTP and must not hold client locks.
-	if sessionID != "" {
-		CleanupSessions(context.Background(), registry, sessionID, logger)
+	if mcpSessionID != "" {
+		CleanupSessions(context.Background(), registry, mcpSessionID, serverIDs, logger)
 	}
 
 	return firstErr
 }
 
 // closeSessions closes MCP sessions and clears client state under mu.
-// Returns the sandbox session key and registry for cleanup after unlock.
-func (c *Client) closeSessions() (firstErr error, sessionID string, registry *config.MCPServerRegistry, logger *slog.Logger) {
+// Returns the sandbox session key, requested server IDs, and registry for
+// cleanup after unlock. Clears mcpSessionID so a second Close is a no-op for DELETE.
+func (c *Client) closeSessions() (
+	firstErr error,
+	mcpSessionID string,
+	registry *config.MCPServerRegistry,
+	serverIDs []string,
+	logger *slog.Logger,
+) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -356,7 +383,16 @@ func (c *Client) closeSessions() (firstErr error, sessionID string, registry *co
 	c.toolCache = make(map[string][]*mcpsdk.Tool)
 	c.toolCacheMu.Unlock()
 
-	return firstErr, c.sessionID, c.registry, c.logger
+	mcpSessionID = c.mcpSessionID
+	c.mcpSessionID = "" // make Close idempotent for sandbox cleanup
+
+	serverIDs = make([]string, 0, len(c.requestedServers))
+	for id := range c.requestedServers {
+		serverIDs = append(serverIDs, id)
+	}
+	c.requestedServers = make(map[string]struct{})
+
+	return firstErr, mcpSessionID, c.registry, serverIDs, c.logger
 }
 
 // InvalidateToolCache removes the cached tool list for a server,
