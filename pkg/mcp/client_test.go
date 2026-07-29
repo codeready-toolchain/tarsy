@@ -61,6 +61,9 @@ func TestClient_SessionVars(t *testing.T) {
 
 	withSession := newClient(config.NewMCPServerRegistry(nil), "exec-99")
 	assert.Equal(t, map[string]string{"SESSION_ID": "exec-99"}, withSession.sessionVars())
+
+	require.NoError(t, withSession.Close())
+	assert.Nil(t, withSession.sessionVars(), "Close clears mcpSessionID")
 }
 
 // connectClientDirect creates an Client with a pre-wired in-memory transport.

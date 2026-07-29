@@ -58,7 +58,10 @@ func newClient(registry *config.MCPServerRegistry, mcpSessionID string) *Client 
 }
 
 // sessionVars returns template variables for resolving custom_headers.
+// Synchronizes with Close(), which clears mcpSessionID under mu.
 func (c *Client) sessionVars() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.mcpSessionID == "" {
 		return nil
 	}
