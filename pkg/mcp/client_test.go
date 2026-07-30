@@ -3,7 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -64,6 +68,99 @@ func TestClient_SessionVars(t *testing.T) {
 
 	require.NoError(t, withSession.Close())
 	assert.Nil(t, withSession.sessionVars(), "Close clears mcpSessionID")
+}
+
+func TestClient_SessionVars_ConcurrentWithClose(t *testing.T) {
+	client := newClient(config.NewMCPServerRegistry(nil), "exec-race")
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			vars := client.sessionVars()
+			if vars != nil {
+				assert.Equal(t, "exec-race", vars["SESSION_ID"])
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		require.NoError(t, client.Close())
+	}()
+	wg.Wait()
+
+	assert.Nil(t, client.sessionVars(), "sessionVars must be nil after Close")
+}
+
+func TestClient_InitializeServer_AfterClose(t *testing.T) {
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"srv": {
+			Transport: config.TransportConfig{
+				Type:    config.TransportTypeStdio,
+				Command: "true",
+			},
+		},
+	})
+	client := newClient(registry, "exec-closed")
+	require.NoError(t, client.Close())
+
+	err := client.InitializeServer(context.Background(), "srv")
+	require.EqualError(t, err, "client is closed")
+	assert.False(t, client.HasSession("srv"))
+}
+
+// TestClient_Close_DropsInFlightInitialize ensures a session that finishes
+// Connect after Close is discarded instead of being installed.
+func TestClient_Close_DropsInFlightInitialize(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+
+	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "gate-mcp", Version: "test"}, nil)
+	mcpHandler := mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
+		return server
+	}, &mcpsdk.StreamableHTTPOptions{JSONResponse: true, Stateless: true})
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-started:
+		default:
+			close(started)
+		}
+		<-release
+		mcpHandler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(httpServer.Close)
+
+	verifySSL := false
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"srv": {
+			Transport: config.TransportConfig{
+				Type:      config.TransportTypeHTTP,
+				URL:       httpServer.URL,
+				VerifySSL: &verifySSL,
+			},
+		},
+	})
+	client := newClient(registry, "exec-inflight")
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- client.InitializeServer(context.Background(), "srv")
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("InitializeServer never reached the MCP server")
+	}
+
+	require.NoError(t, client.Close())
+	close(release)
+
+	initErr := <-errCh
+	require.EqualError(t, initErr, "client is closed")
+	assert.False(t, client.HasSession("srv"), "late Connect must not install a session after Close")
 }
 
 // connectClientDirect creates an Client with a pre-wired in-memory transport.

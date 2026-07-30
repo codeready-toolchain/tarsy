@@ -25,6 +25,7 @@ type Client struct {
 	mcpSessionID string // agent execution ID for custom_headers (e.g. X-Session-ID); empty for health/startup
 
 	mu               sync.RWMutex
+	closed           bool                             // set by Close; Client is not reusable afterward
 	sessions         map[string]*mcpsdk.ClientSession // serverID → session
 	clients          map[string]*mcpsdk.Client        // serverID → client (for reconnection)
 	failedServers    map[string]string                // serverID → error message
@@ -75,6 +76,9 @@ func (c *Client) recordRequestedServers(serverIDs []string) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed {
+		return
+	}
 	for _, id := range serverIDs {
 		if id != "" {
 			c.requestedServers[id] = struct{}{}
@@ -118,8 +122,12 @@ func (c *Client) InitializeServer(ctx context.Context, serverID string) error {
 // initializeServerLocked performs the actual server initialization.
 // Caller must hold the per-server reinitMu lock.
 func (c *Client) initializeServerLocked(ctx context.Context, serverID string) error {
-	// Check if already connected (under per-server lock, no TOCTOU race)
+	// Check closed / already connected (under per-server lock, no TOCTOU race)
 	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return fmt.Errorf("client is closed")
+	}
 	if _, exists := c.sessions[serverID]; exists {
 		c.mu.RUnlock()
 		return nil
@@ -159,8 +167,13 @@ func (c *Client) initializeServerLocked(ctx context.Context, serverID string) er
 		return fmt.Errorf("failed to connect to %q: %w", serverID, err)
 	}
 
-	// Store session and clear failure record
+	// Install only if still open — Close may have run during Connect.
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		_ = session.Close()
+		return fmt.Errorf("client is closed")
+	}
 	c.sessions[serverID] = session
 	c.clients[serverID] = client
 	delete(c.failedServers, serverID)
@@ -369,6 +382,8 @@ func (c *Client) closeSessions() (
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.closed = true
 
 	for id, session := range c.sessions {
 		if err := session.Close(); err != nil && firstErr == nil {
