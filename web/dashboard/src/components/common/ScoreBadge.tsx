@@ -91,7 +91,18 @@ function PillBadge({
         {icon}
         <Typography
           variant="body2"
-          sx={{ fontWeight: 600, color: `${paletteKey}.main`, minWidth: '3ch', textAlign: 'center' }}
+          component="span"
+          sx={{
+            fontWeight: 600,
+            color: `${paletteKey}.main`,
+            minWidth: '3ch',
+            textAlign: 'center',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1.2,
+            '& .MuiSvgIcon-root': { fontSize: 18 },
+          }}
         >
           {value}
         </Typography>
@@ -151,7 +162,7 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
       return (
         <PillBadge
           color="info"
-          value={<CircularProgress size={14} color="inherit" />}
+          value={<CircularProgress size={16} color="inherit" />}
           tooltip="Scoring in progress"
           onClick={onClick}
         />
@@ -175,19 +186,14 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
   // --- Scoring failed / timed out ---
   if (scoringStatus != null && FAILED_EXECUTION_STATUSES.has(scoringStatus)) {
     const actionable = !!onClick;
-    const icon = actionable
-      ? <RefreshIcon sx={{ fontSize: variant === 'pill' ? 14 : 16 }} />
-      : <ErrorIcon sx={{ fontSize: variant === 'pill' ? 14 : 16 }} />;
-    const label = actionable ? 'Re-score' : (variant === 'pill' ? 'score failed' : 'Score Failed');
+    const icon = actionable ? <RefreshIcon /> : <ErrorIcon />;
     const tooltip = actionable ? 'Click to re-score' : 'Scoring failed';
 
     if (variant === 'pill') {
       return (
         <PillBadge
           color="error"
-          icon={icon}
-          value=""
-          label={label}
+          value={icon}
           tooltip={tooltip}
           onClick={onClick}
         />
@@ -197,8 +203,10 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
     return (
       <Tooltip title={tooltip}>
         <Chip
-          icon={icon}
-          label={label}
+          icon={actionable
+            ? <RefreshIcon sx={{ fontSize: 16 }} />
+            : <ErrorIcon sx={{ fontSize: 16 }} />}
+          label={actionable ? 'Re-score' : 'Failed'}
           size={size}
           color="error"
           variant="outlined"
