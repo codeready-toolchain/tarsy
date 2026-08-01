@@ -19,9 +19,10 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material';
-import { Refresh, Wifi, WifiOff } from '@mui/icons-material';
+import { Refresh } from '@mui/icons-material';
 import { ActiveSessionCard } from './ActiveSessionCard.tsx';
 import { QueuedAlertsSection } from './QueuedAlertsSection.tsx';
+import { ConnectionStatusChip } from '../common/ConnectionStatusChip.tsx';
 import type { ActiveSessionItem, QueuedSessionItem } from '../../types/session.ts';
 import type { SessionProgressPayload } from '../../types/events.ts';
 
@@ -80,28 +81,7 @@ export function ActiveAlertsPanel({
           />
         )}
 
-        <Tooltip
-          title={
-            wsConnected
-              ? 'Connected — real-time updates active'
-              : 'Disconnected — click to retry connection'
-          }
-        >
-          <Chip
-            icon={
-              wsConnected ? (
-                <Wifi sx={{ fontSize: 16 }} />
-              ) : (
-                <WifiOff sx={{ fontSize: 16 }} />
-              )
-            }
-            label={wsConnected ? 'Live' : 'Offline'}
-            color={wsConnected ? 'success' : 'default'}
-            size="small"
-            variant={wsConnected ? 'filled' : 'outlined'}
-            onClick={!wsConnected ? onRetryConnection : undefined}
-          />
-        </Tooltip>
+        <ConnectionStatusChip connected={wsConnected} onRetry={onRetryConnection} />
 
         <Tooltip title="Refresh alerts">
           <span>

@@ -11,7 +11,7 @@
  * Much simpler than SessionDetailPage — no streaming, no auto-scroll, no chat.
  */
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -306,10 +306,11 @@ export function TracePage() {
   // Render
   // ────────────────────────────────────────────────────────────
 
-  usePageHeader({
-    title: headerTitle,
-    showBackButton: true,
-    actions: (
+  // Memoized so the header (subscribed via PageHeaderContext) doesn't
+  // re-render on every TracePage render — only when something the toggle/
+  // live-indicator controls actually depend on changes.
+  const headerActions = useMemo(
+    () => (
       <>
         {/* Session info */}
         {session && !loading && (
@@ -385,6 +386,13 @@ export function TracePage() {
         {loading && <CircularProgress size={20} sx={{ color: 'inherit' }} />}
       </>
     ),
+    [session, loading, isActive, view, handleViewChange],
+  );
+
+  usePageHeader({
+    title: headerTitle,
+    showBackButton: true,
+    actions: headerActions,
   });
 
   return (

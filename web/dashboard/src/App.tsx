@@ -7,8 +7,7 @@ import { VersionProvider } from './contexts/VersionContext.tsx';
 import { SystemWarningBanner } from './components/layout/SystemWarningBanner.tsx';
 import { VersionUpdateBanner } from './components/layout/VersionUpdateBanner.tsx';
 import { AppLayout } from './components/layout/AppLayout.tsx';
-import { DashboardPage } from './pages/DashboardPage.tsx';
-import { TriagePage } from './pages/TriagePage.tsx';
+import { DashboardView } from './components/dashboard/DashboardView.tsx';
 import { SessionDetailPage } from './pages/SessionDetailPage.tsx';
 import { TracePage } from './pages/TracePage.tsx';
 import { SubmitAlertPage } from './pages/SubmitAlertPage.tsx';
@@ -22,12 +21,18 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       {
+        // DashboardView is used directly (not via a wrapper page) so that
+        // React Router reuses the same component instance when navigating
+        // between "/" and "/triage" instead of remounting it — that keeps
+        // loaded sessions/filters and the WebSocket subscription intact
+        // across tab switches. See DashboardView's triageFetchedRef effect
+        // for how it still loads triage data when switching into that tab.
         path: '/',
-        element: <DashboardPage />,
+        element: <DashboardView tab="sessions" />,
       },
       {
         path: '/triage',
-        element: <TriagePage />,
+        element: <DashboardView tab="triage" />,
       },
       {
         path: '/sessions/:id',

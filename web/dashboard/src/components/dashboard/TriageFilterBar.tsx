@@ -5,9 +5,9 @@ import {
   IconButton,
   Tooltip,
   Typography,
-  Chip,
 } from '@mui/material';
-import { Refresh, Wifi, WifiOff } from '@mui/icons-material';
+import { Refresh } from '@mui/icons-material';
+import { ConnectionStatusChip } from '../common/ConnectionStatusChip.tsx';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
@@ -76,28 +76,7 @@ export function TriageFilterBar({
       )}
 
       {wsConnected !== undefined && (
-        <Tooltip
-          title={
-            wsConnected
-              ? 'Connected — real-time updates active'
-              : 'Disconnected — click to retry connection'
-          }
-        >
-          <Chip
-            icon={
-              wsConnected ? (
-                <Wifi sx={{ fontSize: 16 }} />
-              ) : (
-                <WifiOff sx={{ fontSize: 16 }} />
-              )
-            }
-            label={wsConnected ? 'Live' : 'Offline'}
-            color={wsConnected ? 'success' : 'default'}
-            size="small"
-            variant={wsConnected ? 'filled' : 'outlined'}
-            onClick={!wsConnected ? onRetryConnection : undefined}
-          />
-        </Tooltip>
+        <ConnectionStatusChip connected={wsConnected} onRetry={onRetryConnection} />
       )}
 
       <Tooltip title="Refresh triage data">

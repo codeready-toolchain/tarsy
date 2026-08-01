@@ -365,6 +365,20 @@ export function DashboardView({ tab }: { tab: DashboardTab }) {
     fetchAllTriageGroupsRef.current = fetchAllTriageGroups;
   }, [fetchAllTriageGroups]);
 
+  // DashboardView is the direct route element for both "/" and "/triage"
+  // (see App.tsx) — React Router reuses this component instance across that
+  // navigation instead of remounting it, so switching tabs doesn't reset
+  // sessions/filters or recreate the WebSocket subscription. The one thing
+  // the mount-time effect above doesn't cover is triage data when the user
+  // *switches into* the triage tab rather than landing on it directly.
+  const triageFetchedRef = useRef(activeTab === 'triage');
+  useEffect(() => {
+    if (activeTab === 'triage' && !triageFetchedRef.current) {
+      triageFetchedRef.current = true;
+      fetchAllTriageGroups();
+    }
+  }, [activeTab, fetchAllTriageGroups]);
+
   // ── Throttled refresh (sessions + triage together) ──
   const throttledRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
