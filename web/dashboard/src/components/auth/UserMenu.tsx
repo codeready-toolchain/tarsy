@@ -42,15 +42,23 @@ export function UserMenu() {
       <Button
         onClick={(e) => setAnchorEl(e.currentTarget)}
         startIcon={<AccountCircleIcon />}
+        aria-label={`Account menu for ${displayName}`}
         sx={{
           color: 'white',
           textTransform: 'none',
+          minWidth: 0,
+          // Icon-only on mobile — the name label is a nice-to-have that would
+          // otherwise fight the title/actions for space on a narrow header.
+          '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } },
           '&:hover': {
             backgroundColor: 'rgba(255, 255, 255, 0.1)',
           },
         }}
       >
-        <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: 'medium', display: { xs: 'none', sm: 'block' } }}
+        >
           {displayName}
         </Typography>
       </Button>

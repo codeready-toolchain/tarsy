@@ -44,6 +44,7 @@ export function TriageFilterBar({
       sx={{
         display: 'flex',
         alignItems: 'center',
+        flexWrap: 'wrap',
         gap: 2,
         px: 0.5,
         py: 1,

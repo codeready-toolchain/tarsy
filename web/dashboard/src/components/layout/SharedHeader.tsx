@@ -12,7 +12,8 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 import { useAuth } from '../../contexts/AuthContext.tsx';
 import { useNavDrawer } from '../../contexts/NavDrawerContext.tsx';
 import { usePageHeaderState } from '../../contexts/PageHeaderContext.tsx';
-import { useColorScheme } from '@mui/material/styles';
+import { useColorScheme, useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
 import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx } from '../../theme/headerStyles';
@@ -29,6 +30,8 @@ export function SharedHeader() {
   const { title, showBackButton, actions } = usePageHeaderState();
   const { mode, setMode } = useColorScheme();
   const toggleColorMode = () => setMode(mode === 'light' ? 'dark' : 'light');
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleBackClick = () => {
     if (window.history.length > 1) {
@@ -44,7 +47,16 @@ export function SharedHeader() {
       elevation={0}
       sx={(theme) => ({ ...appBarSx(theme) })}
     >
-      <Toolbar>
+      <Toolbar
+        sx={{
+          // On mobile, page-specific actions (toggles, badges) drop to their own
+          // full-width row below instead of squeezing in next to the title and
+          // account controls — flexWrap lets that row's width:100% actually wrap.
+          flexWrap: 'wrap',
+          rowGap: 1,
+          py: isMobile ? 1 : 0,
+        }}
+      >
         {/* Uniform 8px gap across hamburger/back/home — they're all icon-sized nav
             controls in the same row, so a consistent rhythm reads as one group.
             Not a conditional margin on the hamburger itself — otherwise the
@@ -99,16 +111,19 @@ export function SharedHeader() {
         <Typography
           variant="h5"
           component="div"
+          noWrap
           sx={{
             ml: 2,
             flexGrow: 1,
+            minWidth: 0,
+            fontSize: { xs: '1.15rem', sm: '1.5rem' },
             ...titleSx,
           }}
         >
           {title}
         </Typography>
 
-        {actions}
+        {!isMobile && actions}
 
         <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
           <IconButton
@@ -125,6 +140,23 @@ export function SharedHeader() {
           {authAvailable && !isAuthenticated && <LoginButton size="medium" />}
           {authAvailable && isAuthenticated && <UserMenu />}
         </Box>
+
+        {/* Page actions move here on mobile — their own full-width row, wrapping
+            if still too wide, instead of contending with the title/account controls. */}
+        {isMobile && actions && (
+          <Box
+            sx={{
+              width: '100%',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1,
+            }}
+          >
+            {actions}
+          </Box>
+        )}
       </Toolbar>
     </AppBar>
   );
