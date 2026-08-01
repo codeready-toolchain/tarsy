@@ -5,13 +5,19 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import Tooltip from '@mui/material/Tooltip';
+import { useTheme } from '@mui/material/styles';
 import HomeIcon from '@mui/icons-material/Home';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import SendIcon from '@mui/icons-material/Send';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import DnsIcon from '@mui/icons-material/Dns';
 import { ROUTES } from '../../constants/routes.ts';
-import { useNavDrawer, NAV_DRAWER_WIDTH } from '../../contexts/NavDrawerContext.tsx';
+import {
+  useNavDrawer,
+  NAV_DRAWER_WIDTH,
+  NAV_DRAWER_WIDTH_COLLAPSED,
+} from '../../contexts/NavDrawerContext.tsx';
 
 const NAV_ITEMS = [
   {
@@ -47,46 +53,85 @@ const NAV_ITEMS = [
 ] as const;
 
 /**
- * Persistent left navigation drawer, docked below the global header as a
- * flex sibling of the main content — pushes it when open. Open/closed state
- * is owned by NavDrawerContext (remembered across routes).
+ * Left navigation drawer, docked below the global header as a flex sibling
+ * of the main content. Always visible — collapsed to an icon-only rail by
+ * default, expanding in place to show labels too. Open/collapsed state is
+ * owned by NavDrawerContext (remembered across routes).
  */
 export function NavigationDrawer() {
   const { open } = useNavDrawer();
   const { pathname } = useLocation();
+  const theme = useTheme();
+  const width = open ? NAV_DRAWER_WIDTH : NAV_DRAWER_WIDTH_COLLAPSED;
 
   return (
     <Drawer
       id="navigation-drawer"
-      variant="persistent"
+      variant="permanent"
       anchor="left"
-      open={open}
       sx={{
-        width: NAV_DRAWER_WIDTH,
+        width,
         flexShrink: 0,
+        whiteSpace: 'nowrap',
+        transition: theme.transitions.create('width', {
+          easing: open ? theme.transitions.easing.easeOut : theme.transitions.easing.sharp,
+          duration: open
+            ? theme.transitions.duration.enteringScreen
+            : theme.transitions.duration.leavingScreen,
+        }),
         '& .MuiDrawer-paper': {
           position: 'relative',
-          width: NAV_DRAWER_WIDTH,
+          width,
+          overflowX: 'hidden',
           height: '100%',
           boxSizing: 'border-box',
           borderRight: 1,
           borderColor: 'divider',
+          transition: theme.transitions.create('width', {
+            easing: open ? theme.transitions.easing.easeOut : theme.transitions.easing.sharp,
+            duration: open
+              ? theme.transitions.duration.enteringScreen
+              : theme.transitions.duration.leavingScreen,
+          }),
         },
       }}
     >
       <List sx={{ py: 1 }}>
         {NAV_ITEMS.map((item) => {
           const selected = item.match(pathname);
+          const button = (
+            <ListItemButton
+              component={RouterLink}
+              to={item.to}
+              selected={selected}
+              sx={{
+                minHeight: 44,
+                justifyContent: open ? 'flex-start' : 'center',
+                px: 2.5,
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : 0, justifyContent: 'center' }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                sx={{
+                  opacity: open ? 1 : 0,
+                  transition: theme.transitions.create('opacity', {
+                    duration: theme.transitions.duration.shortest,
+                  }),
+                }}
+              />
+            </ListItemButton>
+          );
+
           return (
-            <ListItem key={item.to} disablePadding>
-              <ListItemButton
-                component={RouterLink}
-                to={item.to}
-                selected={selected}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} />
-              </ListItemButton>
+            <ListItem key={item.to} disablePadding sx={{ display: 'block' }}>
+              {open ? button : (
+                <Tooltip title={item.label} placement="right">
+                  {button}
+                </Tooltip>
+              )}
             </ListItem>
           );
         })}

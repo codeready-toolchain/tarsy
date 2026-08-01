@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 export const NAV_DRAWER_WIDTH = 260;
+export const NAV_DRAWER_WIDTH_COLLAPSED = 64;
 
 const STORAGE_KEY = 'tarsy-nav-drawer-open';
 
