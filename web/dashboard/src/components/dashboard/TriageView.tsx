@@ -21,6 +21,8 @@ interface TriageViewProps {
   groups: Record<TriageGroupKey, TriageGroup | null>;
   loading: boolean;
   error: string | null;
+  wsConnected: boolean;
+  onRetryConnection?: () => void;
   filters: TriageFilter;
   onFiltersChange: (filters: TriageFilter) => void;
   onRefresh: () => void;
@@ -50,6 +52,8 @@ export function TriageView({
   groups,
   loading,
   error,
+  wsConnected,
+  onRetryConnection,
   filters,
   onFiltersChange,
   onRefresh,
@@ -257,6 +261,8 @@ export function TriageView({
           onRefresh={onRefresh}
           groups={emptyGroups}
           loading={loading}
+          wsConnected={wsConnected}
+          onRetryConnection={onRetryConnection}
         />
         <Alert severity="error" sx={{ mt: 1 }}>
           {error}
@@ -274,6 +280,8 @@ export function TriageView({
           onRefresh={onRefresh}
           groups={emptyGroups}
           loading={loading}
+          wsConnected={wsConnected}
+          onRetryConnection={onRetryConnection}
         />
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
@@ -292,6 +300,8 @@ export function TriageView({
         onRefresh={onRefresh}
         groups={groups}
         loading={loading}
+        wsConnected={wsConnected}
+        onRetryConnection={onRetryConnection}
       />
 
       <TriageGroupedList

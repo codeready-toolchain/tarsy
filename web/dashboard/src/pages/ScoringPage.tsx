@@ -32,7 +32,7 @@ import {
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { ScoreBadge } from '../components/common/ScoreBadge.tsx';
 import axios from 'axios';
@@ -198,12 +198,12 @@ export function ScoringPage() {
     ? `Scoring - ${id?.slice(-8) ?? ''}`
     : 'Scoring';
 
+  usePageHeader({ title: headerTitle, showBackButton: true });
+
   return (
     <>
       <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
-        <SharedHeader title={headerTitle} showBackButton />
-
-        <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {/* Back to session link */}
           {id && (
             <Button

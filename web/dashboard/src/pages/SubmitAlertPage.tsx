@@ -2,7 +2,7 @@
  * Submit Alert page — manual alert submission form.
  *
  * Layout:
- * - SharedHeader with back button and "Automated Incident Response" subtitle
+ * - Publishes "Automated Incident Response" subtitle into the global header
  * - Backend health check on mount (error + success banners)
  * - ManualAlertForm (the core form component) with Fade transition
  * - VersionFooter inside content container
@@ -11,13 +11,21 @@
 import { useState, useEffect } from 'react';
 import { Box, Container, Typography, Alert as MuiAlert, Fade } from '@mui/material';
 
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { ManualAlertForm } from '../components/alert/ManualAlertForm.tsx';
 import { getHealth } from '../services/api.ts';
 
 export function SubmitAlertPage() {
   const [backendStatus, setBackendStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
+  usePageHeader({
+    title: 'Submit Alert',
+    actions: (
+      <Typography variant="body2" sx={{ opacity: 0.8, color: 'common.white', mr: 2 }}>
+        Automated Incident Response
+      </Typography>
+    ),
+  });
 
   // Backend health check on mount
   useEffect(() => {
@@ -39,14 +47,8 @@ export function SubmitAlertPage() {
   }, []);
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default', px: 2, py: 2 }}>
-      <SharedHeader title="Manual Alert Submission" showBackButton>
-        <Typography variant="body2" sx={{ opacity: 0.8, color: 'common.white', mr: 2 }}>
-          Automated Incident Response
-        </Typography>
-      </SharedHeader>
-
-      <Container maxWidth={false} sx={{ py: 4, px: { xs: 1, sm: 2 } }}>
+    <Box sx={{ backgroundColor: 'background.default' }}>
+      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
         {/* Backend status indicator */}
         {backendStatus === 'error' && (
           <MuiAlert severity="error" sx={{ mb: 3 }}>

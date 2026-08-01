@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom';
 import { Container, Typography, Button, Box } from '@mui/material';
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 
 /**
  * 404 Not Found page.
  */
 export function NotFoundPage() {
+  usePageHeader({ title: 'TARSy' });
+
   return (
     <>
-      <SharedHeader title="TARSy Dashboard" />
       <Container maxWidth="sm">
         <Box
           sx={{
@@ -29,7 +30,7 @@ export function NotFoundPage() {
             The page you are looking for does not exist.
           </Typography>
           <Button component={Link} to="/" variant="contained">
-            Go to Dashboard
+            Go to Alert Investigations
           </Button>
         </Box>
       </Container>

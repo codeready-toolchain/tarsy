@@ -51,6 +51,7 @@ vi.mock('../../services/websocket.ts', () => ({
 }));
 
 import { getFilterOptions, getUsageSummary } from '../../services/api';
+import { PageHeaderProvider } from '../../contexts/PageHeaderContext';
 import { UsagePage } from '../../pages/UsagePage';
 
 const mockGetUsageSummary = vi.mocked(getUsageSummary);
@@ -102,7 +103,9 @@ function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummar
 function renderUsagePage() {
   return render(
     <MemoryRouter>
-      <UsagePage />
+      <PageHeaderProvider>
+        <UsagePage />
+      </PageHeaderProvider>
     </MemoryRouter>,
   );
 }

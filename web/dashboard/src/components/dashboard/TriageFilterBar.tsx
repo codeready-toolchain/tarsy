@@ -5,8 +5,9 @@ import {
   IconButton,
   Tooltip,
   Typography,
+  Chip,
 } from '@mui/material';
-import { Refresh } from '@mui/icons-material';
+import { Refresh, Wifi, WifiOff } from '@mui/icons-material';
 import type { TriageFilter } from '../../types/dashboard.ts';
 import type { TriageGroup, TriageGroupKey } from '../../types/api.ts';
 
@@ -16,6 +17,8 @@ interface TriageFilterBarProps {
   onRefresh: () => void;
   groups: Record<TriageGroupKey, TriageGroup | null>;
   loading?: boolean;
+  wsConnected?: boolean;
+  onRetryConnection?: () => void;
 }
 
 export function TriageFilterBar({
@@ -24,6 +27,8 @@ export function TriageFilterBar({
   onRefresh,
   groups,
   loading,
+  wsConnected,
+  onRetryConnection,
 }: TriageFilterBarProps) {
   const handleAssigneeChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
     if (value) {
@@ -67,6 +72,31 @@ export function TriageFilterBar({
         <Typography variant="body2" color="text.secondary">
           {totalCount} session{totalCount !== 1 ? 's' : ''}
         </Typography>
+      )}
+
+      {wsConnected !== undefined && (
+        <Tooltip
+          title={
+            wsConnected
+              ? 'Connected — real-time updates active'
+              : 'Disconnected — click to retry connection'
+          }
+        >
+          <Chip
+            icon={
+              wsConnected ? (
+                <Wifi sx={{ fontSize: 16 }} />
+              ) : (
+                <WifiOff sx={{ fontSize: 16 }} />
+              )
+            }
+            label={wsConnected ? 'Live' : 'Offline'}
+            color={wsConnected ? 'success' : 'default'}
+            size="small"
+            variant={wsConnected ? 'filled' : 'outlined'}
+            onClick={!wsConnected ? onRetryConnection : undefined}
+          />
+        </Tooltip>
       )}
 
       <Tooltip title="Refresh triage data">

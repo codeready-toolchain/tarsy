@@ -60,6 +60,7 @@ export function UserMenu() {
         open={open}
         onClose={handleClose}
         onClick={handleClose}
+        disableScrollLock
         slotProps={{
           paper: {
             elevation: 0,

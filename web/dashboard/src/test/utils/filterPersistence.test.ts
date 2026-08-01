@@ -18,8 +18,6 @@ import {
   saveSortToStorage,
   loadSortFromStorage,
   clearAllDashboardState,
-  saveDashboardTab,
-  loadDashboardTab,
   saveTriageFilters,
   loadTriageFilters,
 } from '../../utils/filterPersistence';
@@ -202,41 +200,6 @@ describe('sort persistence', () => {
 });
 
 // ---------------------------------------------------------------------------
-// clearAllDashboardState
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Dashboard tab persistence
-// ---------------------------------------------------------------------------
-
-describe('dashboard tab persistence', () => {
-  it('round-trips a valid tab value', () => {
-    saveDashboardTab('triage');
-    expect(loadDashboardTab()).toBe('triage');
-  });
-
-  it('round-trips sessions tab', () => {
-    saveDashboardTab('sessions');
-    expect(loadDashboardTab()).toBe('sessions');
-  });
-
-  it('falls back to sessions for invalid stored value', () => {
-    localStorageMock.setItem('tarsy-dashboard-tab', 'garbage');
-    expect(loadDashboardTab()).toBe('sessions');
-  });
-
-  it('falls back to sessions when nothing saved', () => {
-    expect(loadDashboardTab()).toBe('sessions');
-  });
-
-  it('overwriting replaces previous value', () => {
-    saveDashboardTab('triage');
-    saveDashboardTab('sessions');
-    expect(loadDashboardTab()).toBe('sessions');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Triage filters persistence
 // ---------------------------------------------------------------------------
 
@@ -269,11 +232,10 @@ describe('triage filters persistence', () => {
 // ---------------------------------------------------------------------------
 
 describe('clearAllDashboardState', () => {
-  it('clears all storage keys including tab and triage filters', () => {
+  it('clears all storage keys including triage filters', () => {
     saveFiltersToStorage(getDefaultFilters());
     savePaginationToStorage({ page: 5 });
     saveSortToStorage({ field: 'created_at', direction: 'desc' });
-    saveDashboardTab('triage');
     saveTriageFilters({ assignee: 'mine' });
 
     clearAllDashboardState();
@@ -281,7 +243,6 @@ describe('clearAllDashboardState', () => {
     expect(loadFiltersFromStorage()).toBeNull();
     expect(loadPaginationFromStorage()).toBeNull();
     expect(loadSortFromStorage()).toBeNull();
-    expect(loadDashboardTab()).toBe('sessions');
     expect(loadTriageFilters()).toBeNull();
   });
 });

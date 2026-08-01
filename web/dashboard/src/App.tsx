@@ -6,7 +6,9 @@ import { AuthProvider } from './contexts/AuthContext.tsx';
 import { VersionProvider } from './contexts/VersionContext.tsx';
 import { SystemWarningBanner } from './components/layout/SystemWarningBanner.tsx';
 import { VersionUpdateBanner } from './components/layout/VersionUpdateBanner.tsx';
+import { AppLayout } from './components/layout/AppLayout.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
+import { TriagePage } from './pages/TriagePage.tsx';
 import { SessionDetailPage } from './pages/SessionDetailPage.tsx';
 import { TracePage } from './pages/TracePage.tsx';
 import { SubmitAlertPage } from './pages/SubmitAlertPage.tsx';
@@ -17,36 +19,45 @@ import { NotFoundPage } from './pages/NotFoundPage.tsx';
 
 const router = createBrowserRouter([
   {
-    path: '/',
-    element: <DashboardPage />,
-  },
-  {
-    path: '/sessions/:id',
-    element: <SessionDetailPage />,
-  },
-  {
-    path: '/sessions/:id/trace',
-    element: <TracePage />,
-  },
-  {
-    path: '/sessions/:id/scoring',
-    element: <ScoringPage />,
-  },
-  {
-    path: '/submit-alert',
-    element: <SubmitAlertPage />,
-  },
-  {
-    path: '/system',
-    element: <SystemStatusPage />,
-  },
-  {
-    path: '/usage',
-    element: <UsagePage />,
-  },
-  {
-    path: '*',
-    element: <NotFoundPage />,
+    element: <AppLayout />,
+    children: [
+      {
+        path: '/',
+        element: <DashboardPage />,
+      },
+      {
+        path: '/triage',
+        element: <TriagePage />,
+      },
+      {
+        path: '/sessions/:id',
+        element: <SessionDetailPage />,
+      },
+      {
+        path: '/sessions/:id/trace',
+        element: <TracePage />,
+      },
+      {
+        path: '/sessions/:id/scoring',
+        element: <ScoringPage />,
+      },
+      {
+        path: '/submit-alert',
+        element: <SubmitAlertPage />,
+      },
+      {
+        path: '/system',
+        element: <SystemStatusPage />,
+      },
+      {
+        path: '/usage',
+        element: <UsagePage />,
+      },
+      {
+        path: '*',
+        element: <NotFoundPage />,
+      },
+    ],
   },
 ]);
 

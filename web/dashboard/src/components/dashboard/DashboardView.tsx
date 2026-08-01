@@ -13,44 +13,19 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { MouseEvent } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
-import { ROUTES } from '../../constants/routes.ts';
 import {
   Container,
-  AppBar,
-  Toolbar,
-  Typography,
   Box,
   Tooltip,
   CircularProgress,
-  IconButton,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  ToggleButtonGroup,
-  ToggleButton,
 } from '@mui/material';
-import {
-  Refresh,
-  Menu as MenuIcon,
-  Send as SendIcon,
-  Dns as DnsIcon,
-  BarChart as BarChartIcon,
-  DarkMode as DarkModeIcon,
-  LightMode as LightModeIcon,
-} from '@mui/icons-material';
 import { FilterPanel } from './FilterPanel.tsx';
 import { ActiveAlertsPanel } from './ActiveAlertsPanel.tsx';
 import { HistoricalAlertsList } from './HistoricalAlertsList.tsx';
 import { TriageView } from './TriageView.tsx';
 import { ReviewModal } from './ReviewModal.tsx';
 import { useAuth } from '../../contexts/AuthContext.tsx';
-import { useColorScheme } from '@mui/material/styles';
-import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx, glassToggleGroupSx } from '../../theme/headerStyles';
-import { LoginButton } from '../auth/LoginButton.tsx';
-import { UserMenu } from '../auth/UserMenu.tsx';
+import { usePageHeader } from '../../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../common/FloatingSubmitAlertFab.tsx';
 import {
@@ -86,8 +61,6 @@ import {
   getDefaultPagination,
   getDefaultSort,
   mergeWithDefaults,
-  saveDashboardTab,
-  loadDashboardTab,
   saveTriageFilters,
   loadTriageFilters,
   getDefaultTriageFilters,
@@ -140,20 +113,8 @@ function buildQueryParams(
   return params;
 }
 
-export function DashboardView() {
-  const { isAuthenticated, authAvailable, user } = useAuth();
-  const { mode, setMode } = useColorScheme();
-  const toggleColorMode = () => setMode(mode === 'light' ? 'dark' : 'light');
-
-  // ── Navigation menu state ──
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-
-  const handleMenuOpen = (event: MouseEvent<HTMLElement>) => {
-    setMenuAnchorEl(event.currentTarget);
-  };
-  const handleMenuClose = () => {
-    setMenuAnchorEl(null);
-  };
+export function DashboardView({ tab }: { tab: DashboardTab }) {
+  const { user } = useAuth();
 
   // ── Active sessions state ──
   const [activeSessions, setActiveSessions] = useState<ActiveSessionItem[]>([]);
@@ -185,8 +146,8 @@ export function DashboardView() {
   // ── WebSocket connection status ──
   const [wsConnected, setWsConnected] = useState(() => websocketService.isConnected);
 
-  // ── Tab state (persisted) ──
-  const [activeTab, setActiveTab] = useState<DashboardTab>(loadDashboardTab);
+  // ── Tab state (driven by which route rendered this component) ──
+  const activeTab = tab;
 
   // ── Triage state ──
   const [triageGroups, setTriageGroups] = useState<Record<TriageGroupKey, TriageGroup | null>>({ ...EMPTY_TRIAGE });
@@ -589,17 +550,6 @@ export function DashboardView() {
     websocketService.connect();
   };
 
-  // ── Tab switching ──
-
-  const handleTabChange = (_: React.MouseEvent<HTMLElement>, newValue: DashboardTab | null) => {
-    if (!newValue) return;
-    setActiveTab(newValue);
-    saveDashboardTab(newValue);
-    if (newValue === 'triage') {
-      fetchAllTriageGroups();
-    }
-  };
-
   // ── Triage filter / action callbacks ──
 
   const handleTriageFiltersChange = (newFilters: TriageFilter) => {
@@ -826,229 +776,30 @@ export function DashboardView() {
   // Render
   // ────────────────────────────────────────────────────────────
 
-  return (
-    <Container maxWidth={false} sx={{ px: 2 }}>
-      {/* AppBar with dashboard title and live indicator — ported from old dashboard */}
-      <AppBar
-        position="static"
-        elevation={0}
-        sx={(theme) => ({ ...appBarSx(theme) })}
-      >
-        <Toolbar>
-          {/* Navigation Menu */}
-          <IconButton
-            id="navigation-menu-button"
-            size="large"
-            edge="start"
-            color="inherit"
-            aria-label="menu"
-            onClick={handleMenuOpen}
-            sx={{ mr: 2, ...glassIconButtonSx }}
-          >
-            <MenuIcon />
-          </IconButton>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box
-              component={RouterLink}
-              to="/"
-              aria-label="Home"
-              sx={{
-                ...logoBoxSx,
-              }}
-            >
-              <img
-                src="/tarsy-logo.png"
-                alt="TARSy logo"
-                style={{
-                  height: '28px',
-                  width: 'auto',
-                  borderRadius: '3px',
-                  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))',
-                }}
-              />
-            </Box>
-            <Typography
-              variant="h5"
-              component="div"
-              sx={titleSx}
-            >
-              TARSy
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              flexGrow: 1,
-              justifyContent: 'flex-end',
-            }}
-          >
-            {/* WebSocket Retry Button - only show when disconnected */}
-            {!wsConnected && (
-              <Tooltip title="Retry WebSocket connection">
-                <IconButton
-                  size="small"
-                  onClick={handleWebSocketRetry}
-                  sx={{
-                    color: 'inherit',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    },
-                  }}
-                >
-                  <Refresh fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-
-            {/* Loading indicator */}
-            {(activeLoading || historicalLoading) && (
-              <Tooltip title="Loading data...">
-                <CircularProgress size={18} sx={{ color: 'inherit' }} />
-              </Tooltip>
-            )}
-
-            {/* Sessions / Triage toggle */}
-            <ToggleButtonGroup
-              value={activeTab}
-              exclusive
-              onChange={handleTabChange}
-              size="small"
-              aria-label="Dashboard tabs"
-              sx={{ mr: 2, ...glassToggleGroupSx }}
-            >
-              <ToggleButton value="sessions">Sessions</ToggleButton>
-              <ToggleButton value="triage">Triage</ToggleButton>
-            </ToggleButtonGroup>
-
-            {/* Dark / Light mode toggle */}
-            <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-              <IconButton
-                size="small"
-                onClick={toggleColorMode}
-                aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                sx={themeToggleSx}
-              >
-                {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
-
-            {/* Connection Status Indicator - Fancy LIVE / Offline badge */}
-            <Tooltip
-              title={
-                wsConnected
-                  ? 'Connected - Real-time updates active'
-                  : 'Disconnected - Use manual refresh buttons or retry connection'
-              }
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  px: 1.5,
-                  py: 0.6,
-                  borderRadius: 3,
-                  background: wsConnected
-                    ? 'linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(139, 195, 74, 0.2))'
-                    : 'linear-gradient(135deg, rgba(244, 67, 54, 0.2), rgba(255, 87, 51, 0.2))',
-                  border: `2px solid ${wsConnected ? 'rgba(76, 175, 80, 0.6)' : 'rgba(244, 67, 54, 0.6)'}`,
-                  minWidth: 'fit-content',
-                  boxShadow: wsConnected
-                    ? '0 4px 20px rgba(76, 175, 80, 0.4), 0 0 15px rgba(76, 175, 80, 0.2)'
-                    : '0 4px 20px rgba(244, 67, 54, 0.4), 0 0 15px rgba(244, 67, 54, 0.2)',
-                  backdropFilter: 'blur(10px)',
-                  transition: 'all 0.3s ease',
-                  position: 'relative',
-                  '&:hover': {
-                    transform: 'translateY(-1px)',
-                    boxShadow: wsConnected
-                      ? '0 6px 25px rgba(76, 175, 80, 0.5), 0 0 20px rgba(76, 175, 80, 0.3)'
-                      : '0 6px 25px rgba(244, 67, 54, 0.5), 0 0 20px rgba(244, 67, 54, 0.3)',
-                  },
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    backgroundColor: wsConnected ? 'success.light' : 'error.light',
-                    boxShadow: (theme) => `0 0 6px ${wsConnected ? theme.palette.success.main : theme.palette.error.main}`,
-                    animation: wsConnected ? 'none' : 'pulse 2s infinite',
-                    '@keyframes pulse': {
-                      '0%': {
-                        opacity: 0.7,
-                        transform: 'scale(1)',
-                      },
-                      '50%': {
-                        opacity: 1,
-                        transform: 'scale(1.3)',
-                      },
-                      '100%': {
-                        opacity: 0.7,
-                        transform: 'scale(1)',
-                      },
-                    },
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: 'common.white',
-                    fontWeight: 600,
-                    fontSize: '0.7rem',
-                    letterSpacing: '0.8px',
-                    textTransform: 'uppercase',
-                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                  }}
-                >
-                  {wsConnected ? 'Live' : 'Offline'}
-                </Typography>
-              </Box>
-            </Tooltip>
-
-            {/* Authentication Elements */}
-            {authAvailable && !isAuthenticated && <LoginButton size="medium" />}
-            {authAvailable && isAuthenticated && <UserMenu />}
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      {/* Navigation Menu */}
-      <Menu
-        id="navigation-menu"
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={handleMenuClose}
-        slotProps={{
-          list: {
-            'aria-labelledby': 'navigation-menu-button',
-          },
+  usePageHeader({
+    title: tab === 'triage' ? 'Triage' : 'Alert Investigations',
+    actions: (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexGrow: 1,
+          justifyContent: 'flex-end',
         }}
       >
-        <MenuItem component={RouterLink} to={ROUTES.SUBMIT_ALERT} onClick={handleMenuClose}>
-          <ListItemIcon>
-            <SendIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Manual Alert Submission</ListItemText>
-        </MenuItem>
-        <MenuItem component={RouterLink} to={ROUTES.USAGE} onClick={handleMenuClose}>
-          <ListItemIcon>
-            <BarChartIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Usage</ListItemText>
-        </MenuItem>
-        <MenuItem component={RouterLink} to={ROUTES.SYSTEM_STATUS} onClick={handleMenuClose}>
-          <ListItemIcon>
-            <DnsIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>System Status</ListItemText>
-        </MenuItem>
-      </Menu>
+        {/* Loading indicator */}
+        {(activeLoading || historicalLoading) && (
+          <Tooltip title="Loading data...">
+            <CircularProgress size={18} sx={{ color: 'inherit' }} />
+          </Tooltip>
+        )}
+      </Box>
+    ),
+  });
+
+  return (
+    <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
 
       {/* Sessions tab content */}
       {activeTab === 'sessions' && (
@@ -1069,6 +820,7 @@ export function DashboardView() {
               error={activeError}
               wsConnected={wsConnected}
               onRefresh={handleRefreshActive}
+              onRetryConnection={handleWebSocketRetry}
             />
 
             <HistoricalAlertsList
@@ -1129,6 +881,8 @@ export function DashboardView() {
           groups={triageGroups}
           loading={triageLoading}
           error={triageError}
+          wsConnected={wsConnected}
+          onRetryConnection={handleWebSocketRetry}
           filters={triageFilters}
           onFiltersChange={handleTriageFiltersChange}
           onRefresh={fetchAllTriageGroups}

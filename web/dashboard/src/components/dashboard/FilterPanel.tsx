@@ -124,7 +124,7 @@ export function FilterPanel({
 
   return (
     <>
-      <Paper sx={{ mt: 2, p: 2 }}>
+      <Paper sx={{ p: 2 }}>
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

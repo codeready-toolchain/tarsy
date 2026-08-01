@@ -3,7 +3,8 @@
  */
 
 export const ROUTES = {
-  DASHBOARD: '/',
+  SESSIONS: '/',
+  TRIAGE: '/triage',
   SESSION_DETAIL: '/sessions/:id',
   SESSION_TRACE: '/sessions/:id/trace',
   SESSION_SCORING: '/sessions/:id/scoring',

@@ -30,7 +30,7 @@ import {
   AccountTree,
 } from '@mui/icons-material';
 
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 
@@ -306,85 +306,91 @@ export function TracePage() {
   // Render
   // ────────────────────────────────────────────────────────────
 
+  usePageHeader({
+    title: headerTitle,
+    showBackButton: true,
+    actions: (
+      <>
+        {/* Session info */}
+        {session && !loading && (
+          <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'common.white' }}>
+            {session.stages?.length || 0} stages &bull;{' '}
+            {(session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0)} interactions
+          </Typography>
+        )}
+
+        {/* Reasoning / Trace view toggle */}
+        {session && !loading && (
+          <ToggleButtonGroup
+            value={view}
+            exclusive
+            onChange={(_, newView) => newView && handleViewChange(newView)}
+            size="small"
+            sx={{
+              mr: 2,
+              bgcolor: 'rgba(255,255,255,0.1)',
+              borderRadius: 3,
+              padding: 0.5,
+              border: '1px solid rgba(255,255,255,0.2)',
+              '& .MuiToggleButton-root': {
+                color: 'rgba(255,255,255,0.8)',
+                border: 'none',
+                borderRadius: 2,
+                px: 2,
+                py: 1,
+                minWidth: 100,
+                fontWeight: 500,
+                fontSize: '0.875rem',
+                textTransform: 'none',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.15)',
+                  color: 'rgba(255,255,255,0.95)',
+                  transform: 'translateY(-1px)',
+                },
+                '&.Mui-selected': {
+                  bgcolor: 'rgba(255,255,255,0.25)',
+                  color: '#fff',
+                  fontWeight: 600,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  '&:hover': {
+                    bgcolor: 'rgba(255,255,255,0.3)',
+                  },
+                },
+              },
+            }}
+          >
+            <ToggleButton value="reasoning">
+              <Psychology sx={{ mr: 0.5, fontSize: 18 }} />
+              Reasoning
+            </ToggleButton>
+            <ToggleButton value="trace">
+              <AccountTree sx={{ mr: 0.5, fontSize: 18 }} />
+              Trace
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
+
+        {/* Live updates indicator */}
+        {session && isActive && !loading && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+            <CircularProgress size={14} sx={{ color: 'inherit' }} />
+            <Typography variant="caption" sx={{ color: 'inherit', fontSize: '0.75rem' }}>
+              Live
+            </Typography>
+          </Box>
+        )}
+
+        {/* Loading spinner */}
+        {loading && <CircularProgress size={20} sx={{ color: 'inherit' }} />}
+      </>
+    ),
+  });
+
   return (
     <>
       <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
-        <SharedHeader title={headerTitle} showBackButton>
-          {/* Session info */}
-          {session && !loading && (
-            <Typography variant="body2" sx={{ mr: 2, opacity: 0.8, color: 'common.white' }}>
-              {session.stages?.length || 0} stages &bull;{' '}
-              {(session.llm_interaction_count ?? 0) + (session.mcp_interaction_count ?? 0)} interactions
-            </Typography>
-          )}
-
-          {/* Reasoning / Trace view toggle */}
-          {session && !loading && (
-            <ToggleButtonGroup
-              value={view}
-              exclusive
-              onChange={(_, newView) => newView && handleViewChange(newView)}
-              size="small"
-              sx={{
-                mr: 2,
-                bgcolor: 'rgba(255,255,255,0.1)',
-                borderRadius: 3,
-                padding: 0.5,
-                border: '1px solid rgba(255,255,255,0.2)',
-                '& .MuiToggleButton-root': {
-                  color: 'rgba(255,255,255,0.8)',
-                  border: 'none',
-                  borderRadius: 2,
-                  px: 2,
-                  py: 1,
-                  minWidth: 100,
-                  fontWeight: 500,
-                  fontSize: '0.875rem',
-                  textTransform: 'none',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    bgcolor: 'rgba(255,255,255,0.15)',
-                    color: 'rgba(255,255,255,0.95)',
-                    transform: 'translateY(-1px)',
-                  },
-                  '&.Mui-selected': {
-                    bgcolor: 'rgba(255,255,255,0.25)',
-                    color: '#fff',
-                    fontWeight: 600,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                    '&:hover': {
-                      bgcolor: 'rgba(255,255,255,0.3)',
-                    },
-                  },
-                },
-              }}
-            >
-              <ToggleButton value="reasoning">
-                <Psychology sx={{ mr: 0.5, fontSize: 18 }} />
-                Reasoning
-              </ToggleButton>
-              <ToggleButton value="trace">
-                <AccountTree sx={{ mr: 0.5, fontSize: 18 }} />
-                Trace
-              </ToggleButton>
-            </ToggleButtonGroup>
-          )}
-
-          {/* Live updates indicator */}
-          {session && isActive && !loading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
-              <CircularProgress size={14} sx={{ color: 'inherit' }} />
-              <Typography variant="caption" sx={{ color: 'inherit', fontSize: '0.75rem' }}>
-                Live
-              </Typography>
-            </Box>
-          )}
-
-          {/* Loading spinner */}
-          {loading && <CircularProgress size={20} sx={{ color: 'inherit' }} />}
-        </SharedHeader>
-
-        <Box sx={{ mt: 2 }}>
+        <Box>
           {/* Loading state */}
           {loading && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

@@ -38,7 +38,7 @@ import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
 import FilterList from '@mui/icons-material/FilterList';
 import AutorenewRounded from '@mui/icons-material/AutorenewRounded';
 
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 import {
@@ -206,11 +206,11 @@ export function UsagePage() {
     setChainId(null);
   };
 
-  return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default', px: 2, py: 2 }}>
-      <SharedHeader title="Usage" showBackButton />
+  usePageHeader({ title: 'Usage' });
 
-      <Container maxWidth={false} sx={{ py: 4, px: { xs: 1, sm: 2 } }}>
+  return (
+    <Box sx={{ backgroundColor: 'background.default' }}>
+      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
         <Stack spacing={3}>
           {/* Filters */}
           <Paper variant="outlined" sx={{ p: 2 }}>

@@ -11,7 +11,7 @@ import Container from '@mui/material/Container';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 
-import { SharedHeader } from '../components/layout/SharedHeader.tsx';
+import { usePageHeader } from '../contexts/PageHeaderContext.tsx';
 import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 import { MCPServerStatusView } from '../components/system/MCPServerStatusView.tsx';
@@ -21,12 +21,11 @@ type SystemTab = 'mcp' | 'config';
 
 export function SystemStatusPage() {
   const [tab, setTab] = useState<SystemTab>('mcp');
+  usePageHeader({ title: 'System Status' });
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default', px: 2, py: 2 }}>
-      <SharedHeader title="System Status" showBackButton />
-
-      <Container maxWidth={false} sx={{ py: 4, px: { xs: 1, sm: 2 } }}>
+    <Box sx={{ backgroundColor: 'background.default' }}>
+      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
         <Tabs
           value={tab}
           onChange={(_, value: SystemTab) => setTab(value)}

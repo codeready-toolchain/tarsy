@@ -1,26 +1,31 @@
 import { alpha, type Theme } from '@mui/material/styles';
 import type { SxProps } from '@mui/system';
 
+/** Edge-to-edge app header — spans the full viewport width above both the nav drawer and content, so it reads as one shell rather than a floating card. */
 export function appBarSx(theme: Theme) {
   const primary = theme.palette.primary;
   return {
-    borderRadius: 1,
     background: `linear-gradient(135deg, ${primary.main} 0%, ${primary.dark} 100%)`,
-    boxShadow: `0 4px 16px ${alpha(primary.main, 0.3)}`,
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: `0 2px 8px ${alpha(primary.main, 0.3)}`,
     ...theme.applyStyles('dark', {
       background: 'linear-gradient(135deg, #1a2332 0%, #0d1b2a 100%)',
-      boxShadow: `0 4px 16px ${alpha(theme.palette.common.black, 0.4)}`,
+      boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.4)}`,
     }),
   } as const;
 }
 
 export const glassIconButtonSx: SxProps<Theme> = {
+  width: 40,
+  height: 40,
+  boxSizing: 'border-box',
   background: 'rgba(255, 255, 255, 0.1)',
   backdropFilter: 'blur(10px)',
   border: '1px solid rgba(255, 255, 255, 0.15)',
   borderRadius: 2,
-  transition: 'all 0.2s ease',
+  // Scoped to hover-only visuals — transitioning "all" would also animate layout
+  // properties like margin (e.g. when the back button mounts/unmounts), causing
+  // neighboring elements to visibly slide/settle instead of relayouting instantly.
+  transition: 'background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease',
   '&:hover': {
     background: 'rgba(255, 255, 255, 0.2)',
     transform: 'translateY(-1px)',
