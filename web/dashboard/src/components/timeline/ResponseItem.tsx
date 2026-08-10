@@ -41,6 +41,7 @@ interface ResponseItemProps {
   isCollapsible?: boolean;
   searchTerm?: string;
   stageType?: string;
+  linkUrl?: string;
 }
 
 /**
@@ -56,6 +57,7 @@ function ResponseItem({
   isCollapsible = false,
   searchTerm,
   stageType,
+  linkUrl,
 }: ResponseItemProps) {
   const isFinalAnalysis = item.type === FLOW_ITEM.FINAL_ANALYSIS;
   const isForcedConclusion = !!item.metadata?.forced_conclusion;
@@ -131,6 +133,7 @@ function ResponseItem({
               shouldShowCollapsed={shouldShowCollapsed}
               collapsedHeaderOpacity={collapsedHeaderOpacity}
               onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+              linkUrl={linkUrl}
             />
             <Collapse in={!shouldShowCollapsed} timeout={300}>
               <Box sx={{ mt: 1, pb: 3 }}>
@@ -226,9 +229,10 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+            linkUrl={linkUrl}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
-            <Box sx={{ mt: 0.5, pb: 3 }}>
+                        <Box sx={{ mt: 0.5, pb: 3 }}>
               <ContentCard maxHeight="900px" copyText={item.content || ''}>
                 {renderContent()}
               </ContentCard>
@@ -278,9 +282,10 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+            linkUrl={linkUrl}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
-            <Box sx={{ mt: 0.5 }}>
+                        <Box sx={{ mt: 0.5 }}>
               <ContentCard maxHeight="900px" copyText={item.content || ''}>
                 {renderContent()}
               </ContentCard>
@@ -328,9 +333,10 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+            linkUrl={linkUrl}
           />
         )}
-        <Collapse in={!shouldShowCollapsed} timeout={300}>
+               <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
             {renderContent()}
             {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}

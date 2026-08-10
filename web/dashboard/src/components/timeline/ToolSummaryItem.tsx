@@ -18,6 +18,7 @@ interface ToolSummaryItemProps {
   expandAll?: boolean;
   isCollapsible?: boolean;
   searchTerm?: string;
+  linkUrl?: string;
 }
 
 /**
@@ -31,6 +32,7 @@ function ToolSummaryItem({
   expandAll = false,
   isCollapsible = true,
   searchTerm,
+  linkUrl,
 }: ToolSummaryItemProps) {
   const shouldShowCollapsed = isCollapsible && isAutoCollapsed && !expandAll;
   const collapsedHeaderOpacity = shouldShowCollapsed ? 0.65 : 1;
@@ -68,6 +70,7 @@ function ToolSummaryItem({
           shouldShowCollapsed={shouldShowCollapsed}
           collapsedHeaderOpacity={collapsedHeaderOpacity}
           onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+          linkUrl={linkUrl}
         />
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>

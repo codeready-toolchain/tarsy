@@ -6,11 +6,13 @@ import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import ErrorCard from '../timeline/ErrorCard';
 import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
 import { QUALITY_RATING, REVIEW_SELECTION, REVIEW_STATUS } from '../../types/api';
 import { sessionScoringPath } from '../../constants/routes';
+import { sessionDeepLinkUrl } from '../../utils/deepLink';
 import { executiveSummaryMarkdownStyles, finalAnswerMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
 import { getRatingConfig } from '../../constants/ratingConfig';
 
@@ -200,7 +202,15 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                 </Box>
               )}
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {sessionId && (
+                <Box onClick={(e) => e.stopPropagation()} sx={{ color: 'text.secondary' }}>
+                  <CopyLinkButton
+                    url={sessionDeepLinkUrl(sessionId, {})}
+                    tooltip="Copy session link"
+                  />
+                </Box>
+              )}
               <Box onClick={(e) => e.stopPropagation()}>
                 <CopyButton text={getCombinedDocument()} variant="icon" size="small" tooltip={`Copy ${isFakeAnalysis ? 'message' : 'analysis'}`} />
               </Box>

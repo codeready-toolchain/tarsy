@@ -4,6 +4,7 @@ import { ExpandMore, ExpandLess, HistoryOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import JsonDisplay from '../shared/JsonDisplay';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import { MemoryCardList, type ParsedMemory } from './MemoryCardList';
 import { formatDurationMs, getSkillNamesLabel } from '../../utils/format';
 import { highlightSearchTermNodes } from '../../utils/search';
@@ -19,6 +20,9 @@ interface ToolCallItemProps {
   item: FlowItem;
   expandAll?: boolean;
   searchTerm?: string;
+  /** Open this item for a deep-link focus (user can still collapse) */
+  forceExpanded?: boolean;
+  linkUrl?: string;
 }
 
 /**
@@ -162,12 +166,17 @@ function MemoryResultCards({ result, searchTerm }: { result: string; searchTerm?
  * Skill tool calls (tool_type === TOOL_TYPE.SKILL) get a distinct info-palette treatment
  * with markdown-rendered content.
  */
-function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps) {
-  const [expanded, setExpanded] = useState(false);
+function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = false, linkUrl }: ToolCallItemProps) {
+  const [expanded, setExpanded] = useState(forceExpanded);
   const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
   if (expandAll !== prevExpandAll) {
     setPrevExpandAll(expandAll);
     setExpanded(expandAll);
+  }
+  const [prevForceExpanded, setPrevForceExpanded] = useState(forceExpanded);
+  if (forceExpanded !== prevForceExpanded) {
+    setPrevForceExpanded(forceExpanded);
+    if (forceExpanded) setExpanded(true);
   }
   const isExpanded = expandAll || expanded;
 
@@ -229,6 +238,8 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
           </>
         }
         expandAll={expandAll}
+        forceExpanded={forceExpanded}
+        linkUrl={linkUrl}
       >
         {query && (
           <Box sx={{ mb: 1 }}>
@@ -286,6 +297,8 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
           </>
         }
         expandAll={expandAll}
+        forceExpanded={forceExpanded}
+        linkUrl={linkUrl}
       >
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Recalled during investigation
@@ -374,6 +387,16 @@ function ToolCallItem({ item, expandAll = false, searchTerm }: ToolCallItemProps
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
             {formatDurationMs(durationMs)}
           </Typography>
+        )}
+        {linkUrl && (
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', color: 'text.secondary' }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <CopyLinkButton url={linkUrl} />
+          </Box>
         )}
         <IconButton size="small" sx={{ p: 0.25 }}>
           {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}

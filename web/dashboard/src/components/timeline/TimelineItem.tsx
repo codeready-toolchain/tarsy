@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
+import { isOptimisticTimelineId, sessionDeepLinkUrl } from '../../utils/deepLink';
 import ThinkingItem from './ThinkingItem';
 import ResponseItem from './ResponseItem';
 import ToolCallItem from './ToolCallItem';
@@ -20,6 +21,19 @@ interface TimelineItemProps {
   isCollapsible?: boolean;
   searchTerm?: string;
   stageType?: string;
+  /** Session id for deep-link copy controls */
+  sessionId?: string;
+  /** Force-open locally-collapsible items (tool calls, etc.) for deep links */
+  forceExpanded?: boolean;
+}
+
+function resolveItemLinkUrl(sessionId: string | undefined, item: FlowItem): string | undefined {
+  if (!sessionId || !item.stageId || isOptimisticTimelineId(item.id)) return undefined;
+  // User questions share the stage URL (more resilient than pinning the event id)
+  if (item.type === FLOW_ITEM.USER_QUESTION) {
+    return sessionDeepLinkUrl(sessionId, { stage: item.stageId });
+  }
+  return sessionDeepLinkUrl(sessionId, { stage: item.stageId, event: item.id });
 }
 
 /**
@@ -35,6 +49,8 @@ function TimelineItem({
   isCollapsible = false,
   searchTerm,
   stageType,
+  sessionId,
+  forceExpanded = false,
 }: TimelineItemProps) {
   const handleToggle = useCallback(() => {
     onToggleAutoCollapse?.(item.id);
@@ -44,6 +60,8 @@ function TimelineItem({
   if ((!item.content || !item.content.trim()) && (item.type === FLOW_ITEM.RESPONSE || item.type === FLOW_ITEM.EXECUTIVE_SUMMARY)) {
     return null;
   }
+
+  const linkUrl = resolveItemLinkUrl(sessionId, item);
 
   switch (item.type) {
     case FLOW_ITEM.THINKING:
@@ -55,6 +73,7 @@ function TimelineItem({
           expandAll={expandAll}
           isCollapsible={isCollapsible}
           searchTerm={searchTerm}
+          linkUrl={linkUrl}
         />
       );
 
@@ -67,6 +86,7 @@ function TimelineItem({
           expandAll={expandAll}
           isCollapsible={isCollapsible}
           searchTerm={searchTerm}
+          linkUrl={linkUrl}
         />
       );
 
@@ -81,11 +101,20 @@ function TimelineItem({
           isCollapsible={isCollapsible}
           searchTerm={searchTerm}
           stageType={stageType}
+          linkUrl={linkUrl}
         />
       );
 
     case FLOW_ITEM.TOOL_CALL:
-      return <ToolCallItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
+      return (
+        <ToolCallItem
+          item={item}
+          expandAll={expandAllToolCalls}
+          searchTerm={searchTerm}
+          forceExpanded={forceExpanded}
+          linkUrl={linkUrl}
+        />
+      );
 
     case FLOW_ITEM.TOOL_SUMMARY:
       return (
@@ -96,28 +125,65 @@ function TimelineItem({
           expandAll={expandAll}
           isCollapsible={isCollapsible}
           searchTerm={searchTerm}
+          linkUrl={linkUrl}
         />
       );
 
     case FLOW_ITEM.USER_QUESTION:
-      return <UserQuestionItem item={item} searchTerm={searchTerm} />;
+      return (
+        <UserQuestionItem
+          item={item}
+          searchTerm={searchTerm}
+          linkUrl={linkUrl}
+        />
+      );
 
     case FLOW_ITEM.CODE_EXECUTION:
     case FLOW_ITEM.SEARCH_RESULT:
     case FLOW_ITEM.URL_CONTEXT:
-      return <NativeToolItem item={item} searchTerm={searchTerm} />;
+      return (
+        <NativeToolItem
+          item={item}
+          searchTerm={searchTerm}
+          forceExpanded={forceExpanded}
+          linkUrl={linkUrl}
+        />
+      );
 
     case FLOW_ITEM.ERROR:
-      return <ErrorItem item={item} searchTerm={searchTerm} />;
+      return <ErrorItem item={item} searchTerm={searchTerm} linkUrl={linkUrl} />;
 
     case FLOW_ITEM.PROVIDER_FALLBACK:
-      return <ProviderFallbackItem item={item} searchTerm={searchTerm} />;
+      return (
+        <ProviderFallbackItem
+          item={item}
+          searchTerm={searchTerm}
+          forceExpanded={forceExpanded}
+          linkUrl={linkUrl}
+        />
+      );
 
     case FLOW_ITEM.SKILL_LOADED:
-      return <SkillLoadedItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
+      return (
+        <SkillLoadedItem
+          item={item}
+          expandAll={expandAllToolCalls}
+          searchTerm={searchTerm}
+          forceExpanded={forceExpanded}
+          linkUrl={linkUrl}
+        />
+      );
 
     case FLOW_ITEM.MEMORY_INJECTED:
-      return <MemoryInjectedItem item={item} expandAll={expandAllToolCalls} searchTerm={searchTerm} />;
+      return (
+        <MemoryInjectedItem
+          item={item}
+          expandAll={expandAllToolCalls}
+          searchTerm={searchTerm}
+          forceExpanded={forceExpanded}
+          linkUrl={linkUrl}
+        />
+      );
 
     case FLOW_ITEM.STAGE_SEPARATOR:
       // Stage separators are handled by the ConversationTimeline container

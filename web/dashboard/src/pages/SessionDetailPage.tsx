@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -27,6 +27,7 @@ import {
   FormControlLabel,
   ToggleButton,
   ToggleButtonGroup,
+  Snackbar,
 } from '@mui/material';
 import {
   Psychology,
@@ -47,7 +48,9 @@ import type { ReviewModalMode, ReviewSelection } from '../types/api.ts';
 
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
 import type { FlowItem } from '../utils/timelineParser.ts';
+import { resolveDeepLink } from '../utils/deepLink.ts';
 import type { SessionDetailResponse, TimelineEvent, StageOverview } from '../types/session.ts';
+import type { TimelineFocusRequest } from '../components/session/ConversationTimeline.tsx';
 import type { StreamingItem } from '../components/streaming/StreamingContentRenderer.tsx';
 import type {
   TimelineCreatedPayload,
@@ -181,6 +184,7 @@ function appendWithCap(base: string, delta: string, cap = MAX_STREAM_EVENT_CONTE
 export function SessionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // --- Core state ---
   const [session, setSession] = useState<SessionDetailResponse | null>(null);
@@ -263,6 +267,12 @@ export function SessionDetailPage() {
   // --- In-session search ---
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+
+  // --- Deep links (?stage=&event=) ---
+  const [focusRequest, setFocusRequest] = useState<TimelineFocusRequest | undefined>();
+  const [deepLinkSnackbar, setDeepLinkSnackbar] = useState<string | null>(null);
+  const deepLinkAppliedRef = useRef(false);
+  const deepLinkFocusNonceRef = useRef(0);
 
   // --- Jump navigation ---
   const [expandCounter, setExpandCounter] = useState(0);
@@ -540,6 +550,90 @@ export function SessionDetailPage() {
     const el = document.querySelector(`[data-flow-item-id="${targetId}"]`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [currentMatchIndex, matchingItemIds]);
+
+  // Reset deep-link one-shot guard when navigating to another session
+  useEffect(() => {
+    deepLinkAppliedRef.current = false;
+    setFocusRequest(undefined);
+    setDeepLinkSnackbar(null);
+  }, [id]);
+
+  // Resolve deep-link params once after the initial REST load (not on WS updates).
+  // Scroll is handled in a separate effect keyed on focusRequest so dep churn
+  // (session/flowItems identity) cannot cancel the pending scroll timer.
+  useEffect(() => {
+    if (loading || !session || !id || deepLinkAppliedRef.current) return;
+
+    const stageParam = searchParams.get('stage');
+    const eventParam = searchParams.get('event');
+    if (!stageParam && !eventParam) {
+      deepLinkAppliedRef.current = true;
+      return;
+    }
+
+    const result = resolveDeepLink(stageParam, eventParam, session.stages || [], flowItems);
+    deepLinkAppliedRef.current = true;
+
+    if (result.kind === 'none') return;
+
+    if (result.kind === 'miss') {
+      setDeepLinkSnackbar('Linked stage not found');
+      return;
+    }
+
+    if (result.kind === 'eventFallback') {
+      setDeepLinkSnackbar('Linked event not found; showing stage');
+    }
+
+    deepLinkFocusNonceRef.current += 1;
+    const nonce = deepLinkFocusNonceRef.current;
+    setFocusRequest({
+      stageId: result.stageId,
+      ...(result.kind === 'event' ? { eventId: result.eventId } : {}),
+      nonce,
+      scrollTarget: result.scrollTarget,
+    });
+  }, [loading, session, flowItems, id, searchParams]);
+
+  // Scroll/highlight after expand settles. Retries until the lazy timeline
+  // mounts and Collapse(mountOnEnter) puts the target in the DOM.
+  useEffect(() => {
+    if (!focusRequest?.scrollTarget) return;
+
+    const { scrollTarget } = focusRequest;
+    const selector =
+      scrollTarget.kind === 'event'
+        ? `[data-flow-item-id="${scrollTarget.eventId}"]`
+        : `[data-stage-id="${scrollTarget.stageId}"]`;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 40; // ~2s at 50ms
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const tryScroll = () => {
+      if (cancelled) return;
+      const el = document.querySelector(selector);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('deep-link-focus');
+        highlightTimer = setTimeout(() => el.classList.remove('deep-link-focus'), 1800);
+        return;
+      }
+      attempts += 1;
+      if (attempts < maxAttempts) {
+        window.setTimeout(tryScroll, 50);
+      }
+    };
+
+    // Allow one frame for focusRequest-driven expand state to commit
+    const startTimer = window.setTimeout(tryScroll, 50);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      if (highlightTimer) clearTimeout(highlightTimer);
+    };
+  }, [focusRequest]);
 
   // Header title with session ID suffix (matching old dashboard)
   const headerTitle = session
@@ -1675,6 +1769,8 @@ export function SessionDetailPage() {
                   defaultCollapsed={wasTerminalOnMount && session.status === SESSION_STATUS.COMPLETED}
                   expandCounter={timelineExpandCounter}
                   costEstimationEnabled={session.cost_estimation_enabled === true}
+                  sessionId={id}
+                  focusRequest={focusRequest}
                   {...(hasFinalContent ? {
                     onJumpToSummary: handleJumpToSummary,
                     hasExecutiveSummary: !!session.executive_summary,
@@ -1817,6 +1913,24 @@ export function SessionDetailPage() {
 
       {/* Floating Action Button for quick alert submission access */}
       <FloatingSubmitAlertFab />
+
+      <Snackbar
+        open={deepLinkSnackbar !== null}
+        autoHideDuration={4000}
+        onClose={() => setDeepLinkSnackbar(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {deepLinkSnackbar ? (
+          <Alert
+            onClose={() => setDeepLinkSnackbar(null)}
+            severity="info"
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            {deepLinkSnackbar}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </>
   );
 }

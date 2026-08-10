@@ -2,11 +2,15 @@ import { memo, useState } from 'react';
 import { Box, Chip, Collapse, IconButton, Typography, alpha } from '@mui/material';
 import { SwapHoriz, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { highlightSearchTermNodes } from '../../utils/search';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface ProviderFallbackItemProps {
   item: FlowItem;
   searchTerm?: string;
+  /** Open for a deep-link focus (user can still collapse) */
+  forceExpanded?: boolean;
+  linkUrl?: string;
 }
 
 function safeString(value: unknown): string {
@@ -43,7 +47,7 @@ function stripEnvelope(raw: string): string {
   return msg.trim();
 }
 
-function ProviderFallbackItem({ item, searchTerm }: ProviderFallbackItemProps) {
+function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl }: ProviderFallbackItemProps) {
   const meta = item.metadata || {};
   const from = safeString(meta.original_provider) || '?';
   const to = safeString(meta.fallback_provider) || '?';
@@ -55,7 +59,12 @@ function ProviderFallbackItem({ item, searchTerm }: ProviderFallbackItemProps) {
   const errorCode = extractErrorCode(meta);
   const errorRetryable = typeof meta.error_retryable === 'boolean' ? meta.error_retryable : undefined;
 
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(forceExpanded);
+  const [prevForceExpanded, setPrevForceExpanded] = useState(forceExpanded);
+  if (forceExpanded !== prevForceExpanded) {
+    setPrevForceExpanded(forceExpanded);
+    if (forceExpanded) setExpanded(true);
+  }
   const hasDetails = reason.length > 0 || (droppedTools && droppedTools.length > 0);
 
   const strippedMessage = stripEnvelope(reason);
@@ -114,10 +123,24 @@ function ProviderFallbackItem({ item, searchTerm }: ProviderFallbackItemProps) {
                 sx={{ height: 18, fontSize: '0.6rem' }}
               />
             )}
-            {hasDetails && (
-              <IconButton size="small" sx={{ p: 0.25, ml: 'auto' }}>
-                {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-              </IconButton>
+            {(linkUrl || hasDetails) && (
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', ml: 'auto', gap: 0.25 }}>
+                {linkUrl && (
+                  <Box
+                    component="span"
+                    sx={{ display: 'inline-flex', color: 'text.secondary' }}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <CopyLinkButton url={linkUrl} />
+                  </Box>
+                )}
+                {hasDetails && (
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                  </IconButton>
+                )}
+              </Box>
             )}
           </Box>
 

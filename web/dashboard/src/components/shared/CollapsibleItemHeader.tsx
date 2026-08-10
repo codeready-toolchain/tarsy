@@ -1,4 +1,5 @@
 import { Box, Typography } from '@mui/material';
+import CopyLinkButton from './CopyLinkButton';
 
 interface CollapsibleItemHeaderProps {
   headerText: string;
@@ -7,6 +8,8 @@ interface CollapsibleItemHeaderProps {
   shouldShowCollapsed: boolean;
   collapsedHeaderOpacity: number;
   onToggle?: () => void;
+  /** Deep-link URL shown inline after the label (stage-separator style) */
+  linkUrl?: string;
 }
 
 /**
@@ -20,7 +23,8 @@ export default function CollapsibleItemHeader({
   headerTextTransform = 'none',
   shouldShowCollapsed,
   collapsedHeaderOpacity,
-  onToggle
+  onToggle,
+  linkUrl,
 }: CollapsibleItemHeaderProps) {
   return (
     <Box 
@@ -75,6 +79,16 @@ export default function CollapsibleItemHeader({
           <Box component="span" className="cfi-ellipsis-dot" sx={{ display: 'inline-block' }}>.</Box>
           <Box component="span" className="cfi-ellipsis-dot" sx={{ display: 'inline-block' }}>.</Box>
         </Typography>
+      )}
+      {linkUrl && (
+        <Box
+          component="span"
+          sx={{ display: 'inline-flex', ml: 'auto', color: 'text.secondary' }}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <CopyLinkButton url={linkUrl} />
+        </Box>
       )}
     </Box>
   );

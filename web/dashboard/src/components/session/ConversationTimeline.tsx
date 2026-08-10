@@ -36,9 +36,19 @@ import StageContent from '../timeline/StageContent';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
 import CopyButton from '../shared/CopyButton';
+import { sessionDeepLinkUrl, type DeepLinkScrollTarget } from '../../utils/deepLink';
 import { SessionSearchBar } from './SessionSearchBar';
 import InitializingSpinner from '../common/InitializingSpinner';
 import { TERMINAL_EXECUTION_STATUSES, SCORING_STATUS_MESSAGE } from '../../constants/sessionStatus';
+
+/** Request ConversationTimeline to expand for a deep link; bump `nonce` to re-run. */
+export interface TimelineFocusRequest {
+  stageId: string;
+  eventId?: string;
+  nonce: number;
+  /** Scroll target resolved by the page (optional; page owns scrolling) */
+  scrollTarget?: DeepLinkScrollTarget;
+}
 
 /**
  * Synthesis stages auto-collapse only when the session is no longer active
@@ -100,6 +110,10 @@ interface ConversationTimelineProps {
   expandCounter?: number;
   /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay in sub-agent cards) */
   costEstimationEnabled?: boolean;
+  /** Session id for deep-link copy controls */
+  sessionId?: string;
+  /** Expand timeline + stage (+ optional event) for a deep link */
+  focusRequest?: TimelineFocusRequest;
 }
 
 /**
@@ -140,15 +154,19 @@ export default function ConversationTimeline({
   defaultCollapsed,
   expandCounter = 0,
   costEstimationEnabled = false,
+  sessionId,
+  focusRequest,
 }: ConversationTimelineProps) {
   // --- Whole-timeline collapse (for terminal sessions opened directly) ---
   const [timelineCollapsed, setTimelineCollapsed] = useState(defaultCollapsed ?? false);
 
-  // Sync when defaultCollapsed flips to true after initial data loads
+  // Sync when defaultCollapsed flips to true after initial data loads.
+  // Skip collapsing when a deep-link focusRequest is active — otherwise a
+  // late wasTerminalOnMount flip re-collapses the timeline after expand.
   const [prevDefaultCollapsed, setPrevDefaultCollapsed] = useState(defaultCollapsed);
   if (defaultCollapsed !== prevDefaultCollapsed) {
     setPrevDefaultCollapsed(defaultCollapsed);
-    if (defaultCollapsed) setTimelineCollapsed(true);
+    if (defaultCollapsed && !focusRequest) setTimelineCollapsed(true);
   }
 
   // Expand from outside (e.g. when user sends a chat message)
@@ -172,6 +190,36 @@ export default function ConversationTimeline({
   const [expandAllToolCalls, setExpandAllToolCalls] = useState(false);
   // Manual overrides: items the user has explicitly toggled
   const [manualOverrides, setManualOverrides] = useState<Set<string>>(new Set());
+
+  // Deep-link focus: expand timeline + stage + optional event.
+  // Always init prev nonce to 0 so a focusRequest already set when this
+  // lazy-mounted component first renders is still applied (nonce starts at 1).
+  // forceExpandedItemId covers tool calls / native tools that use local expand
+  // state (not the reasoning auto-collapse / manualOverrides system).
+  const [forceExpandedItemId, setForceExpandedItemId] = useState<string | undefined>();
+  const [prevFocusNonce, setPrevFocusNonce] = useState(0);
+  if (focusRequest && focusRequest.nonce !== prevFocusNonce) {
+    setPrevFocusNonce(focusRequest.nonce);
+    setTimelineCollapsed(false);
+    setStageCollapseOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(focusRequest.stageId, false);
+      return next;
+    });
+    if (focusRequest.eventId) {
+      setForceExpandedItemId(focusRequest.eventId);
+      const target = items.find((item) => item.id === focusRequest.eventId);
+      if (target && isFlowItemCollapsible(target) && isFlowItemTerminal(target)) {
+        setManualOverrides((prev) => {
+          const next = new Set(prev);
+          next.add(focusRequest.eventId!);
+          return next;
+        });
+      }
+    } else {
+      setForceExpandedItemId(undefined);
+    }
+  }
 
   const shouldAutoCollapse = useCallback(
     (item: FlowItem): boolean => {
@@ -625,6 +673,7 @@ export default function ConversationTimeline({
                     });
                   }}
                   fallbackCount={countProviderFallbacks(group.items)}
+                  linkUrl={sessionId ? sessionDeepLinkUrl(sessionId, { stage: group.stageId }) : undefined}
                 />
               )}
 
@@ -648,6 +697,8 @@ export default function ConversationTimeline({
                   searchTerm={searchTerm}
                   stageType={group.stageType}
                   costEstimationEnabled={costEstimationEnabled}
+                  sessionId={sessionId}
+                  forceExpandedItemId={forceExpandedItemId}
                 />
               </Collapse>
             </Box>

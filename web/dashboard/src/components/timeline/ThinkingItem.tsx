@@ -18,6 +18,7 @@ interface ThinkingItemProps {
   expandAll?: boolean;
   isCollapsible?: boolean;
   searchTerm?: string;
+  linkUrl?: string;
 }
 
 function ThinkingItem({
@@ -27,6 +28,7 @@ function ThinkingItem({
   expandAll = false,
   isCollapsible = true,
   searchTerm,
+  linkUrl,
 }: ThinkingItemProps) {
   const rehypePlugins = useMemo(
     () => { const p = rehypeSearchHighlight(searchTerm || ''); return p ? [p] : []; },
@@ -65,6 +67,7 @@ function ThinkingItem({
           shouldShowCollapsed={shouldShowCollapsed}
           collapsedHeaderOpacity={collapsedHeaderOpacity}
           onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+          linkUrl={linkUrl}
         />
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>

@@ -3,6 +3,7 @@ import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, AutoStoriesOutlined } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import type { FlowItem } from '../../utils/timelineParser';
@@ -11,14 +12,22 @@ interface SkillLoadedItemProps {
   item: FlowItem;
   expandAll?: boolean;
   searchTerm?: string;
+  /** Open for a deep-link focus (user can still collapse) */
+  forceExpanded?: boolean;
+  linkUrl?: string;
 }
 
-function SkillLoadedItem({ item, expandAll = false, searchTerm }: SkillLoadedItemProps) {
-  const [expanded, setExpanded] = useState(false);
+function SkillLoadedItem({ item, expandAll = false, searchTerm, forceExpanded = false, linkUrl }: SkillLoadedItemProps) {
+  const [expanded, setExpanded] = useState(forceExpanded);
   const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
   if (expandAll !== prevExpandAll) {
     setPrevExpandAll(expandAll);
     setExpanded(expandAll);
+  }
+  const [prevForceExpanded, setPrevForceExpanded] = useState(forceExpanded);
+  if (forceExpanded !== prevForceExpanded) {
+    setPrevForceExpanded(forceExpanded);
+    if (forceExpanded) setExpanded(true);
   }
   const isExpanded = expandAll || expanded;
 
@@ -57,6 +66,16 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm }: SkillLoadedIte
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
           {skillName}
         </Typography>
+        {linkUrl && (
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', color: 'text.secondary' }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <CopyLinkButton url={linkUrl} />
+          </Box>
+        )}
         <IconButton size="small" sx={{ p: 0.25 }}>
           {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </IconButton>

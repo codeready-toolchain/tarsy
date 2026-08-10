@@ -61,6 +61,15 @@ export const theme = createTheme({
             color: '#000',
           }),
         },
+        '.deep-link-focus': {
+          animation: 'deep-link-focus-pulse 1.8s ease-out',
+          borderRadius: '4px',
+        },
+        '@keyframes deep-link-focus-pulse': {
+          '0%': { boxShadow: '0 0 0 3px rgba(25, 118, 210, 0.45)' },
+          '70%': { boxShadow: '0 0 0 3px rgba(25, 118, 210, 0.2)' },
+          '100%': { boxShadow: '0 0 0 0 rgba(25, 118, 210, 0)' },
+        },
       }),
     },
     MuiChip: {

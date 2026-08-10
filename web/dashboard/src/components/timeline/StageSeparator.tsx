@@ -7,6 +7,7 @@ import {
 import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS, FAILED_EXECUTION_STATUSES, CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 import { STAGE_TYPE } from '../../constants/eventTypes';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import ErrorCard from './ErrorCard';
 
 interface StageSeparatorProps {
@@ -15,6 +16,8 @@ interface StageSeparatorProps {
   onToggleCollapse?: () => void;
   /** Total provider-fallback count within this stage (own items + all sub-agents) */
   fallbackCount?: number;
+  /** Absolute URL for copy-stage-link control */
+  linkUrl?: string;
 }
 
 function getStageTypeIcon(stageType: string | undefined) {
@@ -33,7 +36,7 @@ function getStageTypeIcon(stageType: string | undefined) {
  * StageSeparator — minimal stage boundary divider.
  * A single clickable line: icon + stage name + chevron.
  */
-function StageSeparator({ item, isCollapsed = false, onToggleCollapse, fallbackCount = 0 }: StageSeparatorProps) {
+function StageSeparator({ item, isCollapsed = false, onToggleCollapse, fallbackCount = 0, linkUrl }: StageSeparatorProps) {
   const stageStatus = (item.metadata?.stage_status as string) || '';
   const stageType = item.metadata?.stage_type as string | undefined;
   const isErrorStatus = FAILED_EXECUTION_STATUSES.has(stageStatus);
@@ -56,7 +59,10 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse, fallbackC
   );
 
   return (
-    <Box sx={{ my: isCollapsed ? 0.5 : 1.5 }}>
+    <Box
+      data-stage-id={item.stageId || undefined}
+      sx={{ my: isCollapsed ? 0.5 : 1.5 }}
+    >
       <Divider
         role={onToggleCollapse ? 'button' : undefined}
         tabIndex={onToggleCollapse ? 0 : undefined}
@@ -102,6 +108,16 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse, fallbackC
                 }}
               />
             </Tooltip>
+          )}
+          {linkUrl && (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', ml: 0.25, color: 'text.secondary' }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <CopyLinkButton url={linkUrl} />
+            </Box>
           )}
           {onToggleCollapse && (
             isCollapsed

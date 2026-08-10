@@ -9,6 +9,7 @@ import {
   SwapHoriz,
 } from '@mui/icons-material';
 import { FLOW_ITEM, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
+import { sessionDeepLinkUrl } from '../../utils/deepLink';
 import type { ExecutionOverview } from '../../types/session';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
@@ -57,6 +58,10 @@ interface StageContentProps {
   stageType?: string;
   /** Whether cost estimation is enabled for this session (gates EstimatedCostDisplay) */
   costEstimationEnabled?: boolean;
+  /** Session id for deep-link copy controls on timeline items */
+  sessionId?: string;
+  /** Deep-link event id that should open (tool calls, native tools, etc.) */
+  forceExpandedItemId?: string;
 }
 
 interface TabPanelProps {
@@ -271,6 +276,8 @@ const StageContent: React.FC<StageContentProps> = ({
   searchTerm,
   stageType,
   costEstimationEnabled = false,
+  sessionId,
+  forceExpandedItemId,
 }) => {
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -504,11 +511,18 @@ const StageContent: React.FC<StageContentProps> = ({
 
   const renderSubAgentCard = (subExecId: string, dispatchItem?: FlowItem) => {
     const fallback = dispatchItem ? parseDispatchArgs(dispatchItem) : {};
+    const nestedItems = subAgentItemsByExec.get(subExecId) || [];
+    // Card replaces the dispatch tool-call in the timeline — use that event as the share anchor.
+    const anchorItem = dispatchItem ?? nestedItems[0];
+    const linkUrl =
+      sessionId && anchorItem?.stageId
+        ? sessionDeepLinkUrl(sessionId, { stage: anchorItem.stageId, event: anchorItem.id })
+        : undefined;
     return (
       <SubAgentCard
         key={`sub-${subExecId}`}
         executionOverview={subAgentOverviewMap.get(subExecId)}
-        items={subAgentItemsByExec.get(subExecId) || []}
+        items={nestedItems}
         streamingEvents={subAgentStreamingByExec.get(subExecId)}
         executionStatus={subAgentExecutionStatuses?.get(subExecId)}
         progressStatus={subAgentProgressStatuses?.get(subExecId)}
@@ -520,6 +534,10 @@ const StageContent: React.FC<StageContentProps> = ({
         isItemCollapsible={isItemCollapsible}
         searchTerm={searchTerm}
         costEstimationEnabled={costEstimationEnabled}
+        sessionId={sessionId}
+        forceExpandedItemId={forceExpandedItemId}
+        linkUrl={linkUrl}
+        anchorEventId={anchorItem?.id}
       />
     );
   };
@@ -578,6 +596,8 @@ const StageContent: React.FC<StageContentProps> = ({
           isCollapsible={isItemCollapsible ? isItemCollapsible(item) : false}
           searchTerm={searchTerm}
           stageType={stageType}
+          sessionId={sessionId}
+          forceExpanded={forceExpandedItemId === item.id}
         />,
       );
     }

@@ -5,16 +5,19 @@ import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { rehypeSearchHighlight } from '../../utils/rehypeSearchHighlight';
 import CopyButton from '../shared/CopyButton';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import type { FlowItem } from '../../utils/timelineParser';
 
 interface UserQuestionItemProps {
   item: FlowItem;
   searchTerm?: string;
+  /** Stage deep-link URL (copy-link uses stage, not event) */
+  linkUrl?: string;
 }
 
 const MAX_TASK_HEIGHT = 200;
 
-function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
+function UserQuestionItem({ item, searchTerm, linkUrl }: UserQuestionItemProps) {
   const author = (item.metadata?.author as string) || 'User';
   const isTask = author === 'Task';
   const Icon = isTask ? Assignment : AccountCircle;
@@ -49,9 +52,12 @@ function UserQuestionItem({ item, searchTerm }: UserQuestionItemProps) {
           borderColor: theme.palette.divider,
         })}
       >
-        {!isTask && (
-          <Box sx={{ position: 'absolute', top: 4, right: 4 }}>
-            <CopyButton text={item.content} variant="icon" size="small" tooltip="Copy message" />
+        {(linkUrl || !isTask) && (
+          <Box sx={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 0.25 }}>
+            {linkUrl && <CopyLinkButton url={linkUrl} />}
+            {!isTask && (
+              <CopyButton text={item.content} variant="icon" size="small" tooltip="Copy message" />
+            )}
           </Box>
         )}
         <Typography
