@@ -200,16 +200,6 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             {formatDurationMs(eo.duration_ms)}
           </Typography>
         )}
-        {linkUrl && (
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', color: 'text.secondary', flexShrink: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <CopyLinkButton url={linkUrl} />
-          </Box>
-        )}
         <IconButton size="small" sx={{ p: 0.25, flexShrink: 0 }}>
           {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </IconButton>
@@ -234,7 +224,8 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 1.5, pt: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.25, px: 1.5, pt: 0.5, color: 'text.secondary' }}>
+            {linkUrl && <CopyLinkButton url={linkUrl} />}
             <CopyButton text={copyText} variant="icon" size="small" tooltip="Copy sub-agent content" />
           </Box>
 

@@ -5,6 +5,7 @@ import EmojiIcon from '../shared/EmojiIcon';
 import CollapsibleItemHeader from '../shared/CollapsibleItemHeader';
 import CollapseButton from '../shared/CollapseButton';
 import ContentCard from '../shared/ContentCard';
+import CopyLinkButton from '../shared/CopyLinkButton';
 import { hasMarkdownSyntax, remarkPlugins, thoughtMarkdownComponents } from '../../utils/markdownComponents';
 import { FADE_COLLAPSE_ANIMATION } from '../../constants/chatFlowAnimations';
 import { FLOW_ITEM, type FlowItem } from '../../utils/timelineParser';
@@ -133,11 +134,10 @@ function ResponseItem({
               shouldShowCollapsed={shouldShowCollapsed}
               collapsedHeaderOpacity={collapsedHeaderOpacity}
               onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
-              linkUrl={linkUrl}
             />
             <Collapse in={!shouldShowCollapsed} timeout={300}>
               <Box sx={{ mt: 1, pb: 3 }}>
-                <ContentCard>
+                <ContentCard linkUrl={linkUrl}>
                   {totalActions === 0 ? (
                     <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                       No new learnings extracted from this investigation.
@@ -229,11 +229,10 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
-            linkUrl={linkUrl}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
                         <Box sx={{ mt: 0.5, pb: 3 }}>
-              <ContentCard maxHeight="900px" copyText={item.content || ''}>
+              <ContentCard maxHeight="900px" copyText={item.content || ''} linkUrl={linkUrl}>
                 {renderContent()}
               </ContentCard>
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
@@ -282,11 +281,10 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
-            linkUrl={linkUrl}
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
                         <Box sx={{ mt: 0.5 }}>
-              <ContentCard maxHeight="900px" copyText={item.content || ''}>
+              <ContentCard maxHeight="900px" copyText={item.content || ''} linkUrl={linkUrl}>
                 {renderContent()}
               </ContentCard>
               {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
@@ -333,11 +331,15 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
-            linkUrl={linkUrl}
           />
         )}
-               <Collapse in={!shouldShowCollapsed} timeout={300}>
+        <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
+            {linkUrl && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5, color: 'text.secondary' }}>
+                <CopyLinkButton url={linkUrl} />
+              </Box>
+            )}
             {renderContent()}
             {isCollapsible && onToggleAutoCollapse && <CollapseButton onClick={onToggleAutoCollapse} />}
           </Box>

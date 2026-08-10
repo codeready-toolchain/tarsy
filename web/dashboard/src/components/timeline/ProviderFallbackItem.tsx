@@ -123,25 +123,22 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
                 sx={{ height: 18, fontSize: '0.6rem' }}
               />
             )}
-            {(linkUrl || hasDetails) && (
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', ml: 'auto', gap: 0.25 }}>
-                {linkUrl && (
-                  <Box
-                    component="span"
-                    sx={{ display: 'inline-flex', color: 'text.secondary' }}
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    <CopyLinkButton url={linkUrl} />
-                  </Box>
-                )}
-                {hasDetails && (
-                  <IconButton size="small" sx={{ p: 0.25 }}>
-                    {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-                  </IconButton>
-                )}
+            {/* Non-expandable fallbacks keep the link in-header; expandable ones
+                show it next to content actions inside the expanded panel. */}
+            {!hasDetails && linkUrl ? (
+              <Box
+                component="span"
+                sx={{ display: 'inline-flex', ml: 'auto', color: 'text.secondary' }}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <CopyLinkButton url={linkUrl} />
               </Box>
-            )}
+            ) : hasDetails ? (
+              <IconButton size="small" sx={{ p: 0.25, ml: 'auto' }}>
+                {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+              </IconButton>
+            ) : null}
           </Box>
 
           <Collapse in={expanded}>
@@ -155,6 +152,11 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
                 borderBottomRightRadius: 4,
               })}
             >
+              {linkUrl && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5, color: 'text.secondary' }}>
+                  <CopyLinkButton url={linkUrl} />
+                </Box>
+              )}
               <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontStyle: 'italic' }}>
                 The original model ({from}) returned an error, so execution was automatically switched to {to}.
               </Typography>

@@ -239,7 +239,6 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         }
         expandAll={expandAll}
         forceExpanded={forceExpanded}
-        linkUrl={linkUrl}
       >
         {query && (
           <Box sx={{ mb: 1 }}>
@@ -255,7 +254,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
             <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Summary</Typography>
-            <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
+              {linkUrl && <CopyLinkButton url={linkUrl} />}
+              <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+            </Box>
           </Box>
           {toolResult && typeof toolResult === 'string' ? (
             <Box sx={markdownContainerSx('success', 600)}>
@@ -298,7 +300,6 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         }
         expandAll={expandAll}
         forceExpanded={forceExpanded}
-        linkUrl={linkUrl}
       >
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Recalled during investigation
@@ -317,7 +318,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
             <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Result</Typography>
-            <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
+              {linkUrl && <CopyLinkButton url={linkUrl} />}
+              <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+            </Box>
           </Box>
           {toolResult && typeof toolResult === 'string' ? (
             <MemoryResultCards result={stripHistoricalContext(toolResult)} searchTerm={searchTerm} />
@@ -388,16 +392,6 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
             {formatDurationMs(durationMs)}
           </Typography>
         )}
-        {linkUrl && (
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', color: 'text.secondary' }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <CopyLinkButton url={linkUrl} />
-          </Box>
-        )}
         <IconButton size="small" sx={{ p: 0.25 }}>
           {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </IconButton>
@@ -438,7 +432,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
               <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Result</Typography>
-              <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
+                {linkUrl && <CopyLinkButton url={linkUrl} />}
+                <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />
+              </Box>
             </Box>
             {toolResult ? (
               isSkill && typeof toolResult === 'string' ? (

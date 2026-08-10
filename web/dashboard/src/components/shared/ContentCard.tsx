@@ -2,21 +2,24 @@ import { forwardRef } from 'react';
 import { Box, alpha } from '@mui/material';
 import type { ReactNode } from 'react';
 import CopyButton from './CopyButton';
+import CopyLinkButton from './CopyLinkButton';
 
 interface ContentCardProps {
   children: ReactNode;
   maxHeight?: string;
   height?: string;
   copyText?: string;
+  /** Deep-link URL shown next to copy when the card is visible (expanded) */
+  linkUrl?: string;
 }
 
 /**
  * Scrollable grey card used for thoughts and responses.
  * Accepts ref for auto-scroll in streaming contexts.
- * Pass copyText to show a copy button in the top-right corner.
+ * Pass copyText / linkUrl to show action buttons in the top-right corner.
  */
 const ContentCard = forwardRef<HTMLDivElement, ContentCardProps>(
-  ({ children, maxHeight, height, copyText }, ref) => (
+  ({ children, maxHeight, height, copyText, linkUrl }, ref) => (
     <Box
       ref={ref}
       sx={(theme) => ({
@@ -38,9 +41,22 @@ const ContentCard = forwardRef<HTMLDivElement, ContentCardProps>(
         },
       })}
     >
-      {copyText && (
-        <Box sx={{ position: 'sticky', top: 0, float: 'right', zIndex: 1, ml: 1 }}>
-          <CopyButton text={copyText} variant="icon" size="small" />
+      {(copyText || linkUrl) && (
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            float: 'right',
+            zIndex: 1,
+            ml: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.25,
+            color: 'text.secondary',
+          }}
+        >
+          {linkUrl && <CopyLinkButton url={linkUrl} />}
+          {copyText && <CopyButton text={copyText} variant="icon" size="small" />}
         </Box>
       )}
       {children}

@@ -67,12 +67,11 @@ function ThinkingItem({
           shouldShowCollapsed={shouldShowCollapsed}
           collapsedHeaderOpacity={collapsedHeaderOpacity}
           onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
-          linkUrl={linkUrl}
         />
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>
           <Box sx={{ mt: 0.5 }}>
-            <ContentCard maxHeight="900px" copyText={item.content || ''}>
+            <ContentCard maxHeight="900px" copyText={item.content || ''} linkUrl={linkUrl}>
               <Box
                 sx={{
                   '& p, & li': { color: 'text.secondary', fontStyle: 'italic' },

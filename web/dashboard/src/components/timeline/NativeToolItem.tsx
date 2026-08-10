@@ -540,16 +540,6 @@ function NativeToolItem({ item, searchTerm, forceExpanded = false, linkUrl }: Na
             sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}
           />
         )}
-        {linkUrl && (
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', color: 'text.secondary' }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <CopyLinkButton url={linkUrl} />
-          </Box>
-        )}
         <IconButton size="small" sx={{ p: 0.25 }}>
           {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </IconButton>
@@ -557,7 +547,8 @@ function NativeToolItem({ item, searchTerm, forceExpanded = false, linkUrl }: Na
 
       <Collapse in={expanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.25, mb: 0.5, color: 'text.secondary' }}>
+            {linkUrl && <CopyLinkButton url={linkUrl} />}
             <CopyButton text={item.content} variant="icon" size="small" tooltip="Copy content" />
           </Box>
           {renderContent()}

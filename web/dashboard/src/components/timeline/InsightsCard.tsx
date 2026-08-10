@@ -1,7 +1,6 @@
 import { useState, memo, type ReactNode } from 'react';
 import { Box, Typography, Collapse, IconButton, alpha } from '@mui/material';
 import { ExpandMore, ExpandLess, PsychologyOutlined } from '@mui/icons-material';
-import CopyLinkButton from '../shared/CopyLinkButton';
 
 interface InsightsCardProps {
   itemId: string;
@@ -11,7 +10,6 @@ interface InsightsCardProps {
   expandAll?: boolean;
   /** Open for a deep-link focus (user can still collapse) */
   forceExpanded?: boolean;
-  linkUrl?: string;
   children: ReactNode;
 }
 
@@ -20,7 +18,7 @@ interface InsightsCardProps {
  * dynamically recalled). Provides the green-accent shell with a brain icon
  * by default; callers can override with a custom icon prop.
  */
-function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, forceExpanded = false, linkUrl, children }: InsightsCardProps) {
+function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, forceExpanded = false, children }: InsightsCardProps) {
   const [expanded, setExpanded] = useState(forceExpanded);
   const [prevExpandAll, setPrevExpandAll] = useState(expandAll);
   if (expandAll !== prevExpandAll) {
@@ -66,16 +64,6 @@ function InsightsCard({ itemId, title, icon, headerExtras, expandAll = false, fo
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
           {headerExtras}
         </Box>
-        {linkUrl && (
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', color: 'text.secondary', flexShrink: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <CopyLinkButton url={linkUrl} />
-          </Box>
-        )}
         <IconButton
           size="small"
           disabled={expandAll}
