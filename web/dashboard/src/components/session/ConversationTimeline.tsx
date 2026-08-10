@@ -452,7 +452,14 @@ export default function ConversationTimeline({
     return status;
   }, [progressStatus, scoringStatus, scoringInProgress, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
 
-  if (items.length === 0 && (!streamingEvents || streamingEvents.size === 0)) {
+  // Empty FlowItems alone is not enough to bail out — backend stages with no
+  // events still need StageSeparator mounts (incl. deep-link stageSeparator
+  // scroll targets via data-stage-id).
+  if (
+    items.length === 0 &&
+    (!streamingEvents || streamingEvents.size === 0) &&
+    stages.length === 0
+  ) {
     // Session is active but no timeline items have arrived yet — show the
     // same pulsing ring spinner used by SessionDetailPage so there is no
     // jarring visual gap between "Initializing investigation..." and the

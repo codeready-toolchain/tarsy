@@ -561,8 +561,11 @@ export function SessionDetailPage() {
   // Resolve deep-link params once after the initial REST load (not on WS updates).
   // Scroll is handled in a separate effect keyed on focusRequest so dep churn
   // (session/flowItems identity) cannot cancel the pending scroll timer.
+  // Require session.id === id so a brief stale-session window during route
+  // changes cannot resolve/mark the deep link against the previous session.
   useEffect(() => {
     if (loading || !session || !id || deepLinkAppliedRef.current) return;
+    if (session.id !== id) return;
 
     const stageParam = searchParams.get('stage');
     const eventParam = searchParams.get('event');

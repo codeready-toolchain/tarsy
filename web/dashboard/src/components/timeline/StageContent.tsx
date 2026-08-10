@@ -441,6 +441,27 @@ const StageContent: React.FC<StageContentProps> = ({
     setSelectedTab(clampedSelectedTab);
   }
 
+  // Deep link: select the execution tab that owns forceExpandedItemId so the
+  // target mounts (inactive TabPanels defer first render). Nested sub-agent
+  // events map to their parent execution's tab.
+  React.useEffect(() => {
+    if (!forceExpandedItemId || mergedExecutions.length <= 1) return;
+
+    const target = items.find((item) => item.id === forceExpandedItemId);
+    if (!target?.executionId) return;
+
+    let ownerExecId = target.executionId;
+    if (target.parentExecutionId) {
+      ownerExecId = target.parentExecutionId;
+    } else if (subAgentIds.has(ownerExecId)) {
+      ownerExecId = subAgentParentMap.get(ownerExecId) ?? ownerExecId;
+    }
+
+    const tabIndex = mergedExecutions.findIndex((e) => e.executionId === ownerExecId);
+    if (tabIndex < 0) return;
+    setSelectedTab((prev) => (prev === tabIndex ? prev : tabIndex));
+  }, [forceExpandedItemId, items, mergedExecutions, subAgentIds, subAgentParentMap]);
+
   // Notify parent when selected agent actually changes (parallel stages only).
   // Uses a ref to skip redundant calls when mergedExecutions array identity
   // changes but the selected execution ID is the same.
