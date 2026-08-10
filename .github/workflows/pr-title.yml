@@ -1,0 +1,28 @@
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title || '';
+            const ok = /^(feat|fix|docs|chore|refactor|test)\s*(\([a-zA-Z0-9._-]+\))?\s*:/.test(title);
+            if (ok) {
+              core.info('PR title OK');
+              return;
+            }
+            core.setFailed(`PR title must use conventional commits, got: ${title}`);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: 'Please rename this PR to conventional commit form, e.g. `fix: ...` or `feat(scope): ...`. See CONTRIBUTING.md.'
+            });
