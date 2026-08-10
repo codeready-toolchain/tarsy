@@ -24,7 +24,7 @@ Edit `deploy/config/.env` with your API keys and database credentials. See [depl
 
 | Tool | Version | Required by |
 |------|---------|-------------|
-| Go | 1.25+ | Host dev, container build |
+| Go | 1.26+ | Host dev, container build |
 | Python + uv | 3.13+ | Host dev, container build |
 | Node.js | 24+ | Host dev (dashboard), container build |
 | Podman (or Docker) | -- | All modes (DB in host dev, full stack in container/OpenShift) |

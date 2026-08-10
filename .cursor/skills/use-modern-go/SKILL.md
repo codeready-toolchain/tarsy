@@ -197,9 +197,7 @@ for _, item := range items {
 wg.Wait()
 ```
 
-### Go 1.26+ (DO NOT USE — listed for future reference only)
-
-These features are NOT available in the current project. Do not use them until the go.mod version is upgraded to 1.26+.
+### Go 1.26+
 
 - `new(val)` — `new()` extended to accept expressions, not just types. Returns pointer to any value.
   `new(0)` → `*int`, `new("s")` → `*string`, `new(T{})` → `*T`.
