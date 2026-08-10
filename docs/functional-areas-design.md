@@ -1099,7 +1099,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 | Route | Page | Purpose |
 |-------|------|---------|
 | `/` | DashboardPage | Session list + Triage view (tabbed: Sessions \| Triage) with filters, pagination |
-| `/sessions/:id` | SessionDetailPage | Session detail with conversation timeline, streaming, chat |
+| `/sessions/:id` | SessionDetailPage | Session detail with conversation timeline, streaming, chat; optional `?stage=` / `&event=` deep links |
 | `/sessions/:id/trace` | TracePage | Trace view with LLM/MCP interaction details |
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
 | `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, failure tags, tool improvement report), re-score trigger |
@@ -1126,6 +1126,15 @@ Two-phase search implementation (see [ADR-0006](adr/0006-search-text.md)):
 - **Dashboard search** (server-side): The session list search extends to `timeline_events.content` via PostgreSQL full-text search (`to_tsvector/plainto_tsquery`) with a GIN index. Sessions matched via timeline content carry a `matched_in_content` flag shown as an indicator in the session list.
 - **In-session search** (client-side): A search bar on `SessionDetailPage` (terminated sessions only) performs substring matching on loaded `FlowItem[]` content, highlights matches via `rehypeSearchHighlight`, auto-expands collapsed stages containing matches, and provides next/previous match navigation.
 
+#### Session Deep Links
+
+Shareable anchors into the session timeline (dashboard-only; no API changes). See [ADR-0021: Session Deep Links](adr/0021-session-deep-links.md).
+
+- **URL shape**: `/sessions/:id?stage={stageId}` and optional `&event={timelineEventId}` (stable server ids only).
+- **Copy link**: Stage separators and timeline items expose a link affordance distinct from Copy content; chat user questions copy the stage URL; optimistic `temp-*` items are not linkable.
+- **Open behavior**: After REST load, expand the timeline/stage (and collapsible event when targeting an event), then `scrollIntoView`. Stage-only links focus the first real event in the stage (or the stage separator when empty). Invalid anchors show a page-local snackbar; a valid stage with a bad event falls back to stage focus.
+- **Copy-only**: The address bar is not live-synced while browsing; focus runs once after the initial load so live WebSocket updates continue normally.
+
 #### State Management
 
 No global state library. State is local `useState` per page + two React Contexts:
@@ -1146,6 +1155,8 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
 - `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
 - `web/dashboard/src/components/session/SessionSearchBar.tsx` -- In-session search bar with match navigation
+- `web/dashboard/src/components/shared/CopyLinkButton.tsx` -- Copy stage/event deep-link URL to clipboard
+- `web/dashboard/src/utils/deepLink.ts` -- Resolve `?stage=` / `&event=` against loaded stages and FlowItems
 - `web/dashboard/src/components/shared/EstimatedCostDisplay.tsx` -- Soft Est. $ next to token usage
 - `web/dashboard/src/utils/rehypeSearchHighlight.ts` -- Rehype plugin for search term highlighting in markdown
 - `web/dashboard/src/services/websocketService.ts` -- WebSocket with reconnect + catchup
