@@ -9,7 +9,7 @@ TARSy (Thoughtful Alert Response System) is an intelligent SRE system that proce
 ## Build & Development Commands
 
 ```bash
-make doctor          # Verify prerequisites (Go 1.25+, Python 3.13+, Node 24+, uv, Podman)
+make doctor          # Verify prerequisites (Go 1.26+, Python 3.13+, Node 24+, uv, Podman)
 make setup           # Install all deps + bootstrap config files
 make dev             # Start full dev environment (DB + LLM service + backend + dashboard)
 make dev-stop        # Stop all dev services

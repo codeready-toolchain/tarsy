@@ -844,22 +844,21 @@ func AssertEventsInOrder(t *testing.T, actual []WSEvent, expected []testdata.Exp
 		// Build a readable summary of what was expected vs what we got.
 		var sb strings.Builder
 		sb.WriteString("Expected events (unmatched from index ")
-		sb.WriteString(fmt.Sprintf("%d):\n", expectedIdx))
+		fmt.Fprintf(&sb, "%d):\n", expectedIdx)
 		for i := expectedIdx; i < len(expected); i++ {
-			sb.WriteString(fmt.Sprintf("  [%d] %s", i, formatExpected(expected[i])))
-			sb.WriteString("\n")
+			fmt.Fprintf(&sb, "  [%d] %s\n", i, formatExpected(expected[i]))
 		}
 		sb.WriteString("Actual events received:\n")
 		for i, e := range filtered {
-			sb.WriteString(fmt.Sprintf("  [%d] type=%s", i, e.Type))
+			fmt.Fprintf(&sb, "  [%d] type=%s", i, e.Type)
 			if s, ok := e.Parsed["status"]; ok {
-				sb.WriteString(fmt.Sprintf(" status=%v", s))
+				fmt.Fprintf(&sb, " status=%v", s)
 			}
 			if sn, ok := e.Parsed["stage_name"]; ok {
-				sb.WriteString(fmt.Sprintf(" stage_name=%v", sn))
+				fmt.Fprintf(&sb, " stage_name=%v", sn)
 			}
 			if et, ok := e.Parsed["event_type"]; ok {
-				sb.WriteString(fmt.Sprintf(" event_type=%v", et))
+				fmt.Fprintf(&sb, " event_type=%v", et)
 			}
 			sb.WriteString("\n")
 		}

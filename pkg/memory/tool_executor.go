@@ -244,10 +244,10 @@ func (te *ToolExecutor) executeRecall(ctx context.Context, call agent.ToolCall) 
 
 	var sb strings.Builder
 	sb.WriteString("<historical_context>\n")
-	sb.WriteString(fmt.Sprintf("Found %d relevant memories:\n", len(filtered)))
+	fmt.Fprintf(&sb, "Found %d relevant memories:\n", len(filtered))
 	for i, m := range filtered {
 		age := FormatMemoryAge(m.CreatedAt, m.UpdatedAt)
-		sb.WriteString(fmt.Sprintf("\n%d. [%s, %s, score: %.2f, %s] %s", i+1, m.Category, m.Valence, m.Similarity, age, m.Content))
+		fmt.Fprintf(&sb, "\n%d. [%s, %s, score: %.2f, %s] %s", i+1, m.Category, m.Valence, m.Similarity, age, m.Content)
 	}
 	sb.WriteString("\n\nThese are learnings from PAST incidents — they suggest where to look, not what you will find NOW.\n</historical_context>")
 
@@ -378,35 +378,35 @@ func wrapHistoricalContext(reminder string) func(string) string {
 
 func buildSessionSummarizationPrompt(query string, sessions []SessionSearchResult) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Search query: %s\n\nMatched sessions (%d):\n", query, len(sessions)))
+	fmt.Fprintf(&sb, "Search query: %s\n\nMatched sessions (%d):\n", query, len(sessions))
 
 	for i, s := range sessions {
-		sb.WriteString(fmt.Sprintf("\n--- Session %d (ID: %s, %s) ---\n", i+1, s.SessionID, s.CreatedAt.Format("2006-01-02 15:04")))
-		sb.WriteString(fmt.Sprintf("Alert type: %s\n", s.AlertType))
-		sb.WriteString(fmt.Sprintf("Alert data:\n%s\n", s.AlertData))
+		fmt.Fprintf(&sb, "\n--- Session %d (ID: %s, %s) ---\n", i+1, s.SessionID, s.CreatedAt.Format("2006-01-02 15:04"))
+		fmt.Fprintf(&sb, "Alert type: %s\n", s.AlertType)
+		fmt.Fprintf(&sb, "Alert data:\n%s\n", s.AlertData)
 
 		if s.FinalAnalysis != nil {
-			sb.WriteString(fmt.Sprintf("Investigation conclusions:\n%s\n", *s.FinalAnalysis))
+			fmt.Fprintf(&sb, "Investigation conclusions:\n%s\n", *s.FinalAnalysis)
 		} else {
 			sb.WriteString("Investigation conclusions: (none recorded)\n")
 		}
 
 		if s.QualityRating != nil {
-			sb.WriteString(fmt.Sprintf("Quality assessment: %s\n", *s.QualityRating))
+			fmt.Fprintf(&sb, "Quality assessment: %s\n", *s.QualityRating)
 		}
 		if s.InvestigationFeedback != nil {
-			sb.WriteString(fmt.Sprintf("Human review feedback: %s\n", *s.InvestigationFeedback))
+			fmt.Fprintf(&sb, "Human review feedback: %s\n", *s.InvestigationFeedback)
 		}
 
 		if len(s.ChatExchanges) > 0 {
-			sb.WriteString(fmt.Sprintf("Follow-up conversations (%d):\n", len(s.ChatExchanges)))
+			fmt.Fprintf(&sb, "Follow-up conversations (%d):\n", len(s.ChatExchanges))
 			for j, ce := range s.ChatExchanges {
-				sb.WriteString(fmt.Sprintf("  Q%d: %s\n", j+1, ce.Question))
+				fmt.Fprintf(&sb, "  Q%d: %s\n", j+1, ce.Question)
 				answer := ce.Answer
 				if answer == "" {
 					answer = "(no response recorded)"
 				}
-				sb.WriteString(fmt.Sprintf("  A%d: %s\n", j+1, answer))
+				fmt.Fprintf(&sb, "  A%d: %s\n", j+1, answer)
 			}
 		}
 	}

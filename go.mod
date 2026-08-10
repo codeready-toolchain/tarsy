@@ -1,6 +1,6 @@
 module github.com/codeready-toolchain/tarsy
 
-go 1.25.6
+go 1.26.5
 
 require (
 	dario.cat/mergo v1.0.2

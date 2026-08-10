@@ -121,7 +121,7 @@ func AssertGoldenLLMInteraction(t *testing.T, goldenPath string, detail map[stri
 					callID, _ := tc["id"].(string)
 					name, _ := tc["name"].(string)
 					args, _ := tc["arguments"].(string)
-					buf.WriteString(fmt.Sprintf("[%s] %s(%s)\n", callID, name, args))
+					fmt.Fprintf(&buf, "[%s] %s(%s)\n", callID, name, args)
 				}
 			}
 
@@ -329,7 +329,7 @@ func AssertSessionTraceGoldens(t *testing.T, app *TestApp, sessionID, goldenScen
 func serializeLLMMessages(msgs []agent.ConversationMessage) string {
 	var sb strings.Builder
 	for i, msg := range msgs {
-		sb.WriteString(fmt.Sprintf("=== message[%d] role=%s ===\n", i, msg.Role))
+		fmt.Fprintf(&sb, "=== message[%d] role=%s ===\n", i, msg.Role)
 		sb.WriteString(msg.Content)
 		if !strings.HasSuffix(msg.Content, "\n") {
 			sb.WriteString("\n")
