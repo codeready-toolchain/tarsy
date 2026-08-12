@@ -95,8 +95,8 @@ const chatResponseGuidelines = `## Response Guidelines
 func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) string {
 	var sections []string
 
-	// Tier 0: Dynamic context (current time)
-	sections = append(sections, currentTimeSection())
+	// Tier 0: Dynamic context (current time + calendar / staffing)
+	sections = append(sections, b.currentTimeSection())
 
 	// Tier 1: General SRE instructions
 	sections = append(sections, generalInstructions)
@@ -125,8 +125,8 @@ func (b *PromptBuilder) ComposeInstructions(execCtx *agent.ExecutionContext) str
 func (b *PromptBuilder) ComposeChatInstructions(execCtx *agent.ExecutionContext) string {
 	var sections []string
 
-	// Tier 0: Dynamic context (current time)
-	sections = append(sections, currentTimeSection())
+	// Tier 0: Dynamic context (current time + calendar / staffing)
+	sections = append(sections, b.currentTimeSection())
 
 	// Tier 1: Chat-specific general instructions
 	sections = append(sections, chatGeneralInstructions)
@@ -227,10 +227,45 @@ func appendSkillSections(sections []string, execCtx *agent.ExecutionContext) []s
 	return sections
 }
 
-func currentTimeSection() string {
-	now := time.Now().UTC()
-	return fmt.Sprintf("## Context\n\nCurrent time: %s (%s)",
-		now.Format(time.RFC3339), now.Format("Monday"))
+// nowUTC returns the wall-clock time used for Tier 0 calendar context.
+// Tests override this to freeze time.
+var nowUTC = time.Now
+
+func (b *PromptBuilder) currentTimeSection() string {
+	return formatCurrentTimeSection(nowUTC().UTC(), b.holidays)
+}
+
+// formatCurrentTimeSection builds Tier 0 context: wall-clock UTC time plus
+// WEEKEND / GLOBAL_HOLIDAY classification and staffing guidance.
+// Holidays are matched year-agnostically by MM-DD (UTC). Priority:
+// GLOBAL_HOLIDAY > WEEKEND > WEEKDAY.
+func formatCurrentTimeSection(now time.Time, holidays []config.Holiday) string {
+	weekday := now.Format("Monday")
+	date := now.Format("2006-01-02")
+	mmdd := now.Format("01-02")
+
+	classification := "WEEKDAY"
+	staffing := "normal"
+	if name, ok := holidayName(mmdd, holidays); ok {
+		classification = fmt.Sprintf("GLOBAL_HOLIDAY (%s)", name)
+		staffing = "reduced (more aggressive freeloading idle thresholds apply)"
+	} else if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		classification = "WEEKEND"
+		staffing = "reduced (more aggressive freeloading idle thresholds apply)"
+	}
+
+	return fmt.Sprintf(
+		"## Context\n\nCurrent time: %s (%s)\nCalendar context (UTC): %s — %s — %s\nStaffing: %s",
+		now.Format(time.RFC3339), weekday, date, weekday, classification, staffing)
+}
+
+func holidayName(mmdd string, holidays []config.Holiday) (string, bool) {
+	for _, h := range holidays {
+		if h.Date == mmdd {
+			return h.Name, true
+		}
+	}
+	return "", false
 }
 
 // appendMemorySection adds Tier 4 memory hints from past investigations.

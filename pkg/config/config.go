@@ -33,6 +33,9 @@ type Config struct {
 	// Additional WebSocket origin patterns beyond DashboardURL and localhost defaults
 	AllowedWSOrigins []string
 
+	// Global holidays for Tier 0 calendar / staffing context (resolved from system.holidays).
+	Holidays []Holiday
+
 	// Component registries
 	AgentRegistry       *AgentRegistry
 	ChainRegistry       *ChainRegistry

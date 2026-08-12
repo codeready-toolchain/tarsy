@@ -55,7 +55,7 @@ func NewRealSessionExecutor(cfg *config.Config, dbClient *ent.Client, llmClient 
 		llmClient:        llmClient,
 		eventPublisher:   eventPublisher,
 		agentFactory:     agent.NewAgentFactory(controllerFactory),
-		promptBuilder:    prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		promptBuilder:    prompt.NewPromptBuilder(cfg.MCPServerRegistry, cfg.Holidays),
 		mcpFactory:       mcpFactory,
 		runbookService:   runbookService,
 		subAgentRegistry: config.BuildSubAgentRegistry(cfg.AgentRegistry.GetAll()),

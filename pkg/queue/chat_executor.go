@@ -112,7 +112,7 @@ func NewChatMessageExecutor(
 		mcpFactory:         mcpFactory,
 		agentFactory:       agent.NewAgentFactory(controllerFactory),
 		eventPublisher:     eventPublisher,
-		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry, cfg.Holidays),
 		execConfig:         execConfig,
 		runbookService:     runbookService,
 		memoryService:      memoryService,

@@ -16,6 +16,8 @@ import (
 )
 
 var currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
+var calendarContextLineRe = regexp.MustCompile(`Calendar context \(UTC\): [^\n]+`)
+var staffingLineRe = regexp.MustCompile(`Staffing: [^\n]+`)
 
 var update = flag.Bool("update", false, "update golden files")
 
@@ -73,7 +75,10 @@ func assertGolden(t *testing.T, name string, actual string) {
 }
 
 func normalizeGolden(s string) string {
-	return currentTimeLineRe.ReplaceAllString(s, "Current time: {CURRENT_TIME}")
+	s = currentTimeLineRe.ReplaceAllString(s, "Current time: {CURRENT_TIME}")
+	s = calendarContextLineRe.ReplaceAllString(s, "Calendar context (UTC): {CALENDAR_CONTEXT}")
+	s = staffingLineRe.ReplaceAllString(s, "Staffing: {STAFFING}")
+	return s
 }
 
 // findFirstDiff produces a human-readable description of where two strings diverge.
@@ -153,7 +158,7 @@ func newIntegrationBuilder() *PromptBuilder {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: k8sServerInstructions},
 	})
-	return NewPromptBuilder(registry)
+	return NewPromptBuilder(registry, nil)
 }
 
 func newIntegrationExecCtx() *agent.ExecutionContext {

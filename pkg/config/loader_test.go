@@ -846,6 +846,142 @@ func TestResolveRetentionConfig(t *testing.T) {
 	})
 }
 
+func TestResolveHolidays(t *testing.T) {
+	t.Run("nil system uses defaults", func(t *testing.T) {
+		got := resolveHolidays(nil)
+		assert.Equal(t, DefaultHolidays(), got)
+	})
+
+	t.Run("empty holidays uses defaults", func(t *testing.T) {
+		got := resolveHolidays(&SystemYAMLConfig{})
+		assert.Equal(t, DefaultHolidays(), got)
+	})
+
+	t.Run("non-empty holidays replace defaults", func(t *testing.T) {
+		got := resolveHolidays(&SystemYAMLConfig{
+			Holidays: []HolidayYAMLConfig{
+				{Date: "07-04", Name: "Independence Day"},
+				{Date: "12-25", Name: "Christmas"},
+			},
+		})
+		assert.Equal(t, []Holiday{
+			{Date: "07-04", Name: "Independence Day"},
+			{Date: "12-25", Name: "Christmas"},
+		}, got)
+	})
+
+	t.Run("entries with empty date or name are skipped", func(t *testing.T) {
+		got := resolveHolidays(&SystemYAMLConfig{
+			Holidays: []HolidayYAMLConfig{
+				{Date: "", Name: "Broken"},
+				{Date: "12-25", Name: ""},
+				{Date: "01-01", Name: "New Year's Day"},
+			},
+		})
+		assert.Equal(t, []Holiday{{Date: "01-01", Name: "New Year's Day"}}, got)
+	})
+
+	t.Run("all invalid entries fall back to defaults", func(t *testing.T) {
+		got := resolveHolidays(&SystemYAMLConfig{
+			Holidays: []HolidayYAMLConfig{{Date: "", Name: ""}},
+		})
+		assert.Equal(t, DefaultHolidays(), got)
+	})
+}
+
+func TestHolidaysYAMLLoading(t *testing.T) {
+	t.Run("explicit holidays replace defaults", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  holidays:
+    - date: "12-25"
+      name: "Christmas"
+    - date: "01-01"
+      name: "New Year's Day"
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		assert.Equal(t, []Holiday{
+			{Date: "12-25", Name: "Christmas"},
+			{Date: "01-01", Name: "New Year's Day"},
+		}, cfg.Holidays)
+	})
+
+	t.Run("omitted holidays use defaults", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  dashboard_url: "https://tarsy.example.com"
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultHolidays(), cfg.Holidays)
+	})
+
+	t.Run("christmas break product list loads end to end", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  holidays:
+    - date: "12-24"
+      name: "Christmas Eve"
+    - date: "12-25"
+      name: "Christmas"
+    - date: "12-26"
+      name: "Christmas holiday"
+    - date: "12-27"
+      name: "Christmas holiday"
+    - date: "12-28"
+      name: "Christmas holiday"
+    - date: "12-29"
+      name: "Christmas holiday"
+    - date: "12-30"
+      name: "Christmas holiday"
+    - date: "12-31"
+      name: "New Year's Eve"
+    - date: "01-01"
+      name: "New Year's Day"
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		require.Len(t, cfg.Holidays, 9)
+		assert.Equal(t, "12-24", cfg.Holidays[0].Date)
+		assert.Equal(t, "01-01", cfg.Holidays[8].Date)
+		assert.NotEqual(t, DefaultHolidays(), cfg.Holidays)
+	})
+}
+
 func TestSystemConfigYAMLLoading(t *testing.T) {
 	t.Run("system section parsed from YAML", func(t *testing.T) {
 		dir := t.TempDir()

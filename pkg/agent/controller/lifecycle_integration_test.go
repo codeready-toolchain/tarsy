@@ -219,7 +219,7 @@ func TestIteratingController_SummarizationIntegration(t *testing.T) {
 			},
 		},
 	})
-	pb := prompt.NewPromptBuilder(registry)
+	pb := prompt.NewPromptBuilder(registry, nil)
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.PromptBuilder = pb
@@ -273,7 +273,7 @@ func TestIteratingController_SummarizationFailOpen(t *testing.T) {
 			},
 		},
 	})
-	pb := prompt.NewPromptBuilder(registry)
+	pb := prompt.NewPromptBuilder(registry, nil)
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.PromptBuilder = pb
@@ -477,7 +477,7 @@ func TestGoogleNativeController_SummarizationIntegration(t *testing.T) {
 			},
 		},
 	})
-	pb := prompt.NewPromptBuilder(registry)
+	pb := prompt.NewPromptBuilder(registry, nil)
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
@@ -533,7 +533,7 @@ func TestGoogleNativeController_SummarizationFailOpen(t *testing.T) {
 			},
 		},
 	})
-	pb := prompt.NewPromptBuilder(registry)
+	pb := prompt.NewPromptBuilder(registry, nil)
 
 	execCtx := newTestExecCtx(t, llm, executor)
 	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini

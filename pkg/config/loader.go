@@ -32,6 +32,9 @@ type SystemYAMLConfig struct {
 	Slack            *SlackYAMLConfig          `yaml:"slack"`
 	CostEstimation   *CostEstimationYAMLConfig `yaml:"cost_estimation"`
 	Retention        *RetentionConfig          `yaml:"retention"`
+	// Holidays replaces the built-in global holiday list when non-empty.
+	// Each entry is year-agnostic MM-DD (UTC) used for Tier 0 calendar context.
+	Holidays []HolidayYAMLConfig `yaml:"holidays,omitempty"`
 }
 
 // CostEstimationYAMLConfig holds cost-estimation settings from YAML.
@@ -198,7 +201,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks + Slack + CostEstimation + Retention + DashboardURL + WS Origins)
+	// Resolve system config (GitHub + Runbooks + Slack + CostEstimation + Retention + DashboardURL + WS Origins + Holidays)
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
 	slackCfg := resolveSlackConfig(tarsyConfig.System)
@@ -206,6 +209,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	retentionCfg := resolveRetentionConfig(tarsyConfig.System)
 	dashboardURL := resolveDashboardURL(tarsyConfig.System)
 	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
+	holidays := resolveHolidays(tarsyConfig.System)
 
 	return &Config{
 		configDir:           configDir,
@@ -218,6 +222,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		Retention:           retentionCfg,
 		DashboardURL:        dashboardURL,
 		AllowedWSOrigins:    allowedWSOrigins,
+		Holidays:            holidays,
 		AgentRegistry:       agentRegistry,
 		ChainRegistry:       chainRegistry,
 		MCPServerRegistry:   mcpServerRegistry,
@@ -418,4 +423,25 @@ func resolveAllowedWSOrigins(sys *SystemYAMLConfig) []string {
 		return sys.AllowedWSOrigins
 	}
 	return nil
+}
+
+// resolveHolidays returns system.holidays when non-empty (replacing defaults),
+// otherwise the built-in global holiday list.
+func resolveHolidays(sys *SystemYAMLConfig) []Holiday {
+	if sys == nil || len(sys.Holidays) == 0 {
+		return DefaultHolidays()
+	}
+	out := make([]Holiday, 0, len(sys.Holidays))
+	for _, h := range sys.Holidays {
+		if h.Date == "" || h.Name == "" {
+			slog.Warn("Ignoring holiday entry with empty date or name",
+				"date", h.Date, "name", h.Name)
+			continue
+		}
+		out = append(out, Holiday{Date: h.Date, Name: h.Name})
+	}
+	if len(out) == 0 {
+		return DefaultHolidays()
+	}
+	return out
 }

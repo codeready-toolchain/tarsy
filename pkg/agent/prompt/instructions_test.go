@@ -31,7 +31,7 @@ func TestComposeInstructions_ThreeTiers(t *testing.T) {
 			Instructions: "Always check node status first.",
 		},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := newTestExecCtx()
 
 	result := builder.ComposeInstructions(execCtx)
@@ -59,7 +59,7 @@ func TestComposeInstructions_NoMCPInstructions(t *testing.T) {
 			Instructions: "", // Empty instructions
 		},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := newTestExecCtx()
 
 	result := builder.ComposeInstructions(execCtx)
@@ -68,7 +68,7 @@ func TestComposeInstructions_NoMCPInstructions(t *testing.T) {
 
 func TestComposeInstructions_NoCustomInstructions(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			CustomInstructions: "",
@@ -83,7 +83,7 @@ func TestComposeInstructions_NoCustomInstructions(t *testing.T) {
 func TestComposeInstructions_MissingMCPServer(t *testing.T) {
 	// Server referenced but not in registry — should be silently skipped
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := newTestExecCtx()
 
 	result := builder.ComposeInstructions(execCtx)
@@ -98,7 +98,7 @@ func TestComposeChatInstructions_UsesChatGeneralInstructions(t *testing.T) {
 			Instructions: "K8s instructions.",
 		},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := newTestExecCtx()
 
 	result := builder.ComposeChatInstructions(execCtx)
@@ -124,7 +124,7 @@ func TestComposeChatInstructions_UsesChatGeneralInstructions(t *testing.T) {
 
 func TestComposeInstructions_FailedServers(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 		FailedServers: map[string]string{
@@ -145,7 +145,7 @@ func TestComposeInstructions_FailedServers(t *testing.T) {
 
 func TestComposeChatInstructions_FailedServers(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 		FailedServers: map[string]string{
@@ -162,7 +162,7 @@ func TestComposeChatInstructions_FailedServers(t *testing.T) {
 
 func TestComposeInstructions_NoFailedServers(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 	}
@@ -175,7 +175,7 @@ func TestComposeInstructions_OrderingPreserved(t *testing.T) {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			MCPServers:         []string{"kubernetes-server"},
@@ -204,7 +204,7 @@ func TestComposeInstructions_SkillTierOrdering(t *testing.T) {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			MCPServers:         []string{"kubernetes-server"},
@@ -246,7 +246,7 @@ func TestComposeChatInstructions_SkillTierOrdering(t *testing.T) {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			MCPServers:         []string{"kubernetes-server"},
@@ -279,7 +279,7 @@ func TestComposeChatInstructions_SkillTierOrdering(t *testing.T) {
 
 func TestComposeInstructions_NoSkills(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 	}
@@ -292,7 +292,7 @@ func TestComposeInstructions_NoSkills(t *testing.T) {
 
 func TestComposeChatInstructions_NoSkills(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 	}
@@ -305,7 +305,7 @@ func TestComposeChatInstructions_NoSkills(t *testing.T) {
 
 func TestComposeInstructions_OnlyRequiredSkills(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			RequiredSkillContent: []agent.ResolvedSkill{
@@ -324,7 +324,7 @@ func TestComposeInstructions_OnlyRequiredSkills(t *testing.T) {
 
 func TestComposeInstructions_MultipleRequiredSkills(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			RequiredSkillContent: []agent.ResolvedSkill{
@@ -349,7 +349,7 @@ func TestComposeInstructions_MultipleRequiredSkills(t *testing.T) {
 
 func TestComposeInstructions_MemoryTier4(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			CustomInstructions: "CUSTOM_TIER3_MARKER",
@@ -378,7 +378,7 @@ func TestComposeInstructions_MemoryTier4(t *testing.T) {
 
 func TestComposeInstructions_MemoryTier4Ordering(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			CustomInstructions: "CUSTOM_TIER3_MARKER",
@@ -400,7 +400,7 @@ func TestComposeInstructions_MemoryTier4Ordering(t *testing.T) {
 
 func TestComposeInstructions_NoMemoryBriefing(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 	}
@@ -411,7 +411,7 @@ func TestComposeInstructions_NoMemoryBriefing(t *testing.T) {
 
 func TestComposeInstructions_EmptyMemoryBriefing(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config:         &agent.ResolvedAgentConfig{},
 		MemoryBriefing: &agent.MemoryBriefing{},
@@ -423,7 +423,7 @@ func TestComposeInstructions_EmptyMemoryBriefing(t *testing.T) {
 
 func TestComposeChatInstructions_NoMemoryInjection(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{},
 		MemoryBriefing: &agent.MemoryBriefing{
@@ -443,7 +443,7 @@ func TestComposeInstructions_FullTierOrdering_WithMemory(t *testing.T) {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
 	})
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			MCPServers:         []string{"kubernetes-server"},
@@ -483,7 +483,7 @@ func TestComposeInstructions_FullTierOrdering_WithMemory(t *testing.T) {
 
 func TestComposeInstructions_OnlyOnDemandSkills(t *testing.T) {
 	registry := newTestMCPRegistry(nil)
-	builder := NewPromptBuilder(registry)
+	builder := NewPromptBuilder(registry, nil)
 	execCtx := &agent.ExecutionContext{
 		Config: &agent.ResolvedAgentConfig{
 			OnDemandSkills: []agent.SkillCatalogEntry{

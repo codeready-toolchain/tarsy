@@ -71,7 +71,7 @@ func TestMaybeSummarize(t *testing.T) {
 				Summarization: nil, // nil = enabled with defaults
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 		execCtx := &agent.ExecutionContext{
 			PromptBuilder: pb,
 			Config: &agent.ResolvedAgentConfig{
@@ -95,7 +95,7 @@ func TestMaybeSummarize(t *testing.T) {
 				},
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 		execCtx := &agent.ExecutionContext{
 			PromptBuilder: pb,
 			Config: &agent.ResolvedAgentConfig{
@@ -119,7 +119,7 @@ func TestMaybeSummarize(t *testing.T) {
 				},
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 		execCtx := &agent.ExecutionContext{
 			PromptBuilder: pb,
 			Config: &agent.ResolvedAgentConfig{
@@ -137,7 +137,7 @@ func TestMaybeSummarize(t *testing.T) {
 
 	t.Run("returns raw content when server not found", func(t *testing.T) {
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 		execCtx := &agent.ExecutionContext{
 			PromptBuilder: pb,
 			Config: &agent.ResolvedAgentConfig{
@@ -176,7 +176,7 @@ func TestMaybeSummarize(t *testing.T) {
 				Summarization: nil, // nil = enabled with defaults (threshold = DefaultSizeThresholdTokens)
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 
 		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
 		execCtx.PromptBuilder = pb
@@ -207,7 +207,7 @@ func TestMaybeSummarize(t *testing.T) {
 				},
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 
 		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
 		execCtx.PromptBuilder = pb
@@ -242,7 +242,7 @@ func TestMaybeSummarize(t *testing.T) {
 				},
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 
 		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
 		execCtx.PromptBuilder = pb
@@ -299,7 +299,7 @@ func TestMaybeSummarize(t *testing.T) {
 				},
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 
 		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
 		execCtx.PromptBuilder = pb
@@ -327,7 +327,7 @@ func TestMaybeSummarize(t *testing.T) {
 				},
 			},
 		})
-		pb := prompt.NewPromptBuilder(registry)
+		pb := prompt.NewPromptBuilder(registry, nil)
 
 		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
 		execCtx.PromptBuilder = pb

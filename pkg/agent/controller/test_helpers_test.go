@@ -167,7 +167,7 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 	require.NoError(t, err)
 
 	testRegistry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{})
-	pb := prompt.NewPromptBuilder(testRegistry)
+	pb := prompt.NewPromptBuilder(testRegistry, nil)
 
 	return &agent.ExecutionContext{
 		SessionID:   sessionID,

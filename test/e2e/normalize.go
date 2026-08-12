@@ -35,6 +35,8 @@ var (
 	connIDRe          = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
 	durationMsRe      = regexp.MustCompile(`"duration_ms":\s*\d+`)
 	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
+	calendarContextLineRe = regexp.MustCompile(`Calendar context \(UTC\): [^\n]+`)
+	staffingLineRe      = regexp.MustCompile(`Staffing: [^\n]+`)
 	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
 	memoryScoreRe     = regexp.MustCompile(`, score: -?\d+\.\d+`)
 	shortTimestampRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
@@ -138,8 +140,10 @@ func (n *Normalizer) Normalize(data string) string {
 		data = strings.ReplaceAll(data, id, placeholder)
 	}
 
-	// 7. Replace "Current time:" line (varies every run).
+	// 7. Replace Tier 0 calendar lines (vary every run / by weekday).
 	data = currentTimeLineRe.ReplaceAllString(data, "Current time: {CURRENT_TIME}")
+	data = calendarContextLineRe.ReplaceAllString(data, "Calendar context (UTC): {CALENDAR_CONTEXT}")
+	data = staffingLineRe.ReplaceAllString(data, "Staffing: {STAFFING}")
 
 	// 8. Replace memory score values (vary based on ranking computation).
 	data = memoryScoreRe.ReplaceAllString(data, ", score: {SCORE}")

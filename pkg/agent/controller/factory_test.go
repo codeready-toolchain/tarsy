@@ -39,7 +39,7 @@ func TestFactory_CreateController(t *testing.T) {
 	})
 
 	t.Run("synthesis type returns SingleShotController", func(t *testing.T) {
-		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}))
+		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}), nil)
 		synthExecCtx := &agent.ExecutionContext{
 			SessionID:     "test-session",
 			StageID:       "test-stage",
@@ -65,7 +65,7 @@ func TestFactory_CreateController(t *testing.T) {
 	})
 
 	t.Run("exec_summary type returns SingleShotController", func(t *testing.T) {
-		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}))
+		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}), nil)
 		esExecCtx := &agent.ExecutionContext{
 			SessionID:     "test-session",
 			StageID:       "test-stage",

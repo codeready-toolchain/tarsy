@@ -13,7 +13,7 @@ func newBuilderForTest() *PromptBuilder {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {Instructions: "K8s server instructions."},
 	})
-	return NewPromptBuilder(registry)
+	return NewPromptBuilder(registry, nil)
 }
 
 func newFullExecCtx() *agent.ExecutionContext {

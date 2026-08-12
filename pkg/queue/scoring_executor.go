@@ -91,7 +91,7 @@ func NewScoringExecutor(
 		llmClient:          llmClient,
 		agentFactory:       agent.NewAgentFactory(controllerFactory),
 		eventPublisher:     eventPublisher,
-		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry),
+		promptBuilder:      prompt.NewPromptBuilder(cfg.MCPServerRegistry, cfg.Holidays),
 		stageService:       stageService,
 		timelineService:    timelineService,
 		interactionService: services.NewInteractionService(dbClient, msgService, nil),

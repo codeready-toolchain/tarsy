@@ -79,6 +79,15 @@ system:
     token_env: "SLACK_BOT_TOKEN"   # Env var name for bot token (default: SLACK_BOT_TOKEN)
     channel: "C12345678"           # Slack channel ID (required when enabled)
 
+  # Global holidays for Tier 0 calendar / staffing context (UTC, year-agnostic MM-DD).
+  # When omitted or empty, TARSy uses a small built-in list (Christmas, New Year's Day, …).
+  # When set, this list REPLACES the built-in defaults.
+  # holidays:
+  #   - date: "12-25"
+  #     name: "Christmas"
+  #   - date: "01-01"
+  #     name: "New Year's Day"
+
   # LLM usage cost estimation (list-price estimates, not invoice truth).
   # Enabled by default when this block is omitted. When disabled, token usage
   # is still tracked but estimated USD is not computed or shown.

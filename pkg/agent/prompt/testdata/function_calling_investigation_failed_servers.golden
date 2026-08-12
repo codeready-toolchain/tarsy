@@ -2,6 +2,8 @@
 ## Context
 
 Current time: {CURRENT_TIME}
+Calendar context (UTC): {CALENDAR_CONTEXT}
+Staffing: {STAFFING}
 
 ## General SRE Agent Instructions
 

@@ -524,6 +524,7 @@ Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestra
 
 **Tiered system** (`pkg/agent/prompt/builder.go`, `pkg/agent/prompt/instructions.go`, `pkg/agent/prompt/skills.go`):
 ```
+Tier 0:   Dynamic context                  (wall-clock UTC time + WEEKEND / GLOBAL_HOLIDAY + staffing hint)
 Tier 1:   General SRE Instructions        (hardcoded)
 Tier 2:   MCP Server Instructions          (per configured server)
 Tier 2.5: Required Skill Content           (from required_skills — injected bodies)
@@ -531,6 +532,8 @@ Tier 2.6: On-Demand Skill Catalog          (names + descriptions, with load_skil
 Tier 3:   Agent Custom Instructions        (from custom_instructions)
 Tier 4:   Lessons from Past Investigations (auto-injected memories, investigation sessions only)
 ```
+
+Tier 0 is computed at prompt-build time via `time.Now().UTC()` (not alert/session timestamps). Saturday/Sunday classify as `WEEKEND`; dates matching `system.holidays` (or built-in defaults when unset) classify as `GLOBAL_HOLIDAY (<name>)`. Reduced staffing guidance is injected on weekends/holidays so action agents can apply softer freeloading thresholds without deriving weekday/holiday from dates themselves.
 
 **Agent Skills** (`pkg/agent/skill/tool_executor.go`) provide reusable domain knowledge. Required skills are injected as content (Tier 2.5); on-demand skills appear as a catalog with a `load_skill` tool (Tier 2.6). Skill resolution happens in `config_resolver.go` — the prompt builder only formats pre-resolved data from `ResolvedAgentConfig.RequiredSkillContent` and `ResolvedAgentConfig.OnDemandSkills`. `SkillToolExecutor` wraps the inner tool executor and intercepts `load_skill` calls, reading from the in-memory `SkillRegistry`. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
 
@@ -1308,6 +1311,7 @@ Two Ent edges connect memories to sessions:
 Memories are injected into the system prompt as Tier 4 (after custom instructions):
 
 ```text
+Tier 0:   Dynamic context (UTC time + WEEKEND / GLOBAL_HOLIDAY + staffing)
 Tier 1:   General SRE Instructions
 Tier 2:   MCP Server Instructions
 Tier 2.5: Required Skill Content
