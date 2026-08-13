@@ -254,15 +254,18 @@ func TestBuiltinLLMProviders(t *testing.T) {
 		name          string
 		providerID    string
 		wantType      LLMProviderType
+		wantModel     string // if set, exact model ID (else only non-empty)
 		wantMinTokens int
+		wantTokens    int  // if set, exact MaxToolResultTokens (else wantMinTokens floor)
 		checkAPIKey   bool // VertexAI uses ProjectEnv/LocationEnv instead
 	}{
 		{
-			name:          "google-default",
-			providerID:    "google-default",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "google-default",
+			providerID:  "google-default",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-3.7-flash",
+			wantTokens:  950000,
+			checkAPIKey: true,
 		},
 		{
 			name:          "google-image-flash",
@@ -307,18 +310,20 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey:   true,
 		},
 		{
-			name:          "gemini-3.7-flash",
-			providerID:    "gemini-3.7-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-3.7-flash",
+			providerID:  "gemini-3.7-flash",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-3.7-flash",
+			wantTokens:  950000,
+			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-3.6-flash",
-			providerID:    "gemini-3.6-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-3.6-flash",
+			providerID:  "gemini-3.6-flash",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-3.6-flash",
+			wantTokens:  950000,
+			checkAPIKey: true,
 		},
 		{
 			name:          "gemini-3.5-flash",
@@ -362,11 +367,19 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			provider, exists := cfg.LLMProviders[tt.providerID]
 			require.True(t, exists, "Provider %s should exist", tt.providerID)
 			assert.Equal(t, tt.wantType, provider.Type)
-			assert.NotEmpty(t, provider.Model)
+			if tt.wantModel != "" {
+				assert.Equal(t, tt.wantModel, provider.Model)
+			} else {
+				assert.NotEmpty(t, provider.Model)
+			}
 			if tt.checkAPIKey {
 				assert.NotEmpty(t, provider.APIKeyEnv)
 			}
-			assert.GreaterOrEqual(t, provider.MaxToolResultTokens, tt.wantMinTokens)
+			if tt.wantTokens > 0 {
+				assert.Equal(t, tt.wantTokens, provider.MaxToolResultTokens)
+			} else {
+				assert.GreaterOrEqual(t, provider.MaxToolResultTokens, tt.wantMinTokens)
+			}
 		})
 	}
 }
