@@ -83,7 +83,7 @@ system:
   #
   # At prompt-build time TARSy injects wall-clock UTC into every investigation /
   # chat / action agent system prompt as Tier 0 Context, for example:
-  #   Calendar context (UTC): 2026-12-25 — Thursday — GLOBAL_HOLIDAY (Christmas)
+  #   Calendar context (UTC): 2026-12-25 — Friday — GLOBAL_HOLIDAY (Christmas)
   #   Staffing: reduced (humans less likely to review promptly)
   # Saturday/Sunday classify as WEEKEND even when not listed here. Matching a
   # holiday date classifies as GLOBAL_HOLIDAY (<name>) and takes priority over

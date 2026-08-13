@@ -438,6 +438,11 @@ func resolveHolidays(sys *SystemYAMLConfig) []Holiday {
 				"date", h.Date, "name", h.Name)
 			continue
 		}
+		if _, err := time.Parse("01-02", h.Date); err != nil {
+			slog.Warn("Ignoring holiday entry with invalid date (want MM-DD)",
+				"date", h.Date, "name", h.Name, "error", err)
+			continue
+		}
 		out = append(out, h)
 	}
 	if len(out) == 0 {

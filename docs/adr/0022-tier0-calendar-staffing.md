@@ -23,8 +23,8 @@ This decision extends existing Tier 0 prompt context (already injecting `Current
 ```text
 ## Context
 
-Current time: 2026-12-25T08:00:00Z (Thursday)
-Calendar context (UTC): 2026-12-25 — Thursday — GLOBAL_HOLIDAY (Christmas)
+Current time: 2026-12-25T08:00:00Z (Friday)
+Calendar context (UTC): 2026-12-25 — Friday — GLOBAL_HOLIDAY (Christmas)
 Staffing: reduced (humans less likely to review promptly)
 ```
 

@@ -887,6 +887,28 @@ func TestResolveHolidays(t *testing.T) {
 		})
 		assert.Equal(t, DefaultHolidays(), got)
 	})
+
+	t.Run("malformed and calendar-invalid dates are skipped", func(t *testing.T) {
+		got := resolveHolidays(&SystemYAMLConfig{
+			Holidays: []Holiday{
+				{Date: "7-04", Name: "Unpadded July 4"},
+				{Date: "02-30", Name: "Impossible day"},
+				{Date: "13-01", Name: "Invalid month"},
+				{Date: "07-04", Name: "Independence Day"},
+			},
+		})
+		assert.Equal(t, []Holiday{{Date: "07-04", Name: "Independence Day"}}, got)
+	})
+
+	t.Run("all malformed dates fall back to defaults", func(t *testing.T) {
+		got := resolveHolidays(&SystemYAMLConfig{
+			Holidays: []Holiday{
+				{Date: "7-04", Name: "Bad"},
+				{Date: "02-30", Name: "Also bad"},
+			},
+		})
+		assert.Equal(t, DefaultHolidays(), got)
+	})
 }
 
 func TestHolidaysYAMLLoading(t *testing.T) {

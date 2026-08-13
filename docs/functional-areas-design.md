@@ -538,8 +538,8 @@ Tier 4:   Lessons from Past Investigations (auto-injected memories, investigatio
 ```text
 ## Context
 
-Current time: 2026-12-25T08:00:00Z (Thursday)
-Calendar context (UTC): 2026-12-25 — Thursday — GLOBAL_HOLIDAY (Christmas)
+Current time: 2026-12-25T08:00:00Z (Friday)
+Calendar context (UTC): 2026-12-25 — Friday — GLOBAL_HOLIDAY (Christmas)
 Staffing: reduced (humans less likely to review promptly)
 ```
 
