@@ -109,11 +109,22 @@ system:
   # See docs/session-usage-cost.md for caveats, tiers, and airgap/snapshot notes.
   cost_estimation:
     enabled: true
-    # Optional flat per-million USD overrides (exact model_name; wins over catalog).
+    # Optional flat per-million USD overrides (exact model_name; used when no
+    # active promotion matches).
     # model_rates:
     #   gemini-3.1-pro-preview:
     #     input_per_million: 2.0
     #     output_per_million: 12.0
+    #
+    # Optional time-bounded rates (intro pricing). While active, beat model_rates,
+    # catalog, and snapshot. Windows are half-open [start, end) UTC.
+    # start optional (omit = already active); end required. id optional (label).
+    # promotions:
+    #   - model: gemini-3.7-flash
+    #     start: "2026-08-01"
+    #     end: "2026-10-01"
+    #     input_per_million: 0.75
+    #     output_per_million: 3.75
 
   # Data retention and cleanup (all values below are defaults)
   retention:

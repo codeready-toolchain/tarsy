@@ -381,6 +381,7 @@ function CostEstimationDetails({
   const rates = costEstimation.model_rates
     ? Object.entries(costEstimation.model_rates)
     : [];
+  const promotions = costEstimation.promotions ?? [];
   return (
     <Paper variant="outlined" sx={{ p: 1.5 }}>
       <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -405,6 +406,37 @@ function CostEstimationDetails({
                   {model}: in {rate.input_per_million}/M · out {rate.output_per_million}/M
                 </Typography>
               ))}
+            </Box>
+          )
+        }
+      />
+      <Field
+        label="promotions"
+        value={
+          promotions.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              (none)
+            </Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {promotions.map((promo, idx) => {
+                const label = promo.id ? `${promo.id} (${promo.model})` : promo.model;
+                const window = promo.start
+                  ? `${promo.start} → ${promo.end}`
+                  : `… → ${promo.end}`;
+                const status = promo.status ? ` [${promo.status}]` : '';
+                return (
+                  <Typography
+                    key={`${promo.model}-${promo.end}-${idx}`}
+                    variant="body2"
+                    sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                  >
+                    {label}: in {promo.input_per_million}/M · out {promo.output_per_million}/M ·{' '}
+                    {window}
+                    {status}
+                  </Typography>
+                );
+              })}
             </Box>
           )
         }

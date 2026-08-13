@@ -488,8 +488,25 @@ func costConfigFrom(cfg *config.CostEstimationConfig) *cost.Config {
 			OutputPerMillion: rate.OutputPerMillion,
 		}
 	}
+	promos := make([]cost.Promotion, 0, len(cfg.Promotions))
+	for _, p := range cfg.Promotions {
+		start, end, err := config.ParsePromotionWindow(p.Start, p.End)
+		if err != nil {
+			// Validation should have rejected invalid windows; skip defensively.
+			continue
+		}
+		promos = append(promos, cost.Promotion{
+			ID:               p.ID,
+			Model:            p.Model,
+			Start:            start,
+			End:              end,
+			InputPerMillion:  p.InputPerMillion,
+			OutputPerMillion: p.OutputPerMillion,
+		})
+	}
 	return &cost.Config{
 		Enabled:    cfg.Enabled,
 		ModelRates: rates,
+		Promotions: promos,
 	}
 }

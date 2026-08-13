@@ -1112,6 +1112,88 @@ agent_chains: {}
 		require.NotNil(t, cfg.CostEstimation)
 		assert.True(t, cfg.CostEstimation.Enabled)
 	})
+
+	t.Run("cost_estimation promotions parsed from YAML", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  cost_estimation:
+    enabled: true
+    promotions:
+      - id: gemini-3.7-flash-intro
+        model: gemini-3.7-flash
+        start: "2026-08-01"
+        end: "2026-10-01"
+        input_per_million: 0.75
+        output_per_million: 3.75
+      - model: open-start-model
+        end: "2027-01-01"
+        input_per_million: 1.0
+        output_per_million: 2.0
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.CostEstimation)
+		require.Len(t, cfg.CostEstimation.Promotions, 2)
+
+		p0 := cfg.CostEstimation.Promotions[0]
+		assert.Equal(t, "gemini-3.7-flash-intro", p0.ID)
+		assert.Equal(t, "gemini-3.7-flash", p0.Model)
+		assert.Equal(t, "2026-08-01", p0.Start)
+		assert.Equal(t, "2026-10-01", p0.End)
+		assert.Equal(t, 0.75, p0.InputPerMillion)
+		assert.Equal(t, 3.75, p0.OutputPerMillion)
+
+		p1 := cfg.CostEstimation.Promotions[1]
+		assert.Empty(t, p1.ID)
+		assert.Equal(t, "open-start-model", p1.Model)
+		assert.Empty(t, p1.Start)
+		assert.Equal(t, "2027-01-01", p1.End)
+	})
+
+	t.Run("cost_estimation overlapping promotions fail validation", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  cost_estimation:
+    promotions:
+      - model: same-model
+        start: "2026-08-01"
+        end: "2026-10-01"
+        input_per_million: 1.0
+        output_per_million: 1.0
+      - model: same-model
+        start: "2026-09-01"
+        end: "2026-11-01"
+        input_per_million: 2.0
+        output_per_million: 2.0
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		err = NewValidator(cfg).validateCostEstimation()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "overlapping windows")
+	})
 }
 
 func TestLoadAppliesSummarizationDefaults(t *testing.T) {

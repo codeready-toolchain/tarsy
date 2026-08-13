@@ -8,12 +8,13 @@ import (
 	"time"
 )
 
-// Book is the process-local price book: YAML overrides > remote catalog > snapshot.
+// Book is the process-local price book: active promotions > YAML overrides > remote catalog > snapshot.
 type Book struct {
 	mu sync.RWMutex
 
 	enabled     bool
 	overrides   map[string]ModelRateOverride
+	promotions  []Promotion
 	catalog     map[string]catalogEntry
 	snapshot    map[string]catalogEntry
 	lastFetch   time.Time
@@ -24,6 +25,7 @@ type Book struct {
 	catalogURL string
 	ttl        time.Duration
 	maxBody    int64
+	now        func() time.Time
 
 	stopRefresh context.CancelFunc
 }
@@ -38,22 +40,42 @@ func NewBook(cfg *Config) (*Book, error) {
 
 	enabled := true
 	overrides := map[string]ModelRateOverride{}
+	var promotions []Promotion
 	if cfg != nil {
 		enabled = cfg.Enabled
 		if cfg.ModelRates != nil {
 			overrides = cfg.ModelRates
+		}
+		if cfg.Promotions != nil {
+			promotions = cfg.Promotions
 		}
 	}
 
 	return &Book{
 		enabled:    enabled,
 		overrides:  overrides,
+		promotions: promotions,
 		snapshot:   snapshot,
 		httpClient: &http.Client{Timeout: defaultFetchTimeout},
 		catalogURL: CatalogURL,
 		ttl:        defaultCatalogTTL,
 		maxBody:    defaultMaxBodyBytes,
+		now:        func() time.Time { return time.Now().UTC() },
 	}, nil
+}
+
+// SetNowForTest replaces the wall clock used for promotion windows (tests only).
+func (b *Book) SetNowForTest(now func() time.Time) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if now == nil {
+		b.now = func() time.Time { return time.Now().UTC() }
+		return
+	}
+	b.now = now
 }
 
 // Enabled reports whether cost estimation is on.
@@ -80,7 +102,7 @@ func (b *Book) Estimate(modelName string, inputTokens, outputTokens, thinkingTok
 		return nil, ProvenanceUnpriced
 	}
 
-	res, ok := b.resolveLocked(modelName, inputTokens)
+	res, ok := b.resolveLocked(modelName, inputTokens, b.now())
 	if !ok {
 		return nil, ProvenanceUnpriced
 	}
@@ -102,6 +124,20 @@ func (b *Book) Status() Status {
 		rates[k] = RateView(v)
 	}
 
+	now := b.now()
+	promos := make([]PromotionStatus, len(b.promotions))
+	for i, p := range b.promotions {
+		promos[i] = PromotionStatus{
+			ID:               p.ID,
+			Model:            p.Model,
+			InputPerMillion:  p.InputPerMillion,
+			OutputPerMillion: p.OutputPerMillion,
+			Start:            p.Start,
+			End:              p.End,
+			Status:           promotionLifecycle(p, now),
+		}
+	}
+
 	src := "snapshot"
 	count := len(b.snapshot)
 	if b.usingRemote && len(b.catalog) > 0 {
@@ -112,6 +148,7 @@ func (b *Book) Status() Status {
 	st := Status{
 		Enabled:    b.enabled,
 		ModelRates: rates,
+		Promotions: promos,
 		Catalog: CatalogStatus{
 			Source:     src,
 			EntryCount: count,
@@ -209,8 +246,24 @@ func (b *Book) refreshOnce(ctx context.Context) {
 }
 
 // resolveLocked requires b.mu held for reading.
-func (b *Book) resolveLocked(modelName string, inputTokens int) (resolved, bool) {
-	// 1. YAML overrides (exact model_name).
+func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (resolved, bool) {
+	// 1. Active promotion (exact model_name, wall-clock window).
+	if p, ok := findActivePromotion(b.promotions, modelName, now); ok {
+		label := p.Model
+		if p.ID != "" {
+			label = p.ID
+		}
+		return resolved{
+			rates: overrideRates(ModelRateOverride{
+				InputPerMillion:  p.InputPerMillion,
+				OutputPerMillion: p.OutputPerMillion,
+			}),
+			provenance: Provenance(string(ProvenancePromotion) + ":" + label),
+			matchKey:   modelName,
+		}, true
+	}
+
+	// 2. YAML overrides (exact model_name).
 	if o, ok := b.overrides[modelName]; ok {
 		return resolved{
 			rates:      overrideRates(o),
@@ -219,7 +272,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int) (resolved, bool)
 		}, true
 	}
 
-	// 2. Remote catalog.
+	// 3. Remote catalog.
 	if e, key, ok := findInCatalog(b.catalog, modelName); ok {
 		if rates, ok := e.ratesForInput(inputTokens); ok {
 			return resolved{
@@ -230,7 +283,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int) (resolved, bool)
 		}
 	}
 
-	// 3. Bundled snapshot.
+	// 4. Bundled snapshot.
 	if e, key, ok := findInCatalog(b.snapshot, modelName); ok {
 		if rates, ok := e.ratesForInput(inputTokens); ok {
 			return resolved{
@@ -242,4 +295,36 @@ func (b *Book) resolveLocked(modelName string, inputTokens int) (resolved, bool)
 	}
 
 	return resolved{provenance: ProvenanceUnpriced}, false
+}
+
+func findActivePromotion(promos []Promotion, modelName string, now time.Time) (Promotion, bool) {
+	for _, p := range promos {
+		if p.Model != modelName {
+			continue
+		}
+		if promotionActive(p, now) {
+			return p, true
+		}
+	}
+	return Promotion{}, false
+}
+
+func promotionActive(p Promotion, now time.Time) bool {
+	if !now.Before(p.End) {
+		return false
+	}
+	if p.Start != nil && now.Before(*p.Start) {
+		return false
+	}
+	return true
+}
+
+func promotionLifecycle(p Promotion, now time.Time) PromotionLifecycle {
+	if promotionActive(p, now) {
+		return PromotionActive
+	}
+	if p.Start != nil && now.Before(*p.Start) {
+		return PromotionUpcoming
+	}
+	return PromotionExpired
 }

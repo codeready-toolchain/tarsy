@@ -2534,6 +2534,210 @@ func TestValidateCostEstimation(t *testing.T) {
 			wantErr: true,
 			errMsg:  "output_per_million must be >= 0",
 		},
+		{
+			name: "valid promotion passes",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					ID:               "intro",
+					Model:            "gemini-3.7-flash",
+					Start:            "2026-08-01",
+					End:              "2026-10-01",
+					InputPerMillion:  0.75,
+					OutputPerMillion: 3.75,
+				}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "expired promotion still loads",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "old-model",
+					Start:            "2020-01-01",
+					End:              "2020-06-01",
+					InputPerMillion:  1.0,
+					OutputPerMillion: 1.0,
+				}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "omitted start passes",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "open-start",
+					End:              "2026-10-01",
+					InputPerMillion:  1.0,
+					OutputPerMillion: 1.0,
+				}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing end fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "no-end",
+					InputPerMillion:  1.0,
+					OutputPerMillion: 1.0,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "end is required",
+		},
+		{
+			name: "empty model fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					End:              "2026-10-01",
+					InputPerMillion:  1.0,
+					OutputPerMillion: 1.0,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "model must not be empty",
+		},
+		{
+			name: "bad time fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "bad-time",
+					End:              "not-a-date",
+					InputPerMillion:  1.0,
+					OutputPerMillion: 1.0,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "end:",
+		},
+		{
+			name: "end before start fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "backwards",
+					Start:            "2026-10-01",
+					End:              "2026-08-01",
+					InputPerMillion:  1.0,
+					OutputPerMillion: 1.0,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "end must be after start",
+		},
+		{
+			name: "duplicate id fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{ID: "same", Model: "m1", End: "2026-06-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{ID: "same", Model: "m2", End: "2026-07-01", InputPerMillion: 1, OutputPerMillion: 1},
+				},
+			},
+			wantErr: true,
+			errMsg:  "duplicates",
+		},
+		{
+			name: "overlapping windows fail",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{Model: "m1", Start: "2026-08-01", End: "2026-10-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{Model: "m1", Start: "2026-09-01", End: "2026-11-01", InputPerMillion: 1, OutputPerMillion: 1},
+				},
+			},
+			wantErr: true,
+			errMsg:  "overlapping windows",
+		},
+		{
+			name: "sequential non-overlapping windows pass",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{Model: "m1", Start: "2026-08-01", End: "2026-10-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{Model: "m1", Start: "2026-10-01", End: "2026-12-01", InputPerMillion: 2, OutputPerMillion: 2},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "negative promo rate fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "neg",
+					End:              "2026-10-01",
+					InputPerMillion:  -1,
+					OutputPerMillion: 1,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "input_per_million must be >= 0",
+		},
+		{
+			name: "end equals start fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "equal",
+					Start:            "2026-08-01",
+					End:              "2026-08-01",
+					InputPerMillion:  1,
+					OutputPerMillion: 1,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "end must be after start",
+		},
+		{
+			name: "RFC3339 window passes",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "rfc",
+					Start:            "2026-08-01T00:00:00Z",
+					End:              "2026-10-01T15:04:05-07:00",
+					InputPerMillion:  1,
+					OutputPerMillion: 1,
+				}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "overlapping open start with later window fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{Model: "m1", End: "2026-10-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{Model: "m1", Start: "2026-09-01", End: "2026-11-01", InputPerMillion: 1, OutputPerMillion: 1},
+				},
+			},
+			wantErr: true,
+			errMsg:  "overlapping windows",
+		},
+		{
+			name: "two open starts for same model fail",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{Model: "m1", End: "2026-06-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{Model: "m1", End: "2026-12-01", InputPerMillion: 1, OutputPerMillion: 1},
+				},
+			},
+			wantErr: true,
+			errMsg:  "overlapping windows",
+		},
+		{
+			name: "same window different models pass",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{Model: "m1", Start: "2026-08-01", End: "2026-10-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{Model: "m2", Start: "2026-08-01", End: "2026-10-01", InputPerMillion: 2, OutputPerMillion: 2},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "open start abutting next window passes",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{
+					{Model: "m1", End: "2026-10-01", InputPerMillion: 1, OutputPerMillion: 1},
+					{Model: "m1", Start: "2026-10-01", End: "2026-12-01", InputPerMillion: 2, OutputPerMillion: 2},
+				},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
@@ -228,6 +229,39 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, row.EstimatedCostUsd)
 		assert.InDelta(t, 0.0, *row.EstimatedCostUsd, 1e-12)
+	})
+
+	t.Run("prices from active promotion", func(t *testing.T) {
+		end := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"promo-model": {InputPerMillion: 10.0, OutputPerMillion: 20.0},
+			},
+			Promotions: []cost.Promotion{{
+				Model:            "promo-model",
+				End:              end,
+				InputPerMillion:  1.0,
+				OutputPerMillion: 2.0,
+			}},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+
+		interaction, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "promo-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			InputTokens:     &input,
+			OutputTokens:    &output,
+			ThinkingTokens:  &thinking,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, interaction.EstimatedCostUsd)
+		// Promo beats model_rates: 1.0 + 0.5*2.0 + 0.1*2.0 = 2.2
+		assert.InDelta(t, 2.2, *interaction.EstimatedCostUsd, 1e-9)
 	})
 }
 

@@ -250,6 +250,7 @@ type SystemView struct {
 type CostEstimationView struct {
 	Enabled    bool                     `json:"enabled"`
 	ModelRates map[string]ModelRateView `json:"model_rates,omitempty"`
+	Promotions []PromotionView          `json:"promotions,omitempty"`
 	Catalog    CostCatalogStatusView    `json:"catalog"`
 }
 
@@ -257,6 +258,17 @@ type CostEstimationView struct {
 type ModelRateView struct {
 	InputPerMillion  float64 `json:"input_per_million"`
 	OutputPerMillion float64 `json:"output_per_million"`
+}
+
+// PromotionView is a time-bounded rate with lifecycle for Config Viewer.
+type PromotionView struct {
+	ID               string  `json:"id,omitempty"`
+	Model            string  `json:"model"`
+	InputPerMillion  float64 `json:"input_per_million"`
+	OutputPerMillion float64 `json:"output_per_million"`
+	Start            *string `json:"start,omitempty"`  // RFC3339 UTC; omitted when already-active
+	End              string  `json:"end"`              // RFC3339 UTC
+	Status           string  `json:"status,omitempty"` // active | upcoming | expired
 }
 
 // CostCatalogStatusView describes the in-memory price catalog.
@@ -463,6 +475,10 @@ func buildCostEstimationView(cfg *config.CostEstimationConfig, book *cost.Book) 
 				OutputPerMillion: v.OutputPerMillion,
 			}
 		}
+		promos := make([]PromotionView, len(st.Promotions))
+		for i, p := range st.Promotions {
+			promos[i] = promotionStatusToView(p)
+		}
 		cat := CostCatalogStatusView{
 			Source:     st.Catalog.Source,
 			EntryCount: st.Catalog.EntryCount,
@@ -475,6 +491,7 @@ func buildCostEstimationView(cfg *config.CostEstimationConfig, book *cost.Book) 
 		return &CostEstimationView{
 			Enabled:    st.Enabled,
 			ModelRates: rates,
+			Promotions: promos,
 			Catalog:    cat,
 		}
 	}
@@ -482,6 +499,7 @@ func buildCostEstimationView(cfg *config.CostEstimationConfig, book *cost.Book) 
 	// Config-only fallback (book not wired yet).
 	enabled := true
 	rates := map[string]ModelRateView{}
+	var promos []PromotionView
 	if cfg != nil {
 		enabled = cfg.Enabled
 		for k, v := range cfg.ModelRates {
@@ -490,14 +508,65 @@ func buildCostEstimationView(cfg *config.CostEstimationConfig, book *cost.Book) 
 				OutputPerMillion: v.OutputPerMillion,
 			}
 		}
+		promos = make([]PromotionView, 0, len(cfg.Promotions))
+		now := time.Now().UTC()
+		for _, p := range cfg.Promotions {
+			promos = append(promos, promotionConfigToView(p, now))
+		}
 	}
 	return &CostEstimationView{
 		Enabled:    enabled,
 		ModelRates: rates,
+		Promotions: promos,
 		Catalog: CostCatalogStatusView{
 			Source: "none",
 		},
 	}
+}
+
+func promotionStatusToView(p cost.PromotionStatus) PromotionView {
+	v := PromotionView{
+		ID:               p.ID,
+		Model:            p.Model,
+		InputPerMillion:  p.InputPerMillion,
+		OutputPerMillion: p.OutputPerMillion,
+		End:              p.End.UTC().Format(time.RFC3339),
+		Status:           string(p.Status),
+	}
+	if p.Start != nil {
+		s := p.Start.UTC().Format(time.RFC3339)
+		v.Start = &s
+	}
+	return v
+}
+
+func promotionConfigToView(p config.PromotionConfig, now time.Time) PromotionView {
+	v := PromotionView{
+		ID:               p.ID,
+		Model:            p.Model,
+		InputPerMillion:  p.InputPerMillion,
+		OutputPerMillion: p.OutputPerMillion,
+		End:              p.End, // may be raw YAML; prefer parsed when possible
+	}
+	start, end, err := config.ParsePromotionWindow(p.Start, p.End)
+	if err != nil {
+		return v
+	}
+	v.End = end.UTC().Format(time.RFC3339)
+	if start != nil {
+		s := start.UTC().Format(time.RFC3339)
+		v.Start = &s
+	}
+	// Derive lifecycle when times parse.
+	switch {
+	case (start == nil || !now.Before(*start)) && now.Before(end):
+		v.Status = string(cost.PromotionActive)
+	case start != nil && now.Before(*start):
+		v.Status = string(cost.PromotionUpcoming)
+	default:
+		v.Status = string(cost.PromotionExpired)
+	}
+	return v
 }
 
 func buildAgentView(a *config.AgentConfig) AgentView {

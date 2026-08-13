@@ -345,6 +345,15 @@ export interface SystemSettingsView {
   cost_estimation?: {
     enabled: boolean;
     model_rates?: Record<string, { input_per_million: number; output_per_million: number }>;
+    promotions?: Array<{
+      id?: string;
+      model: string;
+      input_per_million: number;
+      output_per_million: number;
+      start?: string | null;
+      end: string;
+      status?: 'active' | 'upcoming' | 'expired' | string;
+    }>;
     catalog: {
       source: string;
       entry_count: number;

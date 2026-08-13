@@ -342,6 +342,40 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.Greater(t, resp.System.CostEstimation.Catalog.EntryCount, 0)
 	})
 
+	t.Run("includes promotions from book status", func(t *testing.T) {
+		start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+		end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			Promotions: []cost.Promotion{{
+				ID:               "gemini-3.7-flash-intro",
+				Model:            "gemini-3.7-flash",
+				Start:            &start,
+				End:              end,
+				InputPerMillion:  0.75,
+				OutputPerMillion: 3.75,
+			}},
+		})
+		require.NoError(t, err)
+		book.SetNowForTest(func() time.Time {
+			return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+		})
+
+		resp := buildSystemConfigResponse(&config.Config{
+			CostEstimation: &config.CostEstimationConfig{Enabled: true},
+		}, book)
+		require.NotNil(t, resp.System.CostEstimation)
+		require.Len(t, resp.System.CostEstimation.Promotions, 1)
+		p := resp.System.CostEstimation.Promotions[0]
+		assert.Equal(t, "gemini-3.7-flash-intro", p.ID)
+		assert.Equal(t, "gemini-3.7-flash", p.Model)
+		assert.Equal(t, 0.75, p.InputPerMillion)
+		assert.Equal(t, "active", p.Status)
+		require.NotNil(t, p.Start)
+		assert.Equal(t, start.UTC().Format(time.RFC3339), *p.Start)
+		assert.Equal(t, end.UTC().Format(time.RFC3339), p.End)
+	})
+
 	t.Run("cost_estimation falls back to config when book nil", func(t *testing.T) {
 		resp := buildSystemConfigResponse(&config.Config{
 			CostEstimation: &config.CostEstimationConfig{
@@ -349,12 +383,22 @@ func TestSystemConfigHandler(t *testing.T) {
 				ModelRates: map[string]config.ModelRateConfig{
 					"gpt-4o": {InputPerMillion: 2.5, OutputPerMillion: 10.0},
 				},
+				Promotions: []config.PromotionConfig{{
+					Model:            "promo-model",
+					Start:            "2026-08-01",
+					End:              "2026-10-01",
+					InputPerMillion:  0.5,
+					OutputPerMillion: 1.5,
+				}},
 			},
 		}, nil)
 		require.NotNil(t, resp.System.CostEstimation)
 		assert.False(t, resp.System.CostEstimation.Enabled)
 		assert.Equal(t, 2.5, resp.System.CostEstimation.ModelRates["gpt-4o"].InputPerMillion)
 		assert.Equal(t, "none", resp.System.CostEstimation.Catalog.Source)
+		require.Len(t, resp.System.CostEstimation.Promotions, 1)
+		assert.Equal(t, "promo-model", resp.System.CostEstimation.Promotions[0].Model)
+		assert.NotEmpty(t, resp.System.CostEstimation.Promotions[0].Status)
 	})
 
 	t.Run("includes chains defaults memory and orchestrator duration strings", func(t *testing.T) {

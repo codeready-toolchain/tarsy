@@ -37,15 +37,28 @@ When cost estimation is **disabled**:
 system:
   cost_estimation:
     enabled: true   # default true if the whole block is omitted
-    model_rates:    # optional flat overrides; exact TARSy model_name
+    model_rates:    # optional flat permanent overrides; exact TARSy model_name
       gemini-3.1-pro-preview:
         input_per_million: 2.0
         output_per_million: 12.0
+    # Optional time-bounded rates (intro pricing). Active promotions beat model_rates,
+    # catalog, and snapshot. Windows are half-open [start, end) in UTC.
+    # start is optional (omit = already active). end is required.
+    # id is optional (Config Viewer / debug provenance only).
+    promotions:
+      - id: gemini-3.7-flash-intro          # optional label
+        model: gemini-3.7-flash
+        start: "2026-08-01"                 # YYYY-MM-DD or RFC3339
+        end: "2026-10-01"                   # exclusive; runs through 2026-09-30 UTC
+        input_per_million: 0.75
+        output_per_million: 3.75
 ```
 
-- Overrides are **per-million USD** (converted to per-token internally).
-- Overrides win over the remote catalog and the bundled snapshot.
-- YAML changes require a process restart (catalog TTL refresh does not reload YAML).
+- Rates are **per-million USD** (converted to per-token internally).
+- An **active** promotion (exact `model_name` + wall-clock window) beats permanent `model_rates`, the remote catalog, and the bundled snapshot.
+- Outside a promotion window, resolve order is unchanged: `model_rates` → catalog → snapshot.
+- YAML changes (including adding/editing promotions) require a process restart. Crossing a promotion start/end boundary takes effect on the next estimate without a restart.
+- Overlapping promotion windows for the same model are a config validation error.
 
 See also [`deploy/config/tarsy.yaml.example`](../deploy/config/tarsy.yaml.example).
 
@@ -53,17 +66,18 @@ See also [`deploy/config/tarsy.yaml.example`](../deploy/config/tarsy.yaml.exampl
 
 Resolve order:
 
-1. **YAML overrides** — exact `model_name`
-2. **Remote LiteLLM catalog** — fetched asynchronously at startup, refreshed every 24h
-3. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure
+1. **Active promotion** — exact `model_name`, half-open `[start, end)` at write / `Estimate` time (UTC)
+2. **YAML overrides** (`model_rates`) — exact `model_name`
+3. **Remote LiteLLM catalog** — fetched asynchronously at startup, refreshed every 24h
+4. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure
 
 Catalog URL:
 
 `https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json`
 
-Model matching: exact key first, then conservative `*/{model}` / provider-prefix heuristics. If multiple heuristic candidates disagree on rates, the model stays **unpriced** rather than guessing.
+Model matching (catalog/snapshot only): exact key first, then conservative `*/{model}` / provider-prefix heuristics. If multiple heuristic candidates disagree on rates, the model stays **unpriced** rather than guessing. Promotions and `model_rates` match exact `model_name` only.
 
-Config Viewer (`system.cost_estimation`) shows `enabled`, override rates, and catalog status (`source`, `entry_count`, `last_fetch`, `last_error`).
+Config Viewer (`system.cost_estimation`) shows `enabled`, override rates, all configured promotions with lifecycle status (`active` / `upcoming` / `expired`), and catalog status (`source`, `entry_count`, `last_fetch`, `last_error`).
 
 ## How estimates are computed
 

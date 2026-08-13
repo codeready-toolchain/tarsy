@@ -26,10 +26,23 @@ type SlackConfig struct {
 type CostEstimationConfig struct {
 	Enabled    bool
 	ModelRates map[string]ModelRateConfig // exact model_name → flat per-million USD overrides
+	Promotions []PromotionConfig          // time-bounded rates; beat model_rates while active
 }
 
 // ModelRateConfig is a flat per-million USD override for one model.
 type ModelRateConfig struct {
+	InputPerMillion  float64
+	OutputPerMillion float64
+}
+
+// PromotionConfig is a time-bounded flat rate for one exact model_name.
+// Start/End are raw YAML strings (RFC3339 or YYYY-MM-DD); empty Start means already active.
+// End is required. Parsed times live on cost.Promotion after costConfigFrom.
+type PromotionConfig struct {
+	ID               string
+	Model            string
+	Start            string // optional; empty = already active
+	End              string // required
 	InputPerMillion  float64
 	OutputPerMillion float64
 }

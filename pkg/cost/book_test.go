@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -340,4 +341,290 @@ func TestBook_EstimateConcurrentWithRefresh(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+func TestEstimate_PromotionActive(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{{
+			ID:               "gemini-3.7-flash-intro",
+			Model:            "promo-only-model",
+			Start:            &start,
+			End:              end,
+			InputPerMillion:  0.75,
+			OutputPerMillion: 3.75,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	})
+
+	costUSD, prov := book.Estimate("promo-only-model", 1_000_000, 1_000_000, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:gemini-3.7-flash-intro"), prov)
+	assert.InDelta(t, 4.5, *costUSD, 1e-9)
+}
+
+func TestEstimate_PromotionBeatsModelRates(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		ModelRates: map[string]ModelRateOverride{
+			"shared-model": {InputPerMillion: 10.0, OutputPerMillion: 20.0},
+		},
+		Promotions: []Promotion{{
+			Model:            "shared-model",
+			Start:            &start,
+			End:              end,
+			InputPerMillion:  1.0,
+			OutputPerMillion: 2.0,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+	})
+
+	costUSD, prov := book.Estimate("shared-model", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:shared-model"), prov)
+	assert.InDelta(t, 1.0, *costUSD, 1e-9)
+}
+
+func TestEstimate_PromotionBeforeStart(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		ModelRates: map[string]ModelRateOverride{
+			"shared-model": {InputPerMillion: 10.0, OutputPerMillion: 20.0},
+		},
+		Promotions: []Promotion{{
+			Model:            "shared-model",
+			Start:            &start,
+			End:              end,
+			InputPerMillion:  1.0,
+			OutputPerMillion: 2.0,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 7, 31, 23, 59, 59, 0, time.UTC)
+	})
+
+	costUSD, prov := book.Estimate("shared-model", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, ProvenanceOverride, prov)
+	assert.InDelta(t, 10.0, *costUSD, 1e-9)
+}
+
+func TestEstimate_PromotionAfterEnd(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		ModelRates: map[string]ModelRateOverride{
+			"shared-model": {InputPerMillion: 10.0, OutputPerMillion: 20.0},
+		},
+		Promotions: []Promotion{{
+			Model:            "shared-model",
+			Start:            &start,
+			End:              end,
+			InputPerMillion:  1.0,
+			OutputPerMillion: 2.0,
+		}},
+	})
+	require.NoError(t, err)
+	// Half-open: end instant is expired.
+	book.SetNowForTest(func() time.Time { return end })
+
+	costUSD, prov := book.Estimate("shared-model", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, ProvenanceOverride, prov)
+	assert.InDelta(t, 10.0, *costUSD, 1e-9)
+}
+
+func TestEstimate_PromotionOmittedStart(t *testing.T) {
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{{
+			Model:            "open-start-model",
+			End:              end,
+			InputPerMillion:  0.5,
+			OutputPerMillion: 1.5,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	})
+
+	costUSD, prov := book.Estimate("open-start-model", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:open-start-model"), prov)
+	assert.InDelta(t, 0.5, *costUSD, 1e-9)
+}
+
+func TestEstimate_PromotionExactNameMiss(t *testing.T) {
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{{
+			Model:            "gemini-3.7-flash",
+			End:              end,
+			InputPerMillion:  0.75,
+			OutputPerMillion: 3.75,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	})
+
+	// Prefixed alias must not match promotion (exact name only).
+	costUSD, prov := book.Estimate("gemini/gemini-3.7-flash", 1000, 0, 0)
+	// May still be priced via snapshot heuristics, but not via promotion.
+	assert.NotEqual(t, Provenance("promotion:gemini-3.7-flash"), prov)
+	_ = costUSD
+}
+
+func TestEstimate_PromotionDisabledIgnored(t *testing.T) {
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: false,
+		Promotions: []Promotion{{
+			Model:            "promo-model",
+			End:              end,
+			InputPerMillion:  0.75,
+			OutputPerMillion: 3.75,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	})
+
+	costUSD, prov := book.Estimate("promo-model", 1000, 500, 0)
+	assert.Nil(t, costUSD)
+	assert.Equal(t, ProvenanceUnpriced, prov)
+}
+
+func TestEstimate_PromotionHalfOpenDateBoundary(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{{
+			Model:            "boundary-model",
+			Start:            &start,
+			End:              end,
+			InputPerMillion:  1.0,
+			OutputPerMillion: 1.0,
+		}},
+	})
+	require.NoError(t, err)
+
+	book.SetNowForTest(func() time.Time { return start })
+	costUSD, prov := book.Estimate("boundary-model", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:boundary-model"), prov)
+
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 30, 23, 59, 59, 0, time.UTC)
+	})
+	costUSD, prov = book.Estimate("boundary-model", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:boundary-model"), prov)
+
+	book.SetNowForTest(func() time.Time { return end })
+	costUSD, prov = book.Estimate("boundary-model", 1_000_000, 0, 0)
+	assert.Nil(t, costUSD)
+	assert.Equal(t, ProvenanceUnpriced, prov)
+}
+
+func TestStatus_PromotionLifecycle(t *testing.T) {
+	upcomingStart := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	upcomingEnd := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	activeStart := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	activeEnd := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	expiredEnd := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{
+			{ID: "upcoming", Model: "m1", Start: &upcomingStart, End: upcomingEnd, InputPerMillion: 1, OutputPerMillion: 1},
+			{ID: "active", Model: "m2", Start: &activeStart, End: activeEnd, InputPerMillion: 1, OutputPerMillion: 1},
+			{Model: "m3", End: expiredEnd, InputPerMillion: 1, OutputPerMillion: 1}, // omitted start, already expired
+		},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	})
+
+	st := book.Status()
+	require.Len(t, st.Promotions, 3)
+	assert.Equal(t, PromotionUpcoming, st.Promotions[0].Status)
+	assert.Equal(t, PromotionActive, st.Promotions[1].Status)
+	assert.Equal(t, PromotionExpired, st.Promotions[2].Status)
+	assert.Nil(t, st.Promotions[2].Start)
+}
+
+func TestEstimate_PromotionThinkingUsesOutputRate(t *testing.T) {
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{{
+			Model:            "think-model",
+			End:              end,
+			InputPerMillion:  1.0,
+			OutputPerMillion: 2.0,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	})
+
+	// 1M in + 0.5M out + 0.1M thinking@output = 1 + 1 + 0.2 = 2.2
+	costUSD, prov := book.Estimate("think-model", 1_000_000, 500_000, 100_000)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:think-model"), prov)
+	assert.InDelta(t, 2.2, *costUSD, 1e-9)
+}
+
+func TestEstimate_PromotionBeatsSnapshot(t *testing.T) {
+	// Snapshot has gemini-3.7-flash intro rates; promo with different rates must win.
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{{
+			ID:               "flash-intro",
+			Model:            "gemini-3.7-flash",
+			End:              end,
+			InputPerMillion:  0.1,
+			OutputPerMillion: 0.2,
+		}},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	})
+
+	costUSD, prov := book.Estimate("gemini-3.7-flash", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("promotion:flash-intro"), prov)
+	assert.InDelta(t, 0.1, *costUSD, 1e-9)
+
+	// After window: falls through to snapshot (not promo rates).
+	book.SetNowForTest(func() time.Time { return end })
+	costUSD, prov = book.Estimate("gemini-3.7-flash", 1_000_000, 0, 0)
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("snapshot:gemini-3.7-flash"), prov)
+	assert.InDelta(t, 0.75, *costUSD, 1e-9) // snapshot intro rate
 }

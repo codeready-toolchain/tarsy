@@ -1,5 +1,5 @@
 // Package cost provides LLM usage cost estimation from a price book
-// (YAML overrides, remote LiteLLM catalog, bundled snapshot).
+// (YAML promotions, overrides, remote LiteLLM catalog, bundled snapshot).
 package cost
 
 import "time"
@@ -7,13 +7,23 @@ import "time"
 // Provenance identifies how rates were resolved for an estimate.
 type Provenance string
 
-// ProvenanceOverride, ProvenanceCatalog, ProvenanceSnapshot, and ProvenanceUnpriced
-// identify how rates were resolved for an estimate.
+// ProvenancePromotion, ProvenanceOverride, ProvenanceCatalog, ProvenanceSnapshot,
+// and ProvenanceUnpriced identify how rates were resolved for an estimate.
 const (
-	ProvenanceOverride Provenance = "override"
-	ProvenanceCatalog  Provenance = "catalog"
-	ProvenanceSnapshot Provenance = "snapshot"
-	ProvenanceUnpriced Provenance = "unpriced"
+	ProvenancePromotion Provenance = "promotion"
+	ProvenanceOverride  Provenance = "override"
+	ProvenanceCatalog   Provenance = "catalog"
+	ProvenanceSnapshot  Provenance = "snapshot"
+	ProvenanceUnpriced  Provenance = "unpriced"
+)
+
+// PromotionLifecycle is the wall-clock status of a configured promotion.
+type PromotionLifecycle string
+
+const (
+	PromotionActive   PromotionLifecycle = "active"
+	PromotionUpcoming PromotionLifecycle = "upcoming"
+	PromotionExpired  PromotionLifecycle = "expired"
 )
 
 // CatalogURL is the LiteLLM public model price catalog.
@@ -31,16 +41,29 @@ type ModelRateOverride struct {
 	OutputPerMillion float64
 }
 
+// Promotion is a time-bounded flat rate for one exact model_name.
+// Start nil means already active (-∞). Window is half-open [start, end).
+type Promotion struct {
+	ID               string
+	Model            string
+	Start            *time.Time // nil = already active
+	End              time.Time
+	InputPerMillion  float64
+	OutputPerMillion float64
+}
+
 // Config is the resolved cost-estimation configuration used to construct a Book.
 type Config struct {
 	Enabled    bool
 	ModelRates map[string]ModelRateOverride
+	Promotions []Promotion
 }
 
 // Status is runtime metadata for Config Viewer / debugging.
 type Status struct {
 	Enabled    bool                `json:"enabled"`
 	ModelRates map[string]RateView `json:"model_rates,omitempty"`
+	Promotions []PromotionStatus   `json:"promotions,omitempty"`
 	Catalog    CatalogStatus       `json:"catalog"`
 }
 
@@ -48,6 +71,17 @@ type Status struct {
 type RateView struct {
 	InputPerMillion  float64 `json:"input_per_million"`
 	OutputPerMillion float64 `json:"output_per_million"`
+}
+
+// PromotionStatus is a read-only view of a configured promotion with lifecycle.
+type PromotionStatus struct {
+	ID               string             `json:"id,omitempty"`
+	Model            string             `json:"model"`
+	InputPerMillion  float64            `json:"input_per_million"`
+	OutputPerMillion float64            `json:"output_per_million"`
+	Start            *time.Time         `json:"start,omitempty"`
+	End              time.Time          `json:"end"`
+	Status           PromotionLifecycle `json:"status"`
 }
 
 // CatalogStatus describes the in-memory remote catalog (or snapshot fallback).

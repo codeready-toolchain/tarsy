@@ -42,10 +42,22 @@ type SystemYAMLConfig struct {
 type CostEstimationYAMLConfig struct {
 	Enabled    *bool                          `yaml:"enabled,omitempty"`
 	ModelRates map[string]ModelRateYAMLConfig `yaml:"model_rates,omitempty"`
+	Promotions []PromotionYAMLConfig          `yaml:"promotions,omitempty"`
 }
 
 // ModelRateYAMLConfig is a flat per-million USD override from YAML.
 type ModelRateYAMLConfig struct {
+	InputPerMillion  float64 `yaml:"input_per_million"`
+	OutputPerMillion float64 `yaml:"output_per_million"`
+}
+
+// PromotionYAMLConfig is a time-bounded flat rate for one exact model_name.
+// start/end accept RFC3339 or YYYY-MM-DD (UTC); end is required.
+type PromotionYAMLConfig struct {
+	ID               string  `yaml:"id,omitempty"`
+	Model            string  `yaml:"model"`
+	Start            string  `yaml:"start,omitempty"`
+	End              string  `yaml:"end"`
 	InputPerMillion  float64 `yaml:"input_per_million"`
 	OutputPerMillion float64 `yaml:"output_per_million"`
 }
@@ -382,6 +394,19 @@ func resolveCostEstimationConfig(sys *SystemYAMLConfig) *CostEstimationConfig {
 	}
 	for name, rate := range ce.ModelRates {
 		cfg.ModelRates[name] = ModelRateConfig(rate)
+	}
+	if len(ce.Promotions) > 0 {
+		cfg.Promotions = make([]PromotionConfig, len(ce.Promotions))
+		for i, p := range ce.Promotions {
+			cfg.Promotions[i] = PromotionConfig{
+				ID:               p.ID,
+				Model:            p.Model,
+				Start:            p.Start,
+				End:              p.End,
+				InputPerMillion:  p.InputPerMillion,
+				OutputPerMillion: p.OutputPerMillion,
+			}
+		}
 	}
 
 	return cfg
