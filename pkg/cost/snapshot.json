@@ -37,6 +37,24 @@
     "mode": "chat",
     "output_cost_per_token": 7.5e-06
   },
+  "gemini-3.7-flash": {
+    "input_cost_per_token": 7.5e-07,
+    "max_input_tokens": 1048576,
+    "litellm_provider": "vertex_ai-language-models",
+    "max_output_tokens": 65536,
+    "output_cost_per_reasoning_token": 3.75e-06,
+    "mode": "chat",
+    "output_cost_per_token": 3.75e-06
+  },
+  "gemini/gemini-3.7-flash": {
+    "input_cost_per_token": 7.5e-07,
+    "max_input_tokens": 1048576,
+    "litellm_provider": "gemini",
+    "max_output_tokens": 65536,
+    "output_cost_per_reasoning_token": 3.75e-06,
+    "mode": "chat",
+    "output_cost_per_token": 3.75e-06
+  },
   "gemini-2.5-pro": {
     "input_cost_per_token": 1.25e-06,
     "max_input_tokens": 1048576,
