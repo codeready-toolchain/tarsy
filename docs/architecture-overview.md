@@ -406,6 +406,7 @@ graph LR
 
 Each agent operates with a tiered knowledge system composed into its system prompt:
 
+0. **Dynamic context** (Tier 0): Wall-clock UTC time plus `WEEKEND` / `GLOBAL_HOLIDAY` / `WEEKDAY` classification and a staffing hint (`system.holidays` in `tarsy.yaml`; defaults to New Year's Day and Christmas when unset). Agents read this block rather than deriving dates from alert timestamps — typically as a soft signal when humans are less likely to review promptly. See [ADR-0022: Tier 0 Calendar and Staffing Context](adr/0022-tier0-calendar-staffing.md).
 1. **General SRE Instructions**: Universal best practices for incident response
 2. **MCP Server Instructions**: Tool-specific guidance from each configured MCP server
 3. **Required Skills** (Tier 2.5): Domain knowledge injected directly from `required_skills` — always present in the prompt

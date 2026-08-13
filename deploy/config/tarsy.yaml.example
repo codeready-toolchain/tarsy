@@ -80,8 +80,23 @@ system:
     channel: "C12345678"           # Slack channel ID (required when enabled)
 
   # Global holidays for Tier 0 calendar / staffing context (UTC, year-agnostic MM-DD).
-  # When omitted or empty, TARSy uses a small built-in list (Christmas, New Year's Day, …).
-  # When set, this list REPLACES the built-in defaults.
+  #
+  # At prompt-build time TARSy injects wall-clock UTC into every investigation /
+  # chat / action agent system prompt as Tier 0 Context, for example:
+  #   Calendar context (UTC): 2026-12-25 — Thursday — GLOBAL_HOLIDAY (Christmas)
+  #   Staffing: reduced (humans less likely to review promptly)
+  # Saturday/Sunday classify as WEEKEND even when not listed here. Matching a
+  # holiday date classifies as GLOBAL_HOLIDAY (<name>) and takes priority over
+  # WEEKEND. Agents should read this block — they must not re-derive weekday or
+  # holiday from alert/session timestamps.
+  #
+  # Typical use: give agents a soft signal when humans are less likely to review
+  # promptly (weekends / global holidays). It does not by itself trigger actions.
+  #
+  # When omitted or empty, TARSy uses a small built-in list (New Year's Day,
+  # Christmas). When set, this list REPLACES the built-in defaults — include
+  # every date you want classified as a holiday (e.g. a multi-day break).
+  # See docs/adr/0022-tier0-calendar-staffing.md.
   # holidays:
   #   - date: "12-25"
   #     name: "Christmas"

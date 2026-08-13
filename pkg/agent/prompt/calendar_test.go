@@ -60,7 +60,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2026-08-01T10:00:00Z (Saturday)",
 				"Calendar context (UTC): 2026-08-01 — Saturday — WEEKEND",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 		{
@@ -72,7 +72,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2026-08-02T10:00:00Z (Sunday)",
 				"Calendar context (UTC): 2026-08-02 — Sunday — WEEKEND",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 		{
@@ -84,7 +84,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2026-12-25T08:00:00Z (Friday)",
 				"Calendar context (UTC): 2026-12-25 — Friday — GLOBAL_HOLIDAY (Christmas)",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 		{
@@ -96,7 +96,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2023-01-01T12:00:00Z (Sunday)",
 				"Calendar context (UTC): 2023-01-01 — Sunday — GLOBAL_HOLIDAY (New Year's Day)",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 		{
@@ -121,7 +121,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2026-12-28T09:00:00Z (Monday)",
 				"Calendar context (UTC): 2026-12-28 — Monday — GLOBAL_HOLIDAY (Christmas holiday)",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 		{
@@ -133,7 +133,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2026-12-24T18:00:00Z (Thursday)",
 				"Calendar context (UTC): 2026-12-24 — Thursday — GLOBAL_HOLIDAY (Christmas Eve)",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 		{
@@ -157,7 +157,7 @@ func TestFormatCurrentTimeSection(t *testing.T) {
 				"",
 				"Current time: 2026-07-04T08:00:00Z (Saturday)",
 				"Calendar context (UTC): 2026-07-04 — Saturday — GLOBAL_HOLIDAY (Independence Day)",
-				"Staffing: reduced (more aggressive freeloading idle thresholds apply)",
+				"Staffing: reduced (humans less likely to review promptly)",
 			}, "\n"),
 		},
 	}
@@ -190,7 +190,7 @@ func TestFormatCurrentTimeSection_ChristmasBreakAllDays(t *testing.T) {
 		t.Run(d.Format("2006-01-02"), func(t *testing.T) {
 			got := formatCurrentTimeSection(d, christmasBreak)
 			assert.Contains(t, got, "GLOBAL_HOLIDAY (")
-			assert.Contains(t, got, "Staffing: reduced (more aggressive freeloading idle thresholds apply)")
+			assert.Contains(t, got, "Staffing: reduced (humans less likely to review promptly)")
 			assert.NotContains(t, got, "Staffing: normal")
 			assert.NotContains(t, got, "— WEEKDAY")
 			assert.NotContains(t, got, "— WEEKEND")
@@ -208,7 +208,7 @@ func TestComposeInstructions_Tier0CalendarUsesBuilderHolidays(t *testing.T) {
 	result := builder.ComposeInstructions(newTestExecCtx())
 
 	assert.Contains(t, result, "Calendar context (UTC): 2026-12-28 — Monday — GLOBAL_HOLIDAY (Christmas holiday)")
-	assert.Contains(t, result, "Staffing: reduced (more aggressive freeloading idle thresholds apply)")
+	assert.Contains(t, result, "Staffing: reduced (humans less likely to review promptly)")
 	assert.True(t, strings.Index(result, "## Context") < strings.Index(result, "General SRE Agent Instructions"),
 		"Tier 0 Context should precede Tier 1 general instructions")
 }

@@ -248,10 +248,10 @@ func formatCurrentTimeSection(now time.Time, holidays []config.Holiday) string {
 	staffing := "normal"
 	if name, ok := holidayName(mmdd, holidays); ok {
 		classification = fmt.Sprintf("GLOBAL_HOLIDAY (%s)", name)
-		staffing = "reduced (more aggressive freeloading idle thresholds apply)"
+		staffing = "reduced (humans less likely to review promptly)"
 	} else if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
 		classification = "WEEKEND"
-		staffing = "reduced (more aggressive freeloading idle thresholds apply)"
+		staffing = "reduced (humans less likely to review promptly)"
 	}
 
 	return fmt.Sprintf(
