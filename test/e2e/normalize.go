@@ -28,18 +28,18 @@ type Normalizer struct {
 
 // Regex patterns for dynamic values.
 var (
-	uuidRe            = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
-	timestampRe       = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
-	unixTSRe          = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
-	dbEventIDRe       = regexp.MustCompile(`"db_event_id":\s*\d+`)
-	connIDRe          = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
-	durationMsRe      = regexp.MustCompile(`"duration_ms":\s*\d+`)
-	currentTimeLineRe = regexp.MustCompile(`Current time: [^\n]+`)
+	uuidRe                = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	timestampRe           = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+	unixTSRe              = regexp.MustCompile(`"(created_at|updated_at|started_at|completed_at|timestamp)":\s*\d{10,13}`)
+	dbEventIDRe           = regexp.MustCompile(`"db_event_id":\s*\d+`)
+	connIDRe              = regexp.MustCompile(`"connection_id":\s*"[^"]*"`)
+	durationMsRe          = regexp.MustCompile(`"duration_ms":\s*\d+`)
+	currentTimeLineRe     = regexp.MustCompile(`Current time: [^\n]+`)
 	calendarContextLineRe = regexp.MustCompile(`Calendar context \(UTC\): [^\n]+`)
-	staffingLineRe      = regexp.MustCompile(`Staffing: [^\n]+`)
-	memoryAgeRe       = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
-	memoryScoreRe     = regexp.MustCompile(`, score: -?\d+\.\d+`)
-	shortTimestampRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
+	staffingLineRe        = regexp.MustCompile(`Staffing: [^\n]+`)
+	memoryAgeRe           = regexp.MustCompile(`(learned|updated) (?:just now|\d+ \w+ ago)`)
+	memoryScoreRe         = regexp.MustCompile(`, score: -?\d+\.\d+`)
+	shortTimestampRe      = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}`)
 )
 
 // NewNormalizer creates a normalizer that knows the session ID to replace.

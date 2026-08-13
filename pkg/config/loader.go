@@ -34,7 +34,7 @@ type SystemYAMLConfig struct {
 	Retention        *RetentionConfig          `yaml:"retention"`
 	// Holidays replaces the built-in global holiday list when non-empty.
 	// Each entry is year-agnostic MM-DD (UTC) used for Tier 0 calendar context.
-	Holidays []HolidayYAMLConfig `yaml:"holidays,omitempty"`
+	Holidays []Holiday `yaml:"holidays,omitempty"`
 }
 
 // CostEstimationYAMLConfig holds cost-estimation settings from YAML.
@@ -438,7 +438,7 @@ func resolveHolidays(sys *SystemYAMLConfig) []Holiday {
 				"date", h.Date, "name", h.Name)
 			continue
 		}
-		out = append(out, Holiday{Date: h.Date, Name: h.Name})
+		out = append(out, h)
 	}
 	if len(out) == 0 {
 		return DefaultHolidays()

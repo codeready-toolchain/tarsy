@@ -859,7 +859,7 @@ func TestResolveHolidays(t *testing.T) {
 
 	t.Run("non-empty holidays replace defaults", func(t *testing.T) {
 		got := resolveHolidays(&SystemYAMLConfig{
-			Holidays: []HolidayYAMLConfig{
+			Holidays: []Holiday{
 				{Date: "07-04", Name: "Independence Day"},
 				{Date: "12-25", Name: "Christmas"},
 			},
@@ -872,7 +872,7 @@ func TestResolveHolidays(t *testing.T) {
 
 	t.Run("entries with empty date or name are skipped", func(t *testing.T) {
 		got := resolveHolidays(&SystemYAMLConfig{
-			Holidays: []HolidayYAMLConfig{
+			Holidays: []Holiday{
 				{Date: "", Name: "Broken"},
 				{Date: "12-25", Name: ""},
 				{Date: "01-01", Name: "New Year's Day"},
@@ -883,7 +883,7 @@ func TestResolveHolidays(t *testing.T) {
 
 	t.Run("all invalid entries fall back to defaults", func(t *testing.T) {
 		got := resolveHolidays(&SystemYAMLConfig{
-			Holidays: []HolidayYAMLConfig{{Date: "", Name: ""}},
+			Holidays: []Holiday{{Date: "", Name: ""}},
 		})
 		assert.Equal(t, DefaultHolidays(), got)
 	})
