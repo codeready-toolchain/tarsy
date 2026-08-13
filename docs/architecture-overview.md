@@ -216,9 +216,9 @@ TARSy can automatically send Slack notifications when alert processing starts (f
 
 ### 12. Session Usage Cost
 
-TARSy estimates USD cost for LLM interactions at write time (list prices from a LiteLLM catalog + YAML overrides + bundled snapshot). Soft **Est. $** appears next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled (default on). A dedicated **Usage** page (`/usage`) provides date-window fleet dig-in (tokens and estimated cost) via `GET /api/v1/usage/summary`. Estimates are not invoice truth.
+TARSy estimates USD cost for LLM interactions at write time (list prices from a LiteLLM catalog + YAML overrides + time-bounded promotions + bundled snapshot). Soft **Est. $** appears next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled (default on). A dedicated **Usage** page (`/usage`) provides date-window fleet dig-in (tokens and estimated cost) via `GET /api/v1/usage/summary`. Estimates are not invoice truth.
 
-**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md) and [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md).
+**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), and [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md).
 
 ### 13. Prometheus Metrics
 
