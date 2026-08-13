@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"log/slog"
+	"math"
 	"testing"
 	"time"
 
@@ -2668,6 +2669,52 @@ func TestValidateCostEstimation(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "input_per_million must be >= 0",
+		},
+		{
+			name: "NaN promo rate fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "nan",
+					End:              "2026-10-01",
+					InputPerMillion:  math.NaN(),
+					OutputPerMillion: 1,
+				}},
+			},
+			wantErr: true,
+			errMsg:  "must be a finite number >= 0",
+		},
+		{
+			name: "positive infinity promo rate fails",
+			ce: &CostEstimationConfig{
+				Promotions: []PromotionConfig{{
+					Model:            "inf",
+					End:              "2026-10-01",
+					InputPerMillion:  1,
+					OutputPerMillion: math.Inf(1),
+				}},
+			},
+			wantErr: true,
+			errMsg:  "must be a finite number >= 0",
+		},
+		{
+			name: "NaN model_rates fails",
+			ce: &CostEstimationConfig{
+				ModelRates: map[string]ModelRateConfig{
+					"bad": {InputPerMillion: math.NaN(), OutputPerMillion: 1},
+				},
+			},
+			wantErr: true,
+			errMsg:  "must be a finite number >= 0",
+		},
+		{
+			name: "positive infinity model_rates fails",
+			ce: &CostEstimationConfig{
+				ModelRates: map[string]ModelRateConfig{
+					"bad": {InputPerMillion: 1, OutputPerMillion: math.Inf(1)},
+				},
+			},
+			wantErr: true,
+			errMsg:  "must be a finite number >= 0",
 		},
 		{
 			name: "end equals start fails",

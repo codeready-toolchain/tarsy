@@ -398,14 +398,7 @@ func resolveCostEstimationConfig(sys *SystemYAMLConfig) *CostEstimationConfig {
 	if len(ce.Promotions) > 0 {
 		cfg.Promotions = make([]PromotionConfig, len(ce.Promotions))
 		for i, p := range ce.Promotions {
-			cfg.Promotions[i] = PromotionConfig{
-				ID:               p.ID,
-				Model:            p.Model,
-				Start:            p.Start,
-				End:              p.End,
-				InputPerMillion:  p.InputPerMillion,
-				OutputPerMillion: p.OutputPerMillion,
-			}
+			cfg.Promotions[i] = PromotionConfig(p)
 		}
 	}
 

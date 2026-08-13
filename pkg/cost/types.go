@@ -21,9 +21,12 @@ const (
 type PromotionLifecycle string
 
 const (
-	PromotionActive   PromotionLifecycle = "active"
+	// PromotionActive means the promotion window includes now (half-open [start, end)).
+	PromotionActive PromotionLifecycle = "active"
+	// PromotionUpcoming means start is set and now is before start.
 	PromotionUpcoming PromotionLifecycle = "upcoming"
-	PromotionExpired  PromotionLifecycle = "expired"
+	// PromotionExpired means now is at or after end.
+	PromotionExpired PromotionLifecycle = "expired"
 )
 
 // CatalogURL is the LiteLLM public model price catalog.

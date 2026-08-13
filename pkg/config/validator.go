@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
 	"os"
 	"slices"
@@ -901,11 +902,11 @@ func (v *Validator) validateCostEstimation() error {
 		if name == "" {
 			return fmt.Errorf("system.cost_estimation.model_rates: model name must not be empty")
 		}
-		if rate.InputPerMillion < 0 {
-			return fmt.Errorf("system.cost_estimation.model_rates.%s.input_per_million must be >= 0", name)
+		if err := validatePerMillionRate(rate.InputPerMillion, fmt.Sprintf("system.cost_estimation.model_rates.%s.input_per_million", name)); err != nil {
+			return err
 		}
-		if rate.OutputPerMillion < 0 {
-			return fmt.Errorf("system.cost_estimation.model_rates.%s.output_per_million must be >= 0", name)
+		if err := validatePerMillionRate(rate.OutputPerMillion, fmt.Sprintf("system.cost_estimation.model_rates.%s.output_per_million", name)); err != nil {
+			return err
 		}
 	}
 
@@ -913,6 +914,17 @@ func (v *Validator) validateCostEstimation() error {
 		return err
 	}
 
+	return nil
+}
+
+// validatePerMillionRate rejects NaN, ±Inf, and negative per-million USD rates.
+func validatePerMillionRate(value float64, field string) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return fmt.Errorf("%s must be a finite number >= 0", field)
+	}
+	if value < 0 {
+		return fmt.Errorf("%s must be >= 0", field)
+	}
 	return nil
 }
 
@@ -937,11 +949,11 @@ func validatePromotions(promos []PromotionConfig) error {
 		if p.End == "" {
 			return fmt.Errorf("%s.end is required", prefix)
 		}
-		if p.InputPerMillion < 0 {
-			return fmt.Errorf("%s.input_per_million must be >= 0", prefix)
+		if err := validatePerMillionRate(p.InputPerMillion, prefix+".input_per_million"); err != nil {
+			return err
 		}
-		if p.OutputPerMillion < 0 {
-			return fmt.Errorf("%s.output_per_million must be >= 0", prefix)
+		if err := validatePerMillionRate(p.OutputPerMillion, prefix+".output_per_million"); err != nil {
+			return err
 		}
 		if p.ID != "" {
 			if prev, dup := seenIDs[p.ID]; dup {
