@@ -35,6 +35,14 @@ func (s *SessionService) GetUsageSummary(ctx context.Context, params models.Usag
 	if err != nil {
 		return nil, err
 	}
+	sessionCount, err := s.client.AlertSession.Query().
+		Where(sessionPreds...).
+		Count(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count usage sessions: %w", err)
+	}
+	totals.SessionCount = int64(sessionCount)
+	totals.AverageCostUsd = usageAverageCostUSD(totals.EstimatedCostUsd, totals.SessionCount)
 	byModel, err := s.usageByModel(ctx, interactionPred)
 	if err != nil {
 		return nil, err
@@ -139,6 +147,7 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 func (s *SessionService) usageByModel(ctx context.Context, interactionPred predicate.LLMInteraction) ([]models.UsageModelBreakdown, error) {
 	var rows []struct {
 		ModelName    string             `json:"model_name"`
+		SessionCount stdsql.NullInt64   `json:"session_count"`
 		InputSum     stdsql.NullInt64   `json:"input_sum"`
 		OutputSum    stdsql.NullInt64   `json:"output_sum"`
 		TotalSum     stdsql.NullInt64   `json:"total_sum"`
@@ -148,6 +157,9 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 	}
 
 	aggs := []ent.AggregateFunc{
+		ent.As(func(_ *sql.Selector) string {
+			return "COUNT(DISTINCT " + llminteraction.FieldSessionID + ")"
+		}, "session_count"),
 		ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
 		ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
 		ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
@@ -177,6 +189,7 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 	for _, row := range rows {
 		item := models.UsageModelBreakdown{
 			ModelName:    row.ModelName,
+			SessionCount: row.SessionCount.Int64,
 			InputTokens:  row.InputSum.Int64,
 			OutputTokens: row.OutputSum.Int64,
 			TotalTokens:  row.TotalSum.Int64,
@@ -184,6 +197,7 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 		if s.costEstimationEnabled {
 			cost := row.CostSum.Float64
 			item.EstimatedCostUsd = &cost
+			item.AverageCostUsd = usageAverageCostUSD(item.EstimatedCostUsd, item.SessionCount)
 			priced := row.TokenBearing > 0 && row.Priced == row.TokenBearing
 			item.Priced = &priced
 			unpriced := row.TokenBearing - row.Priced
@@ -196,9 +210,10 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 
 func (s *SessionService) usageByAlertType(ctx context.Context, sessionPreds []predicate.AlertSession) ([]models.UsageAlertBreakdown, error) {
 	var rows []struct {
-		AlertType stdsql.NullString  `json:"alert_type"`
-		TotalSum  stdsql.NullInt64   `json:"total_sum"`
-		CostSum   stdsql.NullFloat64 `json:"cost_sum"`
+		AlertType    stdsql.NullString  `json:"alert_type"`
+		SessionCount stdsql.NullInt64   `json:"session_count"`
+		TotalSum     stdsql.NullInt64   `json:"total_sum"`
+		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
 	}
 
 	err := s.client.AlertSession.Query().
@@ -207,6 +222,10 @@ func (s *SessionService) usageByAlertType(ctx context.Context, sessionPreds []pr
 			li := sql.Table(llminteraction.Table).As("li")
 			sel.LeftJoin(li).On(sel.C(alertsession.FieldID), li.C(llminteraction.FieldSessionID))
 			sel.Select(sql.As(sel.C(alertsession.FieldAlertType), "alert_type"))
+			sel.AppendSelectAs(
+				fmt.Sprintf("COUNT(DISTINCT %s)", sel.C(alertsession.FieldID)),
+				"session_count",
+			)
 			sel.AppendSelectAs(
 				fmt.Sprintf("COALESCE(SUM(%s), 0)", li.C(llminteraction.FieldTotalTokens)),
 				"total_sum",
@@ -227,12 +246,14 @@ func (s *SessionService) usageByAlertType(ctx context.Context, sessionPreds []pr
 	out := make([]models.UsageAlertBreakdown, 0, len(rows))
 	for _, row := range rows {
 		item := models.UsageAlertBreakdown{
-			AlertType:   row.AlertType.String,
-			TotalTokens: row.TotalSum.Int64,
+			AlertType:    row.AlertType.String,
+			SessionCount: row.SessionCount.Int64,
+			TotalTokens:  row.TotalSum.Int64,
 		}
 		if s.costEstimationEnabled {
 			cost := row.CostSum.Float64
 			item.EstimatedCostUsd = &cost
+			item.AverageCostUsd = usageAverageCostUSD(item.EstimatedCostUsd, item.SessionCount)
 		}
 		out = append(out, item)
 	}
@@ -241,9 +262,10 @@ func (s *SessionService) usageByAlertType(ctx context.Context, sessionPreds []pr
 
 func (s *SessionService) usageByChain(ctx context.Context, sessionPreds []predicate.AlertSession) ([]models.UsageChainBreakdown, error) {
 	var rows []struct {
-		ChainID  string             `json:"chain_id"`
-		TotalSum stdsql.NullInt64   `json:"total_sum"`
-		CostSum  stdsql.NullFloat64 `json:"cost_sum"`
+		ChainID      string             `json:"chain_id"`
+		SessionCount stdsql.NullInt64   `json:"session_count"`
+		TotalSum     stdsql.NullInt64   `json:"total_sum"`
+		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
 	}
 
 	err := s.client.AlertSession.Query().
@@ -252,6 +274,10 @@ func (s *SessionService) usageByChain(ctx context.Context, sessionPreds []predic
 			li := sql.Table(llminteraction.Table).As("li")
 			sel.LeftJoin(li).On(sel.C(alertsession.FieldID), li.C(llminteraction.FieldSessionID))
 			sel.Select(sql.As(sel.C(alertsession.FieldChainID), "chain_id"))
+			sel.AppendSelectAs(
+				fmt.Sprintf("COUNT(DISTINCT %s)", sel.C(alertsession.FieldID)),
+				"session_count",
+			)
 			sel.AppendSelectAs(
 				fmt.Sprintf("COALESCE(SUM(%s), 0)", li.C(llminteraction.FieldTotalTokens)),
 				"total_sum",
@@ -272,12 +298,14 @@ func (s *SessionService) usageByChain(ctx context.Context, sessionPreds []predic
 	out := make([]models.UsageChainBreakdown, 0, len(rows))
 	for _, row := range rows {
 		item := models.UsageChainBreakdown{
-			ChainID:     row.ChainID,
-			TotalTokens: row.TotalSum.Int64,
+			ChainID:      row.ChainID,
+			SessionCount: row.SessionCount.Int64,
+			TotalTokens:  row.TotalSum.Int64,
 		}
 		if s.costEstimationEnabled {
 			cost := row.CostSum.Float64
 			item.EstimatedCostUsd = &cost
+			item.AverageCostUsd = usageAverageCostUSD(item.EstimatedCostUsd, item.SessionCount)
 		}
 		out = append(out, item)
 	}
@@ -377,4 +405,11 @@ func (s *SessionService) usageTopSessions(
 		out = append(out, item)
 	}
 	return out, nil
+}
+
+func usageAverageCostUSD(cost *float64, sessionCount int64) *float64 {
+	if cost == nil || sessionCount <= 0 {
+		return nil
+	}
+	return new(*cost / float64(sessionCount))
 }

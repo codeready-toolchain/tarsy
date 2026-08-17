@@ -66,25 +66,45 @@ function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummar
     },
     rank_by: 'cost',
     totals: {
+      session_count: 2,
       input_tokens: 100,
       output_tokens: 50,
       total_tokens: 150,
       estimated_cost_usd: 1.23,
+      average_cost_usd: 0.615,
       cost_completeness: 'complete',
       unpriced_interaction_count: 0,
     },
     by_model: [
       {
         model_name: 'gemini-flash',
+        session_count: 2,
         input_tokens: 100,
         output_tokens: 50,
         total_tokens: 150,
         estimated_cost_usd: 1.23,
+        average_cost_usd: 0.615,
         priced: true,
       },
     ],
-    by_alert_type: [{ alert_type: 'kubernetes', total_tokens: 150, estimated_cost_usd: 1.23 }],
-    by_chain: [{ chain_id: 'default', total_tokens: 150, estimated_cost_usd: 1.23 }],
+    by_alert_type: [
+      {
+        alert_type: 'kubernetes',
+        session_count: 2,
+        total_tokens: 150,
+        estimated_cost_usd: 1.23,
+        average_cost_usd: 0.615,
+      },
+    ],
+    by_chain: [
+      {
+        chain_id: 'default',
+        session_count: 2,
+        total_tokens: 150,
+        estimated_cost_usd: 1.23,
+        average_cost_usd: 0.615,
+      },
+    ],
     top_sessions: [
       {
         session_id: 'abcdef12-3456-7890-abcd-ef1234567890',
@@ -141,7 +161,12 @@ describe('UsagePage', () => {
     expect(end - start).toBeLessThan(31 * dayMs);
 
     expect(await screen.findByText('Totals')).toBeInTheDocument();
-    expect(screen.getAllByText('~$1.23').length).toBeGreaterThan(0);
+    expect(screen.getByText('Sessions')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('Avg. cost / session')).toBeInTheDocument();
+    expect(screen.getAllByText('Avg. / session').length).toBe(3);
+    expect(screen.getAllByText('$0.615').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$1.23').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
       'Last 30 days',
     );
@@ -216,6 +241,7 @@ describe('UsagePage', () => {
         by_model: [
           {
             model_name: 'gemini-flash',
+            session_count: 2,
             input_tokens: 100,
             output_tokens: 50,
             total_tokens: 150,
@@ -243,6 +269,7 @@ describe('UsagePage', () => {
         cost_estimation_enabled: false,
         rank_by: 'tokens',
         totals: {
+          session_count: 1,
           input_tokens: 100,
           output_tokens: 50,
           total_tokens: 150,
@@ -250,13 +277,14 @@ describe('UsagePage', () => {
         by_model: [
           {
             model_name: 'gemini-flash',
+            session_count: 1,
             input_tokens: 100,
             output_tokens: 50,
             total_tokens: 150,
           },
         ],
-        by_alert_type: [{ alert_type: 'kubernetes', total_tokens: 150 }],
-        by_chain: [{ chain_id: 'default', total_tokens: 150 }],
+        by_alert_type: [{ alert_type: 'kubernetes', session_count: 1, total_tokens: 150 }],
+        by_chain: [{ chain_id: 'default', session_count: 1, total_tokens: 150 }],
         top_sessions: [
           {
             session_id: 'abcdef12-3456-7890-abcd-ef1234567890',
@@ -274,10 +302,14 @@ describe('UsagePage', () => {
 
     expect(screen.queryByText(/[~≈]\$/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Rank top sessions')).not.toBeInTheDocument();
+    expect(screen.getByText('Sessions')).toBeInTheDocument();
+    expect(screen.queryByText('Avg. cost / session')).not.toBeInTheDocument();
+    expect(screen.queryByText('Avg. / session')).not.toBeInTheDocument();
 
     const modelSection = screen.getByText('By model').closest('.MuiPaper-root');
     expect(modelSection).toBeInstanceOf(HTMLElement);
     expect(within(modelSection as HTMLElement).queryByText('Est. cost')).not.toBeInTheDocument();
+    expect(within(modelSection as HTMLElement).queryByText('Avg. / session')).not.toBeInTheDocument();
     expect(within(modelSection as HTMLElement).getByText('Tokens')).toBeInTheDocument();
   });
 });

@@ -177,7 +177,9 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.Equal(t, totalIn, toInt(totals["input_tokens"]))
 		assert.Equal(t, totalOut, toInt(totals["output_tokens"]))
 		assert.Equal(t, totalTok, toInt(totals["total_tokens"]))
+		assert.Equal(t, 2, toInt(totals["session_count"]))
 		assert.InDelta(t, totalCost, toFloat(totals["estimated_cost_usd"]), 1e-12)
+		assert.InDelta(t, totalCost/2, toFloat(totals["average_cost_usd"]), 1e-12)
 		assert.Equal(t, "complete", totals["cost_completeness"])
 
 		byModel, ok := usage["by_model"].([]interface{})
@@ -187,17 +189,25 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.Equal(t, "test-model", model["model_name"])
 		assert.Equal(t, true, model["priced"])
 		assert.Equal(t, 0, toInt(model["unpriced_interaction_count"]))
+		assert.Equal(t, 2, toInt(model["session_count"]))
 		assert.InDelta(t, totalCost, toFloat(model["estimated_cost_usd"]), 1e-12)
+		assert.InDelta(t, totalCost/2, toFloat(model["average_cost_usd"]), 1e-12)
 
 		byAlert, ok := usage["by_alert_type"].([]interface{})
 		require.True(t, ok)
 		require.Len(t, byAlert, 1)
-		assert.Equal(t, "test-usage-cost", byAlert[0].(map[string]interface{})["alert_type"])
+		alertRow := byAlert[0].(map[string]interface{})
+		assert.Equal(t, "test-usage-cost", alertRow["alert_type"])
+		assert.Equal(t, 2, toInt(alertRow["session_count"]))
+		assert.InDelta(t, totalCost/2, toFloat(alertRow["average_cost_usd"]), 1e-12)
 
 		byChain, ok := usage["by_chain"].([]interface{})
 		require.True(t, ok)
 		require.Len(t, byChain, 1)
-		assert.Equal(t, "usage-cost-chain", byChain[0].(map[string]interface{})["chain_id"])
+		chainRow := byChain[0].(map[string]interface{})
+		assert.Equal(t, "usage-cost-chain", chainRow["chain_id"])
+		assert.Equal(t, 2, toInt(chainRow["session_count"]))
+		assert.InDelta(t, totalCost/2, toFloat(chainRow["average_cost_usd"]), 1e-12)
 
 		top, ok := usage["top_sessions"].([]interface{})
 		require.True(t, ok)
@@ -298,8 +308,11 @@ func TestUsageCost_EstimationDisabled(t *testing.T) {
 	assert.Equal(t, false, usage["cost_estimation_enabled"])
 	totals := usage["totals"].(map[string]interface{})
 	assert.Equal(t, 150, toInt(totals["total_tokens"]))
+	assert.Equal(t, 1, toInt(totals["session_count"]))
 	_, hasUsageCost := totals["estimated_cost_usd"]
 	assert.False(t, hasUsageCost)
+	_, hasAvgCost := totals["average_cost_usd"]
+	assert.False(t, hasAvgCost)
 
 	// rank_by=cost is rejected when estimation is disabled.
 	app.getJSON(t, fmt.Sprintf(

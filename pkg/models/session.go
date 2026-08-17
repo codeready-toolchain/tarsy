@@ -376,10 +376,12 @@ type UsageWindow struct {
 
 // UsageTotals is the fleet-wide token/cost rollup for the window.
 type UsageTotals struct {
+	SessionCount             int64            `json:"session_count"`
 	InputTokens              int64            `json:"input_tokens"`
 	OutputTokens             int64            `json:"output_tokens"`
 	TotalTokens              int64            `json:"total_tokens"`
 	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
+	AverageCostUsd           *float64         `json:"average_cost_usd,omitempty"` // estimated_cost_usd / session_count
 	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
 	UnpricedInteractionCount *int             `json:"unpriced_interaction_count,omitempty"`
 }
@@ -387,10 +389,12 @@ type UsageTotals struct {
 // UsageModelBreakdown is a per-model rollup within the window.
 type UsageModelBreakdown struct {
 	ModelName                string   `json:"model_name"`
+	SessionCount             int64    `json:"session_count"`
 	InputTokens              int64    `json:"input_tokens"`
 	OutputTokens             int64    `json:"output_tokens"`
 	TotalTokens              int64    `json:"total_tokens"`
 	EstimatedCostUsd         *float64 `json:"estimated_cost_usd,omitempty"`
+	AverageCostUsd           *float64 `json:"average_cost_usd,omitempty"`           // estimated_cost_usd / session_count
 	Priced                   *bool    `json:"priced,omitempty"`                     // true when all token-bearing rows for the model are priced
 	UnpricedInteractionCount *int     `json:"unpriced_interaction_count,omitempty"` // count of token-bearing interactions for this model with no resolved rate
 }
@@ -398,15 +402,19 @@ type UsageModelBreakdown struct {
 // UsageAlertBreakdown is a per-alert-type rollup within the window.
 type UsageAlertBreakdown struct {
 	AlertType        string   `json:"alert_type"`
+	SessionCount     int64    `json:"session_count"`
 	TotalTokens      int64    `json:"total_tokens"`
 	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
+	AverageCostUsd   *float64 `json:"average_cost_usd,omitempty"` // estimated_cost_usd / session_count
 }
 
 // UsageChainBreakdown is a per-chain rollup within the window.
 type UsageChainBreakdown struct {
 	ChainID          string   `json:"chain_id"`
+	SessionCount     int64    `json:"session_count"`
 	TotalTokens      int64    `json:"total_tokens"`
 	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
+	AverageCostUsd   *float64 `json:"average_cost_usd,omitempty"` // estimated_cost_usd / session_count
 }
 
 // UsageTopSession is one of the capped top sessions in the window.

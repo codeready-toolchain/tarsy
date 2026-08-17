@@ -131,6 +131,8 @@ Rules:
 - Soft-deleted sessions are always excluded.
 - All `interaction_type` values count (same as session token SUMs).
 - Response sections: `totals`, `by_model`, `by_alert_type`, `by_chain`, and capped `top_sessions` (hardcoded top **20**; no `limit` param).
+- `totals.session_count` is the number of matching sessions in the window (same filters; includes sessions with no LLM rows). When estimation is enabled and `session_count > 0`, `totals.average_cost_usd` is `estimated_cost_usd / session_count`.
+- `by_model[]`, `by_alert_type[]`, and `by_chain[]` rows include `session_count` and (when estimation is enabled) `average_cost_usd`. For models, `session_count` is distinct sessions that used that model — a session that hits two models counts toward both.
 - `by_model[]` rows carry `priced` (bool: all token-bearing rows for that model are priced) and `unpriced_interaction_count` (count of token-bearing rows for that model with no resolved rate); the dashboard surfaces the count in the "Incomplete" chip's tooltip.
 - Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.

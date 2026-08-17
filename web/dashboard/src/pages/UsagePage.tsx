@@ -65,12 +65,6 @@ function defaultThirtyDayRange(): { start: Date; end: Date; preset: string } {
   return { start: range.start, end: range.end, preset: '30d' };
 }
 
-/** "~$X" for the Usage page's large, colored cost displays — tilde reads clearly at this size/weight. */
-function approxCostUsd(usd: number | null | undefined): string {
-  const formatted = formatEstimatedCostUsd(usd);
-  return formatted === '—' ? formatted : `~${formatted}`;
-}
-
 /** Explains exactly what "Incomplete" means for a model's priced status. */
 function incompletePricingTooltip(unpricedCount: number | undefined): string {
   const suffix = 'so its total cost likely undercounts.';
@@ -293,22 +287,33 @@ export function UsagePage() {
                     gap: 2,
                   }}
                 >
+                  <StatCard
+                    label="Sessions"
+                    value={summary.totals.session_count.toLocaleString()}
+                  />
                   <StatCard label="Total tokens" value={formatTokens(summary.totals.total_tokens)} />
                   <StatCard label="Input tokens" value={formatTokens(summary.totals.input_tokens)} />
                   <StatCard label="Output tokens" value={formatTokens(summary.totals.output_tokens)} />
                   {costEnabled && (
-                    <StatCard
-                      label="Est. cost"
-                      value={approxCostUsd(summary.totals.estimated_cost_usd)}
-                      warning={summary.totals.cost_completeness === 'partial'}
-                      caption={
-                        summary.totals.cost_completeness === 'partial' &&
-                        summary.totals.unpriced_interaction_count != null &&
-                        summary.totals.unpriced_interaction_count > 0
-                          ? `${summary.totals.unpriced_interaction_count} unpriced`
-                          : undefined
-                      }
-                    />
+                    <>
+                      <StatCard
+                        label="Est. cost"
+                        value={formatEstimatedCostUsd(summary.totals.estimated_cost_usd)}
+                        warning={summary.totals.cost_completeness === 'partial'}
+                        caption={
+                          summary.totals.cost_completeness === 'partial' &&
+                          summary.totals.unpriced_interaction_count != null &&
+                          summary.totals.unpriced_interaction_count > 0
+                            ? `${summary.totals.unpriced_interaction_count} unpriced`
+                            : undefined
+                        }
+                      />
+                      <StatCard
+                        label="Avg. cost / session"
+                        value={formatEstimatedCostUsd(summary.totals.average_cost_usd)}
+                        warning={summary.totals.cost_completeness === 'partial'}
+                      />
+                    </>
                   )}
                 </Box>
               </Paper>
@@ -324,6 +329,7 @@ export function UsagePage() {
                         { label: 'In', align: 'right' },
                         { label: 'Out', align: 'right' },
                         { label: 'Est. cost', align: 'right' },
+                        { label: 'Avg. / session', align: 'right' },
                         { label: 'Priced', align: 'center' },
                       ]
                     : [
@@ -343,7 +349,8 @@ export function UsagePage() {
                     <TableCell align="right">{formatTokens(row.output_tokens)}</TableCell>
                     {costEnabled && (
                       <>
-                        <TableCell align="right">{approxCostUsd(row.estimated_cost_usd)}</TableCell>
+                        <TableCell align="right">{formatEstimatedCostUsd(row.estimated_cost_usd)}</TableCell>
+                        <TableCell align="right">{formatEstimatedCostUsd(row.average_cost_usd)}</TableCell>
                         <TableCell align="center">
                           {row.priced === false ? (
                             <Tooltip title={incompletePricingTooltip(row.unpriced_interaction_count)} arrow>
@@ -377,7 +384,12 @@ export function UsagePage() {
                   title="By alert type"
                   columns={
                     costEnabled
-                      ? [{ label: 'Alert type' }, { label: 'Tokens', align: 'right' }, { label: 'Est. cost', align: 'right' }]
+                      ? [
+                          { label: 'Alert type' },
+                          { label: 'Tokens', align: 'right' },
+                          { label: 'Est. cost', align: 'right' },
+                          { label: 'Avg. / session', align: 'right' },
+                        ]
                       : [{ label: 'Alert type' }, { label: 'Tokens', align: 'right' }]
                   }
                   empty={summary.by_alert_type.length === 0}
@@ -387,7 +399,10 @@ export function UsagePage() {
                       <TableCell>{row.alert_type || '—'}</TableCell>
                       <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                       {costEnabled && (
-                        <TableCell align="right">{approxCostUsd(row.estimated_cost_usd)}</TableCell>
+                        <>
+                          <TableCell align="right">{formatEstimatedCostUsd(row.estimated_cost_usd)}</TableCell>
+                          <TableCell align="right">{formatEstimatedCostUsd(row.average_cost_usd)}</TableCell>
+                        </>
                       )}
                     </TableRow>
                   ))}
@@ -397,7 +412,12 @@ export function UsagePage() {
                   title="By chain"
                   columns={
                     costEnabled
-                      ? [{ label: 'Chain' }, { label: 'Tokens', align: 'right' }, { label: 'Est. cost', align: 'right' }]
+                      ? [
+                          { label: 'Chain' },
+                          { label: 'Tokens', align: 'right' },
+                          { label: 'Est. cost', align: 'right' },
+                          { label: 'Avg. / session', align: 'right' },
+                        ]
                       : [{ label: 'Chain' }, { label: 'Tokens', align: 'right' }]
                   }
                   empty={summary.by_chain.length === 0}
@@ -407,7 +427,10 @@ export function UsagePage() {
                       <TableCell>{row.chain_id}</TableCell>
                       <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                       {costEnabled && (
-                        <TableCell align="right">{approxCostUsd(row.estimated_cost_usd)}</TableCell>
+                        <>
+                          <TableCell align="right">{formatEstimatedCostUsd(row.estimated_cost_usd)}</TableCell>
+                          <TableCell align="right">{formatEstimatedCostUsd(row.average_cost_usd)}</TableCell>
+                        </>
                       )}
                     </TableRow>
                   ))}

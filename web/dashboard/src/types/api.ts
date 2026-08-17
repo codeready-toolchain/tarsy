@@ -40,10 +40,13 @@ export interface UsageWindow {
 
 /** Fleet-wide token/cost rollup for a usage window. */
 export interface UsageTotals {
+  session_count: number;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
   estimated_cost_usd?: number | null;
+  /** estimated_cost_usd / session_count; omitted when count is 0 or estimation is disabled */
+  average_cost_usd?: number | null;
   cost_completeness?: CostCompleteness;
   unpriced_interaction_count?: number;
 }
@@ -51,10 +54,12 @@ export interface UsageTotals {
 /** Per-model rollup within a usage window. */
 export interface UsageModelBreakdown {
   model_name: string;
+  session_count: number;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
   estimated_cost_usd?: number | null;
+  average_cost_usd?: number | null;
   priced?: boolean;
   unpriced_interaction_count?: number;
 }
@@ -62,15 +67,19 @@ export interface UsageModelBreakdown {
 /** Per-alert-type rollup within a usage window. */
 export interface UsageAlertBreakdown {
   alert_type: string;
+  session_count: number;
   total_tokens: number;
   estimated_cost_usd?: number | null;
+  average_cost_usd?: number | null;
 }
 
 /** Per-chain rollup within a usage window. */
 export interface UsageChainBreakdown {
   chain_id: string;
+  session_count: number;
   total_tokens: number;
   estimated_cost_usd?: number | null;
+  average_cost_usd?: number | null;
 }
 
 /** One of the capped top sessions in a usage window. */
