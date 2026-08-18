@@ -132,10 +132,12 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 			CostEstimationEnabled: true,
 			RankBy:                UsageRankByCost,
 			Totals: UsageTotals{
-				SessionCount:     1,
-				EstimatedCostUsd: &zero,
-				AverageCostUsd:   &zero,
-				CostCompleteness: CostCompletenessNone,
+				SessionCount:             1,
+				EstimatedCostUsd:         &zero,
+				AverageCostUsd:           &zero,
+				CostCompleteness:         CostCompletenessNone,
+				UnpricedInteractionCount: new(0),
+				UnpricedTokenCount:       new(int64(0)),
 			},
 			ByModel: []UsageModelBreakdown{{
 				ModelName:        "m",
@@ -159,6 +161,8 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 		assert.Contains(t, string(raw), `"average_cost_usd":0`)
 		assert.Contains(t, string(raw), `"cost_completeness":"none"`)
 		assert.Contains(t, string(raw), `"priced":false`)
+		assert.Contains(t, string(raw), `"unpriced_interaction_count":0`)
+		assert.Contains(t, string(raw), `"unpriced_token_count":0`)
 	})
 
 	t.Run("nil cost fields omitted when estimation disabled shape", func(t *testing.T) {

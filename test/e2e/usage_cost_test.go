@@ -315,6 +315,10 @@ func TestUsageCost_EstimationDisabled(t *testing.T) {
 	assert.False(t, hasUsageCost)
 	_, hasAvgCost := totals["average_cost_usd"]
 	assert.False(t, hasAvgCost)
+	_, hasUnpricedTokens := totals["unpriced_token_count"]
+	assert.False(t, hasUnpricedTokens, "unpriced_token_count must be omitted when estimation is disabled")
+	_, hasUnpricedInteractions := totals["unpriced_interaction_count"]
+	assert.False(t, hasUnpricedInteractions, "unpriced_interaction_count must be omitted when estimation is disabled")
 
 	// rank_by=cost is rejected when estimation is disabled.
 	app.getJSON(t, fmt.Sprintf(
