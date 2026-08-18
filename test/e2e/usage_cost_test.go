@@ -181,6 +181,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.InDelta(t, totalCost, toFloat(totals["estimated_cost_usd"]), 1e-12)
 		assert.InDelta(t, totalCost/2, toFloat(totals["average_cost_usd"]), 1e-12)
 		assert.Equal(t, "complete", totals["cost_completeness"])
+		assert.Equal(t, 0, toInt(totals["unpriced_interaction_count"]))
+		assert.Equal(t, 0, toInt(totals["unpriced_token_count"]))
 
 		byModel, ok := usage["by_model"].([]interface{})
 		require.True(t, ok)

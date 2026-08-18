@@ -93,12 +93,13 @@ func usageSessionPreds(params models.UsageSummaryParams) []predicate.AlertSessio
 
 func (s *SessionService) usageTotals(ctx context.Context, interactionPred predicate.LLMInteraction) (models.UsageTotals, error) {
 	var results []struct {
-		InputSum     stdsql.NullInt64   `json:"input_sum"`
-		OutputSum    stdsql.NullInt64   `json:"output_sum"`
-		TotalSum     stdsql.NullInt64   `json:"total_sum"`
-		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
-		TokenBearing int                `json:"token_bearing"`
-		Priced       int                `json:"priced"`
+		InputSum       stdsql.NullInt64   `json:"input_sum"`
+		OutputSum      stdsql.NullInt64   `json:"output_sum"`
+		TotalSum       stdsql.NullInt64   `json:"total_sum"`
+		CostSum        stdsql.NullFloat64 `json:"cost_sum"`
+		TokenBearing   int                `json:"token_bearing"`
+		Priced         int                `json:"priced"`
+		UnpricedTokens stdsql.NullInt64   `json:"unpriced_tokens"`
 	}
 
 	aggs := []ent.AggregateFunc{
@@ -115,6 +116,10 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 			ent.As(func(_ *sql.Selector) string {
 				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + " AND estimated_cost_usd IS NOT NULL)"
 			}, "priced"),
+			ent.As(func(_ *sql.Selector) string {
+				return "COALESCE(SUM(COALESCE(" + llminteraction.FieldTotalTokens + ", 0)) FILTER (WHERE " +
+					tokenBearingPredicateSQL + " AND estimated_cost_usd IS NULL), 0)"
+			}, "unpriced_tokens"),
 		)
 	}
 
@@ -140,6 +145,8 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 		totals.CostCompleteness = models.DeriveCostCompleteness(r.TokenBearing, r.Priced)
 		unpriced := r.TokenBearing - r.Priced
 		totals.UnpricedInteractionCount = &unpriced
+		unpricedTokens := r.UnpricedTokens.Int64
+		totals.UnpricedTokenCount = &unpricedTokens
 	}
 	return totals, nil
 }

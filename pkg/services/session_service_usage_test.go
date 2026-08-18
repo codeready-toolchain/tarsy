@@ -118,6 +118,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessPartial, summary.Totals.CostCompleteness)
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(300), *summary.Totals.UnpricedTokenCount)
 
 		byModel := map[string]models.UsageModelBreakdown{}
 		for _, m := range summary.ByModel {
@@ -213,6 +215,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessNone, summary.Totals.CostCompleteness)
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(15), *summary.Totals.UnpricedTokenCount)
 	})
 
 	t.Run("rank_by cost vs tokens", func(t *testing.T) {
@@ -388,6 +392,7 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Nil(t, summary.Totals.AverageCostUsd)
 		assert.Empty(t, summary.Totals.CostCompleteness)
 		assert.Nil(t, summary.Totals.UnpricedInteractionCount)
+		assert.Nil(t, summary.Totals.UnpricedTokenCount)
 		assert.Equal(t, int64(1), summary.Totals.SessionCount)
 		assert.Equal(t, int64(150), summary.Totals.TotalTokens)
 
@@ -464,6 +469,8 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, models.CostCompletenessComplete, summary.Totals.CostCompleteness)
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 0, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(0), *summary.Totals.UnpricedTokenCount)
 		require.Len(t, summary.ByModel, 1)
 		require.NotNil(t, summary.ByModel[0].Priced)
 		assert.True(t, *summary.ByModel[0].Priced)

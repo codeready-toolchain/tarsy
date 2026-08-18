@@ -51,7 +51,7 @@ import { getFilterOptions, getUsageSummary, handleAPIError } from '../services/a
 import { websocketService } from '../services/websocket.ts';
 import { EVENT_SESSION_STATUS } from '../constants/eventTypes.ts';
 import { isTerminalStatus, type SessionStatus } from '../constants/sessionStatus.ts';
-import { formatEstimatedCostUsd, formatTimestamp, formatTokens } from '../utils/format.ts';
+import { formatEstimatedCostUsd, formatTimestamp, formatTokens, formatTokensCompact } from '../utils/format.ts';
 import { sessionDetailPath } from '../constants/routes.ts';
 import type { UsageRankBy, UsageSummaryResponse } from '../types/api.ts';
 import type { SessionStatusPayload } from '../types/events.ts';
@@ -71,6 +71,20 @@ function incompletePricingTooltip(unpricedCount: number | undefined): string {
   return unpricedCount != null && unpricedCount > 0
     ? `${unpricedCount} token-bearing interaction${unpricedCount === 1 ? '' : 's'} for this model had no resolved rate (missing from the price catalog/overrides), ${suffix}`
     : `Some token-bearing interactions for this model had no resolved rate (missing from the price catalog/overrides), ${suffix}`;
+}
+
+function unpricedCostCaption(tokenCount: number | undefined): string | undefined {
+  if (tokenCount == null || tokenCount <= 0) {
+    return undefined;
+  }
+  return `${formatTokensCompact(tokenCount)} unpriced`;
+}
+
+function unpricedCostTooltip(tokenCount: number | undefined, interactionCount: number | undefined): string {
+  const tokens = formatTokensCompact(tokenCount ?? 0);
+  const n = interactionCount ?? 0;
+  const interactionWord = n === 1 ? 'interaction' : 'interactions';
+  return `${tokens} tokens from ${n.toLocaleString()} LLM ${interactionWord} had no resolved rate`;
 }
 
 export function UsagePage() {
@@ -301,10 +315,16 @@ export function UsagePage() {
                         value={formatEstimatedCostUsd(summary.totals.estimated_cost_usd)}
                         warning={summary.totals.cost_completeness === 'partial'}
                         caption={
-                          summary.totals.cost_completeness === 'partial' &&
-                          summary.totals.unpriced_interaction_count != null &&
-                          summary.totals.unpriced_interaction_count > 0
-                            ? `${summary.totals.unpriced_interaction_count} unpriced`
+                          summary.totals.cost_completeness === 'partial'
+                            ? unpricedCostCaption(summary.totals.unpriced_token_count)
+                            : undefined
+                        }
+                        captionTooltip={
+                          summary.totals.cost_completeness === 'partial'
+                            ? unpricedCostTooltip(
+                                summary.totals.unpriced_token_count,
+                                summary.totals.unpriced_interaction_count,
+                              )
                             : undefined
                         }
                       />
@@ -612,11 +632,13 @@ function StatCard({
   value,
   warning,
   caption,
+  captionTooltip,
 }: {
   label: string;
   value: string;
   warning?: boolean;
   caption?: string;
+  captionTooltip?: string;
 }) {
   return (
     <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
@@ -636,14 +658,16 @@ function StatCard({
         {value}
       </Typography>
       {caption && (
-        <Typography
-          variant="caption"
-          color="warning.main"
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mt: 0.25 }}
-        >
-          <WarningAmberRounded sx={{ fontSize: '0.9rem' }} />
-          {caption}
-        </Typography>
+        <Tooltip title={captionTooltip ?? ''} disableHoverListener={!captionTooltip} arrow>
+          <Typography
+            variant="caption"
+            color="warning.main"
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mt: 0.25 }}
+          >
+            <WarningAmberRounded sx={{ fontSize: '0.9rem' }} />
+            {caption}
+          </Typography>
+        </Tooltip>
       )}
     </Box>
   );

@@ -74,6 +74,7 @@ function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummar
       average_cost_usd: 0.615,
       cost_completeness: 'complete',
       unpriced_interaction_count: 0,
+      unpriced_token_count: 0,
     },
     by_model: [
       {
@@ -232,6 +233,37 @@ describe('UsagePage', () => {
     await new Promise((resolve) => setTimeout(resolve, 2200));
     expect(mockGetUsageSummary).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Updated — new session data available')).not.toBeInTheDocument();
+  });
+
+  it('shows unpriced token volume on the Est. cost card with an interaction-count tooltip', async () => {
+    const user = userEvent.setup();
+    mockGetUsageSummary.mockResolvedValue(
+      makeSummary({
+        totals: {
+          session_count: 2,
+          input_tokens: 100,
+          output_tokens: 50,
+          total_tokens: 1_200_150,
+          estimated_cost_usd: 1.23,
+          average_cost_usd: 0.615,
+          cost_completeness: 'partial',
+          unpriced_interaction_count: 838,
+          unpriced_token_count: 1_200_000,
+        },
+      }),
+    );
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+
+    const caption = await screen.findByText('1.2M unpriced');
+    expect(caption).toBeInTheDocument();
+
+    await user.hover(caption);
+
+    expect(
+      await screen.findByText('1.2M tokens from 838 LLM interactions had no resolved rate'),
+    ).toBeInTheDocument();
   });
 
   it('shows a tooltip on the Incomplete chip explaining exactly what is unpriced', async () => {

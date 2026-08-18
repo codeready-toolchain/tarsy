@@ -384,6 +384,7 @@ type UsageTotals struct {
 	AverageCostUsd           *float64         `json:"average_cost_usd,omitempty"` // estimated_cost_usd / session_count
 	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
 	UnpricedInteractionCount *int             `json:"unpriced_interaction_count,omitempty"`
+	UnpricedTokenCount       *int64           `json:"unpriced_token_count,omitempty"` // SUM(total_tokens) of token-bearing unpriced rows
 }
 
 // UsageModelBreakdown is a per-model rollup within the window.

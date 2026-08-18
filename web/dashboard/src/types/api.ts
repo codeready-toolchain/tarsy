@@ -49,6 +49,8 @@ export interface UsageTotals {
   average_cost_usd?: number | null;
   cost_completeness?: CostCompleteness;
   unpriced_interaction_count?: number;
+  /** SUM(total_tokens) of token-bearing interactions with no resolved rate */
+  unpriced_token_count?: number;
 }
 
 /** Per-model rollup within a usage window. */

@@ -177,5 +177,6 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 		assert.NotContains(t, string(raw), "cost_completeness")
 		assert.NotContains(t, string(raw), `"priced"`)
 		assert.NotContains(t, string(raw), "unpriced_interaction_count")
+		assert.NotContains(t, string(raw), "unpriced_token_count")
 	})
 }

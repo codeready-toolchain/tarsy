@@ -219,7 +219,8 @@ Illustrative response shape:
     "total_tokens": 0,
     "estimated_cost_usd": 0.0,
     "cost_completeness": "partial",
-    "unpriced_interaction_count": 12
+    "unpriced_interaction_count": 12,
+    "unpriced_token_count": 1200000
   },
   "by_model": [],
   "by_alert_type": [],
