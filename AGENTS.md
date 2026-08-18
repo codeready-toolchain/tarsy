@@ -1,22 +1,34 @@
 # TARSy - agent guide
 
-Default branch: `master`.
+TARSy is a hybrid Go + Python SRE system: Go orchestrator (alerts, sessions, MCP tools), a stateless Python LLM service over gRPC, and a React dashboard.
+
+Default branch: `master`. Architecture and package map: `CLAUDE.md`.
 
 ## Commands
 
-- Lint: `make lint`
-- Test: `make test`
+Never invent alternate package-manager commands if these work.
+
 - Full local gate: `make check-all`
-- Never invent alternate package-manager commands if the above work.
-
-Stack notes (do not invent substitutes):
-
-- Go backend: `make test-unit`, `make test-go`, `make build`
+- Lint: `make lint` (`make lint-fix` to auto-fix)
+- Test: `make test`
+- Format: `make fmt`
+- Dev: `make doctor`, `make setup`, `make dev`, `make dev-stop`
+- Go: `make test-unit`, `make test-go`, `make build`
 - Python LLM service: `make test-llm`
 - Dashboard: `make test-dashboard`
-- Format: `make fmt`
+- Codegen: `make ent-generate`, `make proto-generate`
+- Migrations: `make migrate-create NAME=add_feature` — then apply the `db-migration-review` skill
 
-Also read `CLAUDE.md` and skills under `.cursor/skills/` (symlinked for Claude Code) before substantive edits.
+## Skills
+
+Project skills live in `.cursor/skills/` (symlinked as `.claude/skills/`). Load a skill when its description matches the task. Do not preload all of them.
+
+## How we work
+
+- Don't assume; surface tradeoffs and ask when unclear
+- Minimum code that solves the problem; no speculative features or abstractions
+- Touch only what you must; no drive-by refactors
+- Define success criteria and verify before finishing
 
 ## Commits and PRs
 
@@ -32,7 +44,6 @@ Also read `CLAUDE.md` and skills under `.cursor/skills/` (symlinked for Claude C
 - Match existing code; do not reformat unrelated files
 - Prefer clear names over clever abstractions
 - No AI walls of text in PR descriptions
-- Avoid drive-by refactors
 
 ## Safety
 
@@ -42,4 +53,4 @@ Also read `CLAUDE.md` and skills under `.cursor/skills/` (symlinked for Claude C
 
 ## Learnings
 
-When using `/learn`, append **non-obvious** discoveries to the nearest relevant `AGENTS.md` (package-level preferred over root).
+When using `/learn`, append **non-obvious** discoveries to the nearest relevant `AGENTS.md` (package-level preferred over root). Do not create empty nested files.

@@ -1,6 +1,6 @@
 ---
 name: use-modern-go
-description: Apply modern Go syntax guidelines based on project's Go version. Use when user ask for modern Go code guidelines.
+description: Apply modern Go syntax based on this repository's Go version. Use when writing, editing, or reviewing Go code, or when the user asks for modern Go guidelines.
 ---
 
 # Modern Go Guidelines

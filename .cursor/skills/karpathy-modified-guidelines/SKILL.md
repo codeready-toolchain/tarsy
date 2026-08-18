@@ -1,6 +1,6 @@
 ---
 name: karpathy-modified-guidelines
-description: Behavioral guidelines to reduce common LLM coding mistakes by emphasizing thinking before coding, simplicity, surgical changes, and goal-driven execution. Use when implementing features, fixing bugs, refactoring code, or performing any coding task.
+description: Behavioral guidelines to reduce common LLM coding mistakes (think before coding, simplicity, surgical changes, goal-driven execution). Use when implementing features, fixing bugs, refactoring, reviewing code, or any other coding task.
 ---
 
 # Karpathy Guidelines
