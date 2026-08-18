@@ -139,13 +139,22 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 			},
 			ByModel: []UsageModelBreakdown{{
 				ModelName:        "m",
+				SessionCount:     2,
 				EstimatedCostUsd: &zero,
+				AverageCostUsd:   &zero,
 				Priced:           &priced,
+			}},
+			ByAlertType: []UsageAlertBreakdown{{
+				AlertType:        "oom",
+				SessionCount:     2,
+				EstimatedCostUsd: &zero,
+				AverageCostUsd:   &zero,
 			}},
 		}
 		raw, err := json.Marshal(resp)
 		require.NoError(t, err)
 		assert.Contains(t, string(raw), `"session_count":1`)
+		assert.Contains(t, string(raw), `"session_count":2`)
 		assert.Contains(t, string(raw), `"estimated_cost_usd":0`)
 		assert.Contains(t, string(raw), `"average_cost_usd":0`)
 		assert.Contains(t, string(raw), `"cost_completeness":"none"`)

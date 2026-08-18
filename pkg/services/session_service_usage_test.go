@@ -146,6 +146,54 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.InDelta(t, 0.012, *summary.TopSessions[0].EstimatedCostUsd, 1e-9)
 	})
 
+	t.Run("model average counts distinct sessions that used that model", func(t *testing.T) {
+		oc := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, oc.Client)
+		ctx := t.Context()
+
+		aID, aStage, aExec := seedUsageSession(t, oc.Client, usageSeed{
+			AlertData: "shared-a",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow,
+		})
+		seedLLMInteraction(t, oc.Client, aID, aStage, aExec, "shared-model", 10, 10, 20, floatPtr(0.10), 0)
+		seedLLMInteraction(t, oc.Client, aID, aStage, aExec, "solo-model", 20, 20, 40, floatPtr(0.40), 0)
+
+		bID, bStage, bExec := seedUsageSession(t, oc.Client, usageSeed{
+			AlertData: "shared-b",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow.Add(time.Minute),
+		})
+		seedLLMInteraction(t, oc.Client, bID, bStage, bExec, "shared-model", 30, 30, 60, floatPtr(0.30), 0)
+
+		summary, err := svc.GetUsageSummary(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), summary.Totals.SessionCount)
+		require.NotNil(t, summary.Totals.AverageCostUsd)
+		assert.InDelta(t, 0.40, *summary.Totals.AverageCostUsd, 1e-9)
+
+		byModel := map[string]models.UsageModelBreakdown{}
+		for _, m := range summary.ByModel {
+			byModel[m.ModelName] = m
+		}
+		require.Contains(t, byModel, "shared-model")
+		require.Contains(t, byModel, "solo-model")
+
+		assert.Equal(t, int64(2), byModel["shared-model"].SessionCount)
+		require.NotNil(t, byModel["shared-model"].EstimatedCostUsd)
+		assert.InDelta(t, 0.40, *byModel["shared-model"].EstimatedCostUsd, 1e-9)
+		require.NotNil(t, byModel["shared-model"].AverageCostUsd)
+		assert.InDelta(t, 0.20, *byModel["shared-model"].AverageCostUsd, 1e-9)
+
+		assert.Equal(t, int64(1), byModel["solo-model"].SessionCount)
+		require.NotNil(t, byModel["solo-model"].EstimatedCostUsd)
+		assert.InDelta(t, 0.40, *byModel["solo-model"].EstimatedCostUsd, 1e-9)
+		require.NotNil(t, byModel["solo-model"].AverageCostUsd)
+		assert.InDelta(t, 0.40, *byModel["solo-model"].AverageCostUsd, 1e-9)
+	})
+
 	t.Run("null costs treated as zero with none completeness", func(t *testing.T) {
 		nc := testdb.NewTestClient(t)
 		svc := setupTestSessionService(t, nc.Client)
@@ -581,4 +629,34 @@ func seedUsageLLMInteractionType(
 		create = create.SetEstimatedCostUsd(*costUSD)
 	}
 	create.SaveX(context.Background())
+}
+
+func TestUsageAverageCostUSD(t *testing.T) {
+	t.Parallel()
+	cost := 1.5
+	zero := 0.0
+	tests := []struct {
+		name         string
+		cost         *float64
+		sessionCount int64
+		wantNil      bool
+		want         float64
+	}{
+		{name: "nil cost", cost: nil, sessionCount: 3, wantNil: true},
+		{name: "zero sessions", cost: &cost, sessionCount: 0, wantNil: true},
+		{name: "divides cost by count", cost: &cost, sessionCount: 3, want: 0.5},
+		{name: "zero cost with sessions", cost: &zero, sessionCount: 2, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := usageAverageCostUSD(tt.cost, tt.sessionCount)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.InDelta(t, tt.want, *got, 1e-9)
+		})
+	}
 }
