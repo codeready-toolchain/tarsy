@@ -20,6 +20,9 @@ Also read `CLAUDE.md` and skills under `.cursor/skills/` (symlinked for Claude C
 
 ## Commits and PRs
 
+- Never commit, amend, or push unless the user explicitly asks in this turn
+- “Make the change”, “fix the tests”, or finishing a task is not permission to commit
+- If it is unclear, leave changes uncommitted and ask
 - Conventional commits: `feat|fix|docs|chore|refactor|test(scope): summary`
 - Prefer small, focused PRs
 - Fixes should reference an issue: `Fixes #123`
