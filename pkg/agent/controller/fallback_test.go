@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -577,6 +578,22 @@ func TestTryFallback_PreservesOriginalOnSecondFallback(t *testing.T) {
 	assert.Equal(t, "test-model", *exec.OriginalModelName, "original model should be preserved across multiple fallbacks")
 	require.NotNil(t, exec.ModelName)
 	assert.Equal(t, "fallback-model-2", *exec.ModelName, "current model should be updated to latest fallback")
+
+	events, err := execCtx.Services.Timeline.GetSessionTimeline(context.Background(), execCtx.SessionID)
+	require.NoError(t, err)
+	var originalModels, fallbackModels []any
+	for _, evt := range events {
+		if evt.EventType == timelineevent.EventTypeProviderFallback {
+			originalModels = append(originalModels, evt.Metadata["original_model"])
+			fallbackModels = append(fallbackModels, evt.Metadata["fallback_model"])
+		}
+	}
+	require.Len(t, originalModels, 2)
+	assert.Equal(t, "test-model", originalModels[0])
+	assert.Equal(t, "fallback-model-1", fallbackModels[0])
+	assert.Equal(t, "fallback-model-1", originalModels[1],
+		"second hop original_model should be the previous fallback model, not the primary")
+	assert.Equal(t, "fallback-model-2", fallbackModels[1])
 }
 
 func TestNativeToolsDroppedOnFallback(t *testing.T) {

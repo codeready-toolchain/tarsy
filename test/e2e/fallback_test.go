@@ -195,8 +195,8 @@ func TestE2E_FallbackCascade(t *testing.T) {
 
 	ev2 := findFallbackTransition(fallbackEvents, "fallback-1", "fallback-2")
 	require.NotNil(t, ev2, "should have fallback-1 → fallback-2 transition")
-	assert.Equal(t, "test-primary", ev2.Metadata["original_model"],
-		"original_model on later hops is the true primary, not the previous fallback")
+	assert.Equal(t, "test-fallback-1", ev2.Metadata["original_model"],
+		"original_model on each hop is the model we fell away from")
 	assert.Equal(t, "test-fallback-2", ev2.Metadata["fallback_model"])
 
 	// ── Execution record: original provider preserved, current is fallback-2 ──

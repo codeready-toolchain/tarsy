@@ -49,8 +49,11 @@ function stripEnvelope(raw: string): string {
 
 function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl }: ProviderFallbackItemProps) {
   const meta = item.metadata || {};
-  const from = safeString(meta.original_model) || safeString(meta.original_provider) || '?';
-  const to = safeString(meta.fallback_model) || safeString(meta.fallback_provider) || '?';
+  const originalModel = safeString(meta.original_model);
+  const fallbackModel = safeString(meta.fallback_model);
+  const from = originalModel || safeString(meta.original_provider) || '?';
+  const to = fallbackModel || safeString(meta.fallback_provider) || '?';
+  const originalKind = originalModel ? 'model' : 'provider';
   const fromBackend = safeString(meta.original_backend);
   const toBackend = safeString(meta.fallback_backend);
   const reason = safeString(meta.reason);
@@ -158,7 +161,7 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
                 </Box>
               )}
               <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontStyle: 'italic' }}>
-                The original model ({from}) returned an error, so execution was automatically switched to {to}.
+                The original {originalKind} ({from}) returned an error, so execution was automatically switched to {to}.
               </Typography>
 
               {fromBackend && toBackend && fromBackend !== toBackend && (

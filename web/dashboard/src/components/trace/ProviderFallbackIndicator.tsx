@@ -55,6 +55,7 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
   const attempt = overview.fallback_attempt;
   const hasDetails = reason.length > 0;
   const formattedReason = reason ? formatError(stripEnvelope(reason)) : '';
+  const originalKind = overview.original_model_name ? 'model' : 'provider';
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -111,7 +112,7 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
           })}
         >
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75, fontStyle: 'italic' }}>
-            The original model ({originalLabel}) returned an error, so execution was switched to {modelLabel}.
+            The original {originalKind} ({originalLabel}) returned an error, so execution was switched to {modelLabel}.
           </Typography>
           {formattedReason && (
             <Box>

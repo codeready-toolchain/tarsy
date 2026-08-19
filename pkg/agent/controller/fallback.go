@@ -185,6 +185,7 @@ func tryFallback(
 
 	prevProvider := execCtx.Config.LLMProviderName
 	prevBackend := execCtx.Config.LLMBackend
+	prevModel := execCtx.Config.ModelName()
 	fallbackModel := ""
 	if entry.Config != nil {
 		fallbackModel = entry.Config.Model
@@ -228,7 +229,7 @@ func tryFallback(
 	meta := map[string]any{
 		"original_provider": prevProvider,
 		"original_backend":  string(prevBackend),
-		"original_model":    state.OriginalModel,
+		"original_model":    prevModel,
 		"fallback_provider": entry.ProviderName,
 		"fallback_backend":  string(entry.Backend),
 		"fallback_model":    fallbackModel,
