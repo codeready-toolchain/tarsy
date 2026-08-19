@@ -188,7 +188,7 @@ class GoogleNativeProvider(LLMProvider):
 
     @staticmethod
     def _is_image_model(model: str) -> bool:
-        """Check if the model is an image-generation variant (limited native tool support)."""
+        """Check if the model is an image-generation variant (no function calling)."""
         return "image" in model.lower()
 
     def _convert_tools(
@@ -201,34 +201,41 @@ class GoogleNativeProvider(LLMProvider):
         grounding tools (url_context, google_search) in the same request.
         Both are included when present.
 
-        Image model variants only support google_search; url_context and
-        code_execution are filtered out to avoid 400 errors from the
-        Gemini API.  Any skipped tools are logged at INFO level.
+        Image model variants do not support function calling. They only support
+        google_search among native tools; url_context, code_execution, and MCP
+        FunctionDeclarations are omitted to avoid 400 errors from the Gemini API.
         """
         result_tools: List[genai_types.Tool] = []
+        is_image = self._is_image_model(model)
 
         # Add function declarations (MCP / memory / built-in tools)
         if tools:
-            declarations = []
-            for tool in tools:
-                try:
-                    params = json.loads(tool.parameters_schema) if tool.parameters_schema else {}
-                except json.JSONDecodeError:
-                    params = {}
-                declarations.append(
-                    genai_types.FunctionDeclaration(
-                        name=tool_name_to_api(tool.name),
-                        description=tool.description,
-                        parameters_json_schema=params if params else None,
-                    )
+            if is_image:
+                logger.warning(
+                    "Omitting %d function declaration(s) for image model %s "
+                    "(function calling is not supported)",
+                    len(tools), model,
                 )
-            result_tools.append(genai_types.Tool(function_declarations=declarations))
+            else:
+                declarations = []
+                for tool in tools:
+                    try:
+                        params = json.loads(tool.parameters_schema) if tool.parameters_schema else {}
+                    except json.JSONDecodeError:
+                        params = {}
+                    declarations.append(
+                        genai_types.FunctionDeclaration(
+                            name=tool_name_to_api(tool.name),
+                            description=tool.description,
+                            parameters_json_schema=params if params else None,
+                        )
+                    )
+                result_tools.append(genai_types.Tool(function_declarations=declarations))
 
         # Add native grounding tools alongside any function declarations.
         # Image model variants only support google_search; url_context and
         # code_execution are not available and would cause a 400 error.
         if native_tools:
-            is_image = self._is_image_model(model)
             if native_tools.get("google_search"):
                 result_tools.append(genai_types.Tool(google_search=genai_types.GoogleSearch()))
             if native_tools.get("code_execution") and not is_image:

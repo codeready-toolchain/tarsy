@@ -74,7 +74,14 @@ class LangChainProvider(LLMProvider):
             self._model_cache[cache_key] = self._create_chat_model(config)
         model = self._model_cache[cache_key]
         if tools:
-            model = self._bind_tools(model, list(tools))
+            if "image" in (config.model or "").lower():
+                logger.warning(
+                    "Omitting %d bound tool(s) for image model %s "
+                    "(function calling is not supported)",
+                    len(tools), config.model,
+                )
+            else:
+                model = self._bind_tools(model, list(tools))
         return model
 
     # ── Reasoning/thinking configuration per provider ──────────────────

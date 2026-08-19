@@ -142,6 +142,22 @@ class TestLangChainProviderToolBinding:
         mock_model.bind_tools.assert_not_called()
         assert result is mock_model
 
+    @patch("llm.providers.langchain_provider.LangChainProvider._create_chat_model")
+    def test_get_or_create_model_skips_tools_on_image_model(self, mock_create, provider):
+        mock_model = MagicMock()
+        mock_create.return_value = mock_model
+        config = pb.LLMConfig(
+            provider="google",
+            model="gemini-3.1-flash-image",
+            api_key_env="GOOGLE_API_KEY",
+        )
+        tools = [pb.ToolDefinition(name="server.read", description="Read a file")]
+
+        result = provider._get_or_create_model(config, tools)
+
+        mock_model.bind_tools.assert_not_called()
+        assert result is mock_model
+
 
 class TestLangChainProviderReasoningConfig:
     """Test reasoning/thinking configuration helpers."""

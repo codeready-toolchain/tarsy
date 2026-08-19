@@ -213,6 +213,33 @@ class TestGoogleNativeProvider:
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
         assert isinstance(result[1].code_execution, genai_types.ToolCodeExecution)
 
+    def test_convert_tools_image_model_omits_function_declarations(self, provider, caplog):
+        """Image models must not receive MCP FunctionDeclarations (API 400)."""
+        tools = [
+            pb.ToolDefinition(
+                name="server.read",
+                description="Read a file",
+                parameters_schema='{"type": "object", "properties": {"path": {"type": "string"}}}',
+            ),
+        ]
+        native_tools = {"google_search": True}
+
+        with caplog.at_level("WARNING"):
+            result = provider._convert_tools(
+                tools, native_tools, model="gemini-3.1-flash-image",
+            )
+
+        assert len(result) == 1
+        assert isinstance(result[0].google_search, genai_types.GoogleSearch)
+        assert all(not t.function_declarations for t in result)
+        assert any(
+            "function declaration" in r.message.lower()
+            for r in caplog.records
+        ), "expected warning when MCP tools are omitted on an image model"
+
+        tools_only = provider._convert_tools(tools, {}, model="gemini-3.1-flash-image")
+        assert tools_only is None
+
     def test_convert_tools_image_model_only_keeps_google_search(self, provider, caplog):
         """Test that url_context and code_execution are filtered out for image models."""
         native_tools = {
