@@ -25,6 +25,7 @@ const (
 type FallbackState struct {
 	OriginalProvider          string
 	OriginalBackend           config.LLMBackend
+	OriginalModel             string
 	CurrentProviderIndex      int // -1 = primary, 0+ = index into ResolvedFallbackProviders
 	AttemptedProviders        []string
 	FallbackReason            string
@@ -39,6 +40,7 @@ func NewFallbackState(execCtx *agent.ExecutionContext) *FallbackState {
 	return &FallbackState{
 		OriginalProvider:     execCtx.Config.LLMProviderName,
 		OriginalBackend:      execCtx.Config.LLMBackend,
+		OriginalModel:        execCtx.Config.ModelName(),
 		CurrentProviderIndex: -1,
 		AttemptedProviders:   []string{execCtx.Config.LLMProviderName},
 	}
@@ -183,6 +185,10 @@ func tryFallback(
 
 	prevProvider := execCtx.Config.LLMProviderName
 	prevBackend := execCtx.Config.LLMBackend
+	fallbackModel := ""
+	if entry.Config != nil {
+		fallbackModel = entry.Config.Model
+	}
 
 	// Check for native tools that will be lost on backend switch.
 	droppedTools := nativeToolsDroppedOnFallback(execCtx.Config.LLMProvider, entry.Backend)
@@ -219,11 +225,13 @@ func tryFallback(
 	)
 
 	// Record provider_fallback timeline event
-	meta := map[string]interface{}{
+	meta := map[string]any{
 		"original_provider": prevProvider,
 		"original_backend":  string(prevBackend),
+		"original_model":    state.OriginalModel,
 		"fallback_provider": entry.ProviderName,
 		"fallback_backend":  string(entry.Backend),
+		"fallback_model":    fallbackModel,
 		"reason":            state.FallbackReason,
 		"attempt":           nextIdx + 1,
 	}
@@ -246,8 +254,8 @@ func tryFallback(
 	if execCtx.Services != nil && execCtx.Services.Stage != nil {
 		if updateErr := execCtx.Services.Stage.UpdateExecutionProviderFallback(
 			ctx, execCtx.ExecutionID,
-			state.OriginalProvider, string(state.OriginalBackend),
-			entry.ProviderName, string(entry.Backend),
+			state.OriginalProvider, string(state.OriginalBackend), state.OriginalModel,
+			entry.ProviderName, string(entry.Backend), fallbackModel,
 		); updateErr != nil {
 			slog.Warn("Failed to update execution fallback record",
 				"execution_id", execCtx.ExecutionID, "error", updateErr)

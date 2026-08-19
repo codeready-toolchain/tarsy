@@ -90,6 +90,10 @@ func TestE2E_FallbackOnMaxRetries(t *testing.T) {
 	assert.Equal(t, "google-native", *investigator.OriginalLlmBackend)
 	require.NotNil(t, investigator.LlmProvider)
 	assert.Equal(t, "fallback-1", *investigator.LlmProvider)
+	require.NotNil(t, investigator.OriginalModelName, "original_model_name should be set after fallback")
+	assert.Equal(t, "test-primary", *investigator.OriginalModelName)
+	require.NotNil(t, investigator.ModelName)
+	assert.Equal(t, "test-fallback-1", *investigator.ModelName)
 
 	// ── Timeline: provider_fallback event with metadata ──
 	timeline := app.QueryTimeline(t, sessionID)
@@ -99,6 +103,8 @@ func TestE2E_FallbackOnMaxRetries(t *testing.T) {
 	assert.Equal(t, "fallback-1", fallbackEvents[0].Metadata["fallback_provider"])
 	assert.Equal(t, "google-native", fallbackEvents[0].Metadata["original_backend"])
 	assert.Equal(t, "google-native", fallbackEvents[0].Metadata["fallback_backend"])
+	assert.Equal(t, "test-primary", fallbackEvents[0].Metadata["original_model"])
+	assert.Equal(t, "test-fallback-1", fallbackEvents[0].Metadata["fallback_model"])
 
 	// ── ClearCache: set on the first call after fallback ──
 	inputs := llm.CapturedInputs()
@@ -184,9 +190,14 @@ func TestE2E_FallbackCascade(t *testing.T) {
 
 	ev1 := findFallbackTransition(fallbackEvents, "primary-provider", "fallback-1")
 	require.NotNil(t, ev1, "should have primary-provider → fallback-1 transition")
+	assert.Equal(t, "test-primary", ev1.Metadata["original_model"])
+	assert.Equal(t, "test-fallback-1", ev1.Metadata["fallback_model"])
 
 	ev2 := findFallbackTransition(fallbackEvents, "fallback-1", "fallback-2")
 	require.NotNil(t, ev2, "should have fallback-1 → fallback-2 transition")
+	assert.Equal(t, "test-primary", ev2.Metadata["original_model"],
+		"original_model on later hops is the true primary, not the previous fallback")
+	assert.Equal(t, "test-fallback-2", ev2.Metadata["fallback_model"])
 
 	// ── Execution record: original provider preserved, current is fallback-2 ──
 	execs := app.QueryExecutions(t, sessionID)
@@ -196,6 +207,10 @@ func TestE2E_FallbackCascade(t *testing.T) {
 	assert.Equal(t, "primary-provider", *investigator.OriginalLlmProvider, "original provider should be the primary")
 	require.NotNil(t, investigator.LlmProvider)
 	assert.Equal(t, "fallback-2", *investigator.LlmProvider, "current provider should be the last fallback")
+	require.NotNil(t, investigator.OriginalModelName)
+	assert.Equal(t, "test-primary", *investigator.OriginalModelName, "original model should stay the primary across hops")
+	require.NotNil(t, investigator.ModelName)
+	assert.Equal(t, "test-fallback-2", *investigator.ModelName, "current model should be the last fallback")
 
 	// ── LLM call count: 2 errors + 1 success + 1 exec summary = 4 ──
 	assert.Equal(t, 4, llm.CallCount())

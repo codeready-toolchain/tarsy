@@ -173,6 +173,8 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 	require.Len(t, execs, 1)
 	assert.Equal(t, config.AgentNameChat, execs[0].AgentName)
 	assert.Equal(t, agentexecution.StatusCompleted, execs[0].Status)
+	require.NotNil(t, execs[0].ModelName)
+	assert.Equal(t, "test-model", *execs[0].ModelName)
 
 	// Verify timeline events: user_question + final_analysis
 	tlEvents, err := entClient.TimelineEvent.Query().
@@ -438,7 +440,8 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		SetAgentName("TestAgent").
 		SetAgentIndex(1).
 		SetLlmBackend("google-native").
-		SetLlmProvider("gemini-2.5-pro").
+		SetLlmProvider("google-default").
+		SetModelName("gemini-3.7-flash").
 		SetStatus(agentexecution.StatusCompleted).
 		Save(ctx)
 	require.NoError(t, err)
@@ -451,7 +454,7 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		SetAgentName("TestAgent").
 		SetAgentIndex(2).
 		SetLlmBackend("google-native").
-		SetLlmProvider("gemini-2.5-pro").
+		SetLlmProvider("legacy-provider-key").
 		SetStatus(agentexecution.StatusCompleted).
 		Save(ctx)
 	require.NoError(t, err)
@@ -523,7 +526,8 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 	require.GreaterOrEqual(t, len(llm.capturedInputs), 2)
 
 	secondInput := llm.capturedInputs[1]
-	var foundInvestigation, foundFirstExchange, foundLLMProvider, foundAgent2 bool
+	var foundInvestigation, foundFirstExchange, foundModel, foundLegacyProvider, foundAgent2 bool
+	var foundProviderKey bool
 	for _, msg := range secondInput.Messages {
 		if strings.Contains(msg.Content, "OOM killed 5 times") {
 			foundInvestigation = true
@@ -534,14 +538,22 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 		if strings.Contains(msg.Content, "What caused the OOM?") || strings.Contains(msg.Content, "excessive memory usage") {
 			foundFirstExchange = true
 		}
-		if strings.Contains(msg.Content, "gemini-2.5-pro") {
-			foundLLMProvider = true
+		if strings.Contains(msg.Content, "gemini-3.7-flash") {
+			foundModel = true
+		}
+		if strings.Contains(msg.Content, "legacy-provider-key") {
+			foundLegacyProvider = true
+		}
+		if strings.Contains(msg.Content, "google-default") {
+			foundProviderKey = true
 		}
 	}
 	assert.True(t, foundInvestigation, "2nd chat call should see agent-1 investigation context")
 	assert.True(t, foundAgent2, "2nd chat call should see agent-2 investigation context")
 	assert.True(t, foundFirstExchange, "2nd chat call should see first chat exchange context")
-	assert.True(t, foundLLMProvider, "chat context should include agent's LLM provider name from AgentExecution")
+	assert.True(t, foundModel, "chat context should prefer persisted model_name over provider key")
+	assert.True(t, foundLegacyProvider, "chat context should fall back to llm_provider when model_name is unset")
+	assert.False(t, foundProviderKey, "chat context should not show provider key when model_name is set")
 }
 
 func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {

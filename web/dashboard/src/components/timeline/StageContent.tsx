@@ -722,6 +722,13 @@ const StageContent: React.FC<StageContentProps> = ({
             ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
             : deriveTokenData(execution.items);
           const hasTokens = tokenData && (tokenData.input_tokens > 0 || tokenData.output_tokens > 0);
+          const modelLabel = eo?.model_name || eo?.llm_provider;
+          const wasLabel = eo?.original_model_name || eo?.original_llm_provider;
+          const providerTip = eo?.model_name && eo.llm_provider
+            ? (eo.original_llm_provider
+              ? `${eo.llm_provider} (was: ${eo.original_llm_provider})`
+              : eo.llm_provider)
+            : undefined;
 
           return (
             <Box
@@ -782,19 +789,21 @@ const StageContent: React.FC<StageContentProps> = ({
               {/* Row 2: model info (left) + tokens (right) */}
               <Box display="flex" alignItems="center" gap={1} mt={0.5}>
                 <Box display="flex" alignItems="center" gap={1} flexWrap="wrap" sx={{ flex: 1, minWidth: 0 }}>
-                  {eo?.llm_provider && (
-                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                      {eo.llm_provider}
-                    </Typography>
+                  {modelLabel && (
+                    <Tooltip title={providerTip ?? ''} disableHoverListener={!providerTip}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                        {modelLabel}
+                      </Typography>
+                    </Tooltip>
                   )}
                   {eo?.llm_backend && (
                     <Typography variant="caption" color="text.secondary">
                       {eo.llm_backend}
                     </Typography>
                   )}
-                  {eo?.original_llm_provider && (
+                  {wasLabel && (
                     <Chip
-                      label={`was: ${eo.original_llm_provider}`}
+                      label={`was: ${wasLabel}`}
                       size="small" color="warning" variant="outlined"
                       sx={{ height: 18, fontSize: '0.6rem', fontFamily: 'monospace' }}
                     />

@@ -153,6 +153,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		AgentIndex:        agentIndex,
 		LLMBackend:        resolvedConfig.LLMBackend,
 		LLMProvider:       resolvedConfig.LLMProviderName,
+		ModelName:         resolvedConfig.ModelName(),
 		ParentExecutionID: &parentID,
 		Task:              &task,
 	})

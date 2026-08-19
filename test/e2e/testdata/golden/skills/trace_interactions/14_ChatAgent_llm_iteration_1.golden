@@ -81,7 +81,7 @@ No runbook available.
 
 ## Stage 1: investigation
 
-**Agent:** SkillInvestigator (google-native, test-provider)
+**Agent:** SkillInvestigator (google-native, test-model)
 **Status**: completed
 
 **Pre-loaded Skill: kubernetes-basics**
@@ -155,7 +155,7 @@ Investigation complete: pod-1 is OOMKilled. Network connectivity verified.
 
 ## Stage 2: remediation
 
-**Agent:** SkillRemediator (google-native, test-provider)
+**Agent:** SkillRemediator (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**

@@ -203,6 +203,26 @@ func (_u *AgentExecutionUpdate) ClearLlmProvider() *AgentExecutionUpdate {
 	return _u
 }
 
+// SetModelName sets the "model_name" field.
+func (_u *AgentExecutionUpdate) SetModelName(v string) *AgentExecutionUpdate {
+	_u.mutation.SetModelName(v)
+	return _u
+}
+
+// SetNillableModelName sets the "model_name" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableModelName(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetModelName(*v)
+	}
+	return _u
+}
+
+// ClearModelName clears the value of the "model_name" field.
+func (_u *AgentExecutionUpdate) ClearModelName() *AgentExecutionUpdate {
+	_u.mutation.ClearModelName()
+	return _u
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (_u *AgentExecutionUpdate) SetOriginalLlmProvider(v string) *AgentExecutionUpdate {
 	_u.mutation.SetOriginalLlmProvider(v)
@@ -240,6 +260,26 @@ func (_u *AgentExecutionUpdate) SetNillableOriginalLlmBackend(v *string) *AgentE
 // ClearOriginalLlmBackend clears the value of the "original_llm_backend" field.
 func (_u *AgentExecutionUpdate) ClearOriginalLlmBackend() *AgentExecutionUpdate {
 	_u.mutation.ClearOriginalLlmBackend()
+	return _u
+}
+
+// SetOriginalModelName sets the "original_model_name" field.
+func (_u *AgentExecutionUpdate) SetOriginalModelName(v string) *AgentExecutionUpdate {
+	_u.mutation.SetOriginalModelName(v)
+	return _u
+}
+
+// SetNillableOriginalModelName sets the "original_model_name" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableOriginalModelName(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetOriginalModelName(*v)
+	}
+	return _u
+}
+
+// ClearOriginalModelName clears the value of the "original_model_name" field.
+func (_u *AgentExecutionUpdate) ClearOriginalModelName() *AgentExecutionUpdate {
+	_u.mutation.ClearOriginalModelName()
 	return _u
 }
 
@@ -638,6 +678,12 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if _u.mutation.LlmProviderCleared() {
 		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
 	}
+	if value, ok := _u.mutation.ModelName(); ok {
+		_spec.SetField(agentexecution.FieldModelName, field.TypeString, value)
+	}
+	if _u.mutation.ModelNameCleared() {
+		_spec.ClearField(agentexecution.FieldModelName, field.TypeString)
+	}
 	if value, ok := _u.mutation.OriginalLlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
 	}
@@ -649,6 +695,12 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.OriginalLlmBackendCleared() {
 		_spec.ClearField(agentexecution.FieldOriginalLlmBackend, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalModelName(); ok {
+		_spec.SetField(agentexecution.FieldOriginalModelName, field.TypeString, value)
+	}
+	if _u.mutation.OriginalModelNameCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalModelName, field.TypeString)
 	}
 	if value, ok := _u.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
@@ -1147,6 +1199,26 @@ func (_u *AgentExecutionUpdateOne) ClearLlmProvider() *AgentExecutionUpdateOne {
 	return _u
 }
 
+// SetModelName sets the "model_name" field.
+func (_u *AgentExecutionUpdateOne) SetModelName(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetModelName(v)
+	return _u
+}
+
+// SetNillableModelName sets the "model_name" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableModelName(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetModelName(*v)
+	}
+	return _u
+}
+
+// ClearModelName clears the value of the "model_name" field.
+func (_u *AgentExecutionUpdateOne) ClearModelName() *AgentExecutionUpdateOne {
+	_u.mutation.ClearModelName()
+	return _u
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (_u *AgentExecutionUpdateOne) SetOriginalLlmProvider(v string) *AgentExecutionUpdateOne {
 	_u.mutation.SetOriginalLlmProvider(v)
@@ -1184,6 +1256,26 @@ func (_u *AgentExecutionUpdateOne) SetNillableOriginalLlmBackend(v *string) *Age
 // ClearOriginalLlmBackend clears the value of the "original_llm_backend" field.
 func (_u *AgentExecutionUpdateOne) ClearOriginalLlmBackend() *AgentExecutionUpdateOne {
 	_u.mutation.ClearOriginalLlmBackend()
+	return _u
+}
+
+// SetOriginalModelName sets the "original_model_name" field.
+func (_u *AgentExecutionUpdateOne) SetOriginalModelName(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetOriginalModelName(v)
+	return _u
+}
+
+// SetNillableOriginalModelName sets the "original_model_name" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableOriginalModelName(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetOriginalModelName(*v)
+	}
+	return _u
+}
+
+// ClearOriginalModelName clears the value of the "original_model_name" field.
+func (_u *AgentExecutionUpdateOne) ClearOriginalModelName() *AgentExecutionUpdateOne {
+	_u.mutation.ClearOriginalModelName()
 	return _u
 }
 
@@ -1612,6 +1704,12 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	if _u.mutation.LlmProviderCleared() {
 		_spec.ClearField(agentexecution.FieldLlmProvider, field.TypeString)
 	}
+	if value, ok := _u.mutation.ModelName(); ok {
+		_spec.SetField(agentexecution.FieldModelName, field.TypeString, value)
+	}
+	if _u.mutation.ModelNameCleared() {
+		_spec.ClearField(agentexecution.FieldModelName, field.TypeString)
+	}
 	if value, ok := _u.mutation.OriginalLlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
 	}
@@ -1623,6 +1721,12 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	}
 	if _u.mutation.OriginalLlmBackendCleared() {
 		_spec.ClearField(agentexecution.FieldOriginalLlmBackend, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalModelName(); ok {
+		_spec.SetField(agentexecution.FieldOriginalModelName, field.TypeString, value)
+	}
+	if _u.mutation.OriginalModelNameCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalModelName, field.TypeString)
 	}
 	if value, ok := _u.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)

@@ -57,7 +57,11 @@ func (AgentExecution) Fields() []ent.Field {
 		field.String("llm_provider").
 			Optional().
 			Nillable().
-			Comment("Resolved LLM provider name (for observability, e.g. 'gemini-2.5-pro')"),
+			Comment("Resolved LLM provider key (for observability, e.g. 'google-default')"),
+		field.String("model_name").
+			Optional().
+			Nillable().
+			Comment("Configured model at execution time (e.g. 'gemini-3.7-flash')"),
 
 		// Fallback tracking fields (NULL = no fallback occurred)
 		field.String("original_llm_provider").
@@ -68,6 +72,10 @@ func (AgentExecution) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Original backend before fallback (NULL = no fallback occurred)"),
+		field.String("original_model_name").
+			Optional().
+			Nillable().
+			Comment("Original model before fallback (NULL = no fallback occurred)"),
 
 		// Orchestrator sub-agent fields
 		field.String("parent_execution_id").

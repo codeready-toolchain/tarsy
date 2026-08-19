@@ -1571,6 +1571,7 @@ func buildExecutionOverview(
 		Status:              string(exec.Status),
 		LLMBackend:          exec.LlmBackend,
 		LLMProvider:         exec.LlmProvider,
+		ModelName:           exec.ModelName,
 		StartedAt:           exec.StartedAt,
 		CompletedAt:         exec.CompletedAt,
 		DurationMs:          durationMs,
@@ -1582,6 +1583,7 @@ func buildExecutionOverview(
 		Task:                exec.Task,
 		OriginalLLMProvider: exec.OriginalLlmProvider,
 		OriginalLLMBackend:  exec.OriginalLlmBackend,
+		OriginalModelName:   exec.OriginalModelName,
 	}
 	if costEstimationEnabled {
 		applyExecutionCostFields(&overview, stats)

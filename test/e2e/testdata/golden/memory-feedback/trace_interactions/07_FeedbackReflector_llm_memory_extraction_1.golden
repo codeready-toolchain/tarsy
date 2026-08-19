@@ -94,7 +94,7 @@ Bad queries: 'check if user john-doe was investigated before in my-namespace' (n
 
 ## Stage 1: investigation
 
-**Agent:** Investigator (google-native, test-provider)
+**Agent:** Investigator (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -120,7 +120,7 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
 ## Stage 2: Executive Summary
 
-**Agent:** ExecSummaryAgent (google-native, test-provider)
+**Agent:** ExecSummaryAgent (google-native, test-model)
 **Status**: completed
 
 **Agent Response:**

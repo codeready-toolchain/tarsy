@@ -138,6 +138,9 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 	if req.LLMProvider != "" {
 		builder.SetLlmProvider(req.LLMProvider)
 	}
+	if req.ModelName != "" {
+		builder.SetModelName(req.ModelName)
+	}
 	if req.ParentExecutionID != nil {
 		parent, err := s.client.AgentExecution.Get(ctx, *req.ParentExecutionID)
 		if err != nil {
@@ -217,13 +220,14 @@ func (s *StageService) UpdateAgentExecutionStatus(ctx context.Context, execution
 }
 
 // UpdateExecutionProviderFallback records a provider fallback on an execution.
-// Sets original_llm_provider/original_llm_backend (only on first fallback) and
-// updates llm_provider/llm_backend to the new fallback values.
+// Sets original_llm_provider/original_llm_backend/original_model_name (only on
+// first fallback) and updates llm_provider/llm_backend/model_name to the new
+// fallback values.
 func (s *StageService) UpdateExecutionProviderFallback(
 	ctx context.Context,
 	executionID string,
-	originalProvider, originalBackend string,
-	newProvider, newBackend string,
+	originalProvider, originalBackend, originalModel string,
+	newProvider, newBackend, newModel string,
 ) error {
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -239,12 +243,18 @@ func (s *StageService) UpdateExecutionProviderFallback(
 	update := s.client.AgentExecution.UpdateOneID(executionID).
 		SetLlmProvider(newProvider).
 		SetLlmBackend(newBackend)
+	if newModel != "" {
+		update = update.SetModelName(newModel)
+	}
 
 	// Only set originals on the first fallback (preserve the true primary)
 	if exec.OriginalLlmProvider == nil {
 		update = update.
 			SetOriginalLlmProvider(originalProvider).
 			SetOriginalLlmBackend(originalBackend)
+		if originalModel != "" {
+			update = update.SetOriginalModelName(originalModel)
+		}
 	}
 
 	if err := update.Exec(writeCtx); err != nil {

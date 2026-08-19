@@ -140,6 +140,20 @@ func (_c *AgentExecutionCreate) SetNillableLlmProvider(v *string) *AgentExecutio
 	return _c
 }
 
+// SetModelName sets the "model_name" field.
+func (_c *AgentExecutionCreate) SetModelName(v string) *AgentExecutionCreate {
+	_c.mutation.SetModelName(v)
+	return _c
+}
+
+// SetNillableModelName sets the "model_name" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableModelName(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetModelName(*v)
+	}
+	return _c
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (_c *AgentExecutionCreate) SetOriginalLlmProvider(v string) *AgentExecutionCreate {
 	_c.mutation.SetOriginalLlmProvider(v)
@@ -164,6 +178,20 @@ func (_c *AgentExecutionCreate) SetOriginalLlmBackend(v string) *AgentExecutionC
 func (_c *AgentExecutionCreate) SetNillableOriginalLlmBackend(v *string) *AgentExecutionCreate {
 	if v != nil {
 		_c.SetOriginalLlmBackend(*v)
+	}
+	return _c
+}
+
+// SetOriginalModelName sets the "original_model_name" field.
+func (_c *AgentExecutionCreate) SetOriginalModelName(v string) *AgentExecutionCreate {
+	_c.mutation.SetOriginalModelName(v)
+	return _c
+}
+
+// SetNillableOriginalModelName sets the "original_model_name" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableOriginalModelName(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetOriginalModelName(*v)
 	}
 	return _c
 }
@@ -464,6 +492,10 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 		_spec.SetField(agentexecution.FieldLlmProvider, field.TypeString, value)
 		_node.LlmProvider = &value
 	}
+	if value, ok := _c.mutation.ModelName(); ok {
+		_spec.SetField(agentexecution.FieldModelName, field.TypeString, value)
+		_node.ModelName = &value
+	}
 	if value, ok := _c.mutation.OriginalLlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
 		_node.OriginalLlmProvider = &value
@@ -471,6 +503,10 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 	if value, ok := _c.mutation.OriginalLlmBackend(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmBackend, field.TypeString, value)
 		_node.OriginalLlmBackend = &value
+	}
+	if value, ok := _c.mutation.OriginalModelName(); ok {
+		_spec.SetField(agentexecution.FieldOriginalModelName, field.TypeString, value)
+		_node.OriginalModelName = &value
 	}
 	if value, ok := _c.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)

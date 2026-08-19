@@ -64,7 +64,7 @@ No runbook available.
 
 ## Stage 1: investigation
 
-**Agent:** DataCollector (google-native, test-provider)
+**Agent:** DataCollector (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -108,7 +108,7 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
 ## Stage 2: remediation
 
-**Agent:** Remediator (langchain, test-provider)
+**Agent:** Remediator (langchain, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -143,7 +143,7 @@ Recommend increasing memory limit to 1Gi and adding a HPA for pod-1.
 
 ### Parallel Investigation: "validation" — 2/2 agents succeeded
 
-#### Agent 1: ConfigValidator (langchain, test-provider)
+#### Agent 1: ConfigValidator (langchain, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -163,7 +163,7 @@ The memory limit of 512Mi matches the alert threshold.
 
 Config validated: pod-1 memory limit is 512Mi, matching the OOM threshold.
 
-#### Agent 2: MetricsValidator (google-native, test-provider)
+#### Agent 2: MetricsValidator (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -198,7 +198,7 @@ Combined validation confirms pod-1 has correct memory limit of 512Mi but violate
 
 ### Parallel Investigation: "scaling-review" — 2/2 agents succeeded
 
-#### Agent 1: ScalingReviewer-1 (google-native, test-provider)
+#### Agent 1: ScalingReviewer-1 (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -209,7 +209,7 @@ Evaluating horizontal scaling needs for pod-1.
 
 Current replicas=1 is insufficient. Recommend min=2 max=5 with 70% CPU target.
 
-#### Agent 2: ScalingReviewer-2 (google-native, test-provider)
+#### Agent 2: ScalingReviewer-2 (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**

@@ -21,8 +21,10 @@ var (
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "llm_backend", Type: field.TypeString},
 		{Name: "llm_provider", Type: field.TypeString, Nullable: true},
+		{Name: "model_name", Type: field.TypeString, Nullable: true},
 		{Name: "original_llm_provider", Type: field.TypeString, Nullable: true},
 		{Name: "original_llm_backend", Type: field.TypeString, Nullable: true},
+		{Name: "original_model_name", Type: field.TypeString, Nullable: true},
 		{Name: "task", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "parent_execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
@@ -36,19 +38,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "agent_executions_agent_executions_sub_agents",
-				Columns:    []*schema.Column{AgentExecutionsColumns[13]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[15]},
 				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_alert_sessions_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[14]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[16]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_stages_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[15]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[17]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -57,12 +59,12 @@ var (
 			{
 				Name:    "agentexecution_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[14]},
+				Columns: []*schema.Column{AgentExecutionsColumns[16]},
 			},
 			{
 				Name:    "agentexecution_parent_execution_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[13]},
+				Columns: []*schema.Column{AgentExecutionsColumns[15]},
 			},
 		},
 	}

@@ -490,6 +490,9 @@ func TestSubAgentRunner_Dispatch_WithOverrides(t *testing.T) {
 	require.NotNil(t, dbExec.LlmProvider, "llm_provider should be set")
 	assert.Equal(t, "fast-provider", *dbExec.LlmProvider,
 		"execution should use overridden LLM provider, not the default")
+	require.NotNil(t, dbExec.ModelName, "model_name should be set")
+	assert.Equal(t, "fast-model", *dbExec.ModelName,
+		"execution should persist the overridden provider's model")
 }
 
 // ─── Execution status WS events (integration) ──────────────────────────────

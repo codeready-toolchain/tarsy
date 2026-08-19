@@ -1469,13 +1469,19 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 	require.Contains(t, execByName, "NativeAgent")
 	assert.Equal(t, string(config.LLMBackendNativeGemini), execByName["NativeAgent"].LlmBackend,
 		"NativeAgent should have resolved backend from agent registry, not default")
+	require.NotNil(t, execByName["NativeAgent"].ModelName)
+	assert.Equal(t, "test-model", *execByName["NativeAgent"].ModelName)
 
 	require.Contains(t, execByName, "LangChainAgent")
 	assert.Equal(t, string(config.LLMBackendLangChain), execByName["LangChainAgent"].LlmBackend,
 		"LangChainAgent should have resolved backend from agent registry")
+	require.NotNil(t, execByName["LangChainAgent"].ModelName)
+	assert.Equal(t, "test-model", *execByName["LangChainAgent"].ModelName)
 
 	require.Contains(t, execByName, config.AgentNameSynthesis)
 	assert.Equal(t, string(config.LLMBackendLangChain), execByName[config.AgentNameSynthesis].LlmBackend)
+	require.NotNil(t, execByName[config.AgentNameSynthesis].ModelName)
+	assert.Equal(t, "test-model", *execByName[config.AgentNameSynthesis].ModelName)
 
 	// Verify the synthesis LLM call received correct backend labels.
 	// The 3rd LLM call is synthesis — its input messages should contain
@@ -1488,10 +1494,10 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 			synthUserMsg = msg.Content
 		}
 	}
-	assert.Contains(t, synthUserMsg, "NativeAgent (google-native, test-provider)",
-		"synthesis prompt should show resolved strategy for NativeAgent")
-	assert.Contains(t, synthUserMsg, "LangChainAgent (langchain, test-provider)",
-		"synthesis prompt should show resolved strategy for LangChainAgent")
+	assert.Contains(t, synthUserMsg, "NativeAgent (google-native, test-model)",
+		"synthesis prompt should show resolved backend and model for NativeAgent")
+	assert.Contains(t, synthUserMsg, "LangChainAgent (langchain, test-model)",
+		"synthesis prompt should show resolved backend and model for LangChainAgent")
 }
 
 func TestExecutor_MultiAgentThenSingleAgent(t *testing.T) {

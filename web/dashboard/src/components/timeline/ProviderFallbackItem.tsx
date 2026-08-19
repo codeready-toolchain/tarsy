@@ -49,8 +49,8 @@ function stripEnvelope(raw: string): string {
 
 function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl }: ProviderFallbackItemProps) {
   const meta = item.metadata || {};
-  const from = safeString(meta.original_provider) || '?';
-  const to = safeString(meta.fallback_provider) || '?';
+  const from = safeString(meta.original_model) || safeString(meta.original_provider) || '?';
+  const to = safeString(meta.fallback_model) || safeString(meta.fallback_provider) || '?';
   const fromBackend = safeString(meta.original_backend);
   const toBackend = safeString(meta.fallback_backend);
   const reason = safeString(meta.reason);

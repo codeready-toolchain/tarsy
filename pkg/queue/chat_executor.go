@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -291,6 +292,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 		AgentIndex:  1,
 		LLMBackend:  resolvedConfig.LLMBackend,
 		LLMProvider: chatProviderName,
+		ModelName:   resolvedConfig.ModelName(),
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
@@ -573,7 +575,7 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 				AgentName:    exec.AgentName,
 				AgentIndex:   exec.AgentIndex,
 				LLMBackend:   exec.LlmBackend,
-				LLMProvider:  stringFromNillable(exec.LlmProvider),
+				LLMProvider:  cmp.Or(stringFromNillable(exec.ModelName), stringFromNillable(exec.LlmProvider)),
 				Status:       mapExecStatusToSessionStatus(exec.Status),
 				Events:       events,
 				ErrorMessage: stringFromNillable(exec.ErrorMessage),

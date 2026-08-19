@@ -118,7 +118,7 @@ Pod OOMKilled
 
 ### Parallel Investigation: "investigation" — 2/2 agents succeeded
 
-#### Agent 1: Investigator (google-native, test-provider)
+#### Agent 1: Investigator (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -142,7 +142,7 @@ Pod is OOMKilled.
 
 Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
-#### Agent 2: MetricsChecker (google-native, test-provider)
+#### Agent 2: MetricsChecker (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -160,7 +160,7 @@ Combined analysis: pod-1 is OOMKilled (5 restarts) with memory at 98% of 512Mi l
 
 ## Stage 2: remediation
 
-**Agent:** Remediator (google-native, test-provider)
+**Agent:** Remediator (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**
@@ -189,7 +189,7 @@ Restarted pod-1. Recommend increasing memory limit to 1Gi.
 
 ## Stage 3: Executive Summary
 
-**Agent:** ExecSummaryAgent (google-native, test-provider)
+**Agent:** ExecSummaryAgent (google-native, test-model)
 **Status**: completed
 
 **Agent Response:**

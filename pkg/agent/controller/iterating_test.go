@@ -1399,6 +1399,8 @@ func TestIteratingController_FallbackSetsTimelineEvent(t *testing.T) {
 			assert.Equal(t, false, evt.Metadata["error_retryable"])
 			assert.Equal(t, "primary", evt.Metadata["original_provider"])
 			assert.Equal(t, "fallback", evt.Metadata["fallback_provider"])
+			assert.Equal(t, "test-model", evt.Metadata["original_model"])
+			assert.Equal(t, "fallback-model", evt.Metadata["fallback_model"])
 		}
 	}
 	require.True(t, foundFallbackEvent, "should have a provider_fallback timeline event")

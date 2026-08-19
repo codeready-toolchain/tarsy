@@ -121,6 +121,7 @@ type agentResult struct {
 	err             error
 	llmBackend      string // resolved backend (for synthesis context)
 	llmProviderName string // resolved provider name (for synthesis context)
+	llmModel        string // resolved model (for synthesis context)
 }
 
 // executionConfig wraps agent config with display name for stage execution.
@@ -593,6 +594,7 @@ func (e *RealSessionExecutor) executeAgent(
 		AgentIndex:  agentIndex + 1, // 1-based in DB
 		LLMBackend:  resolvedConfig.LLMBackend,
 		LLMProvider: resolvedConfig.LLMProviderName,
+		ModelName:   resolvedConfig.ModelName(),
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)
@@ -601,6 +603,7 @@ func (e *RealSessionExecutor) executeAgent(
 			err:             fmt.Errorf("failed to create agent execution: %w", err),
 			llmBackend:      string(resolvedConfig.LLMBackend),
 			llmProviderName: resolvedConfig.LLMProviderName,
+			llmModel:        resolvedConfig.ModelName(),
 		}
 	}
 
@@ -613,6 +616,7 @@ func (e *RealSessionExecutor) executeAgent(
 
 	// Metadata carried on all agentResult returns below (for synthesis context).
 	resolvedBackend := string(resolvedConfig.LLMBackend)
+	resolvedModel := resolvedConfig.ModelName()
 
 	// Resolve MCP servers and tool filter
 	serverIDs, toolFilter, err := resolveMCPSelection(input.session, resolvedConfig, e.cfg.MCPServerRegistry)
@@ -631,6 +635,7 @@ func (e *RealSessionExecutor) executeAgent(
 			err:             failErr,
 			llmBackend:      resolvedBackend,
 			llmProviderName: resolvedConfig.LLMProviderName,
+			llmModel:        resolvedModel,
 		}
 	}
 
@@ -697,6 +702,7 @@ func (e *RealSessionExecutor) executeAgent(
 					err:             failErr,
 					llmBackend:      resolvedBackend,
 					llmProviderName: resolvedConfig.LLMProviderName,
+					llmModel:        resolvedModel,
 				}
 			}
 
@@ -758,6 +764,7 @@ func (e *RealSessionExecutor) executeAgent(
 			err:             failErr,
 			llmBackend:      resolvedBackend,
 			llmProviderName: resolvedConfig.LLMProviderName,
+			llmModel:        resolvedModel,
 		}
 	}
 
@@ -780,6 +787,7 @@ func (e *RealSessionExecutor) executeAgent(
 			err:             err,
 			llmBackend:      resolvedBackend,
 			llmProviderName: resolvedConfig.LLMProviderName,
+			llmModel:        resolvedModel,
 		}
 	}
 
@@ -810,6 +818,7 @@ func (e *RealSessionExecutor) executeAgent(
 			err:             fmt.Errorf("agent completed but status update failed: %w", updateErr),
 			llmBackend:      resolvedBackend,
 			llmProviderName: resolvedConfig.LLMProviderName,
+			llmModel:        resolvedModel,
 		}
 	}
 	publishExecutionStatus(context.Background(), e.eventPublisher, input.session.ID, stg.ID, exec.ID, agentIndex+1, string(entStatus), errMsg)
@@ -821,6 +830,7 @@ func (e *RealSessionExecutor) executeAgent(
 		err:             result.Error,
 		llmBackend:      resolvedBackend,
 		llmProviderName: resolvedConfig.LLMProviderName,
+		llmModel:        resolvedModel,
 	}
 }
 

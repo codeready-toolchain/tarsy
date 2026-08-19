@@ -27,6 +27,7 @@ type CreateAgentExecutionRequest struct {
 	AgentIndex        int               `json:"agent_index"`
 	LLMBackend        config.LLMBackend `json:"llm_backend"`
 	LLMProvider       string            `json:"llm_provider,omitempty"`
+	ModelName         string            `json:"model_name,omitempty"`
 	ParentExecutionID *string           `json:"parent_execution_id,omitempty"`
 	Task              *string           `json:"task,omitempty"`
 }

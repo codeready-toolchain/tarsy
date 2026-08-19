@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -135,9 +136,9 @@ func (e *RealSessionExecutor) buildSynthesisContext(
 
 		investigation := agentctx.AgentInvestigation{
 			AgentName:   displayName,
-			AgentIndex:  i + 1,              // 1-based
-			LLMBackend:  ar.llmBackend,      // resolved at execution time
-			LLMProvider: ar.llmProviderName, // resolved at execution time
+			AgentIndex:  i + 1,         // 1-based
+			LLMBackend:  ar.llmBackend, // resolved at execution time
+			LLMProvider: cmp.Or(ar.llmModel, ar.llmProviderName),
 			Status:      mapAgentStatusToSessionStatus(ar.status),
 		}
 

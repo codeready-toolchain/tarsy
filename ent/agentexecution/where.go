@@ -115,6 +115,11 @@ func LlmProvider(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldLlmProvider, v))
 }
 
+// ModelName applies equality check predicate on the "model_name" field. It's identical to ModelNameEQ.
+func ModelName(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldModelName, v))
+}
+
 // OriginalLlmProvider applies equality check predicate on the "original_llm_provider" field. It's identical to OriginalLlmProviderEQ.
 func OriginalLlmProvider(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmProvider, v))
@@ -123,6 +128,11 @@ func OriginalLlmProvider(v string) predicate.AgentExecution {
 // OriginalLlmBackend applies equality check predicate on the "original_llm_backend" field. It's identical to OriginalLlmBackendEQ.
 func OriginalLlmBackend(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmBackend, v))
+}
+
+// OriginalModelName applies equality check predicate on the "original_model_name" field. It's identical to OriginalModelNameEQ.
+func OriginalModelName(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalModelName, v))
 }
 
 // ParentExecutionID applies equality check predicate on the "parent_execution_id" field. It's identical to ParentExecutionIDEQ.
@@ -755,6 +765,81 @@ func LlmProviderContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldLlmProvider, v))
 }
 
+// ModelNameEQ applies the EQ predicate on the "model_name" field.
+func ModelNameEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldModelName, v))
+}
+
+// ModelNameNEQ applies the NEQ predicate on the "model_name" field.
+func ModelNameNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldModelName, v))
+}
+
+// ModelNameIn applies the In predicate on the "model_name" field.
+func ModelNameIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldModelName, vs...))
+}
+
+// ModelNameNotIn applies the NotIn predicate on the "model_name" field.
+func ModelNameNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldModelName, vs...))
+}
+
+// ModelNameGT applies the GT predicate on the "model_name" field.
+func ModelNameGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldModelName, v))
+}
+
+// ModelNameGTE applies the GTE predicate on the "model_name" field.
+func ModelNameGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldModelName, v))
+}
+
+// ModelNameLT applies the LT predicate on the "model_name" field.
+func ModelNameLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldModelName, v))
+}
+
+// ModelNameLTE applies the LTE predicate on the "model_name" field.
+func ModelNameLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldModelName, v))
+}
+
+// ModelNameContains applies the Contains predicate on the "model_name" field.
+func ModelNameContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldModelName, v))
+}
+
+// ModelNameHasPrefix applies the HasPrefix predicate on the "model_name" field.
+func ModelNameHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldModelName, v))
+}
+
+// ModelNameHasSuffix applies the HasSuffix predicate on the "model_name" field.
+func ModelNameHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldModelName, v))
+}
+
+// ModelNameIsNil applies the IsNil predicate on the "model_name" field.
+func ModelNameIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldModelName))
+}
+
+// ModelNameNotNil applies the NotNil predicate on the "model_name" field.
+func ModelNameNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldModelName))
+}
+
+// ModelNameEqualFold applies the EqualFold predicate on the "model_name" field.
+func ModelNameEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldModelName, v))
+}
+
+// ModelNameContainsFold applies the ContainsFold predicate on the "model_name" field.
+func ModelNameContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldModelName, v))
+}
+
 // OriginalLlmProviderEQ applies the EQ predicate on the "original_llm_provider" field.
 func OriginalLlmProviderEQ(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmProvider, v))
@@ -903,6 +988,81 @@ func OriginalLlmBackendEqualFold(v string) predicate.AgentExecution {
 // OriginalLlmBackendContainsFold applies the ContainsFold predicate on the "original_llm_backend" field.
 func OriginalLlmBackendContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldOriginalLlmBackend, v))
+}
+
+// OriginalModelNameEQ applies the EQ predicate on the "original_model_name" field.
+func OriginalModelNameEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameNEQ applies the NEQ predicate on the "original_model_name" field.
+func OriginalModelNameNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameIn applies the In predicate on the "original_model_name" field.
+func OriginalModelNameIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldOriginalModelName, vs...))
+}
+
+// OriginalModelNameNotIn applies the NotIn predicate on the "original_model_name" field.
+func OriginalModelNameNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldOriginalModelName, vs...))
+}
+
+// OriginalModelNameGT applies the GT predicate on the "original_model_name" field.
+func OriginalModelNameGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameGTE applies the GTE predicate on the "original_model_name" field.
+func OriginalModelNameGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameLT applies the LT predicate on the "original_model_name" field.
+func OriginalModelNameLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameLTE applies the LTE predicate on the "original_model_name" field.
+func OriginalModelNameLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameContains applies the Contains predicate on the "original_model_name" field.
+func OriginalModelNameContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameHasPrefix applies the HasPrefix predicate on the "original_model_name" field.
+func OriginalModelNameHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameHasSuffix applies the HasSuffix predicate on the "original_model_name" field.
+func OriginalModelNameHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameIsNil applies the IsNil predicate on the "original_model_name" field.
+func OriginalModelNameIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldOriginalModelName))
+}
+
+// OriginalModelNameNotNil applies the NotNil predicate on the "original_model_name" field.
+func OriginalModelNameNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldOriginalModelName))
+}
+
+// OriginalModelNameEqualFold applies the EqualFold predicate on the "original_model_name" field.
+func OriginalModelNameEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldOriginalModelName, v))
+}
+
+// OriginalModelNameContainsFold applies the ContainsFold predicate on the "original_model_name" field.
+func OriginalModelNameContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldOriginalModelName, v))
 }
 
 // ParentExecutionIDEQ applies the EQ predicate on the "parent_execution_id" field.

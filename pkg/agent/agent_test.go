@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,5 +55,24 @@ func TestStatusFromContextErr(t *testing.T) {
 		status, done := StatusFromContextErr(ctx)
 		assert.True(t, done)
 		assert.Equal(t, ExecutionStatusTimedOut, status)
+	})
+}
+
+func TestResolvedAgentConfig_ModelName(t *testing.T) {
+	t.Run("nil receiver", func(t *testing.T) {
+		var cfg *ResolvedAgentConfig
+		assert.Equal(t, "", cfg.ModelName())
+	})
+
+	t.Run("nil provider", func(t *testing.T) {
+		cfg := &ResolvedAgentConfig{}
+		assert.Equal(t, "", cfg.ModelName())
+	})
+
+	t.Run("returns configured model", func(t *testing.T) {
+		cfg := &ResolvedAgentConfig{
+			LLMProvider: &config.LLMProviderConfig{Model: "gemini-3.7-flash"},
+		}
+		assert.Equal(t, "gemini-3.7-flash", cfg.ModelName())
 	})
 }

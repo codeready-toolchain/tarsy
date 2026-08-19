@@ -300,6 +300,7 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 		assert.Equal(t, agentexecution.StatusPending, exec.Status)
 		// LLMProvider omitted → should be nil
 		assert.Nil(t, exec.LlmProvider)
+		assert.Nil(t, exec.ModelName)
 	})
 
 	t.Run("persists llm_provider when set", func(t *testing.T) {
@@ -322,6 +323,28 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, reloaded.LlmProvider)
 		assert.Equal(t, "gemini-2.5-pro", *reloaded.LlmProvider)
+	})
+
+	t.Run("persists model_name when set", func(t *testing.T) {
+		req := models.CreateAgentExecutionRequest{
+			StageID:     stg.ID,
+			SessionID:   session.ID,
+			AgentName:   "ModelAgent",
+			AgentIndex:  3,
+			LLMBackend:  config.LLMBackendNativeGemini,
+			LLMProvider: "google-default",
+			ModelName:   "gemini-3.7-flash",
+		}
+
+		exec, err := stageService.CreateAgentExecution(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, exec.ModelName)
+		assert.Equal(t, "gemini-3.7-flash", *exec.ModelName)
+
+		reloaded, err := client.AgentExecution.Get(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.ModelName)
+		assert.Equal(t, "gemini-3.7-flash", *reloaded.ModelName)
 	})
 
 	t.Run("validates required fields", func(t *testing.T) {
@@ -360,6 +383,120 @@ func TestStageService_CreateAgentExecution(t *testing.T) {
 				assert.True(t, IsValidationError(err))
 			})
 		}
+	})
+}
+
+func TestStageService_UpdateExecutionProviderFallback(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	createExec := func(t *testing.T, agentIndex int, modelName string) *ent.AgentExecution {
+		t.Helper()
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          fmt.Sprintf("Fallback %d", agentIndex),
+			StageIndex:         agentIndex,
+			ExpectedAgentCount: 1,
+		})
+		require.NoError(t, err)
+
+		req := models.CreateAgentExecutionRequest{
+			StageID:     stg.ID,
+			SessionID:   session.ID,
+			AgentName:   "TestAgent",
+			AgentIndex:  1,
+			LLMBackend:  config.LLMBackendLangChain,
+			LLMProvider: "google-default",
+			ModelName:   modelName,
+		}
+		exec, err := stageService.CreateAgentExecution(ctx, req)
+		require.NoError(t, err)
+		return exec
+	}
+
+	t.Run("first fallback records original and current model", func(t *testing.T) {
+		exec := createExec(t, 1, "gemini-3.7-flash")
+
+		err := stageService.UpdateExecutionProviderFallback(ctx, exec.ID,
+			"google-default", string(config.LLMBackendLangChain), "gemini-3.7-flash",
+			"openai-fallback", string(config.LLMBackendLangChain), "gpt-4o")
+		require.NoError(t, err)
+
+		reloaded, err := client.AgentExecution.Get(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.OriginalModelName)
+		assert.Equal(t, "gemini-3.7-flash", *reloaded.OriginalModelName)
+		require.NotNil(t, reloaded.ModelName)
+		assert.Equal(t, "gpt-4o", *reloaded.ModelName)
+		require.NotNil(t, reloaded.OriginalLlmProvider)
+		assert.Equal(t, "google-default", *reloaded.OriginalLlmProvider)
+		require.NotNil(t, reloaded.LlmProvider)
+		assert.Equal(t, "openai-fallback", *reloaded.LlmProvider)
+	})
+
+	t.Run("second fallback preserves original model", func(t *testing.T) {
+		exec := createExec(t, 2, "gemini-3.7-flash")
+
+		err := stageService.UpdateExecutionProviderFallback(ctx, exec.ID,
+			"google-default", string(config.LLMBackendLangChain), "gemini-3.7-flash",
+			"openai-fallback", string(config.LLMBackendLangChain), "gpt-4o")
+		require.NoError(t, err)
+
+		err = stageService.UpdateExecutionProviderFallback(ctx, exec.ID,
+			"openai-fallback", string(config.LLMBackendLangChain), "gpt-4o",
+			"anthropic-fallback", string(config.LLMBackendLangChain), "claude-sonnet")
+		require.NoError(t, err)
+
+		reloaded, err := client.AgentExecution.Get(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.OriginalModelName)
+		assert.Equal(t, "gemini-3.7-flash", *reloaded.OriginalModelName,
+			"original model should stay the primary, not the first fallback")
+		require.NotNil(t, reloaded.ModelName)
+		assert.Equal(t, "claude-sonnet", *reloaded.ModelName)
+	})
+
+	t.Run("empty original model leaves original_model_name unset", func(t *testing.T) {
+		exec := createExec(t, 3, "")
+		assert.Nil(t, exec.ModelName)
+
+		err := stageService.UpdateExecutionProviderFallback(ctx, exec.ID,
+			"google-default", string(config.LLMBackendLangChain), "",
+			"openai-fallback", string(config.LLMBackendLangChain), "gpt-4o")
+		require.NoError(t, err)
+
+		reloaded, err := client.AgentExecution.Get(ctx, exec.ID)
+		require.NoError(t, err)
+		assert.Nil(t, reloaded.OriginalModelName)
+		require.NotNil(t, reloaded.ModelName)
+		assert.Equal(t, "gpt-4o", *reloaded.ModelName)
+	})
+
+	t.Run("empty new model does not overwrite model_name", func(t *testing.T) {
+		exec := createExec(t, 4, "gemini-3.7-flash")
+
+		err := stageService.UpdateExecutionProviderFallback(ctx, exec.ID,
+			"google-default", string(config.LLMBackendLangChain), "gemini-3.7-flash",
+			"openai-fallback", string(config.LLMBackendLangChain), "")
+		require.NoError(t, err)
+
+		reloaded, err := client.AgentExecution.Get(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, reloaded.ModelName)
+		assert.Equal(t, "gemini-3.7-flash", *reloaded.ModelName,
+			"model_name should be left unchanged when the fallback has no model")
+		require.NotNil(t, reloaded.OriginalModelName)
+		assert.Equal(t, "gemini-3.7-flash", *reloaded.OriginalModelName)
 	})
 }
 

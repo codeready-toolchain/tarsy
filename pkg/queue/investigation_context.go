@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"sort"
@@ -129,7 +130,7 @@ func (b *InvestigationContextBuilder) buildInvestigationData(ctx context.Context
 				AgentName:    exec.AgentName,
 				AgentIndex:   exec.AgentIndex,
 				LLMBackend:   exec.LlmBackend,
-				LLMProvider:  stringFromNillable(exec.LlmProvider),
+				LLMProvider:  cmp.Or(stringFromNillable(exec.ModelName), stringFromNillable(exec.LlmProvider)),
 				Status:       mapExecStatusToSessionStatus(exec.Status),
 				Events:       tlEvents,
 				ErrorMessage: stringFromNillable(exec.ErrorMessage),

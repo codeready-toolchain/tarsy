@@ -50,6 +50,10 @@ func TestMigrations_ApplyAll(t *testing.T) {
 		"original_llm_provider column should exist after migrations")
 	assert.Contains(t, columns, "original_llm_backend",
 		"original_llm_backend column should exist after migrations")
+	assert.Contains(t, columns, "model_name",
+		"model_name column should exist after migrations")
+	assert.Contains(t, columns, "original_model_name",
+		"original_model_name column should exist after migrations")
 }
 
 // TestMigrations_EntParity verifies the schema produced by SQL migrations

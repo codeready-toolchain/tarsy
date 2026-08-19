@@ -245,6 +245,7 @@ type ExecutionOverview struct {
 	Status                   string              `json:"status"`
 	LLMBackend               string              `json:"llm_backend"`
 	LLMProvider              *string             `json:"llm_provider"`
+	ModelName                *string             `json:"model_name,omitempty"`
 	StartedAt                *time.Time          `json:"started_at"`
 	CompletedAt              *time.Time          `json:"completed_at"`
 	DurationMs               *int64              `json:"duration_ms"`
@@ -259,6 +260,7 @@ type ExecutionOverview struct {
 	Task                     *string             `json:"task,omitempty"`
 	OriginalLLMProvider      *string             `json:"original_llm_provider,omitempty"`
 	OriginalLLMBackend       *string             `json:"original_llm_backend,omitempty"`
+	OriginalModelName        *string             `json:"original_model_name,omitempty"`
 	FallbackReason           *string             `json:"fallback_reason,omitempty"`
 	FallbackErrorCode        *string             `json:"fallback_error_code,omitempty"`
 	FallbackAttempt          *int                `json:"fallback_attempt,omitempty"`

@@ -139,6 +139,8 @@ func TestScoringExecutor_PrepareScoring_CreatesRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, execs, 1)
 	assert.Equal(t, config.AgentNameScoring, execs[0].AgentName)
+	require.NotNil(t, execs[0].ModelName)
+	assert.Equal(t, "test-model", *execs[0].ModelName)
 }
 
 func TestScoringExecutor_PrepareScoring_RejectsDuplicateInProgress(t *testing.T) {
@@ -560,6 +562,56 @@ func TestScoringExecutor_BuildScoringContext_TimelineEventsIncluded(t *testing.T
 
 	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_timeline_events", result)
+}
+
+func TestScoringExecutor_BuildScoringContext_PrefersModelName(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil, nil)
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	createInvestigationExec := func(name string, idx int, provider, model string) {
+		t.Helper()
+		stgID := uuid.New().String()
+		_, err := entClient.Stage.Create().
+			SetID(stgID).
+			SetSessionID(session.ID).
+			SetStageName(name).
+			SetStageIndex(idx).
+			SetExpectedAgentCount(1).
+			SetStageType(stage.StageTypeInvestigation).
+			Save(ctx)
+		require.NoError(t, err)
+
+		builder := entClient.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetStageID(stgID).
+			SetSessionID(session.ID).
+			SetAgentName(name).
+			SetAgentIndex(1).
+			SetLlmBackend("langchain").
+			SetLlmProvider(provider).
+			SetStatus("completed")
+		if model != "" {
+			builder.SetModelName(model)
+		}
+		_, err = builder.Save(ctx)
+		require.NoError(t, err)
+	}
+
+	createInvestigationExec("ModelAgent", 0, "google-default", "gemini-3.7-flash")
+	createInvestigationExec("LegacyAgent", 1, "legacy-provider-key", "")
+
+	result := executor.buildScoringContext(ctx, session)
+	assert.Contains(t, result, "gemini-3.7-flash",
+		"scoring context should prefer persisted model_name over provider key")
+	assert.NotContains(t, result, "google-default",
+		"scoring context should not show provider key when model_name is set")
+	assert.Contains(t, result, "legacy-provider-key",
+		"scoring context should fall back to llm_provider when model_name is unset")
 }
 
 func TestScoringExecutor_BuildScoringContext_ParallelAgentsWithSynthesis(t *testing.T) {

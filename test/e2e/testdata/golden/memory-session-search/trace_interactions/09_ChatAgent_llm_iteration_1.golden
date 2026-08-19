@@ -68,7 +68,7 @@ No runbook available.
 
 ## Stage 1: investigation
 
-**Agent:** MemoryInvestigator (google-native, test-provider)
+**Agent:** MemoryInvestigator (google-native, test-model)
 **Status**: completed
 
 **Internal Reasoning:**

@@ -145,6 +145,14 @@ type SkillCatalogEntry struct {
 	Description string
 }
 
+// ModelName returns the configured model from the resolved LLM provider, or "".
+func (c *ResolvedAgentConfig) ModelName() string {
+	if c == nil || c.LLMProvider == nil {
+		return ""
+	}
+	return c.LLMProvider.Model
+}
+
 // OnDemandSkillNameSet returns the set of on-demand skill names for use as
 // the allowedNames parameter when constructing a SkillToolExecutor.
 func (r *ResolvedAgentConfig) OnDemandSkillNameSet() map[string]struct{} {

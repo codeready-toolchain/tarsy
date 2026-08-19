@@ -861,6 +861,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendNativeGemini)).
 			SetLlmProvider("gemini-2.5-pro").
+			SetModelName("gemini-2.5-pro").
 			SetStatus("completed").
 			SetStartedAt(started).
 			SetCompletedAt(completed).
@@ -930,6 +931,8 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, string(config.LLMBackendNativeGemini), eo1.LLMBackend)
 		require.NotNil(t, eo1.LLMProvider)
 		assert.Equal(t, "gemini-2.5-pro", *eo1.LLMProvider)
+		require.NotNil(t, eo1.ModelName)
+		assert.Equal(t, "gemini-2.5-pro", *eo1.ModelName)
 		// Tokens summed across two interactions: 200+100=300, 30+20=50, 230+120=350.
 		assert.Equal(t, int64(300), eo1.InputTokens)
 		assert.Equal(t, int64(50), eo1.OutputTokens)
@@ -941,6 +944,7 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, 2, eo2.AgentIndex)
 		assert.Equal(t, string(config.LLMBackendLangChain), eo2.LLMBackend)
 		assert.Nil(t, eo2.LLMProvider)
+		assert.Nil(t, eo2.ModelName)
 		assert.Equal(t, int64(50), eo2.InputTokens)
 		assert.Equal(t, int64(10), eo2.OutputTokens)
 		assert.Equal(t, int64(60), eo2.TotalTokens)
@@ -1130,8 +1134,10 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 			SetAgentIndex(1).
 			SetLlmBackend(string(config.LLMBackendLangChain)).
 			SetLlmProvider("openai-gpt4").
+			SetModelName("gpt-4o").
 			SetOriginalLlmProvider(origProvider).
 			SetOriginalLlmBackend(origBackend).
+			SetOriginalModelName("gemini-2.5-pro").
 			SetStatus("completed").
 			SetStartedAt(started).
 			SetCompletedAt(completed).
@@ -1183,6 +1189,10 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, origProvider, *eo.OriginalLLMProvider)
 		require.NotNil(t, eo.OriginalLLMBackend)
 		assert.Equal(t, origBackend, *eo.OriginalLLMBackend)
+		require.NotNil(t, eo.ModelName)
+		assert.Equal(t, "gpt-4o", *eo.ModelName)
+		require.NotNil(t, eo.OriginalModelName)
+		assert.Equal(t, "gemini-2.5-pro", *eo.OriginalModelName)
 
 		require.NotNil(t, eo.FallbackReason, "fallback_reason should be populated")
 		assert.Contains(t, *eo.FallbackReason, "model not found")

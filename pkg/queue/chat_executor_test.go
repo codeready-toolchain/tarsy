@@ -668,6 +668,7 @@ func TestChatMessageExecutor_CreateFailedChatExecution(t *testing.T) {
 	assert.Contains(t, *exec.ErrorMessage, "config resolution error")
 	require.NotNil(t, exec.LlmProvider)
 	assert.Equal(t, "test-provider", *exec.LlmProvider)
+	assert.Nil(t, exec.ModelName, "failed early-exit executions have no resolved model")
 
 	// Stage can now be finalized via UpdateStageStatus (the whole point)
 	err = stageService.UpdateStageStatus(ctx, stg.ID)

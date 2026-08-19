@@ -268,6 +268,7 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 		AgentIndex:  1,
 		LLMBackend:  resolvedConfig.LLMBackend,
 		LLMProvider: scoringProviderName,
+		ModelName:   resolvedConfig.ModelName(),
 	})
 	if err != nil {
 		e.failScore(scoreID, "failed to create agent execution: "+err.Error())

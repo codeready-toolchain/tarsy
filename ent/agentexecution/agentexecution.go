@@ -36,10 +36,14 @@ const (
 	FieldLlmBackend = "llm_backend"
 	// FieldLlmProvider holds the string denoting the llm_provider field in the database.
 	FieldLlmProvider = "llm_provider"
+	// FieldModelName holds the string denoting the model_name field in the database.
+	FieldModelName = "model_name"
 	// FieldOriginalLlmProvider holds the string denoting the original_llm_provider field in the database.
 	FieldOriginalLlmProvider = "original_llm_provider"
 	// FieldOriginalLlmBackend holds the string denoting the original_llm_backend field in the database.
 	FieldOriginalLlmBackend = "original_llm_backend"
+	// FieldOriginalModelName holds the string denoting the original_model_name field in the database.
+	FieldOriginalModelName = "original_model_name"
 	// FieldParentExecutionID holds the string denoting the parent_execution_id field in the database.
 	FieldParentExecutionID = "parent_execution_id"
 	// FieldTask holds the string denoting the task field in the database.
@@ -149,8 +153,10 @@ var Columns = []string{
 	FieldErrorMessage,
 	FieldLlmBackend,
 	FieldLlmProvider,
+	FieldModelName,
 	FieldOriginalLlmProvider,
 	FieldOriginalLlmBackend,
+	FieldOriginalModelName,
 	FieldParentExecutionID,
 	FieldTask,
 }
@@ -258,6 +264,11 @@ func ByLlmProvider(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLlmProvider, opts...).ToFunc()
 }
 
+// ByModelName orders the results by the model_name field.
+func ByModelName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldModelName, opts...).ToFunc()
+}
+
 // ByOriginalLlmProvider orders the results by the original_llm_provider field.
 func ByOriginalLlmProvider(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOriginalLlmProvider, opts...).ToFunc()
@@ -266,6 +277,11 @@ func ByOriginalLlmProvider(opts ...sql.OrderTermOption) OrderOption {
 // ByOriginalLlmBackend orders the results by the original_llm_backend field.
 func ByOriginalLlmBackend(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOriginalLlmBackend, opts...).ToFunc()
+}
+
+// ByOriginalModelName orders the results by the original_model_name field.
+func ByOriginalModelName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOriginalModelName, opts...).ToFunc()
 }
 
 // ByParentExecutionID orders the results by the parent_execution_id field.
