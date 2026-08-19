@@ -83,6 +83,22 @@
     "mode": "chat",
     "output_cost_per_token": 1e-05
   },
+  "claude-sonnet-5": {
+    "input_cost_per_token": 2e-06,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 128000,
+    "mode": "chat",
+    "output_cost_per_token": 1e-05
+  },
+  "claude-opus-5": {
+    "input_cost_per_token": 5e-06,
+    "litellm_provider": "anthropic",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 128000,
+    "mode": "chat",
+    "output_cost_per_token": 2.5e-05
+  },
   "dashscope/qwen-flash": {
     "max_input_tokens": 997952,
     "litellm_provider": "dashscope",

@@ -118,6 +118,42 @@ func TestEstimate_GeminiAbove200k(t *testing.T) {
 	}
 }
 
+func TestEstimate_ClaudeSnapshotRates(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		model    string
+		wantUSD  float64
+		wantProv Provenance
+	}{
+		{
+			name:     "sonnet-5",
+			model:    "claude-sonnet-5",
+			wantUSD:  2.0 + 10.0, // 1M input @ $2 + 1M output @ $10
+			wantProv: Provenance("snapshot:claude-sonnet-5"),
+		},
+		{
+			name:     "opus-5",
+			model:    "claude-opus-5",
+			wantUSD:  5.0 + 25.0, // 1M input @ $5 + 1M output @ $25
+			wantProv: Provenance("snapshot:claude-opus-5"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			costUSD, prov := book.Estimate(tt.model, 1_000_000, 1_000_000, 0)
+			require.NotNil(t, costUSD)
+			assert.Equal(t, tt.wantProv, prov)
+			assert.InDelta(t, tt.wantUSD, *costUSD, 1e-9)
+		})
+	}
+}
+
 func TestEstimate_TieredPricing(t *testing.T) {
 	book, err := NewBook(&Config{Enabled: true})
 	if err != nil {
