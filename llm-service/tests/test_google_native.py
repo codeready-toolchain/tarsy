@@ -222,7 +222,7 @@ class TestGoogleNativeProvider:
         }
 
         with caplog.at_level("WARNING"):
-            result = provider._convert_tools([], native_tools, model="gemini-3.1-flash-image-preview")
+            result = provider._convert_tools([], native_tools, model="gemini-3.1-flash-image")
 
         assert len(result) == 1
         assert isinstance(result[0].google_search, genai_types.GoogleSearch)
@@ -248,6 +248,7 @@ class TestGoogleNativeProvider:
 
     def test_is_image_model(self, provider):
         """Test image model detection."""
+        assert GoogleNativeProvider._is_image_model("gemini-3.1-flash-image")
         assert GoogleNativeProvider._is_image_model("gemini-3.1-flash-image-preview")
         assert GoogleNativeProvider._is_image_model("gemini-3.1-flash-IMAGE-preview")
         assert not GoogleNativeProvider._is_image_model("gemini-3.1-pro-preview")

@@ -176,7 +176,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 | Google (default) | gemini-3.7-flash | 1M tokens |
 | OpenAI | gpt-5.2 | 400K tokens |
 | Anthropic | claude-sonnet-5 | 1M tokens |
-| xAI | grok-4-1-fast-reasoning | 2M tokens |
+| xAI | grok-4.6 | 500K tokens |
 | VertexAI | claude-sonnet-5 | 1M tokens |
 
 **Per-chain/stage provider configuration**: Different stages can use different LLM providers for cost/performance optimization. Native thinking mode available for Gemini models with exposed internal reasoning.

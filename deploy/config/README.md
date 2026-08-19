@@ -156,7 +156,7 @@ TARSy includes built-in configurations that work out-of-the-box:
 - **google-default** - Gemini 3.7 Flash
 - **openai-default** - GPT-5.2
 - **anthropic-default** - Claude Sonnet 5
-- **xai-default** - Grok 4.1 Fast Reasoning
+- **xai-default** - Grok 4.6
 - **vertexai-default** - Claude Sonnet 5 on Vertex AI
 
 ### Built-in Chains

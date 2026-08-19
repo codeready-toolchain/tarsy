@@ -847,7 +847,7 @@ Shared convention between Go and Python:
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
 | `openai-default` | openai | gpt-5.2 | 400K |
 | `anthropic-default` | anthropic | claude-sonnet-5 | 1M |
-| `xai-default` | xai | grok-4-1-fast-reasoning | 2M |
+| `xai-default` | xai | grok-4.6 | 500K |
 | `vertexai-default` | vertexai | claude-sonnet-5 | 1M |
 
 Google providers include native tools (google_search, url_context enabled; code_execution disabled by default). Native tools are disabled when MCP tools are present.

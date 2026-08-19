@@ -268,6 +268,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:        "google-image-flash",
 			providerID:  "google-image-flash",
 			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-3.1-flash-image",
 			checkAPIKey: true,
 		},
 		{
@@ -337,6 +338,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:        "xai-default",
 			providerID:  "xai-default",
 			wantType:    LLMProviderTypeXAI,
+			wantModel:   "grok-4.6",
 			checkAPIKey: true,
 		},
 		{

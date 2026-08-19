@@ -214,7 +214,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		},
 		"google-image-flash": {
 			Type:        LLMProviderTypeGoogle,
-			Model:       "gemini-3.1-flash-image-preview",
+			Model:       "gemini-3.1-flash-image",
 			APIKeyEnv:   "GOOGLE_API_KEY",
 			NativeTools: geminiImageNativeTools(),
 		},
@@ -284,7 +284,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- xAI ---
 		"xai-default": {
 			Type:      LLMProviderTypeXAI,
-			Model:     "grok-4-1-fast-reasoning",
+			Model:     "grok-4.6",
 			APIKeyEnv: "XAI_API_KEY",
 		},
 
