@@ -632,11 +632,6 @@ func (v *Validator) validateLLMProviders() error {
 			}
 		}
 
-		// Validate max tool result tokens
-		if provider.MaxToolResultTokens < 1000 {
-			return NewValidationError("llm_provider", name, "max_tool_result_tokens", fmt.Errorf("must be at least 1000"))
-		}
-
 		// Validate native tools (Google-specific)
 		if provider.Type == LLMProviderTypeGoogle && provider.NativeTools != nil {
 			for tool := range provider.NativeTools {

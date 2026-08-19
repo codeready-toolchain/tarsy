@@ -104,7 +104,6 @@ llm_providers:
     type: google
     model: gemini-2.5-flash
     api_key_env: GOOGLE_API_KEY
-    max_tool_result_tokens: 950000
     native_tools:
       google_search: true
 ```
@@ -154,11 +153,11 @@ TARSy includes built-in configurations that work out-of-the-box:
 
 ### Built-in LLM Providers
 
-- **google-default** - Gemini 2.5 Flash
-- **openai-default** - GPT-4o
-- **anthropic-default** - Claude Sonnet 4
-- **xai-default** - Grok Beta
-- **vertexai-default** - Claude Sonnet 4 on Vertex AI
+- **google-default** - Gemini 3.7 Flash
+- **openai-default** - GPT-5.2
+- **anthropic-default** - Claude Sonnet 5
+- **xai-default** - Grok 4.1 Fast Reasoning
+- **vertexai-default** - Claude Sonnet 5 on Vertex AI
 
 ### Built-in Chains
 

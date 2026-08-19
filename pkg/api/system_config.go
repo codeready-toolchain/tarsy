@@ -166,15 +166,14 @@ type ScoringView struct {
 
 // LLMProviderView is an LLM provider config entry.
 type LLMProviderView struct {
-	Type                string          `json:"type"`
-	Model               string          `json:"model"`
-	APIKeyEnv           string          `json:"api_key_env,omitempty"`
-	CredentialsEnv      string          `json:"credentials_env,omitempty"`
-	ProjectEnv          string          `json:"project_env,omitempty"`
-	LocationEnv         string          `json:"location_env,omitempty"`
-	BaseURL             string          `json:"base_url,omitempty"`
-	MaxToolResultTokens int             `json:"max_tool_result_tokens"`
-	NativeTools         map[string]bool `json:"native_tools,omitempty"`
+	Type           string          `json:"type"`
+	Model          string          `json:"model"`
+	APIKeyEnv      string          `json:"api_key_env,omitempty"`
+	CredentialsEnv string          `json:"credentials_env,omitempty"`
+	ProjectEnv     string          `json:"project_env,omitempty"`
+	LocationEnv    string          `json:"location_env,omitempty"`
+	BaseURL        string          `json:"base_url,omitempty"`
+	NativeTools    map[string]bool `json:"native_tools,omitempty"`
 }
 
 // SkillMetaView is skill metadata (no body).
@@ -745,15 +744,14 @@ func buildLLMProviderView(p *config.LLMProviderConfig) LLMProviderView {
 		return LLMProviderView{}
 	}
 	return LLMProviderView{
-		Type:                string(p.Type),
-		Model:               p.Model,
-		APIKeyEnv:           p.APIKeyEnv,
-		CredentialsEnv:      p.CredentialsEnv,
-		ProjectEnv:          p.ProjectEnv,
-		LocationEnv:         p.LocationEnv,
-		BaseURL:             sanitizeURL(p.BaseURL),
-		MaxToolResultTokens: p.MaxToolResultTokens,
-		NativeTools:         nativeToolsToMap(p.NativeTools),
+		Type:           string(p.Type),
+		Model:          p.Model,
+		APIKeyEnv:      p.APIKeyEnv,
+		CredentialsEnv: p.CredentialsEnv,
+		ProjectEnv:     p.ProjectEnv,
+		LocationEnv:    p.LocationEnv,
+		BaseURL:        sanitizeURL(p.BaseURL),
+		NativeTools:    nativeToolsToMap(p.NativeTools),
 	}
 }
 

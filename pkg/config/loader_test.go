@@ -320,7 +320,6 @@ llm_providers:
     type: google
     model: test-model
     api_key_env: TEST_API_KEY
-    max_tool_result_tokens: 100000
 `
 	err := os.WriteFile(filepath.Join(configDir, "llm-providers.yaml"), []byte(config), 0644)
 	require.NoError(t, err)

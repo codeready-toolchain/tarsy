@@ -207,7 +207,6 @@ graph TB
 
 **LLM Provider Configuration**: `deploy/config/llm-providers.yaml` (optional)
 - Override built-in provider models, add custom proxy configurations
-- Per-provider content truncation controls (`max_tool_result_tokens`)
 - Native tools for Gemini (google_search, code_execution, url_context)
 
 #### Configuration Registries
@@ -834,7 +833,7 @@ Shared convention between Go and Python:
 #### gRPC Protocol (`proto/llm_service.proto`)
 
 - **RPC**: `Generate(GenerateRequest) returns (stream GenerateResponse)`
-- **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`, `max_tool_result_tokens`
+- **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`
 - **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures)
 - **Response streaming**: `TextDelta`, `ThinkingDelta`, `ToolCallDelta`, `UsageInfo`, `ErrorInfo`, `CodeExecutionDelta`, `GroundingDelta`
 
@@ -842,14 +841,14 @@ Shared convention between Go and Python:
 
 | Name | Type | Model | Context |
 |------|------|-------|---------|
-| `google-default` | google | gemini-3-flash-preview | 1M |
+| `google-default` | google | gemini-3.7-flash | 1M |
 | `gemini-2.5-flash` | google | gemini-2.5-flash | 1M |
 | `gemini-2.5-pro` | google | gemini-2.5-pro | 1M |
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
 | `openai-default` | openai | gpt-5.2 | 400K |
-| `anthropic-default` | anthropic | claude-sonnet-4-6 | 1M (beta) |
+| `anthropic-default` | anthropic | claude-sonnet-5 | 1M |
 | `xai-default` | xai | grok-4-1-fast-reasoning | 2M |
-| `vertexai-default` | vertexai | claude-sonnet-4-6 | 1M (beta) |
+| `vertexai-default` | vertexai | claude-sonnet-5 | 1M |
 
 Google providers include native tools (google_search, url_context enabled; code_execution disabled by default). Native tools are disabled when MCP tools are present.
 

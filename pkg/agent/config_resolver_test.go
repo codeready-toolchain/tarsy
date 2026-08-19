@@ -20,16 +20,14 @@ func TestResolveAgentConfig(t *testing.T) {
 	}
 
 	googleProvider := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeGoogle,
-		Model:               "gemini-2.5-pro",
-		APIKeyEnv:           "GOOGLE_API_KEY",
-		MaxToolResultTokens: 950000,
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
 	}
 	openaiProvider := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeOpenAI,
-		Model:               "gpt-5",
-		APIKeyEnv:           "OPENAI_API_KEY",
-		MaxToolResultTokens: 250000,
+		Type:      config.LLMProviderTypeOpenAI,
+		Model:     "gpt-5",
+		APIKeyEnv: "OPENAI_API_KEY",
 	}
 
 	agentDef := &config.AgentConfig{
@@ -282,10 +280,9 @@ func TestResolveAgentConfig(t *testing.T) {
 
 	t.Run("NativeTools resolution", func(t *testing.T) {
 		providerWithNative := &config.LLMProviderConfig{
-			Type:                config.LLMProviderTypeGoogle,
-			Model:               "gemini-2.5-pro",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000,
+			Type:      config.LLMProviderTypeGoogle,
+			Model:     "gemini-2.5-pro",
+			APIKeyEnv: "GOOGLE_API_KEY",
 			NativeTools: map[config.GoogleNativeTool]bool{
 				config.GoogleNativeToolGoogleSearch:  true,
 				config.GoogleNativeToolCodeExecution: false,
@@ -359,10 +356,9 @@ func TestResolveAgentConfig(t *testing.T) {
 
 		t.Run("agent adds native tools to provider with none", func(t *testing.T) {
 			providerNoNative := &config.LLMProviderConfig{
-				Type:                config.LLMProviderTypeGoogle,
-				Model:               "gemini-2.5-pro",
-				APIKeyEnv:           "GOOGLE_API_KEY",
-				MaxToolResultTokens: 950000,
+				Type:      config.LLMProviderTypeGoogle,
+				Model:     "gemini-2.5-pro",
+				APIKeyEnv: "GOOGLE_API_KEY",
 			}
 			ntCfg := &config.Config{
 				Defaults: &config.Defaults{LLMProvider: "google-bare"},
@@ -1131,10 +1127,9 @@ func TestResolveFallbackProviders(t *testing.T) {
 	}
 
 	googleProvider := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeGoogle,
-		Model:               "gemini-2.5-pro",
-		APIKeyEnv:           "GOOGLE_API_KEY",
-		MaxToolResultTokens: 950000,
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
 	}
 
 	baseCfg := &config.Config{
@@ -1554,10 +1549,9 @@ func TestResolvedFallbackProviders(t *testing.T) {
 
 func TestResolveAdaptiveTimeoutDefaults(t *testing.T) {
 	googleProvider := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeGoogle,
-		Model:               "gemini-2.5-pro",
-		APIKeyEnv:           "GOOGLE_API_KEY",
-		MaxToolResultTokens: 950000,
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
 	}
 
 	cfg := &config.Config{

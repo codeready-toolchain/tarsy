@@ -7,12 +7,11 @@
 package llmv1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1047,19 +1046,18 @@ func (x *ErrorInfo) GetRetryable() bool {
 
 // LLMConfig contains LLM provider configuration passed from Go to Python.
 type LLMConfig struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Provider            string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`                                   // "google", "openai", "anthropic", "xai", "vertexai"
-	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                                         // Model name (e.g., "gemini-2.5-pro")
-	ApiKeyEnv           string                 `protobuf:"bytes,3,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`              // Environment variable name for API key
-	CredentialsEnv      string                 `protobuf:"bytes,4,opt,name=credentials_env,json=credentialsEnv,proto3" json:"credentials_env,omitempty"` // Environment variable name for credentials file (VertexAI)
-	BaseUrl             string                 `protobuf:"bytes,5,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                      // Optional custom endpoint/base URL
-	MaxToolResultTokens int32                  `protobuf:"varint,6,opt,name=max_tool_result_tokens,json=maxToolResultTokens,proto3" json:"max_tool_result_tokens,omitempty"`
-	NativeTools         map[string]bool        `protobuf:"bytes,7,rep,name=native_tools,json=nativeTools,proto3" json:"native_tools,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // Google-specific native tools
-	Project             string                 `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`                                                                                                       // GCP project (for VertexAI)
-	Location            string                 `protobuf:"bytes,9,opt,name=location,proto3" json:"location,omitempty"`                                                                                                     // GCP location (for VertexAI)
-	Backend             string                 `protobuf:"bytes,10,opt,name=backend,proto3" json:"backend,omitempty"`                                                                                                      // Provider backend: "google-native", "langchain" (default)
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Provider       string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`                                                                                                     // "google", "openai", "anthropic", "xai", "vertexai"
+	Model          string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                                                                                                           // Model name (e.g., "gemini-2.5-pro")
+	ApiKeyEnv      string                 `protobuf:"bytes,3,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`                                                                                // Environment variable name for API key
+	CredentialsEnv string                 `protobuf:"bytes,4,opt,name=credentials_env,json=credentialsEnv,proto3" json:"credentials_env,omitempty"`                                                                   // Environment variable name for credentials file (VertexAI)
+	BaseUrl        string                 `protobuf:"bytes,5,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`                                                                                        // Optional custom endpoint/base URL
+	NativeTools    map[string]bool        `protobuf:"bytes,7,rep,name=native_tools,json=nativeTools,proto3" json:"native_tools,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"` // Google-specific native tools
+	Project        string                 `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`                                                                                                       // GCP project (for VertexAI)
+	Location       string                 `protobuf:"bytes,9,opt,name=location,proto3" json:"location,omitempty"`                                                                                                     // GCP location (for VertexAI)
+	Backend        string                 `protobuf:"bytes,10,opt,name=backend,proto3" json:"backend,omitempty"`                                                                                                      // Provider backend: "google-native", "langchain" (default)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
@@ -1125,13 +1123,6 @@ func (x *LLMConfig) GetBaseUrl() string {
 		return x.BaseUrl
 	}
 	return ""
-}
-
-func (x *LLMConfig) GetMaxToolResultTokens() int32 {
-	if x != nil {
-		return x.MaxToolResultTokens
-	}
-	return 0
 }
 
 func (x *LLMConfig) GetNativeTools() map[string]bool {
@@ -1237,14 +1228,13 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	"\tErrorInfo\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12\x1c\n" +
-	"\tretryable\x18\x03 \x01(\bR\tretryable\"\xad\x03\n" +
+	"\tretryable\x18\x03 \x01(\bR\tretryable\"\x96\x03\n" +
 	"\tLLMConfig\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
 	"\vapi_key_env\x18\x03 \x01(\tR\tapiKeyEnv\x12'\n" +
 	"\x0fcredentials_env\x18\x04 \x01(\tR\x0ecredentialsEnv\x12\x19\n" +
-	"\bbase_url\x18\x05 \x01(\tR\abaseUrl\x123\n" +
-	"\x16max_tool_result_tokens\x18\x06 \x01(\x05R\x13maxToolResultTokens\x12E\n" +
+	"\bbase_url\x18\x05 \x01(\tR\abaseUrl\x12E\n" +
 	"\fnative_tools\x18\a \x03(\v2\".llm.v1.LLMConfig.NativeToolsEntryR\vnativeTools\x12\x18\n" +
 	"\aproject\x18\b \x01(\tR\aproject\x12\x1a\n" +
 	"\blocation\x18\t \x01(\tR\blocation\x12\x18\n" +
@@ -1252,7 +1242,7 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	" \x01(\tR\abackend\x1a>\n" +
 	"\x10NativeToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x012M\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01J\x04\b\x06\x10\aR\x16max_tool_result_tokens2M\n" +
 	"\n" +
 	"LLMService\x12?\n" +
 	"\bGenerate\x12\x17.llm.v1.GenerateRequest\x1a\x18.llm.v1.GenerateResponse0\x01B2Z0github.com/codeready-toolchain/tarsy/proto;llmv1b\x06proto3"

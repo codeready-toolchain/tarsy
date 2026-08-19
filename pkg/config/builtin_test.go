@@ -251,70 +251,61 @@ func TestBuiltinLLMProviders(t *testing.T) {
 	cfg := GetBuiltinConfig()
 
 	tests := []struct {
-		name          string
-		providerID    string
-		wantType      LLMProviderType
-		wantModel     string // if set, exact model ID (else only non-empty)
-		wantMinTokens int
-		wantTokens    int  // if set, exact MaxToolResultTokens (else wantMinTokens floor)
-		checkAPIKey   bool // VertexAI uses ProjectEnv/LocationEnv instead
+		name        string
+		providerID  string
+		wantType    LLMProviderType
+		wantModel   string // if set, exact model ID (else only non-empty)
+		checkAPIKey bool   // VertexAI uses ProjectEnv/LocationEnv instead
 	}{
 		{
 			name:        "google-default",
 			providerID:  "google-default",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-3.7-flash",
-			wantTokens:  950000,
 			checkAPIKey: true,
 		},
 		{
-			name:          "google-image-flash",
-			providerID:    "google-image-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "google-image-flash",
+			providerID:  "google-image-flash",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
-			name:          "openai-default",
-			providerID:    "openai-default",
-			wantType:      LLMProviderTypeOpenAI,
-			wantMinTokens: 350000,
-			checkAPIKey:   true,
+			name:        "openai-default",
+			providerID:  "openai-default",
+			wantType:    LLMProviderTypeOpenAI,
+			checkAPIKey: true,
 		},
 		{
-			name:          "anthropic-default",
-			providerID:    "anthropic-default",
-			wantType:      LLMProviderTypeAnthropic,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "anthropic-default",
+			providerID:  "anthropic-default",
+			wantType:    LLMProviderTypeAnthropic,
+			wantModel:   "claude-sonnet-5",
+			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-3-flash",
-			providerID:    "gemini-3-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-3-flash",
+			providerID:  "gemini-3-flash",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-3.1-pro",
-			providerID:    "gemini-3.1-pro",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-3.1-pro",
+			providerID:  "gemini-3.1-pro",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-3.1-flash",
-			providerID:    "gemini-3.1-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-3.1-flash",
+			providerID:  "gemini-3.1-flash",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
 			name:        "gemini-3.7-flash",
 			providerID:  "gemini-3.7-flash",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-3.7-flash",
-			wantTokens:  950000,
 			checkAPIKey: true,
 		},
 		{
@@ -322,43 +313,38 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gemini-3.6-flash",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-3.6-flash",
-			wantTokens:  950000,
 			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-3.5-flash",
-			providerID:    "gemini-3.5-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-3.5-flash",
+			providerID:  "gemini-3.5-flash",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-2.5-flash",
-			providerID:    "gemini-2.5-flash",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-2.5-flash",
+			providerID:  "gemini-2.5-flash",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
-			name:          "gemini-2.5-pro",
-			providerID:    "gemini-2.5-pro",
-			wantType:      LLMProviderTypeGoogle,
-			wantMinTokens: 900000,
-			checkAPIKey:   true,
+			name:        "gemini-2.5-pro",
+			providerID:  "gemini-2.5-pro",
+			wantType:    LLMProviderTypeGoogle,
+			checkAPIKey: true,
 		},
 		{
-			name:          "xai-default",
-			providerID:    "xai-default",
-			wantType:      LLMProviderTypeXAI,
-			wantMinTokens: 200000,
-			checkAPIKey:   true,
+			name:        "xai-default",
+			providerID:  "xai-default",
+			wantType:    LLMProviderTypeXAI,
+			checkAPIKey: true,
 		},
 		{
-			name:          "vertexai-default",
-			providerID:    "vertexai-default",
-			wantType:      LLMProviderTypeVertexAI,
-			wantMinTokens: 900000,
-			checkAPIKey:   false, // VertexAI uses ProjectEnv/LocationEnv
+			name:        "vertexai-default",
+			providerID:  "vertexai-default",
+			wantType:    LLMProviderTypeVertexAI,
+			wantModel:   "claude-sonnet-5",
+			checkAPIKey: false, // VertexAI uses ProjectEnv/LocationEnv
 		},
 	}
 
@@ -374,11 +360,6 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			}
 			if tt.checkAPIKey {
 				assert.NotEmpty(t, provider.APIKeyEnv)
-			}
-			if tt.wantTokens > 0 {
-				assert.Equal(t, tt.wantTokens, provider.MaxToolResultTokens)
-			} else {
-				assert.GreaterOrEqual(t, provider.MaxToolResultTokens, tt.wantMinTokens)
 			}
 		})
 	}

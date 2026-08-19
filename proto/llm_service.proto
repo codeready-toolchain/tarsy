@@ -196,7 +196,8 @@ message LLMConfig {
   string api_key_env = 3;        // Environment variable name for API key
   string credentials_env = 4;    // Environment variable name for credentials file (VertexAI)
   string base_url = 5;           // Optional custom endpoint/base URL
-  int32 max_tool_result_tokens = 6;
+  reserved 6;
+  reserved "max_tool_result_tokens";
   map<string, bool> native_tools = 7;  // Google-specific native tools
   string project = 8;            // GCP project (for VertexAI)
   string location = 9;           // GCP location (for VertexAI)

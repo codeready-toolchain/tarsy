@@ -207,107 +207,93 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 	return map[string]LLMProviderConfig{
 		// --- Google Gemini ---
 		"google-default": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.7-flash",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.7-flash",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"google-image-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.1-flash-image-preview",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiImageNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.1-flash-image-preview",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiImageNativeTools(),
 		},
 		"gemini-3-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3-flash-preview",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3-flash-preview",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-3.1-pro": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.1-pro-preview",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.1-pro-preview",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-3.1-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.1-flash-lite",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.1-flash-lite",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-3.7-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.7-flash",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.7-flash",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-3.6-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.6-flash",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.6-flash",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-3.5-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-3.5-flash",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.5-flash",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-2.5-flash": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-2.5-flash",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-2.5-flash",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 		"gemini-2.5-pro": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "gemini-2.5-pro",
-			APIKeyEnv:           "GOOGLE_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context
-			NativeTools:         geminiNativeTools(),
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-2.5-pro",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
 		},
 
 		// --- OpenAI ---
 		"openai-default": {
-			Type:                LLMProviderTypeOpenAI,
-			Model:               "gpt-5.2",
-			APIKeyEnv:           "OPENAI_API_KEY",
-			MaxToolResultTokens: 380000, // Conservative for 400K context
+			Type:      LLMProviderTypeOpenAI,
+			Model:     "gpt-5.2",
+			APIKeyEnv: "OPENAI_API_KEY",
 		},
 
 		// --- Anthropic ---
 		"anthropic-default": {
-			Type:                LLMProviderTypeAnthropic,
-			Model:               "claude-sonnet-5", // Dateless canonical model ID
-			APIKeyEnv:           "ANTHROPIC_API_KEY",
-			MaxToolResultTokens: 950000, // Conservative for 1M context (GA)
+			Type:      LLMProviderTypeAnthropic,
+			Model:     "claude-sonnet-5", // Dateless canonical model ID
+			APIKeyEnv: "ANTHROPIC_API_KEY",
 		},
 
 		// --- xAI ---
 		"xai-default": {
-			Type:                LLMProviderTypeXAI,
-			Model:               "grok-4-1-fast-reasoning",
-			APIKeyEnv:           "XAI_API_KEY",
-			MaxToolResultTokens: 1500000, // Conservative for 2M context
+			Type:      LLMProviderTypeXAI,
+			Model:     "grok-4-1-fast-reasoning",
+			APIKeyEnv: "XAI_API_KEY",
 		},
 
 		// --- Vertex AI ---
 		"vertexai-default": {
-			Type:                LLMProviderTypeVertexAI,
-			Model:               "claude-sonnet-5",       // Claude Sonnet 5 on Vertex AI
-			ProjectEnv:          "GOOGLE_CLOUD_PROJECT",  // Standard GCP project ID env var
-			LocationEnv:         "GOOGLE_CLOUD_LOCATION", // Standard GCP location env var
-			MaxToolResultTokens: 950000,                  // Conservative for 1M context (GA)
+			Type:        LLMProviderTypeVertexAI,
+			Model:       "claude-sonnet-5",       // Claude Sonnet 5 on Vertex AI
+			ProjectEnv:  "GOOGLE_CLOUD_PROJECT",  // Standard GCP project ID env var
+			LocationEnv: "GOOGLE_CLOUD_LOCATION", // Standard GCP location env var
 		},
 	}
 }

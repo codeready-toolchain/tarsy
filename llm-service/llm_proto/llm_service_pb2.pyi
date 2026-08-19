@@ -161,7 +161,7 @@ class ErrorInfo(_message.Message):
     def __init__(self, message: _Optional[str] = ..., code: _Optional[str] = ..., retryable: bool = ...) -> None: ...
 
 class LLMConfig(_message.Message):
-    __slots__ = ("provider", "model", "api_key_env", "credentials_env", "base_url", "max_tool_result_tokens", "native_tools", "project", "location", "backend")
+    __slots__ = ("provider", "model", "api_key_env", "credentials_env", "base_url", "native_tools", "project", "location", "backend")
     class NativeToolsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -174,7 +174,6 @@ class LLMConfig(_message.Message):
     API_KEY_ENV_FIELD_NUMBER: _ClassVar[int]
     CREDENTIALS_ENV_FIELD_NUMBER: _ClassVar[int]
     BASE_URL_FIELD_NUMBER: _ClassVar[int]
-    MAX_TOOL_RESULT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     NATIVE_TOOLS_FIELD_NUMBER: _ClassVar[int]
     PROJECT_FIELD_NUMBER: _ClassVar[int]
     LOCATION_FIELD_NUMBER: _ClassVar[int]
@@ -184,9 +183,8 @@ class LLMConfig(_message.Message):
     api_key_env: str
     credentials_env: str
     base_url: str
-    max_tool_result_tokens: int
     native_tools: _containers.ScalarMap[str, bool]
     project: str
     location: str
     backend: str
-    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., api_key_env: _Optional[str] = ..., credentials_env: _Optional[str] = ..., base_url: _Optional[str] = ..., max_tool_result_tokens: _Optional[int] = ..., native_tools: _Optional[_Mapping[str, bool]] = ..., project: _Optional[str] = ..., location: _Optional[str] = ..., backend: _Optional[str] = ...) -> None: ...
+    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., api_key_env: _Optional[str] = ..., credentials_env: _Optional[str] = ..., base_url: _Optional[str] = ..., native_tools: _Optional[_Mapping[str, bool]] = ..., project: _Optional[str] = ..., location: _Optional[str] = ..., backend: _Optional[str] = ...) -> None: ...

@@ -178,30 +178,26 @@ func TestMergeChains(t *testing.T) {
 func TestMergeLLMProviders(t *testing.T) {
 	builtin := map[string]LLMProviderConfig{
 		"builtin-provider": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "builtin-model",
-			APIKeyEnv:           "BUILTIN_KEY",
-			MaxToolResultTokens: 100000,
+			Type:      LLMProviderTypeGoogle,
+			Model:     "builtin-model",
+			APIKeyEnv: "BUILTIN_KEY",
 		},
 		"override-me": {
-			Type:                LLMProviderTypeOpenAI,
-			Model:               "old-model",
-			MaxToolResultTokens: 50000,
+			Type:  LLMProviderTypeOpenAI,
+			Model: "old-model",
 		},
 	}
 
 	user := map[string]LLMProviderConfig{
 		"user-provider": {
-			Type:                LLMProviderTypeAnthropic,
-			Model:               "user-model",
-			APIKeyEnv:           "USER_KEY",
-			MaxToolResultTokens: 150000,
+			Type:      LLMProviderTypeAnthropic,
+			Model:     "user-model",
+			APIKeyEnv: "USER_KEY",
 		},
 		"override-me": {
-			Type:                LLMProviderTypeOpenAI,
-			Model:               "new-model",
-			APIKeyEnv:           "NEW_KEY",
-			MaxToolResultTokens: 200000,
+			Type:      LLMProviderTypeOpenAI,
+			Model:     "new-model",
+			APIKeyEnv: "NEW_KEY",
 		},
 	}
 
@@ -214,19 +210,16 @@ func TestMergeLLMProviders(t *testing.T) {
 	assert.Contains(t, result, "builtin-provider")
 	assert.Equal(t, LLMProviderTypeGoogle, result["builtin-provider"].Type)
 	assert.Equal(t, "builtin-model", result["builtin-provider"].Model)
-	assert.Equal(t, 100000, result["builtin-provider"].MaxToolResultTokens)
 
 	// User provider should exist
 	assert.Contains(t, result, "user-provider")
 	assert.Equal(t, LLMProviderTypeAnthropic, result["user-provider"].Type)
 	assert.Equal(t, "user-model", result["user-provider"].Model)
-	assert.Equal(t, 150000, result["user-provider"].MaxToolResultTokens)
 
 	// Overridden provider should have user values
 	assert.Contains(t, result, "override-me")
 	assert.Equal(t, "new-model", result["override-me"].Model)
 	assert.Equal(t, "NEW_KEY", result["override-me"].APIKeyEnv)
-	assert.Equal(t, 200000, result["override-me"].MaxToolResultTokens)
 }
 
 func TestMergeAgentsCarriesLLMBackendAndNativeTools(t *testing.T) {
@@ -346,7 +339,7 @@ func TestMergeEmptyMaps(t *testing.T) {
 
 	t.Run("nil builtin LLM providers", func(t *testing.T) {
 		result := mergeLLMProviders(nil, map[string]LLMProviderConfig{
-			"provider1": {Type: LLMProviderTypeGoogle, Model: "model1", MaxToolResultTokens: 100000},
+			"provider1": {Type: LLMProviderTypeGoogle, Model: "model1"},
 		})
 		assert.Len(t, result, 1)
 	})

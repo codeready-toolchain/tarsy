@@ -246,14 +246,12 @@ func TestMCPServerRegistryThreadSafety(_ *testing.T) {
 func TestLLMProviderRegistry(t *testing.T) {
 	providers := map[string]*LLMProviderConfig{
 		"provider1": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "model1",
-			MaxToolResultTokens: 100000,
+			Type:  LLMProviderTypeGoogle,
+			Model: "model1",
 		},
 		"provider2": {
-			Type:                LLMProviderTypeOpenAI,
-			Model:               "model2",
-			MaxToolResultTokens: 50000,
+			Type:  LLMProviderTypeOpenAI,
+			Model: "model2",
 		},
 	}
 
@@ -282,9 +280,8 @@ func TestLLMProviderRegistry(t *testing.T) {
 
 		// Modify the returned map
 		all["provider3"] = &LLMProviderConfig{
-			Type:                LLMProviderTypeAnthropic,
-			Model:               "model3",
-			MaxToolResultTokens: 75000,
+			Type:  LLMProviderTypeAnthropic,
+			Model: "model3",
 		}
 
 		// Original registry should be unchanged
@@ -295,9 +292,8 @@ func TestLLMProviderRegistry(t *testing.T) {
 func TestLLMProviderRegistryThreadSafety(_ *testing.T) {
 	providers := map[string]*LLMProviderConfig{
 		"provider1": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "model1",
-			MaxToolResultTokens: 100000,
+			Type:  LLMProviderTypeGoogle,
+			Model: "model1",
 		},
 	}
 

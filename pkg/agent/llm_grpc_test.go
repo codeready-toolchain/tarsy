@@ -42,10 +42,9 @@ func TestToProtoMessages(t *testing.T) {
 
 func TestToProtoLLMConfig(t *testing.T) {
 	cfg := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeGoogle,
-		Model:               "gemini-2.5-pro",
-		APIKeyEnv:           "GOOGLE_API_KEY",
-		MaxToolResultTokens: 950000,
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
 		NativeTools: map[config.GoogleNativeTool]bool{
 			config.GoogleNativeToolGoogleSearch: true,
 		},
@@ -55,7 +54,6 @@ func TestToProtoLLMConfig(t *testing.T) {
 	assert.Equal(t, "google", proto.Provider)
 	assert.Equal(t, "gemini-2.5-pro", proto.Model)
 	assert.Equal(t, "GOOGLE_API_KEY", proto.ApiKeyEnv)
-	assert.Equal(t, int32(950000), proto.MaxToolResultTokens)
 	assert.True(t, proto.NativeTools["google_search"])
 	// Backend is set by toProtoRequest from input.Backend
 	assert.Empty(t, proto.Backend)

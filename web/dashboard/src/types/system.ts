@@ -282,7 +282,6 @@ export interface LLMProviderConfigView {
   project_env?: string;
   location_env?: string;
   base_url?: string;
-  max_tool_result_tokens: number;
   native_tools?: Record<string, boolean>;
 }
 

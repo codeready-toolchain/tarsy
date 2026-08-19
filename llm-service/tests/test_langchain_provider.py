@@ -189,6 +189,7 @@ class TestLangChainProviderReasoningConfig:
     # budget_tokens returns a 400 error on these) ---
     @pytest.mark.parametrize("model", [
         "claude-sonnet-5", "claude-sonnet-5-20260101",
+        "claude-opus-5", "claude-fable-5",
     ])
     def test_anthropic_adaptive_thinking(self, model):
         result = LangChainProvider._get_anthropic_thinking_kwargs(model)

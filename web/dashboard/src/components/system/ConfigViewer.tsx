@@ -607,7 +607,6 @@ function LLMProviderDetails({ provider }: { provider: LLMProviderConfigView }) {
       <Field label="project_env" value={provider.project_env} />
       <Field label="location_env" value={provider.location_env} />
       <Field label="base_url" value={provider.base_url} />
-      <Field label="max_tool_result_tokens" value={provider.max_tool_result_tokens} />
       {provider.native_tools && Object.keys(provider.native_tools).length > 0 && (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary">

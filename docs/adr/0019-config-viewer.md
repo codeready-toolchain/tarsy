@@ -169,7 +169,7 @@ A dedicated response type (not internal config structs):
 
 **LLM provider fields:**
 
-- `type`, `model`, `api_key_env`, `credentials_env`, `project_env`, `location_env`, `base_url`, `max_tool_result_tokens`, `native_tools`
+- `type`, `model`, `api_key_env`, `credentials_env`, `project_env`, `location_env`, `base_url`, `native_tools`
 - `base_url` uses the same URL sanitization as MCP transport `url`.
 
 **Excluded from the snapshot (not unavailable):**
@@ -304,7 +304,6 @@ GET /api/v1/system/config/skills/:name
       "project_env": "",
       "location_env": "",
       "base_url": "",
-      "max_tool_result_tokens": 150000,
       "native_tools": { "...": true }
     }
   },

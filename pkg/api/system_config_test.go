@@ -204,10 +204,9 @@ func TestSystemConfigHandler(t *testing.T) {
 				}),
 				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 					"google-default": {
-						Type:                config.LLMProviderTypeGoogle,
-						Model:               "gemini-2.5-pro",
-						APIKeyEnv:           "GOOGLE_API_KEY",
-						MaxToolResultTokens: 150000,
+						Type:      config.LLMProviderTypeGoogle,
+						Model:     "gemini-2.5-pro",
+						APIKeyEnv: "GOOGLE_API_KEY",
 					},
 				}),
 				SkillRegistry: config.NewSkillRegistry(map[string]*config.SkillConfig{
@@ -468,11 +467,10 @@ func TestSystemConfigHandler(t *testing.T) {
 				}),
 				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 					"google-default": {
-						Type:                config.LLMProviderTypeGoogle,
-						Model:               "gemini-2.5-pro",
-						APIKeyEnv:           "GOOGLE_API_KEY",
-						BaseURL:             "https://generativelanguage.googleapis.com",
-						MaxToolResultTokens: 150000,
+						Type:      config.LLMProviderTypeGoogle,
+						Model:     "gemini-2.5-pro",
+						APIKeyEnv: "GOOGLE_API_KEY",
+						BaseURL:   "https://generativelanguage.googleapis.com",
 					},
 				}),
 			},
@@ -545,11 +543,10 @@ func TestSystemConfigHandler(t *testing.T) {
 		resp := buildSystemConfigResponse(&config.Config{
 			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 				"custom": {
-					Type:                config.LLMProviderTypeOpenAI,
-					Model:               "gpt-test",
-					APIKeyEnv:           "OPENAI_API_KEY",
-					BaseURL:             "https://api:E2E_SENTINEL_BASE_URL@llm.example.com/v1?api_key=E2E_SENTINEL_QUERY",
-					MaxToolResultTokens: 1000,
+					Type:      config.LLMProviderTypeOpenAI,
+					Model:     "gpt-test",
+					APIKeyEnv: "OPENAI_API_KEY",
+					BaseURL:   "https://api:E2E_SENTINEL_BASE_URL@llm.example.com/v1?api_key=E2E_SENTINEL_QUERY",
 				},
 			}),
 		}, nil)

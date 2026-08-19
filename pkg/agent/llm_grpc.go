@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"os"
 
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -120,12 +119,11 @@ func toProtoMessages(msgs []ConversationMessage) []*llmv1.ConversationMessage {
 
 func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 	pc := &llmv1.LLMConfig{
-		Provider:            string(cfg.Type),
-		Model:               cfg.Model,
-		ApiKeyEnv:           cfg.APIKeyEnv,      // Sent as env-var name; Python resolves the secret
-		CredentialsEnv:      cfg.CredentialsEnv, // Sent as env-var name; Python resolves the credentials file path
-		BaseUrl:             cfg.BaseURL,
-		MaxToolResultTokens: clampToInt32(cfg.MaxToolResultTokens),
+		Provider:       string(cfg.Type),
+		Model:          cfg.Model,
+		ApiKeyEnv:      cfg.APIKeyEnv,      // Sent as env-var name; Python resolves the secret
+		CredentialsEnv: cfg.CredentialsEnv, // Sent as env-var name; Python resolves the credentials file path
+		BaseUrl:        cfg.BaseURL,
 	}
 	// Resolve VertexAI fields — values (not env names) are sent over gRPC
 	if cfg.ProjectEnv != "" {
@@ -151,16 +149,6 @@ func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 	}
 	// Backend is set by toProtoRequest() from input.Backend (from LLMBackend config).
 	return pc
-}
-
-// clampToInt32 converts an int to int32, clamping to math.MaxInt32 if needed.
-func clampToInt32(v int) int32 {
-	if v > math.MaxInt32 {
-		slog.Warn("int value exceeds int32 range, clamping",
-			"value", v, "clamped_to", math.MaxInt32)
-		return math.MaxInt32
-	}
-	return int32(v)
 }
 
 func toProtoTools(tools []ToolDefinition) []*llmv1.ToolDefinition {

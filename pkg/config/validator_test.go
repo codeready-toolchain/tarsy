@@ -551,10 +551,9 @@ func TestValidateLLMProviders(t *testing.T) {
 			name: "valid provider with API key set",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "test-model",
-					APIKeyEnv:           "TEST_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "test-model",
+					APIKeyEnv: "TEST_API_KEY",
 				},
 			},
 			env:     map[string]string{"TEST_API_KEY": "test-key"},
@@ -564,10 +563,9 @@ func TestValidateLLMProviders(t *testing.T) {
 			name: "unreferenced provider with missing API key does not error",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "test-model",
-					APIKeyEnv:           "MISSING_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "test-model",
+					APIKeyEnv: "MISSING_API_KEY",
 				},
 			},
 			env:     map[string]string{},
@@ -577,9 +575,8 @@ func TestValidateLLMProviders(t *testing.T) {
 			name: "provider with invalid type",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                "invalid",
-					Model:               "test-model",
-					MaxToolResultTokens: 100000,
+					Type:  "invalid",
+					Model: "test-model",
 				},
 			},
 			env:     map[string]string{},
@@ -590,9 +587,8 @@ func TestValidateLLMProviders(t *testing.T) {
 			name: "provider with empty model",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "",
-					MaxToolResultTokens: 100000,
+					Type:  LLMProviderTypeGoogle,
+					Model: "",
 				},
 			},
 			env:     map[string]string{},
@@ -600,27 +596,13 @@ func TestValidateLLMProviders(t *testing.T) {
 			errMsg:  "model required",
 		},
 		{
-			name: "provider with low max tokens",
-			providers: map[string]*LLMProviderConfig{
-				"test-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "test-model",
-					MaxToolResultTokens: 500, // Less than 1000
-				},
-			},
-			env:     map[string]string{},
-			wantErr: true,
-			errMsg:  "must be at least 1000",
-		},
-		{
 			name: "VertexAI provider with both environment variables set",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeVertexAI,
-					Model:               "gemini-pro",
-					ProjectEnv:          "TEST_GCP_PROJECT",
-					LocationEnv:         "TEST_GCP_LOCATION",
-					MaxToolResultTokens: 100000,
+					Type:        LLMProviderTypeVertexAI,
+					Model:       "gemini-pro",
+					ProjectEnv:  "TEST_GCP_PROJECT",
+					LocationEnv: "TEST_GCP_LOCATION",
 				},
 			},
 			env: map[string]string{
@@ -633,11 +615,10 @@ func TestValidateLLMProviders(t *testing.T) {
 			name: "VertexAI provider with missing ProjectEnv",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeVertexAI,
-					Model:               "gemini-pro",
-					ProjectEnv:          "MISSING_GCP_PROJECT",
-					LocationEnv:         "TEST_GCP_LOCATION",
-					MaxToolResultTokens: 100000,
+					Type:        LLMProviderTypeVertexAI,
+					Model:       "gemini-pro",
+					ProjectEnv:  "MISSING_GCP_PROJECT",
+					LocationEnv: "TEST_GCP_LOCATION",
 				},
 			},
 			env: map[string]string{
@@ -649,11 +630,10 @@ func TestValidateLLMProviders(t *testing.T) {
 			name: "VertexAI provider with missing LocationEnv",
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeVertexAI,
-					Model:               "gemini-pro",
-					ProjectEnv:          "TEST_GCP_PROJECT",
-					LocationEnv:         "MISSING_GCP_LOCATION",
-					MaxToolResultTokens: 100000,
+					Type:        LLMProviderTypeVertexAI,
+					Model:       "gemini-pro",
+					ProjectEnv:  "TEST_GCP_PROJECT",
+					LocationEnv: "MISSING_GCP_LOCATION",
 				},
 			},
 			env: map[string]string{
@@ -715,16 +695,14 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"used-provider": {
-					Type:                LLMProviderTypeOpenAI,
-					Model:               "o4-mini",
-					APIKeyEnv:           "USED_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeOpenAI,
+					Model:     "o4-mini",
+					APIKeyEnv: "USED_API_KEY",
 				},
 				"unused-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "gemini-pro",
-					APIKeyEnv:           "UNUSED_API_KEY", // This env var is NOT set, but should not cause error
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "gemini-pro",
+					APIKeyEnv: "UNUSED_API_KEY", // This env var is NOT set, but should not cause error
 				},
 			},
 			env:     map[string]string{}, // No env vars set
@@ -749,16 +727,14 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"used-provider": {
-					Type:                LLMProviderTypeOpenAI,
-					Model:               "o4-mini",
-					APIKeyEnv:           "USED_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeOpenAI,
+					Model:     "o4-mini",
+					APIKeyEnv: "USED_API_KEY",
 				},
 				"unused-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "gemini-pro",
-					APIKeyEnv:           "UNUSED_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "gemini-pro",
+					APIKeyEnv: "UNUSED_API_KEY",
 				},
 			},
 			env:     map[string]string{}, // USED_API_KEY is not set
@@ -788,10 +764,9 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"chat-provider": {
-					Type:                LLMProviderTypeAnthropic,
-					Model:               "claude-sonnet-4-5-20250929",
-					APIKeyEnv:           "CHAT_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeAnthropic,
+					Model:     "claude-sonnet-4-5-20250929",
+					APIKeyEnv: "CHAT_API_KEY",
 				},
 			},
 			env:     map[string]string{}, // CHAT_API_KEY is not set
@@ -821,10 +796,9 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"agent-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "gemini-pro",
-					APIKeyEnv:           "AGENT_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "gemini-pro",
+					APIKeyEnv: "AGENT_API_KEY",
 				},
 			},
 			env:     map[string]string{}, // AGENT_API_KEY is not set
@@ -853,10 +827,9 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"synthesis-provider": {
-					Type:                LLMProviderTypeXAI,
-					Model:               "grok-1",
-					APIKeyEnv:           "SYNTHESIS_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeXAI,
+					Model:     "grok-1",
+					APIKeyEnv: "SYNTHESIS_API_KEY",
 				},
 			},
 			env:     map[string]string{}, // SYNTHESIS_API_KEY is not set
@@ -890,10 +863,9 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"chat-sub-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "gemini-pro",
-					APIKeyEnv:           "CHAT_SUB_AGENT_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "gemini-pro",
+					APIKeyEnv: "CHAT_SUB_AGENT_API_KEY",
 				},
 			},
 			env:     map[string]string{},
@@ -919,22 +891,19 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"used-provider": {
-					Type:                LLMProviderTypeOpenAI,
-					Model:               "o4-mini",
-					APIKeyEnv:           "USED_API_KEY",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeOpenAI,
+					Model:     "o4-mini",
+					APIKeyEnv: "USED_API_KEY",
 				},
 				"unused-provider-1": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "gemini-pro",
-					APIKeyEnv:           "UNUSED_API_KEY_1",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeGoogle,
+					Model:     "gemini-pro",
+					APIKeyEnv: "UNUSED_API_KEY_1",
 				},
 				"unused-provider-2": {
-					Type:                LLMProviderTypeAnthropic,
-					Model:               "claude-sonnet-4-5-20250929",
-					APIKeyEnv:           "UNUSED_API_KEY_2",
-					MaxToolResultTokens: 100000,
+					Type:      LLMProviderTypeAnthropic,
+					Model:     "claude-sonnet-4-5-20250929",
+					APIKeyEnv: "UNUSED_API_KEY_2",
 				},
 			},
 			env: map[string]string{
@@ -962,11 +931,10 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"vertexai-provider": {
-					Type:                LLMProviderTypeVertexAI,
-					Model:               "gemini-pro",
-					ProjectEnv:          "MISSING_GCP_PROJECT",
-					LocationEnv:         "TEST_GCP_LOCATION",
-					MaxToolResultTokens: 100000,
+					Type:        LLMProviderTypeVertexAI,
+					Model:       "gemini-pro",
+					ProjectEnv:  "MISSING_GCP_PROJECT",
+					LocationEnv: "TEST_GCP_LOCATION",
 				},
 			},
 			env: map[string]string{
@@ -995,11 +963,10 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"vertexai-provider": {
-					Type:                LLMProviderTypeVertexAI,
-					Model:               "gemini-pro",
-					ProjectEnv:          "TEST_GCP_PROJECT",
-					LocationEnv:         "MISSING_GCP_LOCATION",
-					MaxToolResultTokens: 100000,
+					Type:        LLMProviderTypeVertexAI,
+					Model:       "gemini-pro",
+					ProjectEnv:  "TEST_GCP_PROJECT",
+					LocationEnv: "MISSING_GCP_LOCATION",
 				},
 			},
 			env: map[string]string{
@@ -1028,11 +995,10 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"vertexai-provider": {
-					Type:                LLMProviderTypeVertexAI,
-					Model:               "gemini-pro",
-					ProjectEnv:          "TEST_GCP_PROJECT",
-					LocationEnv:         "TEST_GCP_LOCATION",
-					MaxToolResultTokens: 100000,
+					Type:        LLMProviderTypeVertexAI,
+					Model:       "gemini-pro",
+					ProjectEnv:  "TEST_GCP_PROJECT",
+					LocationEnv: "TEST_GCP_LOCATION",
 				},
 			},
 			env: map[string]string{
@@ -1687,9 +1653,8 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "test-model",
-					MaxToolResultTokens: 100000,
+					Type:  LLMProviderTypeGoogle,
+					Model: "test-model",
 				},
 			},
 			servers: map[string]*MCPServerConfig{
@@ -1917,9 +1882,8 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{
 				"test-provider": {
-					Type:                LLMProviderTypeGoogle,
-					Model:               "test-model",
-					MaxToolResultTokens: 100000,
+					Type:  LLMProviderTypeGoogle,
+					Model: "test-model",
 				},
 			},
 			servers: map[string]*MCPServerConfig{
@@ -2198,7 +2162,7 @@ func TestValidateDefaultsScoring(t *testing.T) {
 			},
 			agents: map[string]*AgentConfig{},
 			providers: map[string]*LLMProviderConfig{
-				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test", MaxToolResultTokens: 1000},
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
 			},
 			wantErr: false,
 		},
@@ -3357,7 +3321,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini-2.5-pro", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini-2.5-pro", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{"FB_KEY": "secret"},
 			wantErr: false,
@@ -3381,7 +3345,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{"FB_KEY": "secret"},
 			wantErr: true,
@@ -3395,7 +3359,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{}, // FB_KEY not set
 			wantErr: true,
@@ -3413,7 +3377,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{"FB_KEY": "secret"},
 			wantErr: false,
@@ -3446,7 +3410,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{"FB_KEY": "secret"},
 			wantErr: false,
@@ -3466,7 +3430,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{"FB_KEY": "secret"},
 			wantErr: false,
@@ -3486,7 +3450,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY", MaxToolResultTokens: 100000},
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY"},
 			},
 			env:     map[string]string{"FB_KEY": "secret"},
 			wantErr: true,
@@ -3500,7 +3464,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", CredentialsEnv: "VERTEX_CREDS", MaxToolResultTokens: 100000},
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", CredentialsEnv: "VERTEX_CREDS"},
 			},
 			env:     map[string]string{}, // VERTEX_CREDS not set
 			wantErr: true,
@@ -3514,7 +3478,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", ProjectEnv: "VERTEX_PROJECT", MaxToolResultTokens: 100000},
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", ProjectEnv: "VERTEX_PROJECT"},
 			},
 			env:     map[string]string{},
 			wantErr: true,
@@ -3528,7 +3492,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", LocationEnv: "VERTEX_LOCATION", MaxToolResultTokens: 100000},
+				"vertex-fallback": {Type: LLMProviderTypeVertexAI, Model: "claude", LocationEnv: "VERTEX_LOCATION"},
 			},
 			env:     map[string]string{},
 			wantErr: true,
@@ -3543,7 +3507,7 @@ func TestValidateFallbackProviders(t *testing.T) {
 				},
 			},
 			providers: map[string]*LLMProviderConfig{
-				"good-provider": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "GOOD_KEY", MaxToolResultTokens: 100000},
+				"good-provider": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "GOOD_KEY"},
 			},
 			env:     map[string]string{"GOOD_KEY": "secret"},
 			wantErr: true,

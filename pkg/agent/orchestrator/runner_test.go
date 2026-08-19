@@ -469,8 +469,8 @@ func TestSubAgentRunner_Dispatch_WithOverrides(t *testing.T) {
 
 	// Add a second LLM provider to the config so the override is valid.
 	runner.deps.Config.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
-		"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model", MaxToolResultTokens: 10000},
-		"fast-provider": {Type: config.LLMProviderTypeGoogle, Model: "fast-model", MaxToolResultTokens: 10000},
+		"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		"fast-provider": {Type: config.LLMProviderTypeGoogle, Model: "fast-model"},
 	})
 
 	// Set per-reference overrides: TestAgent gets fast-provider.
@@ -951,9 +951,8 @@ func setupIntegrationRunner(
 	parentExecID := executions[0].ID
 
 	testProvider := &config.LLMProviderConfig{
-		Type:                config.LLMProviderTypeGoogle,
-		Model:               "test-model",
-		MaxToolResultTokens: 10000,
+		Type:  config.LLMProviderTypeGoogle,
+		Model: "test-model",
 	}
 
 	cfg := &config.Config{

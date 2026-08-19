@@ -27,9 +27,8 @@ func TestConfigConvenienceMethods(t *testing.T) {
 	}
 	llmProviders := map[string]*LLMProviderConfig{
 		"test-provider": {
-			Type:                LLMProviderTypeGoogle,
-			Model:               "test-model",
-			MaxToolResultTokens: 100000,
+			Type:  LLMProviderTypeGoogle,
+			Model: "test-model",
 		},
 	}
 

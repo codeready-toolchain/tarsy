@@ -18,7 +18,6 @@ llm_providers:
     type: google
     model: gemini-2.5-flash
     api_key_env: GOOGLE_API_KEY
-    max_tool_result_tokens: 950000  # Conservative for 1M context
     native_tools:
       google_search: true
       code_execution: false
@@ -29,7 +28,6 @@ llm_providers:
     type: google
     model: gemini-2.5-pro
     api_key_env: GOOGLE_API_KEY
-    max_tool_result_tokens: 950000
     native_tools:
       google_search: true
       code_execution: false
@@ -40,7 +38,6 @@ llm_providers:
     type: google
     model: gemini-3.1-pro-preview
     api_key_env: GOOGLE_API_KEY
-    max_tool_result_tokens: 950000
     native_tools:
       google_search: true
       code_execution: false
@@ -52,7 +49,6 @@ llm_providers:
     model: gemini-2.5-pro
     api_key_env: OPENAI_API_KEY
     base_url: https://gemini-proxy.example.com/v1beta/openai
-    max_tool_result_tokens: 950000
 
 # =============================================================================
 # OPENAI PROVIDERS
@@ -63,28 +59,24 @@ llm_providers:
     type: openai
     model: gpt-5.2
     api_key_env: OPENAI_API_KEY
-    max_tool_result_tokens: 380000  # Conservative for 400K context
 
   # o4-mini for fast reasoning
   o4-mini:
     type: openai
     model: o4-mini
     api_key_env: OPENAI_API_KEY
-    max_tool_result_tokens: 100000
 
   # GPT-5 for general use
   gpt-5:
     type: openai
     model: gpt-5
     api_key_env: OPENAI_API_KEY
-    max_tool_result_tokens: 100000
 
   # o3 for reasoning (legacy)
   o3:
     type: openai
     model: o3
     api_key_env: OPENAI_API_KEY
-    max_tool_result_tokens: 250000
 
 # =============================================================================
 # ANTHROPIC / CLAUDE PROVIDERS
@@ -95,35 +87,30 @@ llm_providers:
     type: anthropic
     model: claude-sonnet-5
     api_key_env: ANTHROPIC_API_KEY
-    max_tool_result_tokens: 950000  # Conservative for 1M context
 
   # Claude Sonnet 4.6 (previous generation, pinned)
   claude-sonnet-4-6:
     type: anthropic
     model: claude-sonnet-4-6-20260217
     api_key_env: ANTHROPIC_API_KEY
-    max_tool_result_tokens: 900000  # Conservative for 1M context
 
-  # Claude Opus for maximum capability
+  # Claude Opus 5 for maximum capability
   claude-opus:
     type: anthropic
-    model: claude-opus-4-20250514
+    model: claude-opus-5
     api_key_env: ANTHROPIC_API_KEY
-    max_tool_result_tokens: 150000  # Conservative for 200K context
 
   # Claude Sonnet 4 for cost efficiency
   claude-sonnet-4:
     type: anthropic
     model: claude-sonnet-4-20250514
     api_key_env: ANTHROPIC_API_KEY
-    max_tool_result_tokens: 150000
 
   # Claude Haiku for speed
   claude-haiku:
     type: anthropic
     model: claude-haiku-4-20250514
     api_key_env: ANTHROPIC_API_KEY
-    max_tool_result_tokens: 150000
 
 # =============================================================================
 # X.AI / GROK PROVIDERS
@@ -134,7 +121,6 @@ llm_providers:
     type: xai
     model: grok-4
     api_key_env: XAI_API_KEY
-    max_tool_result_tokens: 200000  # Conservative for 256K context
 
 # =============================================================================
 # VERTEX AI PROVIDERS (GCP)
@@ -146,7 +132,13 @@ llm_providers:
     model: claude-sonnet-5
     project_env: GCP_PROJECT
     location_env: GCP_LOCATION
-    max_tool_result_tokens: 950000  # Conservative for 1M context
+
+  # Claude Opus 5 on Vertex AI
+  vertexai-claude-opus:
+    type: vertexai
+    model: claude-opus-5
+    project_env: GCP_PROJECT
+    location_env: GCP_LOCATION
 
   # Gemini on Vertex AI
   vertexai-gemini-pro:
@@ -154,7 +146,6 @@ llm_providers:
     model: gemini-2.5-pro
     project_env: GCP_PROJECT
     location_env: GCP_LOCATION
-    max_tool_result_tokens: 950000
 
 # =============================================================================
 # CUSTOM / ENTERPRISE PROVIDERS
@@ -166,7 +157,6 @@ llm_providers:
     model: custom-model
     api_key_env: CUSTOM_API_KEY
     base_url: https://llm.company.com/v1
-    max_tool_result_tokens: 100000
 
   # Example: Azure OpenAI
   azure-o4-mini:
@@ -174,4 +164,3 @@ llm_providers:
     model: o4-mini
     api_key_env: AZURE_OPENAI_KEY
     base_url: https://your-resource.openai.azure.com/openai/deployments/your-deployment
-    max_tool_result_tokens: 100000

@@ -26,9 +26,6 @@ type LLMProviderConfig struct {
 	// Optional custom endpoint/base URL
 	BaseURL string `yaml:"base_url,omitempty"`
 
-	// Maximum tokens for tool results (required, min 1000)
-	MaxToolResultTokens int `yaml:"max_tool_result_tokens" validate:"required,min=1000"`
-
 	// Google-specific native tools
 	NativeTools map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`
 }
