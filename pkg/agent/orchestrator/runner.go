@@ -282,6 +282,8 @@ func (r *SubAgentRunner) runSubAgent(
 			Task:         exec.task,
 			ParentExecID: r.parentExecID,
 		},
+		LLMProviders:         r.deps.Config.LLMProviderRegistry,
+		DefaultSummarization: subAgentDefaultSummarization(r.deps.Config),
 		Services: &agent.ServiceBundle{
 			Timeline:    r.deps.TimelineService,
 			Message:     r.deps.MessageService,
@@ -544,4 +546,11 @@ func mapToEntStatus(status agent.ExecutionStatus) agentexecution.Status {
 	default:
 		return agentexecution.StatusFailed
 	}
+}
+
+func subAgentDefaultSummarization(cfg *config.Config) *config.SummarizationConfig {
+	if cfg == nil || cfg.Defaults == nil {
+		return nil
+	}
+	return cfg.Defaults.Summarization
 }

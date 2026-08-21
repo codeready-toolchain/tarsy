@@ -413,6 +413,10 @@ func TestSystemConfigHandler(t *testing.T) {
 					LLMProvider:   "google-default",
 					MaxIterations: &maxIter,
 					LLMBackend:    config.LLMBackendNativeGemini,
+					Summarization: &config.SummarizationConfig{
+						LLMProvider: "google-default",
+						LLMBackend:  config.LLMBackendLangChain,
+					},
 					Memory: &config.MemoryConfig{
 						Enabled:   true,
 						MaxInject: 5,
@@ -480,6 +484,12 @@ func TestSystemConfigHandler(t *testing.T) {
 
 		require.NotNil(t, resp.Defaults)
 		assert.Equal(t, "google-default", resp.Defaults.LLMProvider)
+		require.NotNil(t, resp.Defaults.Summarization)
+		assert.Equal(t, "google-default", resp.Defaults.Summarization.LLMProvider)
+		assert.Equal(t, config.LLMBackendLangChain, resp.Defaults.Summarization.LLMBackend)
+		rawDefaults, err := json.Marshal(resp.Defaults)
+		require.NoError(t, err)
+		assert.Contains(t, string(rawDefaults), `"summarization"`)
 		require.NotNil(t, resp.Defaults.Memory)
 		assert.Equal(t, "GOOGLE_API_KEY", resp.Defaults.Memory.Embedding.APIKeyEnv)
 		require.NotNil(t, resp.Defaults.Orchestrator)

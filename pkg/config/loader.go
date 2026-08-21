@@ -152,7 +152,9 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	chains := mergeChains(builtin.ChainDefinitions, tarsyConfig.AgentChains)
 	llmProvidersMerged := mergeLLMProviders(builtin.LLMProviders, llmProviders)
 
-	// 5. Apply MCP server defaults (before validation)
+	// 5. Apply MCP server defaults (before validation).
+	// Size-threshold filler is MCP-server only — do not apply it to
+	// defaults.summarization (that block inherits provider/backend only).
 	for _, server := range mcpServers {
 		if server.Summarization != nil && !server.Summarization.SummarizationDisabled() && server.Summarization.SizeThresholdTokens == 0 {
 			server.Summarization.SizeThresholdTokens = DefaultSizeThresholdTokens

@@ -48,6 +48,7 @@
       "original_tokens": 156,
       "server_name": "test-mcp",
       "summarization_model": "test-model",
+      "summarization_provider": "test-provider",
       "tool_name": "get_pods"
     },
     "sequence": 16,
@@ -243,6 +244,7 @@
       "original_tokens": 156,
       "server_name": "test-mcp",
       "summarization_model": "test-model",
+      "summarization_provider": "test-provider",
       "tool_name": "get_pods"
     },
     "sequence": 5,
@@ -444,6 +446,7 @@
       "original_tokens": 192,
       "server_name": "prometheus-mcp",
       "summarization_model": "test-model",
+      "summarization_provider": "test-provider",
       "tool_name": "query_alerts"
     },
     "sequence": 5,

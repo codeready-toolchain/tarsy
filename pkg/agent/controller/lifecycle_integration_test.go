@@ -181,6 +181,7 @@ func TestIteratingController_SummarizationIntegration(t *testing.T) {
 	// LLM calls: 1) tool call, 2) summarization (internal), 3) final answer
 	// The mock LLM receives 3 calls: iteration, summarization, iteration
 	llm := &mockLLMClient{
+		capture: true,
 		responses: []mockLLMResponse{
 			// Iteration 1: tool call
 			{chunks: []agent.Chunk{
@@ -232,6 +233,10 @@ func TestIteratingController_SummarizationIntegration(t *testing.T) {
 
 	// Verify the LLM was called 3 times (iteration + summarization + iteration)
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, summarization, iteration")
+	require.Len(t, llm.capturedInputs, 3)
+	assert.Equal(t, execCtx.ExecutionID, llm.capturedInputs[0].ExecutionID)
+	assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, llm.capturedInputs[1].ExecutionID)
+	assert.Equal(t, execCtx.ExecutionID, llm.capturedInputs[2].ExecutionID)
 }
 
 // TestIteratingController_SummarizationFailOpen verifies that when summarization

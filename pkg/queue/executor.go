@@ -659,21 +659,23 @@ func (e *RealSessionExecutor) executeAgent(
 
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
-		SessionID:      input.session.ID,
-		StageID:        stg.ID,
-		ExecutionID:    exec.ID,
-		AgentName:      displayName,
-		AgentIndex:     agentIndex + 1, // 1-based
-		AlertData:      input.session.AlertData,
-		AlertType:      input.session.AlertType,
-		StageType:      string(stg.StageType),
-		RunbookContent: input.runbookContent,
-		Config:         resolvedConfig,
-		LLMClient:      e.llmClient,
-		EventPublisher: e.eventPublisher,
-		PromptBuilder:  e.promptBuilder,
-		FailedServers:  failedServers,
-		MemoryBriefing: memoryBriefing,
+		SessionID:            input.session.ID,
+		StageID:              stg.ID,
+		ExecutionID:          exec.ID,
+		AgentName:            displayName,
+		AgentIndex:           agentIndex + 1, // 1-based
+		AlertData:            input.session.AlertData,
+		AlertType:            input.session.AlertType,
+		StageType:            string(stg.StageType),
+		RunbookContent:       input.runbookContent,
+		Config:               resolvedConfig,
+		LLMClient:            e.llmClient,
+		EventPublisher:       e.eventPublisher,
+		PromptBuilder:        e.promptBuilder,
+		FailedServers:        failedServers,
+		MemoryBriefing:       memoryBriefing,
+		LLMProviders:         e.cfg.LLMProviderRegistry,
+		DefaultSummarization: defaultSummarization(e.cfg),
 		Services: &agent.ServiceBundle{
 			Timeline:    input.timelineService,
 			Message:     input.messageService,

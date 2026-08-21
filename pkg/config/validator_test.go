@@ -518,12 +518,153 @@ func TestValidateMCPServers(t *testing.T) {
 			wantErr: true,
 			errMsg:  "must be at least 100",
 		},
+		{
+			name: "disabled summarization with llm_provider fails",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						Enabled:     BoolPtr(false),
+						LLMProvider: "test-provider",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "llm_provider is unused when summarization is disabled",
+		},
+		{
+			name: "backend without provider fails",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						LLMBackend:          LLMBackendLangChain,
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "llm_backend requires llm_provider at the same level",
+		},
+		{
+			name: "unknown summarization provider fails",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						LLMProvider:         "nonexistent-provider",
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "LLM provider 'nonexistent-provider' not found",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
 				MCPServerRegistry: NewMCPServerRegistry(tt.servers),
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateMCPServers()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateMCPServersSummarizationProvider(t *testing.T) {
+	tests := []struct {
+		name      string
+		servers   map[string]*MCPServerConfig
+		providers map[string]*LLMProviderConfig
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "valid overlay provider omitted backend passes",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						LLMProvider:         "test-provider",
+					},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid overlay provider with backend passes",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						LLMProvider:         "test-provider",
+						LLMBackend:          LLMBackendNativeGemini,
+					},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid backend fails",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						LLMProvider:         "test-provider",
+						LLMBackend:          "invalid-backend",
+					},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
+			},
+			wantErr: true,
+			errMsg:  "invalid LLM backend",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				MCPServerRegistry:   NewMCPServerRegistry(tt.servers),
+				LLMProviderRegistry: NewLLMProviderRegistry(tt.providers),
 			}
 
 			validator := NewValidator(cfg)
@@ -2202,6 +2343,135 @@ func TestValidateDefaultsScoring(t *testing.T) {
 	}
 }
 
+func TestValidateDefaultsSummarization(t *testing.T) {
+	tests := []struct {
+		name      string
+		defaults  *Defaults
+		providers map[string]*LLMProviderConfig
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:     "nil summarization passes",
+			defaults: &Defaults{},
+			wantErr:  false,
+		},
+		{
+			name: "valid provider and backend passes",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					LLMProvider: "test-provider",
+					LLMBackend:  LLMBackendLangChain,
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid provider with omitted backend passes",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					LLMProvider: "test-provider",
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "unknown provider fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					LLMProvider: "nonexistent-provider",
+				},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "LLM provider 'nonexistent-provider' not found",
+		},
+		{
+			name: "invalid backend fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					LLMProvider: "test-provider",
+					LLMBackend:  "invalid-backend",
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
+			},
+			wantErr: true,
+			errMsg:  "invalid LLM backend",
+		},
+		{
+			name: "backend without provider fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					LLMBackend: LLMBackendLangChain,
+				},
+			},
+			wantErr: true,
+			errMsg:  "llm_backend requires llm_provider at the same level",
+		},
+		{
+			name: "enabled on defaults fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					Enabled: BoolPtr(true),
+				},
+			},
+			wantErr: true,
+			errMsg:  "enabled is per-MCP-server only",
+		},
+		{
+			name: "size_threshold_tokens on defaults fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					SizeThresholdTokens: 5000,
+				},
+			},
+			wantErr: true,
+			errMsg:  "size_threshold_tokens is per-MCP-server only",
+		},
+		{
+			name: "summary_max_token_limit on defaults fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					SummaryMaxTokenLimit: 1000,
+				},
+			},
+			wantErr: true,
+			errMsg:  "summary_max_token_limit is per-MCP-server only",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			providers := tt.providers
+			if providers == nil {
+				providers = map[string]*LLMProviderConfig{}
+			}
+			cfg := &Config{
+				Defaults:            tt.defaults,
+				LLMProviderRegistry: NewLLMProviderRegistry(providers),
+			}
+
+			validator := NewValidator(cfg)
+			err := validator.validateDefaults()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateRunbooks(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -3580,10 +3850,21 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 			FallbackProviders: []FallbackProviderEntry{
 				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
 			},
+			Summarization: &SummarizationConfig{
+				LLMProvider: "defaults-summarization",
+			},
 		},
 		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}, "Worker": {}}),
 		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
-		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+		MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{
+			"k8s": {
+				Transport: TransportConfig{Type: TransportTypeStdio, Command: "npx"},
+				Summarization: &SummarizationConfig{
+					SizeThresholdTokens: 5000,
+					LLMProvider:         "mcp-summarization",
+				},
+			},
+		}),
 		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 			"chain1": {
 				AlertTypes: []string{"test"},
@@ -3627,6 +3908,8 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 
 	assert.True(t, referenced["defaults-primary"], "defaults primary provider should be referenced")
 	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
+	assert.True(t, referenced["defaults-summarization"], "defaults summarization provider should be referenced")
+	assert.True(t, referenced["mcp-summarization"], "MCP server summarization provider should be referenced")
 	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
 	assert.True(t, referenced["chain-subagent"], "chain sub-agent provider should be referenced")
 	assert.True(t, referenced["chat-subagent"], "chat.sub_agents provider should be referenced")
@@ -3634,6 +3917,43 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 	assert.True(t, referenced["stage-subagent"], "stage sub-agent provider should be referenced")
 	assert.True(t, referenced["agent-fallback"], "agent fallback provider should be referenced")
 	assert.True(t, referenced["agent-subagent"], "agent sub-agent provider should be referenced")
+}
+
+func TestValidateLLMProviders_SummarizationOverlayMissingAPIKey(t *testing.T) {
+	cfg := &Config{
+		Queue:    DefaultQueueConfig(),
+		Defaults: &Defaults{},
+		AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+			"TestAgent": {MCPServers: []string{"k8s"}},
+		}),
+		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
+			"flash-only": {
+				Type:      LLMProviderTypeGoogle,
+				Model:     "gemini-flash",
+				APIKeyEnv: "SUMMARIZATION_TEST_API_KEY",
+			},
+		}),
+		MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{
+			"k8s": {
+				Transport: TransportConfig{Type: TransportTypeStdio, Command: "npx"},
+				Summarization: &SummarizationConfig{
+					SizeThresholdTokens: 5000,
+					LLMProvider:         "flash-only",
+				},
+			},
+		}),
+		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+			"chain1": {
+				AlertTypes: []string{"test"},
+				Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+			},
+		}),
+	}
+
+	err := NewValidator(cfg).ValidateAll()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "LLM provider validation failed")
+	assert.Contains(t, err.Error(), "environment variable SUMMARIZATION_TEST_API_KEY is not set")
 }
 
 func TestValidateSkills(t *testing.T) {

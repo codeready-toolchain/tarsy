@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
+	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -629,4 +630,101 @@ func TestExecuteToolCall_LangChain_StillUsesExecutorForNativeToolNames(t *testin
 
 	assert.False(t, result.IsError)
 	assert.Equal(t, "executor-was-called", result.Content)
+}
+
+func TestExecuteToolCall_RequiredSummarizationUsesDefaults(t *testing.T) {
+	mockLLM := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Digest of past sessions"}}},
+		},
+	}
+	flash := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeGoogle,
+		Model: "gemini-flash",
+	}
+	sonnet := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeVertexAI,
+		Model: "claude-sonnet",
+	}
+	toolExec := &mockToolExecutorFunc{
+		tools: []agent.ToolDefinition{{Name: "search_past_sessions"}},
+		executeFn: func(_ context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+			return &agent.ToolResult{
+				CallID:  call.ID,
+				Name:    call.Name,
+				Content: "raw session rows",
+				RequiredSummarization: &agent.SummarizationRequest{
+					SystemPrompt: "summarize sessions",
+					UserPrompt:   "query: nginx",
+				},
+			}, nil
+		},
+	}
+	execCtx := newTestExecCtx(t, mockLLM, toolExec)
+	execCtx.LLMProviders = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"google-default":         flash,
+		"vertexai-claude-sonnet": sonnet,
+	})
+	execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "google-default"}
+	execCtx.PromptBuilder = prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"k8s": {
+			Summarization: &config.SummarizationConfig{
+				LLMProvider: "vertexai-claude-sonnet",
+			},
+		},
+	}), nil)
+
+	ctx := t.Context()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:        "tc-search",
+		Name:      "search_past_sessions",
+		Arguments: `{"query":"nginx"}`,
+	}, nil, nil, &eventSeq)
+
+	assert.False(t, result.IsError)
+	assert.Equal(t, "Digest of past sessions", result.Content)
+	require.NotNil(t, mockLLM.lastInput)
+	assert.Equal(t, "gemini-flash", mockLLM.lastInput.Config.Model,
+		"search_past_sessions must use defaults.summarization, not an MCP overlay")
+	assert.Equal(t, config.LLMBackendLangChain, mockLLM.lastInput.Backend)
+	assert.Nil(t, mockLLM.lastInput.Config.NativeTools)
+	assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.lastInput.ExecutionID)
+	assert.Equal(t, 1, mockLLM.callCount)
+}
+
+func TestExecuteToolCall_RequiredSummarizationFailClosed(t *testing.T) {
+	mockLLM := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{err: assert.AnError},
+		},
+	}
+	toolExec := &mockToolExecutorFunc{
+		tools: []agent.ToolDefinition{{Name: "search_past_sessions"}},
+		executeFn: func(_ context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+			return &agent.ToolResult{
+				CallID:  call.ID,
+				Name:    call.Name,
+				Content: "raw session rows",
+				RequiredSummarization: &agent.SummarizationRequest{
+					SystemPrompt: "summarize sessions",
+					UserPrompt:   "query: nginx",
+				},
+			}, nil
+		},
+	}
+	execCtx := newTestExecCtx(t, mockLLM, toolExec)
+
+	ctx := t.Context()
+	eventSeq := 0
+	result := executeToolCall(ctx, execCtx, agent.ToolCall{
+		ID:        "tc-search",
+		Name:      "search_past_sessions",
+		Arguments: `{"query":"nginx"}`,
+	}, nil, nil, &eventSeq)
+
+	assert.True(t, result.IsError)
+	assert.Equal(t, "Unable to retrieve session history — summarization failed.", result.Content)
+	assert.Equal(t, 1, mockLLM.callCount, "fail-closed should not retry")
 }

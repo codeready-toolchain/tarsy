@@ -71,7 +71,7 @@ func (TimelineEvent) Fields() []ent.Field {
 		//                        is_error in metadata after ToolExecutor.Execute() returns.
 		//   mcp_tool_summary   — MCP tool result summary. Created with status "streaming"
 		//                        when summarization starts. Completed with the LLM-generated summary.
-		//                        Metadata: server_name, tool_name, original_tokens, summarization_model.
+		//                        Metadata: server_name, tool_name, original_tokens, summarization_model, summarization_provider.
 		//   error              — Error during iteration (LLM failure, tool failure, etc.).
 		//   user_question      — User question in chat mode.
 		//   executive_summary  — High-level session summary.

@@ -20,6 +20,11 @@ type Defaults struct {
 	// Provides defaults for enabled, agent, llm_provider, llm_backend, etc.
 	Scoring *ScoringConfig `yaml:"scoring,omitempty"`
 
+	// Default tool-result summarization provider/backend. Only llm_provider
+	// and llm_backend are inherited; enablement and size thresholds stay
+	// per-MCP-server. Unset means the calling agent's model.
+	Summarization *SummarizationConfig `yaml:"summarization,omitempty"`
+
 	// Success policy default for parallel stages
 	SuccessPolicy SuccessPolicy `yaml:"success_policy,omitempty"`
 

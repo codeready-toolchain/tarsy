@@ -184,17 +184,18 @@ type SkillMetaView struct {
 
 // DefaultsView is system-wide defaults.
 type DefaultsView struct {
-	LLMProvider       string                 `json:"llm_provider,omitempty"`
-	MaxIterations     *int                   `json:"max_iterations,omitempty"`
-	LLMBackend        string                 `json:"llm_backend,omitempty"`
-	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
-	Scoring           *ScoringView           `json:"scoring,omitempty"`
-	SuccessPolicy     string                 `json:"success_policy,omitempty"`
-	AlertType         string                 `json:"alert_type,omitempty"`
-	Runbook           string                 `json:"runbook,omitempty"`
-	AlertMasking      *AlertMaskingView      `json:"alert_masking,omitempty"`
-	Orchestrator      *OrchestratorView      `json:"orchestrator,omitempty"`
-	Memory            *MemoryView            `json:"memory,omitempty"`
+	LLMProvider       string                      `json:"llm_provider,omitempty"`
+	MaxIterations     *int                        `json:"max_iterations,omitempty"`
+	LLMBackend        string                      `json:"llm_backend,omitempty"`
+	FallbackProviders []FallbackProviderView      `json:"fallback_providers,omitempty"`
+	Scoring           *ScoringView                `json:"scoring,omitempty"`
+	Summarization     *config.SummarizationConfig `json:"summarization,omitempty"`
+	SuccessPolicy     string                      `json:"success_policy,omitempty"`
+	AlertType         string                      `json:"alert_type,omitempty"`
+	Runbook           string                      `json:"runbook,omitempty"`
+	AlertMasking      *AlertMaskingView           `json:"alert_masking,omitempty"`
+	Orchestrator      *OrchestratorView           `json:"orchestrator,omitempty"`
+	Memory            *MemoryView                 `json:"memory,omitempty"`
 }
 
 // AlertMaskingView is alert masking defaults.
@@ -382,6 +383,7 @@ func buildDefaultsView(d *config.Defaults) *DefaultsView {
 		LLMBackend:        string(d.LLMBackend),
 		FallbackProviders: buildFallbackProviders(d.FallbackProviders),
 		Scoring:           buildScoringView(d.Scoring),
+		Summarization:     d.Summarization,
 		SuccessPolicy:     string(d.SuccessPolicy),
 		AlertType:         d.AlertType,
 		Runbook:           d.Runbook,

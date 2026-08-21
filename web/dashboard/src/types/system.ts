@@ -296,6 +296,7 @@ export interface DefaultsView {
   llm_backend?: string;
   fallback_providers?: FallbackProviderView[];
   scoring?: ScoringView | null;
+  summarization?: Record<string, unknown> | null;
   success_policy?: string;
   alert_type?: string;
   runbook?: string;

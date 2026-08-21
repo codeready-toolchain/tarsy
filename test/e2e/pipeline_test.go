@@ -334,6 +334,30 @@ func TestE2E_Pipeline(t *testing.T) {
 	assert.Equal(t, config.AgentNameChat, execs[9].AgentName)
 	assert.Equal(t, config.AgentNameChat, execs[10].AgentName)
 
+	execIDs := make(map[string]struct{}, len(execs))
+	for _, e := range execs {
+		execIDs[e.ID] = struct{}{}
+	}
+	suffix := agent.SummarizationExecutionIDSuffix
+	var summarizationCalls int
+	for _, in := range llm.CapturedInputs() {
+		if strings.HasSuffix(in.ExecutionID, suffix) {
+			summarizationCalls++
+			unsuffixed := strings.TrimSuffix(in.ExecutionID, suffix)
+			_, ok := execIDs[unsuffixed]
+			assert.True(t, ok, "summarization ExecutionID %q must map to a real execution", in.ExecutionID)
+			require.NotNil(t, in.Config)
+			assert.Nil(t, in.Config.NativeTools, "summarization Generate must strip NativeTools")
+			assert.Empty(t, in.Tools)
+			assert.NotEmpty(t, string(in.Backend), "summarization Generate must set a backend")
+			assert.Equal(t, "test-model", in.Config.Model)
+		} else {
+			assert.False(t, strings.Contains(in.ExecutionID, suffix),
+				"investigation Generate must not use the summarization ExecutionID suffix")
+		}
+	}
+	assert.GreaterOrEqual(t, summarizationCalls, 3, "pipeline should summarize at least three large tool results")
+
 	timeline := app.QueryTimeline(t, sessionID)
 	assert.NotEmpty(t, timeline)
 

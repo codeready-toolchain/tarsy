@@ -182,6 +182,7 @@ func newTestExecCtx(t *testing.T, llm agent.LLMClient, toolExec agent.ToolExecut
 			Type:               config.AgentTypeDefault,
 			LLMBackend:         config.LLMBackendLangChain,
 			LLMProvider:        &config.LLMProviderConfig{Model: "test-model"},
+			LLMProviderName:    "test-provider",
 			MaxIterations:      20,
 			IterationTimeout:   6 * time.Minute,
 			LLMCallTimeout:     5 * time.Minute,

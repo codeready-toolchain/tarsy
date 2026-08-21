@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -87,6 +88,7 @@ func TestMaybeSummarize(t *testing.T) {
 	})
 
 	t.Run("returns raw content when below explicit threshold", func(t *testing.T) {
+		mockLLM := &mockLLMClient{}
 		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
 			"test-server": {
 				Summarization: &config.SummarizationConfig{
@@ -98,6 +100,7 @@ func TestMaybeSummarize(t *testing.T) {
 		pb := prompt.NewPromptBuilder(registry, nil)
 		execCtx := &agent.ExecutionContext{
 			PromptBuilder: pb,
+			LLMClient:     mockLLM,
 			Config: &agent.ResolvedAgentConfig{
 				LLMProvider: &config.LLMProviderConfig{Model: "test-model"},
 			},
@@ -108,6 +111,7 @@ func TestMaybeSummarize(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "short", result.Content)
 		assert.False(t, result.WasSummarized)
+		assert.Equal(t, 0, mockLLM.callCount)
 	})
 
 	t.Run("returns raw content when explicitly disabled", func(t *testing.T) {
@@ -194,6 +198,7 @@ func TestMaybeSummarize(t *testing.T) {
 
 	t.Run("triggers summarization above threshold", func(t *testing.T) {
 		mockLLM := &mockLLMClient{
+			capture: true,
 			responses: []mockLLMResponse{
 				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Summarized: 3 pods found, 1 failing"}}},
 			},
@@ -211,6 +216,9 @@ func TestMaybeSummarize(t *testing.T) {
 
 		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
 		execCtx.PromptBuilder = pb
+		execCtx.Config.LLMProvider.NativeTools = map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		}
 
 		// Content that exceeds threshold (100 tokens = 400 chars)
 		largeContent := strings.Repeat("pod-info ", 100) // 900 chars = 225 tokens > 100
@@ -225,6 +233,13 @@ func TestMaybeSummarize(t *testing.T) {
 			"The full output is available in the tool call event above.]\n\n" +
 			"Summarized: 3 pods found, 1 failing"
 		assert.Equal(t, want, result.Content)
+
+		require.NotNil(t, mockLLM.lastInput)
+		assert.Equal(t, "test-model", mockLLM.lastInput.Config.Model)
+		assert.Equal(t, config.LLMBackendLangChain, mockLLM.lastInput.Backend)
+		assert.Nil(t, mockLLM.lastInput.Config.NativeTools)
+		assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.lastInput.ExecutionID)
+		assert.True(t, execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
 	})
 
 	t.Run("stores inline conversation in LLM interaction", func(t *testing.T) {
@@ -259,6 +274,7 @@ func TestMaybeSummarize(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, interactions, 1)
 		assert.Equal(t, "summarization", string(interactions[0].InteractionType))
+		assert.Equal(t, "test-model", interactions[0].ModelName)
 
 		// Check inline conversation exists in llm_request.
 		llmReq := interactions[0].LlmRequest
@@ -311,6 +327,7 @@ func TestMaybeSummarize(t *testing.T) {
 		require.NoError(t, err) // No error — fail-open
 		assert.False(t, result.WasSummarized)
 		assert.Equal(t, largeContent, result.Content) // Raw content returned
+		assert.Equal(t, 1, mockLLM.callCount, "fail-open should not retry")
 	})
 
 	t.Run("fail-open on empty summary", func(t *testing.T) {
@@ -339,5 +356,118 @@ func TestMaybeSummarize(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result.WasSummarized)
 		assert.Equal(t, largeContent, result.Content) // Raw content returned
+		assert.Equal(t, 1, mockLLM.callCount, "fail-open should not retry")
+	})
+}
+
+func TestMaybeSummarizeResolvedProvider(t *testing.T) {
+	ctx := t.Context()
+	flash := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeGoogle,
+		Model: "gemini-flash",
+		NativeTools: map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		},
+	}
+	sonnet := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeVertexAI,
+		Model: "claude-sonnet",
+	}
+	providers := config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"google-default":         flash,
+		"vertexai-claude-sonnet": sonnet,
+	})
+
+	largeContent := strings.Repeat("pod-info ", 100)
+
+	t.Run("above threshold uses resolved defaults provider", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Summarized output"}}},
+			},
+		}
+		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+			"test-server": {
+				Summarization: &config.SummarizationConfig{
+					SizeThresholdTokens: 100,
+				},
+			},
+		})
+		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
+		execCtx.PromptBuilder = prompt.NewPromptBuilder(registry, nil)
+		execCtx.EventPublisher = noopEventPublisher{}
+		execCtx.LLMProviders = providers
+		execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "google-default"}
+		execCtx.Config.LLMProviderName = "vertexai-claude-opus"
+		execCtx.Config.LLMProvider.NativeTools = map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		}
+
+		eventSeq := 0
+		result, err := maybeSummarize(ctx, execCtx, "test-server", "get_pods",
+			largeContent, "[user]: check pods", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		require.NotNil(t, mockLLM.lastInput)
+		assert.Equal(t, "gemini-flash", mockLLM.lastInput.Config.Model)
+		assert.Equal(t, config.LLMBackendLangChain, mockLLM.lastInput.Backend)
+		assert.Nil(t, mockLLM.lastInput.Config.NativeTools)
+		assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.lastInput.ExecutionID)
+		assert.True(t, execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch],
+			"investigator NativeTools must be unchanged")
+		assert.Equal(t, "vertexai-claude-opus", execCtx.Config.LLMProviderName)
+
+		interactions, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		require.Len(t, interactions, 1)
+		assert.Equal(t, "gemini-flash", interactions[0].ModelName)
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(ctx, execCtx.SessionID)
+		require.NoError(t, err)
+		var found bool
+		for _, evt := range events {
+			if evt.EventType == timelineevent.EventTypeMcpToolSummary {
+				assert.Equal(t, "gemini-flash", evt.Metadata["summarization_model"])
+				assert.Equal(t, "google-default", evt.Metadata["summarization_provider"])
+				_, hasFallback := evt.Metadata["summarization_fallback"]
+				assert.False(t, hasFallback)
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "mcp_tool_summary timeline event should be created")
+	})
+
+	t.Run("server overlay wins over defaults", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Opus-quality summary"}}},
+			},
+		}
+		registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+			"test-server": {
+				Summarization: &config.SummarizationConfig{
+					SizeThresholdTokens: 100,
+					LLMProvider:         "vertexai-claude-sonnet",
+				},
+			},
+		})
+		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
+		execCtx.PromptBuilder = prompt.NewPromptBuilder(registry, nil)
+		execCtx.LLMProviders = providers
+		execCtx.DefaultSummarization = &config.SummarizationConfig{
+			LLMProvider: "google-default",
+			LLMBackend:  config.LLMBackendNativeGemini,
+		}
+
+		eventSeq := 0
+		_, err := maybeSummarize(ctx, execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		require.NotNil(t, mockLLM.lastInput)
+		assert.Equal(t, "claude-sonnet", mockLLM.lastInput.Config.Model)
+		assert.Equal(t, config.LLMBackendLangChain, mockLLM.lastInput.Backend)
 	})
 }
