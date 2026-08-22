@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -469,5 +472,446 @@ func TestMaybeSummarizeResolvedProvider(t *testing.T) {
 		require.NotNil(t, mockLLM.lastInput)
 		assert.Equal(t, "claude-sonnet", mockLLM.lastInput.Config.Model)
 		assert.Equal(t, config.LLMBackendLangChain, mockLLM.lastInput.Backend)
+	})
+}
+
+func TestMaybeSummarizeFallback(t *testing.T) {
+	largeContent := strings.Repeat("pod-info ", 100)
+
+	flash := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeGoogle,
+		Model: "gemini-flash",
+		NativeTools: map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		},
+	}
+	sonnet := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeVertexAI,
+		Model: "claude-sonnet",
+		NativeTools: map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		},
+	}
+	opus := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeVertexAI,
+		Model: "claude-opus",
+	}
+	providers := config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"google-default":         flash,
+		"vertexai-claude-sonnet": sonnet,
+		"vertexai-claude-opus":   opus,
+	})
+
+	mcpRegistry := func() *config.MCPServerRegistry {
+		return config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+			"test-server": {
+				Summarization: &config.SummarizationConfig{
+					SizeThresholdTokens: 100,
+				},
+			},
+			"overlay-server": {
+				Summarization: &config.SummarizationConfig{
+					SizeThresholdTokens: 100,
+					LLMProvider:         "vertexai-claude-opus",
+				},
+			},
+		})
+	}
+
+	fallbackList := func() []agent.ResolvedFallbackEntry {
+		sonnetEntry := makeFallbackEntry("vertexai-claude-sonnet", config.LLMBackendLangChain, "claude-sonnet")
+		sonnetEntry.Config.NativeTools = map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		}
+		return []agent.ResolvedFallbackEntry{
+			sonnetEntry,
+			makeFallbackEntry("vertexai-claude-opus", config.LLMBackendLangChain, "claude-opus"),
+			makeFallbackEntry("google-default", config.LLMBackendNativeGemini, "gemini-flash"),
+		}
+	}
+
+	setup := func(t *testing.T, mockLLM *mockLLMClient) *agent.ExecutionContext {
+		t.Helper()
+		execCtx := newTestExecCtx(t, mockLLM, agent.NewStubToolExecutor(nil))
+		execCtx.PromptBuilder = prompt.NewPromptBuilder(mcpRegistry(), nil)
+		execCtx.EventPublisher = noopEventPublisher{}
+		execCtx.LLMProviders = providers
+		execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "google-default"}
+		execCtx.Config.LLMProviderName = "vertexai-claude-opus"
+		execCtx.Config.LLMProvider = &config.LLMProviderConfig{Model: "claude-opus"}
+		execCtx.Config.ResolvedFallbackProviders = fallbackList()
+		return execCtx
+	}
+
+	assertNoInvestigationFallback := func(t *testing.T, execCtx *agent.ExecutionContext) {
+		t.Helper()
+		assert.Equal(t, "vertexai-claude-opus", execCtx.Config.LLMProviderName)
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		for _, evt := range events {
+			assert.NotEqual(t, timelineevent.EventTypeProviderFallback, evt.EventType)
+		}
+		exec, err := execCtx.Services.Stage.GetAgentExecutionByID(t.Context(), execCtx.ExecutionID)
+		require.NoError(t, err)
+		assert.Nil(t, exec.OriginalLlmProvider)
+	}
+
+	t.Run("flash error uses sonnet without mutating investigator", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Sonnet summary")
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[0].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[0].ClearCache)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.Equal(t, config.LLMBackendLangChain, mockLLM.capturedInputs[1].Backend)
+		assert.Nil(t, mockLLM.capturedInputs[1].Config.NativeTools)
+		assert.True(t, mockLLM.capturedInputs[1].ClearCache)
+		assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.capturedInputs[1].ExecutionID)
+		assert.True(t, sonnet.NativeTools[config.GoogleNativeToolGoogleSearch])
+
+		sticky, ok := execCtx.SummarizationSticky["google-default"]
+		require.True(t, ok)
+		assert.Equal(t, "vertexai-claude-sonnet", sticky.ProviderName)
+
+		assertNoInvestigationFallback(t, execCtx)
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var found bool
+		for _, evt := range events {
+			if evt.EventType == timelineevent.EventTypeMcpToolSummary {
+				assert.Equal(t, "claude-sonnet", evt.Metadata["summarization_model"])
+				assert.Equal(t, "vertexai-claude-sonnet", evt.Metadata["summarization_provider"])
+				assert.Equal(t, true, evt.Metadata["summarization_fallback"])
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "successful mcp_tool_summary should record summarization_fallback")
+
+		interactions, err := execCtx.Services.Interaction.GetLLMInteractionsList(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		require.Len(t, interactions, 1)
+		assert.Equal(t, "claude-sonnet", interactions[0].ModelName)
+	})
+
+	t.Run("sticky skips failed primary on later call", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "First sonnet summary"}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Second sonnet summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		_, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		require.Equal(t, 2, mockLLM.callCount)
+
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Second sonnet summary")
+		require.Len(t, mockLLM.capturedInputs, 3)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[2].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[2].ClearCache)
+		assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.capturedInputs[2].ExecutionID)
+	})
+
+	t.Run("overlay primary is independent of flash sticky", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Opus overlay summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		_, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+
+		result, err := maybeSummarize(t.Context(), execCtx, "overlay-server", "get_secrets",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Opus overlay summary")
+		require.Len(t, mockLLM.capturedInputs, 3)
+		assert.Equal(t, "claude-opus", mockLLM.capturedInputs[2].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[2].ClearCache)
+	})
+
+	t.Run("sticky failure continues forward not back to flash", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Opus summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		_, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Opus summary")
+		require.Len(t, mockLLM.capturedInputs, 4)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[2].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[2].ClearCache)
+		assert.Equal(t, "claude-opus", mockLLM.capturedInputs[3].Config.Model)
+		assert.True(t, mockLLM.capturedInputs[3].ClearCache)
+		assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.capturedInputs[3].ExecutionID)
+		assert.NotEqual(t, "gemini-flash", mockLLM.capturedInputs[2].Config.Model)
+		assert.NotEqual(t, "gemini-flash", mockLLM.capturedInputs[3].Config.Model)
+
+		sticky, ok := execCtx.SummarizationSticky["google-default"]
+		require.True(t, ok)
+		assert.Equal(t, "vertexai-claude-opus", sticky.ProviderName)
+	})
+
+	t.Run("primary success after sticky failure clears sticky", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+				{err: assert.AnError},
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Flash recovered"}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Flash still primary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		_, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Flash recovered")
+		_, stickySet := execCtx.SummarizationSticky["google-default"]
+		assert.False(t, stickySet)
+
+		meta := summarizationAnswererMetadata(execCtx, nil)
+		assert.Equal(t, "gemini-flash", meta["summarization_model"])
+		assert.Equal(t, "google-default", meta["summarization_provider"])
+		_, hasFallback := meta["summarization_fallback"]
+		assert.False(t, hasFallback)
+
+		result, err = maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.Contains(t, result.Content, "Flash still primary")
+		require.Len(t, mockLLM.capturedInputs, 6)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[4].Config.Model)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[5].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[5].ClearCache)
+	})
+
+	t.Run("exhausted list fail-opens", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{err: assert.AnError},
+				{err: assert.AnError},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.False(t, result.WasSummarized)
+		assert.Equal(t, largeContent, result.Content)
+		assert.Equal(t, 3, mockLLM.callCount, "primary + sonnet + opus; google-default skipped")
+		assertNoInvestigationFallback(t, execCtx)
+	})
+
+	t.Run("requires native tools still uses claude fallback", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		execCtx.Config.RequiresNativeTools = true
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.Equal(t, config.LLMBackendLangChain, mockLLM.capturedInputs[1].Backend)
+	})
+
+	t.Run("cancelled context does not walk fallbacks", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "should not run"}}},
+			},
+			onGenerate: func(int) { cancel() },
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		result, err := maybeSummarize(ctx, execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.False(t, result.WasSummarized)
+		assert.Equal(t, largeContent, result.Content)
+		assert.Equal(t, 1, mockLLM.callCount)
+	})
+
+	t.Run("unset summarization provider walks agent fallbacks", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		execCtx.DefaultSummarization = nil
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "claude-opus", mockLLM.capturedInputs[0].Config.Model)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.True(t, mockLLM.capturedInputs[1].ClearCache)
+		assert.Equal(t, "vertexai-claude-opus", execCtx.Config.LLMProviderName)
+		sticky, ok := execCtx.SummarizationSticky["vertexai-claude-opus"]
+		require.True(t, ok)
+		assert.Equal(t, "vertexai-claude-sonnet", sticky.ProviderName)
+	})
+
+	t.Run("empty summary walks fallbacks", func(t *testing.T) {
+		flashErrorsBefore := testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("google-default", "gemini-flash", "error"))
+		sonnetErrorsBefore := testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("vertexai-claude-sonnet", "claude-sonnet", "error"))
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "   "}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Sonnet summary")
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[0].Config.Model)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.Equal(t, flashErrorsBefore+1, testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("google-default", "gemini-flash", "error")))
+		assert.Equal(t, sonnetErrorsBefore, testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("vertexai-claude-sonnet", "claude-sonnet", "error")))
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var completed []string
+		for _, evt := range events {
+			if evt.EventType != timelineevent.EventTypeMcpToolSummary {
+				continue
+			}
+			if evt.Status == timelineevent.StatusCompleted {
+				assert.NotEqual(t, "", strings.TrimSpace(evt.Content),
+					"fallback must not leave a completed empty mcp_tool_summary")
+				completed = append(completed, evt.Content)
+			}
+		}
+		assert.Equal(t, []string{"Sonnet summary"}, completed)
+	})
+
+	t.Run("unknown named provider walks fallbacks without generate", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sticky sonnet summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "missing-provider"}
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Sonnet summary")
+		require.Len(t, mockLLM.capturedInputs, 1)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[0].Config.Model)
+		assert.True(t, mockLLM.capturedInputs[0].ClearCache)
+		assert.Equal(t, "vertexai-claude-opus", execCtx.Config.LLMProviderName)
+
+		sticky, ok := execCtx.SummarizationSticky["missing-provider"]
+		require.True(t, ok)
+		assert.Equal(t, "vertexai-claude-sonnet", sticky.ProviderName)
+		_, opusSticky := execCtx.SummarizationSticky["vertexai-claude-opus"]
+		assert.False(t, opusSticky, "failed named primary must not reuse the investigator sticky key")
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var found bool
+		for _, evt := range events {
+			if evt.EventType == timelineevent.EventTypeMcpToolSummary && evt.Status == timelineevent.StatusCompleted {
+				assert.Equal(t, "claude-sonnet", evt.Metadata["summarization_model"])
+				assert.Equal(t, "vertexai-claude-sonnet", evt.Metadata["summarization_provider"])
+				assert.Equal(t, true, evt.Metadata["summarization_fallback"])
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "successful fallback summary should record summarization_fallback")
+
+		meta := summarizationAnswererMetadata(execCtx, nil)
+		assert.Equal(t, "claude-sonnet", meta["summarization_model"])
+		assert.Equal(t, "vertexai-claude-sonnet", meta["summarization_provider"])
+		assert.Equal(t, true, meta["summarization_fallback"])
+
+		result, err = maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.Contains(t, result.Content, "Sticky sonnet summary")
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[1].ClearCache)
 	})
 }

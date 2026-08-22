@@ -294,6 +294,67 @@ func TestIteratingController_SummarizationFailOpen(t *testing.T) {
 	assert.Equal(t, 3, llm.callCount, "LLM should be called 3 times: iteration, failed summarization, iteration")
 }
 
+func TestIteratingController_SummarizationFallbackContinuesInvestigation(t *testing.T) {
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Check pods."},
+				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
+			}},
+			{err: assert.AnError},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Summary: pods recovered after fallback."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Investigation complete after summarization fallback."},
+			}},
+		},
+	}
+
+	largeResult := strings.Repeat("pod-data\n", 200)
+	executor := &mockToolExecutorFunc{
+		tools: []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}},
+		executeFn: func(_ context.Context, _ agent.ToolCall) (*agent.ToolResult, error) {
+			return &agent.ToolResult{Content: largeResult, IsError: false}, nil
+		},
+	}
+
+	registry := config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+		"k8s": {
+			Summarization: &config.SummarizationConfig{
+				SizeThresholdTokens: 100,
+			},
+		},
+	})
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.PromptBuilder = prompt.NewPromptBuilder(registry, nil)
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("vertexai-claude-sonnet", config.LLMBackendLangChain, "claude-sonnet"),
+	}
+
+	result, err := NewIteratingController().Run(t.Context(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	assert.Contains(t, result.FinalAnalysis, "summarization fallback")
+	assert.Equal(t, 4, llm.callCount, "iteration, failed summary, fallback summary, iteration")
+	require.Len(t, llm.capturedInputs, 4)
+	assert.Equal(t, execCtx.ExecutionID, llm.capturedInputs[0].ExecutionID)
+	assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, llm.capturedInputs[1].ExecutionID)
+	assert.Equal(t, "test-model", llm.capturedInputs[1].Config.Model)
+	assert.False(t, llm.capturedInputs[1].ClearCache)
+	assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, llm.capturedInputs[2].ExecutionID)
+	assert.Equal(t, "claude-sonnet", llm.capturedInputs[2].Config.Model)
+	assert.True(t, llm.capturedInputs[2].ClearCache)
+	assert.Equal(t, execCtx.ExecutionID, llm.capturedInputs[3].ExecutionID)
+	assert.False(t, llm.capturedInputs[3].ClearCache)
+	assert.Equal(t, "test-provider", execCtx.Config.LLMProviderName)
+
+	exec, err := execCtx.Services.Stage.GetAgentExecutionByID(t.Context(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	assert.Nil(t, exec.OriginalLlmProvider)
+}
+
 // TestIteratingController_NonStreamingEventStatus verifies that events created via
 // createTimelineEvent (non-streaming: llm_thinking, final_analysis) are stored
 // with StatusCompleted in the DB, not StatusStreaming.

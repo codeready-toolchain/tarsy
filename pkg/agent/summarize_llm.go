@@ -35,7 +35,7 @@ func ResolveSummarizationLLM(execCtx *ExecutionContext, server *config.Summariza
 	if execCtx.DefaultSummarization != nil && execCtx.DefaultSummarization.LLMProvider != "" {
 		resolved, err := lookupSummarizationProvider(execCtx.LLMProviders, execCtx.DefaultSummarization)
 		if err != nil {
-			return ResolvedSummarizationLLM{}, err
+			return ResolvedSummarizationLLM{ProviderName: execCtx.DefaultSummarization.LLMProvider}, err
 		}
 		primary = resolved
 	}
@@ -43,13 +43,24 @@ func ResolveSummarizationLLM(execCtx *ExecutionContext, server *config.Summariza
 	if server != nil && server.LLMProvider != "" {
 		resolved, err := lookupSummarizationProvider(execCtx.LLMProviders, server)
 		if err != nil {
-			return ResolvedSummarizationLLM{}, err
+			return ResolvedSummarizationLLM{ProviderName: server.LLMProvider}, err
 		}
 		primary = resolved
 	}
 
 	primary.Backend = cmp.Or(primary.Backend, config.LLMBackendLangChain)
 	return primary, nil
+}
+
+// SummarizationLLMFromFallback clones a resolved investigation fallback entry
+// for a summarization Generate. Backend is kept as already resolved (not
+// re-defaulted to langchain). NativeTools are stripped on the clone.
+func SummarizationLLMFromFallback(entry ResolvedFallbackEntry) ResolvedSummarizationLLM {
+	return ResolvedSummarizationLLM{
+		Provider:     cloneProviderWithoutNativeTools(entry.Config),
+		ProviderName: entry.ProviderName,
+		Backend:      entry.Backend,
+	}
 }
 
 func lookupSummarizationProvider(reg *config.LLMProviderRegistry, layer *config.SummarizationConfig) (ResolvedSummarizationLLM, error) {

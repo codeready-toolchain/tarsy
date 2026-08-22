@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -348,16 +349,19 @@ func createToolCallEvent(
 // Called after ToolExecutor.Execute() returns. The content is the storage-truncated
 // raw result. Metadata is enriched with is_error via read-modify-write merge.
 //
-// The completed event's WebSocket payload only includes {"is_error": bool} in
-// metadata. Full tool context (server_name, tool_name, arguments) was included
-// in the original timeline_event.created message and is persisted in the DB via
-// the metadata merge. Clients correlate completed ↔ created events by event_id.
+// The completed event's WebSocket payload includes is_error plus any extraMetadata
+// (e.g. summarization_model for search_past_sessions). Full tool context
+// (server_name, tool_name, arguments) was included in the original
+// timeline_event.created message and is persisted in the DB via the metadata
+// merge. Clients correlate completed ↔ created events by event_id and merge
+// completion metadata onto the created event.
 func completeToolCallEvent(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	event *ent.TimelineEvent,
 	content string,
 	isError bool,
+	extraMetadata map[string]any,
 ) {
 	if event == nil {
 		return
@@ -368,7 +372,8 @@ func completeToolCallEvent(
 		content = "(empty result)"
 	}
 
-	completionMeta := map[string]interface{}{"is_error": isError}
+	completionMeta := map[string]any{"is_error": isError}
+	maps.Copy(completionMeta, extraMetadata)
 
 	if err := execCtx.Services.Timeline.CompleteTimelineEventWithMetadata(
 		ctx, event.ID, content, completionMeta, nil, nil,

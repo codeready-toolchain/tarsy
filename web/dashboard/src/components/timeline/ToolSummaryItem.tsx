@@ -11,6 +11,7 @@ import { highlightSearchTermNodes } from '../../utils/search';
 import CopyButton from '../shared/CopyButton';
 import CopyLinkButton from '../shared/CopyLinkButton';
 import type { FlowItem } from '../../utils/timelineParser';
+import SummarizationModelCaption, { summarizationModelLabel } from './SummarizationModelCaption';
 
 interface ToolSummaryItemProps {
   item: FlowItem;
@@ -71,6 +72,9 @@ function ToolSummaryItem({
           shouldShowCollapsed={shouldShowCollapsed}
           collapsedHeaderOpacity={collapsedHeaderOpacity}
           onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+          caption={summarizationModelLabel(item.metadata)
+            ? <SummarizationModelCaption metadata={item.metadata} opacity={collapsedHeaderOpacity} />
+            : undefined}
         />
 
         <Collapse in={!shouldShowCollapsed} timeout={300}>

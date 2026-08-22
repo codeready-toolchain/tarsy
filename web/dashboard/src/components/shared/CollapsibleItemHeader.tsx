@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Box, Typography } from '@mui/material';
 
 interface CollapsibleItemHeaderProps {
@@ -7,6 +8,7 @@ interface CollapsibleItemHeaderProps {
   shouldShowCollapsed: boolean;
   collapsedHeaderOpacity: number;
   onToggle?: () => void;
+  caption?: ReactNode;
 }
 
 /**
@@ -21,13 +23,14 @@ export default function CollapsibleItemHeader({
   shouldShowCollapsed,
   collapsedHeaderOpacity,
   onToggle,
+  caption,
 }: CollapsibleItemHeaderProps) {
   return (
     <Box 
       sx={{ 
         display: 'flex',
         alignItems: 'center',
-        gap: 0,
+        gap: caption ? 1 : 0,
         cursor: onToggle ? 'pointer' : 'default',
         px: shouldShowCollapsed ? 1 : 0,
         py: 0.5,
@@ -55,6 +58,7 @@ export default function CollapsibleItemHeader({
       >
         {headerText}
       </Typography>
+      {caption}
       {onToggle && shouldShowCollapsed && (
         <Typography
           className="cfi-ellipsis"

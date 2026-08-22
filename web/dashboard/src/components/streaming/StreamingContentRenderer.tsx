@@ -10,6 +10,7 @@ import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
 import { getSkillNamesLabel } from '../../utils/format';
 import { getToolVisualConfig } from '../../utils/toolCallVisual';
 import { thoughtMarkdownComponents, remarkPlugins } from '../../utils/markdownComponents';
+import SummarizationModelCaption from '../timeline/SummarizationModelCaption';
 
 /**
  * StreamingItem for the streaming content renderer.
@@ -194,19 +195,22 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
     
     return (
       <Box sx={{ mb: 1.5 }}>
-        <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, mb: 0.5, alignItems: 'center' }}>
           <Typography variant="body2" sx={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0 }}>
             📋
           </Typography>
-          <Typography
-            variant="caption"
-            sx={{
-              fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
-              fontSize: '0.75rem', color: 'warning.main', mt: 0.25
-            }}
-          >
-            TOOL RESULT SUMMARY
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 0.25, minWidth: 0 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
+                fontSize: '0.75rem', color: 'warning.main',
+              }}
+            >
+              TOOL RESULT SUMMARY
+            </Typography>
+            <SummarizationModelCaption metadata={item.metadata} />
+          </Box>
         </Box>
         <Box sx={(theme) => ({ pl: 3.5, ml: 3.5, py: 0.5, borderLeft: `2px solid ${alpha(theme.palette.warning.main, 0.2)}` })}>
           {isPlaceholder ? (

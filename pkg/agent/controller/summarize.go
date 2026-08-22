@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -143,11 +145,25 @@ func callSummarizationLLM(
 	streamTarget summarizationStreamTarget,
 	serverSummarization *config.SummarizationConfig,
 ) (string, *agent.TokenUsage, error) {
-	startTime := time.Now()
+	resolved, resolveErr := agent.ResolveSummarizationLLM(execCtx, serverSummarization)
+	primaryName := resolved.ProviderName
+	if primaryName == "" && execCtx != nil && execCtx.Config != nil {
+		primaryName = execCtx.Config.LLMProviderName
+	}
+	appliedSticky := false
+	if execCtx != nil {
+		if sticky, ok := execCtx.SummarizationSticky[primaryName]; ok {
+			resolved = sticky
+			appliedSticky = true
+			resolveErr = nil
+		}
+	}
 
-	resolved, err := agent.ResolveSummarizationLLM(execCtx, serverSummarization)
-	if err != nil {
-		return "", nil, fmt.Errorf("summarization LLM call failed: %w", err)
+	fbState := &FallbackState{SingleShot: true, CurrentProviderIndex: -1}
+	if appliedSticky {
+		if idx := summarizationFallbackIndex(summarizationFallbackList(execCtx), resolved.ProviderName); idx >= 0 {
+			fbState.CurrentProviderIndex = idx
+		}
 	}
 
 	messages := []agent.ConversationMessage{
@@ -155,39 +171,175 @@ func callSummarizationLLM(
 		{Role: agent.RoleUser, Content: userPrompt},
 	}
 
-	input := &agent.GenerateInput{
-		SessionID:   execCtx.SessionID,
-		ExecutionID: execCtx.ExecutionID + agent.SummarizationExecutionIDSuffix,
-		Messages:    messages,
-		Config:      resolved.Provider,
-		Tools:       nil, // No tools for summarization
-		Backend:     resolved.Backend,
+	attempt := 0
+	var lastErr error
+	if resolveErr != nil {
+		lastErr = resolveErr
+	}
+	// Skip-same-name uses the provider this call started on (primary or sticky)
+	// until a fallback succeeds. Updating it after each failed retry would
+	// re-try the downed primary later in the list (Sandbox: skip google-default).
+	inUseName := resolved.ProviderName
+
+	for {
+		if lastErr == nil {
+			attemptStart := time.Now()
+			input := &agent.GenerateInput{
+				SessionID:   execCtx.SessionID,
+				ExecutionID: execCtx.ExecutionID + agent.SummarizationExecutionIDSuffix,
+				Messages:    messages,
+				Config:      resolved.Provider,
+				Tools:       nil, // No tools for summarization
+				Backend:     resolved.Backend,
+				ClearCache:  attempt > 0,
+			}
+
+			thisStream := streamTarget
+			if attempt > 0 && streamTarget.existingEventID != "" {
+				// RequiredSummarization: only the first attempt streams into the tool-call card.
+				thisStream = summarizationStreamTarget{}
+			}
+
+			streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, resolved, primaryName, serverID, toolName, estimatedTokens, eventSeq, thisStream)
+			modelName := ""
+			if resolved.Provider != nil {
+				modelName = resolved.Provider.Model
+			}
+			metrics.ObserveLLMCall(resolved.ProviderName, modelName,
+				time.Since(attemptStart), metricsTokens(streamed, err), err)
+			if err == nil {
+				stickSummarizationProvider(execCtx, primaryName, resolved)
+				summary := strings.TrimSpace(streamed.Text)
+				recordSummarizationInteraction(ctx, execCtx, messages, summary,
+					streamed.LLMResponse, attemptStart, modelName)
+				return summary, streamed.Usage, nil
+			}
+			lastErr = err
+		}
+
+		if ctx.Err() != nil {
+			return "", nil, fmt.Errorf("summarization LLM call failed: %w", lastErr)
+		}
+
+		fromProvider := resolved.ProviderName
+		fromBackend := resolved.Backend
+		next, ok := nextSummarizationFallback(execCtx, fbState, inUseName, lastErr)
+		if !ok {
+			return "", nil, fmt.Errorf("summarization LLM call failed: %w", lastErr)
+		}
+		slog.Info("Summarization falling back to next LLM provider",
+			"session_id", execCtx.SessionID,
+			"execution_id", execCtx.ExecutionID,
+			"from_provider", fromProvider,
+			"from_backend", fromBackend,
+			"to_provider", next.ProviderName,
+			"to_backend", next.Backend,
+			"reason", lastErr.Error(),
+		)
+		resolved = next
+		lastErr = nil
+		attempt++
+	}
+}
+
+func summarizationFallbackList(execCtx *agent.ExecutionContext) []agent.ResolvedFallbackEntry {
+	if execCtx == nil || execCtx.Config == nil {
+		return nil
+	}
+	return execCtx.Config.ResolvedFallbackProviders
+}
+
+func summarizationFallbackIndex(list []agent.ResolvedFallbackEntry, name string) int {
+	return slices.IndexFunc(list, func(e agent.ResolvedFallbackEntry) bool {
+		return e.ProviderName == name
+	})
+}
+
+// stickSummarizationProvider records the answering fallback for later calls
+// with the same primary. When the primary itself answers, any stale sticky
+// entry is cleared so metadata and the next call match the provider in use.
+func stickSummarizationProvider(execCtx *agent.ExecutionContext, primaryName string, answerer agent.ResolvedSummarizationLLM) {
+	if execCtx == nil || primaryName == "" {
+		return
+	}
+	if answerer.ProviderName == primaryName {
+		delete(execCtx.SummarizationSticky, primaryName)
+		return
+	}
+	if execCtx.SummarizationSticky == nil {
+		execCtx.SummarizationSticky = make(map[string]agent.ResolvedSummarizationLLM)
+	}
+	execCtx.SummarizationSticky[primaryName] = answerer
+}
+
+// summarizationProviderMetadata is the answering-model fields shared by
+// mcp_tool_summary events and search_past_sessions llm_tool_call completion.
+func summarizationProviderMetadata(resolved agent.ResolvedSummarizationLLM, primaryName string) map[string]any {
+	meta := map[string]any{}
+	if resolved.Provider != nil && resolved.Provider.Model != "" {
+		meta["summarization_model"] = resolved.Provider.Model
+	}
+	if resolved.ProviderName != "" {
+		meta["summarization_provider"] = resolved.ProviderName
+	}
+	if resolved.ProviderName != "" && resolved.ProviderName != primaryName {
+		meta["summarization_fallback"] = true
+	}
+	return meta
+}
+
+func summarizationAnswererMetadata(execCtx *agent.ExecutionContext, server *config.SummarizationConfig) map[string]any {
+	if execCtx == nil {
+		return nil
+	}
+	resolved, err := agent.ResolveSummarizationLLM(execCtx, server)
+	primaryName := resolved.ProviderName
+	if primaryName == "" && execCtx.Config != nil {
+		primaryName = execCtx.Config.LLMProviderName
+	}
+	if sticky, ok := execCtx.SummarizationSticky[primaryName]; ok {
+		resolved = sticky
+	} else if err != nil {
+		return nil
+	}
+	return summarizationProviderMetadata(resolved, primaryName)
+}
+
+// nextSummarizationFallback walks ResolvedFallbackProviders locally. It does not
+// mutate the investigator, skip RequiresNativeTools, increment LLMFallbacksTotal,
+// or emit provider_fallback.
+func nextSummarizationFallback(
+	execCtx *agent.ExecutionContext,
+	state *FallbackState,
+	currentName string,
+	err error,
+) (agent.ResolvedSummarizationLLM, bool) {
+	list := summarizationFallbackList(execCtx)
+	if !state.shouldFallback(err, list) {
+		return agent.ResolvedSummarizationLLM{}, false
 	}
 
-	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, resolved, serverID, toolName, estimatedTokens, eventSeq, streamTarget)
-	modelName := ""
-	if resolved.Provider != nil {
-		modelName = resolved.Provider.Model
+	nextIdx := state.CurrentProviderIndex + 1
+	for nextIdx < len(list) {
+		if list[nextIdx].ProviderName == currentName {
+			slog.Info("Skipping summarization fallback entry identical to current provider",
+				"session_id", execCtx.SessionID,
+				"execution_id", execCtx.ExecutionID,
+				"skipped_provider", list[nextIdx].ProviderName,
+				"skipped_backend", list[nextIdx].Backend,
+			)
+			nextIdx++
+			continue
+		}
+		break
 	}
-	metrics.ObserveLLMCall(resolved.ProviderName, modelName,
-		time.Since(startTime), metricsTokens(streamed, err), err)
-	if err != nil {
-		return "", nil, fmt.Errorf("summarization LLM call failed: %w", err)
+	if nextIdx >= len(list) {
+		return agent.ResolvedSummarizationLLM{}, false
 	}
 
-	summary := strings.TrimSpace(streamed.Text)
-	if summary == "" {
-		return "", nil, fmt.Errorf("summarization produced empty result")
-	}
-
-	// Record LLM interaction with inline conversation for observability.
-	// Summarization has its own self-contained conversation (system + user + assistant)
-	// that is separate from the iteration's message sequence, so we store it
-	// inline in llm_request rather than in the Message table.
-	recordSummarizationInteraction(ctx, execCtx, messages, summary,
-		streamed.LLMResponse, startTime, modelName)
-
-	return summary, streamed.Usage, nil
+	state.CurrentProviderIndex = nextIdx
+	state.resetCounters()
+	return agent.SummarizationLLMFromFallback(list[nextIdx]), true
 }
 
 // callSummarizationLLMWithStreaming is analogous to callLLMWithStreaming but
@@ -205,6 +357,7 @@ func callSummarizationLLMWithStreaming(
 	execCtx *agent.ExecutionContext,
 	input *agent.GenerateInput,
 	resolved agent.ResolvedSummarizationLLM,
+	primaryName string,
 	serverID, toolName string,
 	estimatedTokens int,
 	eventSeq *int,
@@ -244,7 +397,7 @@ func callSummarizationLLMWithStreaming(
 		if collectErr != nil {
 			return nil, collectErr
 		}
-		return &StreamedResponse{LLMResponse: resp}, nil
+		return streamedSummarizationResponse(resp)
 	}
 
 	if !streamTarget.createEvent || execCtx.EventPublisher == nil {
@@ -252,7 +405,7 @@ func callSummarizationLLMWithStreaming(
 		if collectErr != nil {
 			return nil, collectErr
 		}
-		return &StreamedResponse{LLMResponse: resp}, nil
+		return streamedSummarizationResponse(resp)
 	}
 
 	// Track streaming timeline event
@@ -260,17 +413,12 @@ func callSummarizationLLMWithStreaming(
 	var eventCreateFailed bool
 	pid := parentExecID(execCtx)
 
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"server_name":     serverID,
 		"tool_name":       toolName,
 		"original_tokens": estimatedTokens,
 	}
-	if resolved.Provider != nil {
-		metadata["summarization_model"] = resolved.Provider.Model
-	}
-	if resolved.ProviderName != "" {
-		metadata["summarization_provider"] = resolved.ProviderName
-	}
+	maps.Copy(metadata, summarizationProviderMetadata(resolved, primaryName))
 
 	callback := func(chunkType string, delta string) {
 		if delta == "" || chunkType != ChunkTypeText {
@@ -338,42 +486,59 @@ func callSummarizationLLMWithStreaming(
 	}
 
 	resp, err := collectStreamWithCallback(stream, callback, nil, 0, 0)
-	if err != nil {
-		// Mark streaming event as failed if it was created
-		if summaryEventID != "" {
-			failContent := fmt.Sprintf("Summarization streaming failed: %s", err.Error())
-			if failErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, summaryEventID, failContent); failErr != nil {
-				slog.Warn("Failed to mark summary event as failed",
-					"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", failErr)
-			}
-			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-				BasePayload: events.BasePayload{
-					Type:      events.EventTypeTimelineCompleted,
-					SessionID: execCtx.SessionID,
-					Timestamp: time.Now().Format(time.RFC3339Nano),
-				},
-				EventID:           summaryEventID,
-				ParentExecutionID: pid,
-				EventType:         timelineevent.EventTypeMcpToolSummary,
-				Content:           failContent,
-				Status:            timelineevent.StatusFailed,
-			}); pubErr != nil {
-				slog.Warn("Failed to publish summary failure",
-					"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)
-			}
+	failCreatedSummary := func(failContent string) {
+		if summaryEventID == "" {
+			return
 		}
+		if failErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, summaryEventID, failContent); failErr != nil {
+			slog.Warn("Failed to mark summary event as failed",
+				"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", failErr)
+		}
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCompleted,
+				SessionID: execCtx.SessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
+			EventID:           summaryEventID,
+			ParentExecutionID: pid,
+			EventType:         timelineevent.EventTypeMcpToolSummary,
+			Content:           failContent,
+			Status:            timelineevent.StatusFailed,
+		}); pubErr != nil {
+			slog.Warn("Failed to publish summary failure",
+				"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
+	if err != nil {
+		failCreatedSummary(fmt.Sprintf("Summarization streaming failed: %s", err.Error()))
 		return nil, err
 	}
 
-	// Finalize summary event
+	streamed, emptyErr := streamedSummarizationResponse(resp)
+	streamed.TextEventCreated = summaryEventID != ""
+	if emptyErr != nil {
+		// Reject before finalize so fallback does not leave a completed empty card.
+		failCreatedSummary(emptyErr.Error())
+		return streamed, emptyErr
+	}
+
 	if summaryEventID != "" {
 		finalizeStreamingEvent(ctx, execCtx, summaryEventID, timelineevent.EventTypeMcpToolSummary, resp.Text, "summary")
 	}
 
-	return &StreamedResponse{
-		LLMResponse:      resp,
-		TextEventCreated: summaryEventID != "",
-	}, nil
+	return streamed, nil
+}
+
+// streamedSummarizationResponse wraps a collected LLM response and rejects
+// empty or whitespace-only text so callers can fall back before completing
+// a dashboard event.
+func streamedSummarizationResponse(resp *LLMResponse) (*StreamedResponse, error) {
+	streamed := &StreamedResponse{LLMResponse: resp}
+	if resp == nil || strings.TrimSpace(resp.Text) == "" {
+		return streamed, fmt.Errorf("summarization produced empty result")
+	}
+	return streamed, nil
 }
 
 // recordSummarizationInteraction records an LLMInteraction with the conversation

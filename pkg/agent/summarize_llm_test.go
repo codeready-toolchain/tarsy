@@ -129,9 +129,10 @@ func TestResolveSummarizationLLM(t *testing.T) {
 		execCtx.DefaultSummarization = &config.SummarizationConfig{
 			LLMProvider: "does-not-exist",
 		}
-		_, err := ResolveSummarizationLLM(execCtx, nil)
+		got, err := ResolveSummarizationLLM(execCtx, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does-not-exist")
+		assert.Equal(t, "does-not-exist", got.ProviderName)
 	})
 
 	t.Run("named provider with nil registry returns error", func(t *testing.T) {
@@ -140,9 +141,23 @@ func TestResolveSummarizationLLM(t *testing.T) {
 		execCtx.DefaultSummarization = &config.SummarizationConfig{
 			LLMProvider: "google-default",
 		}
-		_, err := ResolveSummarizationLLM(execCtx, nil)
+		got, err := ResolveSummarizationLLM(execCtx, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "provider registry is not available")
+		assert.Equal(t, "google-default", got.ProviderName)
+	})
+
+	t.Run("unknown server overlay name returns overlay identity", func(t *testing.T) {
+		execCtx := baseExec()
+		execCtx.DefaultSummarization = &config.SummarizationConfig{
+			LLMProvider: "google-default",
+		}
+		got, err := ResolveSummarizationLLM(execCtx, &config.SummarizationConfig{
+			LLMProvider: "missing-overlay",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing-overlay")
+		assert.Equal(t, "missing-overlay", got.ProviderName)
 	})
 
 	t.Run("empty agent backend becomes langchain", func(t *testing.T) {
@@ -151,5 +166,42 @@ func TestResolveSummarizationLLM(t *testing.T) {
 		got, err := ResolveSummarizationLLM(execCtx, nil)
 		require.NoError(t, err)
 		assert.Equal(t, config.LLMBackendLangChain, got.Backend)
+	})
+}
+
+func TestSummarizationLLMFromFallback(t *testing.T) {
+	native := map[config.GoogleNativeTool]bool{
+		config.GoogleNativeToolGoogleSearch: true,
+	}
+	cfg := &config.LLMProviderConfig{
+		Type:        config.LLMProviderTypeVertexAI,
+		Model:       "claude-sonnet",
+		NativeTools: native,
+	}
+
+	t.Run("clones and strips native tools", func(t *testing.T) {
+		got := SummarizationLLMFromFallback(ResolvedFallbackEntry{
+			ProviderName: "vertexai-claude-sonnet",
+			Backend:      config.LLMBackendLangChain,
+			Config:       cfg,
+		})
+		assert.Equal(t, "vertexai-claude-sonnet", got.ProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, got.Backend)
+		require.NotNil(t, got.Provider)
+		assert.Equal(t, "claude-sonnet", got.Provider.Model)
+		assert.Nil(t, got.Provider.NativeTools)
+		assert.NotSame(t, cfg, got.Provider)
+		assert.True(t, cfg.NativeTools[config.GoogleNativeToolGoogleSearch],
+			"fallback entry NativeTools map must not be mutated")
+	})
+
+	t.Run("keeps already-resolved backend", func(t *testing.T) {
+		got := SummarizationLLMFromFallback(ResolvedFallbackEntry{
+			ProviderName: "google-default",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "gemini-flash"},
+		})
+		assert.Equal(t, config.LLMBackendNativeGemini, got.Backend)
+		assert.Equal(t, "gemini-flash", got.Provider.Model)
 	})
 }
