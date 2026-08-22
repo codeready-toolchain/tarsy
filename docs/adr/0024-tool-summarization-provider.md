@@ -249,7 +249,7 @@ MCP server views already serialize the summarization block; new fields appear au
 | `LLMFallbacksTotal` | **Unchanged** — investigation only ([ADR-0003](0003-llm-provider-fallback.md)) |
 | `mcp_tool_summary` metadata | `summarization_model` already exists; add `summarization_provider`; set both from the answering model; set `summarization_fallback: true` when the answerer is not the resolved primary |
 | Trace view | `interaction_type=summarization` already; cheaper model shows naturally |
-| Dashboard tool-summary item | Header stays “TOOL RESULT SUMMARY”. Optional subtitle with model is a follow-up, not v1 |
+| Dashboard tool-summary / session history | Header stays “TOOL RESULT SUMMARY”. Caption shows the answering `summarization_model` on MCP tool summaries and on `search_past_sessions` session-history cards (absent on older events) |
 | Session cost ([ADR-0020](0020-session-usage-cost.md)) | Already sums summarization interactions; `model_name` is enough for the catalog |
 | `provider_fallback` on the **agent execution** | Must **not** fire for summarization |
 
@@ -269,7 +269,6 @@ No schema migration.
 - No dedicated summarization fallback list; operators who want a different order must reorder investigation `fallback_providers`.
 - No sentinel to pin one MCP server back to “whoever is investigating.”
 - A partial-then-failed MCP summary may leave an extra failed `mcp_tool_summary` row.
-- Dashboard subtitle showing the summarization model on the tool-summary card.
 
 ## References
 
