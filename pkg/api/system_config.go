@@ -49,10 +49,10 @@ type SanitizedTransport struct {
 
 // MCPServerView is a sanitized MCP server config entry.
 type MCPServerView struct {
-	Transport     SanitizedTransport          `json:"transport"`
-	Instructions  string                      `json:"instructions,omitempty"`
-	DataMasking   *config.MaskingConfig       `json:"data_masking,omitempty"`
-	Summarization *config.SummarizationConfig `json:"summarization,omitempty"`
+	Transport     SanitizedTransport    `json:"transport"`
+	Instructions  string                `json:"instructions,omitempty"`
+	DataMasking   *config.MaskingConfig `json:"data_masking,omitempty"`
+	Summarization *MCPSummarizationView `json:"summarization,omitempty"`
 }
 
 // AgentView is the agent config view (no llm_provider field).
@@ -164,6 +164,22 @@ type ScoringView struct {
 	MaxIterations *int     `json:"max_iterations,omitempty"`
 }
 
+// SummarizationView is defaults.summarization (named provider/backend only).
+type SummarizationView struct {
+	LLMProvider string `json:"llm_provider,omitempty"`
+	LLMBackend  string `json:"llm_backend,omitempty"`
+}
+
+// MCPSummarizationView is an MCP server summarization block, including
+// server-only enablement and size fields.
+type MCPSummarizationView struct {
+	Enabled              *bool  `json:"enabled,omitempty"`
+	SizeThresholdTokens  int    `json:"size_threshold_tokens,omitempty"`
+	SummaryMaxTokenLimit int    `json:"summary_max_token_limit,omitempty"`
+	LLMProvider          string `json:"llm_provider,omitempty"`
+	LLMBackend           string `json:"llm_backend,omitempty"`
+}
+
 // LLMProviderView is an LLM provider config entry.
 type LLMProviderView struct {
 	Type           string          `json:"type"`
@@ -184,18 +200,18 @@ type SkillMetaView struct {
 
 // DefaultsView is system-wide defaults.
 type DefaultsView struct {
-	LLMProvider       string                      `json:"llm_provider,omitempty"`
-	MaxIterations     *int                        `json:"max_iterations,omitempty"`
-	LLMBackend        string                      `json:"llm_backend,omitempty"`
-	FallbackProviders []FallbackProviderView      `json:"fallback_providers,omitempty"`
-	Scoring           *ScoringView                `json:"scoring,omitempty"`
-	Summarization     *config.SummarizationConfig `json:"summarization,omitempty"`
-	SuccessPolicy     string                      `json:"success_policy,omitempty"`
-	AlertType         string                      `json:"alert_type,omitempty"`
-	Runbook           string                      `json:"runbook,omitempty"`
-	AlertMasking      *AlertMaskingView           `json:"alert_masking,omitempty"`
-	Orchestrator      *OrchestratorView           `json:"orchestrator,omitempty"`
-	Memory            *MemoryView                 `json:"memory,omitempty"`
+	LLMProvider       string                 `json:"llm_provider,omitempty"`
+	MaxIterations     *int                   `json:"max_iterations,omitempty"`
+	LLMBackend        string                 `json:"llm_backend,omitempty"`
+	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
+	Scoring           *ScoringView           `json:"scoring,omitempty"`
+	Summarization     *SummarizationView     `json:"summarization,omitempty"`
+	SuccessPolicy     string                 `json:"success_policy,omitempty"`
+	AlertType         string                 `json:"alert_type,omitempty"`
+	Runbook           string                 `json:"runbook,omitempty"`
+	AlertMasking      *AlertMaskingView      `json:"alert_masking,omitempty"`
+	Orchestrator      *OrchestratorView      `json:"orchestrator,omitempty"`
+	Memory            *MemoryView            `json:"memory,omitempty"`
 }
 
 // AlertMaskingView is alert masking defaults.
@@ -383,7 +399,7 @@ func buildDefaultsView(d *config.Defaults) *DefaultsView {
 		LLMBackend:        string(d.LLMBackend),
 		FallbackProviders: buildFallbackProviders(d.FallbackProviders),
 		Scoring:           buildScoringView(d.Scoring),
-		Summarization:     d.Summarization,
+		Summarization:     buildSummarizationView(d.Summarization),
 		SuccessPolicy:     string(d.SuccessPolicy),
 		AlertType:         d.AlertType,
 		Runbook:           d.Runbook,
@@ -696,6 +712,29 @@ func buildScoringView(s *config.ScoringConfig) *ScoringView {
 	}
 }
 
+func buildSummarizationView(s *config.SummarizationConfig) *SummarizationView {
+	if s == nil {
+		return nil
+	}
+	return &SummarizationView{
+		LLMProvider: s.LLMProvider,
+		LLMBackend:  string(s.LLMBackend),
+	}
+}
+
+func buildMCPSummarizationView(s *config.SummarizationConfig) *MCPSummarizationView {
+	if s == nil {
+		return nil
+	}
+	return &MCPSummarizationView{
+		Enabled:              s.Enabled,
+		SizeThresholdTokens:  s.SizeThresholdTokens,
+		SummaryMaxTokenLimit: s.SummaryMaxTokenLimit,
+		LLMProvider:          s.LLMProvider,
+		LLMBackend:           string(s.LLMBackend),
+	}
+}
+
 func buildSubAgentViews(refs config.SubAgentRefs) []SubAgentView {
 	if refs == nil {
 		return nil
@@ -737,7 +776,7 @@ func buildMCPServerView(s *config.MCPServerConfig) MCPServerView {
 		Transport:     sanitizeTransport(s.Transport),
 		Instructions:  s.Instructions,
 		DataMasking:   s.DataMasking,
-		Summarization: s.Summarization,
+		Summarization: buildMCPSummarizationView(s.Summarization),
 	}
 }
 

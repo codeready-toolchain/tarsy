@@ -14,7 +14,7 @@ The Go gRPC client is already per-call: `GenerateInput` carries `Config` and `Ba
 **Compatibility split:**
 
 - **Provider selection is opt-in.** Unset `defaults.summarization.llm_provider` (and no per-server overlay) keeps today's model: the calling agent.
-- **Fallback-before-raw is always on** when the agent has `fallback_providers` (Q4). An Opus summary that fails already dumps the raw result today; after this change it walks that list locally before fail-open / fail-closed. Deployments with an empty fallback list are unchanged.
+- **Phase 1 keeps today's failure path.** On summarization LLM error, MCP still fail-opens to the raw result and `search_past_sessions` still fail-closes — no `fallback_providers` walk. Walking that list locally before fail-open / fail-closed is **PR 2** (Q4). Deployments with an empty fallback list stay unchanged after PR 2 as well.
 
 ## Design Principles
 
@@ -22,7 +22,7 @@ The Go gRPC client is already per-call: `GenerateInput` carries `Config` and `Ba
 2. **Reuse named providers.** Operators already define models in `llm-providers.yaml` (plus TARSy built-ins). Summarization references those names; it does not invent a parallel model catalog.
 3. **Same code path, different `GenerateInput`.** `callSummarizationLLM` stays the single call site. It must not grow a second client or a second streaming stack.
 4. **No tools on summarization calls.** Summarization is text-in / text-out. MCP tools stay `nil`. Provider-default Gemini native tools (`google_search`, `url_context`, `code_execution`) must be stripped so a Flash summarizer cannot start searching the web.
-5. **Fail-open / fail-closed contracts stay after fallbacks are exhausted.** MCP summarization still falls back to the raw result; `search_past_sessions` still fail-closes. Before that, summarization walks the agent's `fallback_providers` list locally (never mutating the investigator).
+5. **Fail-open / fail-closed contracts stay after fallbacks are exhausted.** MCP summarization still falls back to the raw result; `search_past_sessions` still fail-closes. Phase 1 uses that path immediately. PR 2 walks the agent's `fallback_providers` list locally first (never mutating the investigator).
 6. **Minimum hierarchy.** Defaults + optional per-MCP-server overlay. No chain/stage/agent level. Summarization is about the tool output, not which chain is running.
 
 ## Architecture / How It Works
@@ -324,7 +324,7 @@ Do not split further (no config-only PR, no docs-only PR, no “wire ExecutionCo
 
 No sandbox-sre change in this repo.
 
-### PR 1 — Named summarization provider
+### PR 1 — Named summarization provider - DONE
 
 **Goal:** Operators can point tool summarization at a named provider. Unset config keeps the calling agent's model. On LLM error, behavior is still today's immediate fail-open (MCP) / fail-closed (`search_past_sessions`).
 

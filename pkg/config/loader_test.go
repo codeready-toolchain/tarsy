@@ -1267,6 +1267,8 @@ agent_chains: {}
 		require.NoError(t, err)
 		require.NotNil(t, server.Summarization)
 		assert.Equal(t, "google-default", server.Summarization.LLMProvider)
+		assert.Empty(t, server.Summarization.LLMBackend,
+			"omitted server llm_backend stays empty; loader must not copy defaults.summarization.llm_backend")
 		assert.Equal(t, DefaultSizeThresholdTokens, server.Summarization.SizeThresholdTokens)
 	})
 }

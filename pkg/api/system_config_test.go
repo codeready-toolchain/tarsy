@@ -194,6 +194,12 @@ func TestSystemConfigHandler(t *testing.T) {
 							BearerToken: "should-not-appear",
 						},
 						Instructions: "Use kubectl carefully",
+						Summarization: &config.SummarizationConfig{
+							SizeThresholdTokens:  5000,
+							SummaryMaxTokenLimit: 1000,
+							LLMProvider:          "google-default",
+							LLMBackend:           config.LLMBackendLangChain,
+						},
 					},
 					"alpha-server": {
 						Transport: config.TransportConfig{
@@ -273,6 +279,11 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.Equal(t, []string{"KUBECONFIG"}, k8s.Transport.EnvKeys)
 		assert.True(t, k8s.Transport.BearerTokenSet)
 		assert.Equal(t, "Use kubectl carefully", k8s.Instructions)
+		require.NotNil(t, k8s.Summarization)
+		assert.Equal(t, 5000, k8s.Summarization.SizeThresholdTokens)
+		assert.Equal(t, 1000, k8s.Summarization.SummaryMaxTokenLimit)
+		assert.Equal(t, "google-default", k8s.Summarization.LLMProvider)
+		assert.Equal(t, "langchain", k8s.Summarization.LLMBackend)
 
 		agent := resp.Agents["KubernetesAgent"]
 		assert.Equal(t, "Investigate pods carefully", agent.CustomInstructions)
@@ -486,10 +497,19 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.Equal(t, "google-default", resp.Defaults.LLMProvider)
 		require.NotNil(t, resp.Defaults.Summarization)
 		assert.Equal(t, "google-default", resp.Defaults.Summarization.LLMProvider)
-		assert.Equal(t, config.LLMBackendLangChain, resp.Defaults.Summarization.LLMBackend)
+		assert.Equal(t, "langchain", resp.Defaults.Summarization.LLMBackend)
 		rawDefaults, err := json.Marshal(resp.Defaults)
 		require.NoError(t, err)
-		assert.Contains(t, string(rawDefaults), `"summarization"`)
+		var defaultsJSON map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(rawDefaults, &defaultsJSON))
+		sumRaw, ok := defaultsJSON["summarization"]
+		require.True(t, ok)
+		var sumJSON map[string]any
+		require.NoError(t, json.Unmarshal(sumRaw, &sumJSON))
+		assert.Equal(t, map[string]any{
+			"llm_provider": "google-default",
+			"llm_backend":  "langchain",
+		}, sumJSON)
 		require.NotNil(t, resp.Defaults.Memory)
 		assert.Equal(t, "GOOGLE_API_KEY", resp.Defaults.Memory.Embedding.APIKeyEnv)
 		require.NotNil(t, resp.Defaults.Orchestrator)
