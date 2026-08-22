@@ -153,3 +153,40 @@ func TestResolveSummarizationLLM(t *testing.T) {
 		assert.Equal(t, config.LLMBackendLangChain, got.Backend)
 	})
 }
+
+func TestSummarizationLLMFromFallback(t *testing.T) {
+	native := map[config.GoogleNativeTool]bool{
+		config.GoogleNativeToolGoogleSearch: true,
+	}
+	cfg := &config.LLMProviderConfig{
+		Type:        config.LLMProviderTypeVertexAI,
+		Model:       "claude-sonnet",
+		NativeTools: native,
+	}
+
+	t.Run("clones and strips native tools", func(t *testing.T) {
+		got := SummarizationLLMFromFallback(ResolvedFallbackEntry{
+			ProviderName: "vertexai-claude-sonnet",
+			Backend:      config.LLMBackendLangChain,
+			Config:       cfg,
+		})
+		assert.Equal(t, "vertexai-claude-sonnet", got.ProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, got.Backend)
+		require.NotNil(t, got.Provider)
+		assert.Equal(t, "claude-sonnet", got.Provider.Model)
+		assert.Nil(t, got.Provider.NativeTools)
+		assert.NotSame(t, cfg, got.Provider)
+		assert.True(t, cfg.NativeTools[config.GoogleNativeToolGoogleSearch],
+			"fallback entry NativeTools map must not be mutated")
+	})
+
+	t.Run("keeps already-resolved backend", func(t *testing.T) {
+		got := SummarizationLLMFromFallback(ResolvedFallbackEntry{
+			ProviderName: "google-default",
+			Backend:      config.LLMBackendNativeGemini,
+			Config:       &config.LLMProviderConfig{Model: "gemini-flash"},
+		})
+		assert.Equal(t, config.LLMBackendNativeGemini, got.Backend)
+		assert.Equal(t, "gemini-flash", got.Provider.Model)
+	})
+}

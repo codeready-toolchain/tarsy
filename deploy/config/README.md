@@ -74,7 +74,9 @@ defaults:
       backend: "google-native"
   # Optional: summarize large MCP results (and search_past_sessions) with a
   # cheaper named provider. Unset keeps the calling agent's model.
-  # Omit llm_backend to use langchain.
+  # Omit llm_backend to use langchain. On summarization LLM error, TARSy
+  # walks fallback_providers locally before MCP fail-open / session-search
+  # fail-closed (investigator model unchanged). Empty list: no walk.
   # summarization:
   #   llm_provider: "google-default"
   #   llm_backend: "google-native"

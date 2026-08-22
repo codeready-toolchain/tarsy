@@ -52,6 +52,17 @@ func ResolveSummarizationLLM(execCtx *ExecutionContext, server *config.Summariza
 	return primary, nil
 }
 
+// SummarizationLLMFromFallback clones a resolved investigation fallback entry
+// for a summarization Generate. Backend is kept as already resolved (not
+// re-defaulted to langchain). NativeTools are stripped on the clone.
+func SummarizationLLMFromFallback(entry ResolvedFallbackEntry) ResolvedSummarizationLLM {
+	return ResolvedSummarizationLLM{
+		Provider:     cloneProviderWithoutNativeTools(entry.Config),
+		ProviderName: entry.ProviderName,
+		Backend:      entry.Backend,
+	}
+}
+
 func lookupSummarizationProvider(reg *config.LLMProviderRegistry, layer *config.SummarizationConfig) (ResolvedSummarizationLLM, error) {
 	if reg == nil {
 		return ResolvedSummarizationLLM{}, fmt.Errorf("summarization LLM: provider registry is not available")

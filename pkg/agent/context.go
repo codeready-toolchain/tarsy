@@ -78,6 +78,12 @@ type ExecutionContext struct {
 	// DefaultSummarization is defaults.summarization (may be nil). Only
 	// llm_provider / llm_backend are inherited; enablement stays per-server.
 	DefaultSummarization *config.SummarizationConfig
+
+	// SummarizationSticky is summarization-local failover, keyed by resolved
+	// primary provider name. Lazily initialized by summarize.go; never written
+	// by tryFallback. A later tool result whose primary is still Flash starts
+	// on the sticky provider instead of retrying a downed primary.
+	SummarizationSticky map[string]ResolvedSummarizationLLM
 }
 
 // ServiceBundle groups all service dependencies needed during execution.

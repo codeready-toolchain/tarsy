@@ -346,7 +346,7 @@ No sandbox-sre change in this repo.
 - Resolver: nil defaults + nil server → agent name and backend; clone has nil `NativeTools`; registry / agent maps unchanged; defaults `google-default` omit backend → Flash + langchain; defaults + `google-native` → Flash + google-native; server overlay wins; omitted server backend → langchain (does not inherit defaults' google-native).
 - Call site: below threshold never calls the LLM; above threshold uses resolved provider; `search_past_sessions` uses defaults only; `GenerateInput.ExecutionID` is `execID + ":summarization"`; investigation Generate calls keep the unsuffixed ID; LLM error → MCP fail-open / session-search fail-closed (one Generate, no retry).
 
-### PR 2 — Summarization-local fallback
+### PR 2 — Summarization-local fallback - DONE
 
 **Depends on PR 1.** Do not merge first: it needs the resolver and the isolated execution ID.
 

@@ -728,3 +728,176 @@ func TestExecuteToolCall_RequiredSummarizationFailClosed(t *testing.T) {
 	assert.Equal(t, "Unable to retrieve session history — summarization failed.", result.Content)
 	assert.Equal(t, 1, mockLLM.callCount, "fail-closed should not retry")
 }
+
+func TestExecuteToolCall_RequiredSummarizationFallback(t *testing.T) {
+	flash := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeGoogle,
+		Model: "gemini-flash",
+	}
+	sonnet := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeVertexAI,
+		Model: "claude-sonnet",
+	}
+	opus := &config.LLMProviderConfig{
+		Type:  config.LLMProviderTypeVertexAI,
+		Model: "claude-opus",
+	}
+
+	searchTool := func() *mockToolExecutorFunc {
+		return &mockToolExecutorFunc{
+			tools: []agent.ToolDefinition{{Name: "search_past_sessions"}},
+			executeFn: func(_ context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
+				return &agent.ToolResult{
+					CallID:  call.ID,
+					Name:    call.Name,
+					Content: "raw session rows",
+					RequiredSummarization: &agent.SummarizationRequest{
+						SystemPrompt: "summarize sessions",
+						UserPrompt:   "query: nginx",
+					},
+				}, nil
+			},
+		}
+	}
+
+	t.Run("flash error uses sonnet then fail-closed stays off investigator", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Digest of past sessions"}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, mockLLM, searchTool())
+		execCtx.LLMProviders = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default":         flash,
+			"vertexai-claude-sonnet": sonnet,
+			"vertexai-claude-opus":   opus,
+		})
+		execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "google-default"}
+		execCtx.Config.LLMProviderName = "vertexai-claude-opus"
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("vertexai-claude-sonnet", config.LLMBackendLangChain, "claude-sonnet"),
+			makeFallbackEntry("vertexai-claude-opus", config.LLMBackendLangChain, "claude-opus"),
+		}
+
+		result := executeToolCall(t.Context(), execCtx, agent.ToolCall{
+			ID:        "tc-search",
+			Name:      "search_past_sessions",
+			Arguments: `{"query":"nginx"}`,
+		}, nil, nil, new(int))
+
+		assert.False(t, result.IsError)
+		assert.Equal(t, "Digest of past sessions", result.Content)
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[0].Config.Model)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.True(t, mockLLM.capturedInputs[1].ClearCache)
+		assert.Equal(t, "vertexai-claude-opus", execCtx.Config.LLMProviderName)
+		exec, err := execCtx.Services.Stage.GetAgentExecutionByID(t.Context(), execCtx.ExecutionID)
+		require.NoError(t, err)
+		assert.Nil(t, exec.OriginalLlmProvider)
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var toolCall *ent.TimelineEvent
+		for _, evt := range events {
+			if evt.EventType == timelineevent.EventTypeLlmToolCall {
+				toolCall = evt
+				break
+			}
+		}
+		require.NotNil(t, toolCall)
+		assert.Equal(t, "claude-sonnet", toolCall.Metadata["summarization_model"])
+		assert.Equal(t, "vertexai-claude-sonnet", toolCall.Metadata["summarization_provider"])
+		assert.Equal(t, true, toolCall.Metadata["summarization_fallback"])
+	})
+
+	t.Run("retries do not stream into the tool-call card", func(t *testing.T) {
+		recorder := &recordingEventPublisher{}
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "partial first attempt"},
+					&agent.ErrorChunk{Message: "provider down", Code: string(LLMErrorProviderError)},
+				}},
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "winning digest"},
+				}},
+			},
+		}
+		execCtx := newTestExecCtx(t, mockLLM, searchTool())
+		execCtx.EventPublisher = recorder
+		execCtx.LLMProviders = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default":         flash,
+			"vertexai-claude-sonnet": sonnet,
+			"vertexai-claude-opus":   opus,
+		})
+		execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "google-default"}
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("vertexai-claude-sonnet", config.LLMBackendLangChain, "claude-sonnet"),
+		}
+
+		result := executeToolCall(t.Context(), execCtx, agent.ToolCall{
+			ID:        "tc-search",
+			Name:      "search_past_sessions",
+			Arguments: `{"query":"nginx"}`,
+		}, nil, nil, new(int))
+
+		assert.False(t, result.IsError)
+		assert.Equal(t, "winning digest", result.Content)
+		require.Len(t, mockLLM.capturedInputs, 2)
+
+		deltas := make([]string, 0, len(recorder.chunkCalls))
+		for _, chunk := range recorder.chunkCalls {
+			deltas = append(deltas, chunk.Delta)
+		}
+		assert.Equal(t, []string{"partial first attempt"}, deltas,
+			"only the first attempt should stream into the existing tool-call event")
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var toolCallContent string
+		for _, evt := range events {
+			if evt.EventType == timelineevent.EventTypeLlmToolCall {
+				toolCallContent = evt.Content
+				break
+			}
+		}
+		assert.Equal(t, "winning digest", toolCallContent,
+			"completed tool-call card should show the winning summary, not the failed first attempt")
+	})
+
+	t.Run("exhausted list fail-closes", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{err: assert.AnError},
+				{err: assert.AnError},
+			},
+		}
+		execCtx := newTestExecCtx(t, mockLLM, searchTool())
+		execCtx.LLMProviders = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default":         flash,
+			"vertexai-claude-sonnet": sonnet,
+			"vertexai-claude-opus":   opus,
+		})
+		execCtx.DefaultSummarization = &config.SummarizationConfig{LLMProvider: "google-default"}
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("vertexai-claude-sonnet", config.LLMBackendLangChain, "claude-sonnet"),
+			makeFallbackEntry("vertexai-claude-opus", config.LLMBackendLangChain, "claude-opus"),
+		}
+
+		result := executeToolCall(t.Context(), execCtx, agent.ToolCall{
+			ID:        "tc-search",
+			Name:      "search_past_sessions",
+			Arguments: `{"query":"nginx"}`,
+		}, nil, nil, new(int))
+
+		assert.True(t, result.IsError)
+		assert.Equal(t, "Unable to retrieve session history — summarization failed.", result.Content)
+		assert.Equal(t, 3, mockLLM.callCount)
+	})
+}

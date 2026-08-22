@@ -15,6 +15,7 @@ import type { FlowItem } from '../../utils/timelineParser';
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 import { TOOL_TYPE, MEMORY_TOOL_NAME } from '../../constants/toolTypes';
 import { getToolVisualConfig } from '../../utils/toolCallVisual';
+import SummarizationModelCaption from './SummarizationModelCaption';
 
 interface ToolCallItemProps {
   item: FlowItem;
@@ -253,7 +254,10 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         )}
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-            <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Summary</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem' }}>Summary</Typography>
+              <SummarizationModelCaption metadata={item.metadata} />
+            </Box>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
               {linkUrl && <CopyLinkButton url={linkUrl} />}
               <CopyButton text={typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)} variant="icon" size="small" tooltip="Copy result" />

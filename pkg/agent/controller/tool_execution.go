@@ -244,7 +244,7 @@ func executeToolCall(
 	if toolErr != nil {
 		metrics.MCPErrorsTotal.WithLabelValues(serverID, toolName).Inc()
 		errContent := fmt.Sprintf("Error executing tool: %s", toolErr.Error())
-		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true)
+		completeToolCallEvent(ctx, execCtx, toolCallEvent, errContent, true, nil)
 		recordMCPInteraction(ctx, execCtx, serverID, toolName, call.Arguments, nil, startTime, toolErr)
 		return toolCallResult{Content: errContent, IsError: true, Err: toolErr}
 	}
@@ -293,6 +293,7 @@ func executeToolCall(
 			serverID, toolName, estimatedTokens, eventSeq,
 			summarizationStreamTarget{existingEventID: streamEventID},
 			nil)
+		var extraMeta map[string]any
 		if sumErr != nil {
 			slog.Warn("Required summarization failed",
 				"server", serverID, "tool", toolName, "error", sumErr)
@@ -304,11 +305,12 @@ func executeToolCall(
 				content = result.RequiredSummarization.TransformResult(content)
 			}
 			usage = sumUsage
+			extraMeta = summarizationAnswererMetadata(execCtx, nil)
 		}
-		completeToolCallEvent(ctx, execCtx, toolCallEvent, content, result.IsError)
+		completeToolCallEvent(ctx, execCtx, toolCallEvent, content, result.IsError, extraMeta)
 	} else {
 		storageTruncated := mcp.TruncateForStorage(result.Content)
-		completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError)
+		completeToolCallEvent(ctx, execCtx, toolCallEvent, storageTruncated, result.IsError, nil)
 
 		if !result.IsError {
 			convContext := buildConversationContext(messages)
