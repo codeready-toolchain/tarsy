@@ -202,17 +202,11 @@ func callSummarizationLLM(
 			if resolved.Provider != nil {
 				modelName = resolved.Provider.Model
 			}
-			var summary string
-			if err == nil {
-				summary = strings.TrimSpace(streamed.Text)
-				if summary == "" {
-					err = fmt.Errorf("summarization produced empty result")
-				}
-			}
 			metrics.ObserveLLMCall(resolved.ProviderName, modelName,
 				time.Since(attemptStart), metricsTokens(streamed, err), err)
 			if err == nil {
 				stickSummarizationProvider(execCtx, primaryName, resolved)
+				summary := strings.TrimSpace(streamed.Text)
 				recordSummarizationInteraction(ctx, execCtx, messages, summary,
 					streamed.LLMResponse, attemptStart, modelName)
 				return summary, streamed.Usage, nil
@@ -395,7 +389,7 @@ func callSummarizationLLMWithStreaming(
 		if collectErr != nil {
 			return nil, collectErr
 		}
-		return &StreamedResponse{LLMResponse: resp}, nil
+		return streamedSummarizationResponse(resp)
 	}
 
 	if !streamTarget.createEvent || execCtx.EventPublisher == nil {
@@ -403,7 +397,7 @@ func callSummarizationLLMWithStreaming(
 		if collectErr != nil {
 			return nil, collectErr
 		}
-		return &StreamedResponse{LLMResponse: resp}, nil
+		return streamedSummarizationResponse(resp)
 	}
 
 	// Track streaming timeline event
@@ -484,42 +478,59 @@ func callSummarizationLLMWithStreaming(
 	}
 
 	resp, err := collectStreamWithCallback(stream, callback, nil, 0, 0)
-	if err != nil {
-		// Mark streaming event as failed if it was created
-		if summaryEventID != "" {
-			failContent := fmt.Sprintf("Summarization streaming failed: %s", err.Error())
-			if failErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, summaryEventID, failContent); failErr != nil {
-				slog.Warn("Failed to mark summary event as failed",
-					"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", failErr)
-			}
-			if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
-				BasePayload: events.BasePayload{
-					Type:      events.EventTypeTimelineCompleted,
-					SessionID: execCtx.SessionID,
-					Timestamp: time.Now().Format(time.RFC3339Nano),
-				},
-				EventID:           summaryEventID,
-				ParentExecutionID: pid,
-				EventType:         timelineevent.EventTypeMcpToolSummary,
-				Content:           failContent,
-				Status:            timelineevent.StatusFailed,
-			}); pubErr != nil {
-				slog.Warn("Failed to publish summary failure",
-					"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)
-			}
+	failCreatedSummary := func(failContent string) {
+		if summaryEventID == "" {
+			return
 		}
+		if failErr := execCtx.Services.Timeline.FailTimelineEvent(ctx, summaryEventID, failContent); failErr != nil {
+			slog.Warn("Failed to mark summary event as failed",
+				"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", failErr)
+		}
+		if pubErr := execCtx.EventPublisher.PublishTimelineCompleted(ctx, execCtx.SessionID, events.TimelineCompletedPayload{
+			BasePayload: events.BasePayload{
+				Type:      events.EventTypeTimelineCompleted,
+				SessionID: execCtx.SessionID,
+				Timestamp: time.Now().Format(time.RFC3339Nano),
+			},
+			EventID:           summaryEventID,
+			ParentExecutionID: pid,
+			EventType:         timelineevent.EventTypeMcpToolSummary,
+			Content:           failContent,
+			Status:            timelineevent.StatusFailed,
+		}); pubErr != nil {
+			slog.Warn("Failed to publish summary failure",
+				"event_id", summaryEventID, "session_id", execCtx.SessionID, "error", pubErr)
+		}
+	}
+	if err != nil {
+		failCreatedSummary(fmt.Sprintf("Summarization streaming failed: %s", err.Error()))
 		return nil, err
 	}
 
-	// Finalize summary event
+	streamed, emptyErr := streamedSummarizationResponse(resp)
+	streamed.TextEventCreated = summaryEventID != ""
+	if emptyErr != nil {
+		// Reject before finalize so fallback does not leave a completed empty card.
+		failCreatedSummary(emptyErr.Error())
+		return streamed, emptyErr
+	}
+
 	if summaryEventID != "" {
 		finalizeStreamingEvent(ctx, execCtx, summaryEventID, timelineevent.EventTypeMcpToolSummary, resp.Text, "summary")
 	}
 
-	return &StreamedResponse{
-		LLMResponse:      resp,
-		TextEventCreated: summaryEventID != "",
-	}, nil
+	return streamed, nil
+}
+
+// streamedSummarizationResponse wraps a collected LLM response and rejects
+// empty or whitespace-only text so callers can fall back before completing
+// a dashboard event.
+func streamedSummarizationResponse(resp *LLMResponse) (*StreamedResponse, error) {
+	streamed := &StreamedResponse{LLMResponse: resp}
+	if resp == nil || strings.TrimSpace(resp.Text) == "" {
+		return streamed, fmt.Errorf("summarization produced empty result")
+	}
+	return streamed, nil
 }
 
 // recordSummarizationInteraction records an LLMInteraction with the conversation

@@ -843,6 +843,21 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
 		assert.Equal(t, flashErrorsBefore+1, testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("google-default", "gemini-flash", "error")))
 		assert.Equal(t, sonnetErrorsBefore, testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("vertexai-claude-sonnet", "claude-sonnet", "error")))
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var completed []string
+		for _, evt := range events {
+			if evt.EventType != timelineevent.EventTypeMcpToolSummary {
+				continue
+			}
+			if evt.Status == timelineevent.StatusCompleted {
+				assert.NotEqual(t, "", strings.TrimSpace(evt.Content),
+					"fallback must not leave a completed empty mcp_tool_summary")
+				completed = append(completed, evt.Content)
+			}
+		}
+		assert.Equal(t, []string{"Sonnet summary"}, completed)
 	})
 
 	t.Run("unknown named provider walks fallbacks without generate", func(t *testing.T) {
