@@ -82,7 +82,8 @@ type ExecutionContext struct {
 	// SummarizationSticky is summarization-local failover, keyed by resolved
 	// primary provider name. Lazily initialized by summarize.go; never written
 	// by tryFallback. A later tool result whose primary is still Flash starts
-	// on the sticky provider instead of retrying a downed primary.
+	// on the sticky provider instead of retrying a downed primary. Cleared when
+	// the primary itself answers again.
 	SummarizationSticky map[string]ResolvedSummarizationLLM
 }
 

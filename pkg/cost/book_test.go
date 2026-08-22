@@ -27,9 +27,7 @@ func TestEstimate_OverrideWins(t *testing.T) {
 	}
 
 	cost, prov := book.Estimate("gemini-3.1-pro-preview", 1_000_000, 1_000_000, 0)
-	if cost == nil {
-		t.Fatal("expected priced estimate")
-	}
+	require.NotNil(t, cost)
 	if prov != ProvenanceOverride {
 		t.Fatalf("provenance = %q, want %q", prov, ProvenanceOverride)
 	}
@@ -92,17 +90,13 @@ func TestEstimate_GeminiAbove200k(t *testing.T) {
 	// Snapshot has gemini-3.1-pro-preview with above_200k rates:
 	// base: 2e-6 / 1.2e-5; above: 4e-6 / 1.8e-5
 	below, provBelow := book.Estimate("gemini-3.1-pro-preview", 100_000, 1000, 0)
-	if below == nil {
-		t.Fatal("expected priced below threshold")
-	}
+	require.NotNil(t, below)
 	if provBelow != Provenance("snapshot:gemini-3.1-pro-preview") {
 		t.Fatalf("provenance = %q", provBelow)
 	}
 
 	above, provAbove := book.Estimate("gemini-3.1-pro-preview", 200_000, 1000, 0)
-	if above == nil {
-		t.Fatal("expected priced above threshold")
-	}
+	require.NotNil(t, above)
 	if provAbove != Provenance("snapshot:gemini-3.1-pro-preview") {
 		t.Fatalf("provenance = %q", provAbove)
 	}
@@ -163,9 +157,8 @@ func TestEstimate_TieredPricing(t *testing.T) {
 	// dashscope/qwen-flash: tier0 [0,256k) cheaper than tier1 [256k,1M)
 	low, _ := book.Estimate("dashscope/qwen-flash", 1000, 1000, 0)
 	high, _ := book.Estimate("dashscope/qwen-flash", 300_000, 1000, 0)
-	if low == nil || high == nil {
-		t.Fatal("expected both tiers priced")
-	}
+	require.NotNil(t, low)
+	require.NotNil(t, high)
 	if *high <= *low {
 		t.Fatalf("higher tier cost %v should exceed lower %v", *high, *low)
 	}
@@ -180,9 +173,8 @@ func TestEstimate_ThinkingTokens(t *testing.T) {
 	// gemini-3.6-flash has output_cost_per_reasoning_token
 	without, _ := book.Estimate("gemini-3.6-flash", 1000, 1000, 0)
 	with, _ := book.Estimate("gemini-3.6-flash", 1000, 1000, 500)
-	if without == nil || with == nil {
-		t.Fatal("expected priced")
-	}
+	require.NotNil(t, without)
+	require.NotNil(t, with)
 	if *with <= *without {
 		t.Fatalf("with thinking %v should exceed without %v", *with, *without)
 	}
@@ -233,9 +225,7 @@ func TestBook_CatalogFetch(t *testing.T) {
 	book.refreshOnce(t.Context())
 
 	cost, prov := book.Estimate("test-model", 1_000_000, 0, 0)
-	if cost == nil {
-		t.Fatal("expected catalog-priced model")
-	}
+	require.NotNil(t, cost)
 	if prov != Provenance("catalog:test-model") {
 		t.Fatalf("provenance = %q", prov)
 	}

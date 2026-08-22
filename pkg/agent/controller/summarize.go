@@ -202,17 +202,20 @@ func callSummarizationLLM(
 			if resolved.Provider != nil {
 				modelName = resolved.Provider.Model
 			}
+			var summary string
+			if err == nil {
+				summary = strings.TrimSpace(streamed.Text)
+				if summary == "" {
+					err = fmt.Errorf("summarization produced empty result")
+				}
+			}
 			metrics.ObserveLLMCall(resolved.ProviderName, modelName,
 				time.Since(attemptStart), metricsTokens(streamed, err), err)
 			if err == nil {
-				summary := strings.TrimSpace(streamed.Text)
-				if summary != "" {
-					stickSummarizationProvider(execCtx, primaryName, resolved)
-					recordSummarizationInteraction(ctx, execCtx, messages, summary,
-						streamed.LLMResponse, attemptStart, modelName)
-					return summary, streamed.Usage, nil
-				}
-				err = fmt.Errorf("summarization produced empty result")
+				stickSummarizationProvider(execCtx, primaryName, resolved)
+				recordSummarizationInteraction(ctx, execCtx, messages, summary,
+					streamed.LLMResponse, attemptStart, modelName)
+				return summary, streamed.Usage, nil
 			}
 			lastErr = err
 		}
@@ -255,8 +258,15 @@ func summarizationFallbackIndex(list []agent.ResolvedFallbackEntry, name string)
 	})
 }
 
+// stickSummarizationProvider records the answering fallback for later calls
+// with the same primary. When the primary itself answers, any stale sticky
+// entry is cleared so metadata and the next call match the provider in use.
 func stickSummarizationProvider(execCtx *agent.ExecutionContext, primaryName string, answerer agent.ResolvedSummarizationLLM) {
-	if execCtx == nil || primaryName == "" || answerer.ProviderName == primaryName {
+	if execCtx == nil || primaryName == "" {
+		return
+	}
+	if answerer.ProviderName == primaryName {
+		delete(execCtx.SummarizationSticky, primaryName)
 		return
 	}
 	if execCtx.SummarizationSticky == nil {

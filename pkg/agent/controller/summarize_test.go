@@ -9,6 +9,8 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -692,6 +694,48 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 		assert.Equal(t, "vertexai-claude-opus", sticky.ProviderName)
 	})
 
+	t.Run("primary success after sticky failure clears sticky", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+				{err: assert.AnError},
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Flash recovered"}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Flash still primary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		eventSeq := 0
+		_, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Flash recovered")
+		_, stickySet := execCtx.SummarizationSticky["google-default"]
+		assert.False(t, stickySet)
+
+		meta := summarizationAnswererMetadata(execCtx, nil)
+		assert.Equal(t, "gemini-flash", meta["summarization_model"])
+		assert.Equal(t, "google-default", meta["summarization_provider"])
+		_, hasFallback := meta["summarization_fallback"]
+		assert.False(t, hasFallback)
+
+		result, err = maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.Contains(t, result.Content, "Flash still primary")
+		require.Len(t, mockLLM.capturedInputs, 6)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[4].Config.Model)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[5].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[5].ClearCache)
+	})
+
 	t.Run("exhausted list fail-opens", func(t *testing.T) {
 		mockLLM := &mockLLMClient{
 			capture: true,
@@ -778,6 +822,8 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 	})
 
 	t.Run("empty summary walks fallbacks", func(t *testing.T) {
+		flashErrorsBefore := testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("google-default", "gemini-flash", "error"))
+		sonnetErrorsBefore := testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("vertexai-claude-sonnet", "claude-sonnet", "error"))
 		mockLLM := &mockLLMClient{
 			capture: true,
 			responses: []mockLLMResponse{
@@ -795,6 +841,8 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 		require.Len(t, mockLLM.capturedInputs, 2)
 		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[0].Config.Model)
 		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.Equal(t, flashErrorsBefore+1, testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("google-default", "gemini-flash", "error")))
+		assert.Equal(t, sonnetErrorsBefore, testutil.ToFloat64(metrics.LLMErrorsTotal.WithLabelValues("vertexai-claude-sonnet", "claude-sonnet", "error")))
 	})
 
 	t.Run("unknown named provider walks fallbacks without generate", func(t *testing.T) {
