@@ -146,13 +146,16 @@ func callSummarizationLLM(
 	serverSummarization *config.SummarizationConfig,
 ) (string, *agent.TokenUsage, error) {
 	resolved, resolveErr := agent.ResolveSummarizationLLM(execCtx, serverSummarization)
-	primaryName := ""
+	primaryName := resolved.ProviderName
+	if primaryName == "" && execCtx != nil && execCtx.Config != nil {
+		primaryName = execCtx.Config.LLMProviderName
+	}
 	appliedSticky := false
-	if resolveErr == nil {
-		primaryName = resolved.ProviderName
+	if execCtx != nil {
 		if sticky, ok := execCtx.SummarizationSticky[primaryName]; ok {
 			resolved = sticky
 			appliedSticky = true
+			resolveErr = nil
 		}
 	}
 
@@ -286,13 +289,18 @@ func summarizationProviderMetadata(resolved agent.ResolvedSummarizationLLM, prim
 }
 
 func summarizationAnswererMetadata(execCtx *agent.ExecutionContext, server *config.SummarizationConfig) map[string]any {
-	resolved, err := agent.ResolveSummarizationLLM(execCtx, server)
-	if err != nil {
+	if execCtx == nil {
 		return nil
 	}
+	resolved, err := agent.ResolveSummarizationLLM(execCtx, server)
 	primaryName := resolved.ProviderName
+	if primaryName == "" && execCtx.Config != nil {
+		primaryName = execCtx.Config.LLMProviderName
+	}
 	if sticky, ok := execCtx.SummarizationSticky[primaryName]; ok {
 		resolved = sticky
+	} else if err != nil {
+		return nil
 	}
 	return summarizationProviderMetadata(resolved, primaryName)
 }

@@ -865,6 +865,7 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 			capture: true,
 			responses: []mockLLMResponse{
 				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sonnet summary"}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Sticky sonnet summary"}}},
 			},
 		}
 		execCtx := setup(t, mockLLM)
@@ -879,5 +880,38 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[0].Config.Model)
 		assert.True(t, mockLLM.capturedInputs[0].ClearCache)
 		assert.Equal(t, "vertexai-claude-opus", execCtx.Config.LLMProviderName)
+
+		sticky, ok := execCtx.SummarizationSticky["missing-provider"]
+		require.True(t, ok)
+		assert.Equal(t, "vertexai-claude-sonnet", sticky.ProviderName)
+		_, opusSticky := execCtx.SummarizationSticky["vertexai-claude-opus"]
+		assert.False(t, opusSticky, "failed named primary must not reuse the investigator sticky key")
+
+		events, err := execCtx.Services.Timeline.GetSessionTimeline(t.Context(), execCtx.SessionID)
+		require.NoError(t, err)
+		var found bool
+		for _, evt := range events {
+			if evt.EventType == timelineevent.EventTypeMcpToolSummary && evt.Status == timelineevent.StatusCompleted {
+				assert.Equal(t, "claude-sonnet", evt.Metadata["summarization_model"])
+				assert.Equal(t, "vertexai-claude-sonnet", evt.Metadata["summarization_provider"])
+				assert.Equal(t, true, evt.Metadata["summarization_fallback"])
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "successful fallback summary should record summarization_fallback")
+
+		meta := summarizationAnswererMetadata(execCtx, nil)
+		assert.Equal(t, "claude-sonnet", meta["summarization_model"])
+		assert.Equal(t, "vertexai-claude-sonnet", meta["summarization_provider"])
+		assert.Equal(t, true, meta["summarization_fallback"])
+
+		result, err = maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.Contains(t, result.Content, "Sticky sonnet summary")
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assert.False(t, mockLLM.capturedInputs[1].ClearCache)
 	})
 }

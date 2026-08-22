@@ -35,7 +35,7 @@ func ResolveSummarizationLLM(execCtx *ExecutionContext, server *config.Summariza
 	if execCtx.DefaultSummarization != nil && execCtx.DefaultSummarization.LLMProvider != "" {
 		resolved, err := lookupSummarizationProvider(execCtx.LLMProviders, execCtx.DefaultSummarization)
 		if err != nil {
-			return ResolvedSummarizationLLM{}, err
+			return ResolvedSummarizationLLM{ProviderName: execCtx.DefaultSummarization.LLMProvider}, err
 		}
 		primary = resolved
 	}
@@ -43,7 +43,7 @@ func ResolveSummarizationLLM(execCtx *ExecutionContext, server *config.Summariza
 	if server != nil && server.LLMProvider != "" {
 		resolved, err := lookupSummarizationProvider(execCtx.LLMProviders, server)
 		if err != nil {
-			return ResolvedSummarizationLLM{}, err
+			return ResolvedSummarizationLLM{ProviderName: server.LLMProvider}, err
 		}
 		primary = resolved
 	}
