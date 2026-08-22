@@ -164,7 +164,7 @@ The action stage typically runs after investigation/synthesis stages. It receive
 - **Three transport types**: stdio (command-line servers), HTTP (JSON-RPC endpoints), SSE (Server-Sent Events)
 - **Per-agent-execution isolation** -- each agent execution gets its own MCP Client with independent sessions
 - **Data masking** with hybrid approach: code-based structural maskers (K8s Secrets) + regex patterns
-- **Tool result summarization** -- enabled by default for all MCP servers; large results (>5K tokens) are automatically summarized by an LLM call before being sent back to the investigating agent (can be disabled per-server)
+- **Tool result summarization** -- enabled by default for all MCP servers; large results (>5K tokens) are automatically summarized by an LLM call before being sent back to the investigating agent (can be disabled per-server). Operators can optionally set `defaults.summarization.llm_provider` and `defaults.summarization.llm_backend` to a cheaper named provider. A per-MCP-server overlay can set its own `llm_provider` and `llm_backend` for that server; unset keeps the investigating agent's model.
 - **Health monitoring** -- background service checks server health, attempts recovery, surfaces warnings
 
 ### 8. LLM Multi-Provider Support

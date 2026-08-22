@@ -176,6 +176,14 @@ defaults:
   #   agent: "ScoringAgent"               # Default scoring agent name
   #   llm_provider: "gemini-3-flash"      # Default LLM provider for scoring
   #   llm_backend: "google-native"        # Default LLM backend for scoring
+
+  # Optional: summarize large MCP tool results (and search_past_sessions) with a
+  # cheaper named provider. Unset keeps the calling agent's model.
+  # Only llm_provider / llm_backend belong here — enablement and size thresholds
+  # stay per-MCP-server. Omit llm_backend to use langchain.
+  # summarization:
+  #   llm_provider: "google-default"
+  #   llm_backend: "google-native"
   
   # Investigation memory — learns from past investigations and injects relevant
   # memories into future sessions via semantic retrieval (pgvector cosine similarity).
@@ -266,11 +274,14 @@ mcp_servers:
     
     # Summarization is enabled by default for all MCP servers.
     # Large tool results (>5000 tokens) are automatically summarized by an LLM call.
-    # To customize thresholds or disable, uncomment below:
+    # Unset llm_provider inherits defaults.summarization (or the calling agent).
+    # To customize thresholds, disable, or pin a provider, uncomment below:
     # summarization:
     #   enabled: false                  # Set to false to disable (default: true)
     #   size_threshold_tokens: 8000     # Override default (5000 tokens)
     #   summary_max_token_limit: 1000   # Max tokens in summary (default: 1000)
+    #   llm_provider: "google-default"  # Optional overlay; omit llm_backend → langchain
+    #   llm_backend: "google-native"
 
   # Example: ArgoCD MCP server
   argocd-server:

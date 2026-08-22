@@ -70,6 +70,14 @@ type ExecutionContext struct {
 	// MemoryBriefing holds pre-retrieved memories for Tier 4 prompt injection.
 	// nil when memory is disabled or no relevant memories exist.
 	MemoryBriefing *MemoryBriefing
+
+	// LLMProviders is the named LLM provider registry. Used to resolve an
+	// optional summarization provider. Scoring / reflector leave this nil.
+	LLMProviders *config.LLMProviderRegistry
+
+	// DefaultSummarization is defaults.summarization (may be nil). Only
+	// llm_provider / llm_backend are inherited; enablement stays per-server.
+	DefaultSummarization *config.SummarizationConfig
 }
 
 // ServiceBundle groups all service dependencies needed during execution.
@@ -86,6 +94,15 @@ type ResolvedFallbackEntry struct {
 	ProviderName string
 	Backend      config.LLMBackend
 	Config       *config.LLMProviderConfig
+}
+
+// ResolvedSummarizationLLM is the provider used for a tool-result summary call.
+// Provider is a clone with NativeTools cleared so google-native cannot attach
+// search/url_context on a text-only summarization Generate.
+type ResolvedSummarizationLLM struct {
+	Provider     *config.LLMProviderConfig
+	ProviderName string
+	Backend      config.LLMBackend
 }
 
 // ResolvedAgentConfig is the fully-resolved configuration for an agent execution.

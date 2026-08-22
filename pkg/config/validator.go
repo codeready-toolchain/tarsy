@@ -144,6 +144,10 @@ func (v *Validator) validateDefaults() error {
 		}
 	}
 
+	if err := v.validateDefaultsSummarization(defaults.Summarization); err != nil {
+		return err
+	}
+
 	// Validate fallback providers if specified
 	if err := v.validateFallbackProviders(defaults.FallbackProviders, "defaults", "", "fallback_providers"); err != nil {
 		return err
@@ -176,6 +180,46 @@ func (v *Validator) validateDefaults() error {
 		v.warnMemoryWithoutScoring(defaults)
 	}
 
+	return nil
+}
+
+func (v *Validator) validateDefaultsSummarization(sum *SummarizationConfig) error {
+	if sum == nil {
+		return nil
+	}
+	if sum.Enabled != nil {
+		return NewValidationError("defaults", "", "summarization.enabled",
+			fmt.Errorf("enabled is per-MCP-server only; do not set it on defaults.summarization"))
+	}
+	if sum.SizeThresholdTokens != 0 {
+		return NewValidationError("defaults", "", "summarization.size_threshold_tokens",
+			fmt.Errorf("size_threshold_tokens is per-MCP-server only; do not set it on defaults.summarization"))
+	}
+	if sum.SummaryMaxTokenLimit != 0 {
+		return NewValidationError("defaults", "", "summarization.summary_max_token_limit",
+			fmt.Errorf("summary_max_token_limit is per-MCP-server only; do not set it on defaults.summarization"))
+	}
+	return v.validateSummarizationLLM(sum, "defaults", "", "summarization")
+}
+
+// validateSummarizationLLM checks optional llm_provider / llm_backend on a
+// SummarizationConfig. Backend without provider at the same level is an error.
+func (v *Validator) validateSummarizationLLM(sum *SummarizationConfig, component, id, fieldPrefix string) error {
+	if sum == nil {
+		return nil
+	}
+	if sum.LLMBackend != "" && sum.LLMProvider == "" {
+		return NewValidationError(component, id, fieldPrefix+".llm_backend",
+			fmt.Errorf("llm_backend requires llm_provider at the same level"))
+	}
+	if sum.LLMBackend != "" && !sum.LLMBackend.IsValid() {
+		return NewValidationError(component, id, fieldPrefix+".llm_backend",
+			fmt.Errorf("invalid LLM backend: %s", sum.LLMBackend))
+	}
+	if sum.LLMProvider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(sum.LLMProvider)) {
+		return NewValidationError(component, id, fieldPrefix+".llm_provider",
+			fmt.Errorf("LLM provider '%s' not found", sum.LLMProvider))
+	}
 	return nil
 }
 
@@ -595,13 +639,24 @@ func (v *Validator) validateMCPServers() error {
 			}
 		}
 
-		// Validate summarization configuration
-		if server.Summarization != nil && !server.Summarization.SummarizationDisabled() {
-			if server.Summarization.SizeThresholdTokens < 100 {
-				return NewValidationError("mcp_server", serverID, "summarization.size_threshold_tokens", fmt.Errorf("must be at least 100"))
+		// Validate summarization configuration.
+		// Provider/backend checks run even when summarization is disabled so
+		// llm_provider on an enabled:false server is rejected as dead config.
+		if server.Summarization != nil {
+			if server.Summarization.SummarizationDisabled() && server.Summarization.LLMProvider != "" {
+				return NewValidationError("mcp_server", serverID, "summarization.llm_provider",
+					fmt.Errorf("llm_provider is unused when summarization is disabled"))
 			}
-			if server.Summarization.SummaryMaxTokenLimit > 0 && server.Summarization.SummaryMaxTokenLimit < 50 {
-				return NewValidationError("mcp_server", serverID, "summarization.summary_max_token_limit", fmt.Errorf("must be at least 50 if specified"))
+			if err := v.validateSummarizationLLM(server.Summarization, "mcp_server", serverID, "summarization"); err != nil {
+				return err
+			}
+			if !server.Summarization.SummarizationDisabled() {
+				if server.Summarization.SizeThresholdTokens < 100 {
+					return NewValidationError("mcp_server", serverID, "summarization.size_threshold_tokens", fmt.Errorf("must be at least 100"))
+				}
+				if server.Summarization.SummaryMaxTokenLimit > 0 && server.Summarization.SummaryMaxTokenLimit < 50 {
+					return NewValidationError("mcp_server", serverID, "summarization.summary_max_token_limit", fmt.Errorf("must be at least 50 if specified"))
+				}
 			}
 		}
 	}
@@ -645,7 +700,8 @@ func (v *Validator) validateLLMProviders() error {
 	return nil
 }
 
-// collectReferencedLLMProviders returns a set of LLM provider names that are actually referenced by chains
+// collectReferencedLLMProviders returns a set of LLM provider names referenced
+// by defaults, MCP summarization overlays, and chains.
 func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 	referenced := make(map[string]bool)
 
@@ -659,6 +715,17 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		}
 		if v.cfg.Defaults.Scoring != nil && v.cfg.Defaults.Scoring.LLMProvider != "" {
 			referenced[v.cfg.Defaults.Scoring.LLMProvider] = true
+		}
+		if v.cfg.Defaults.Summarization != nil && v.cfg.Defaults.Summarization.LLMProvider != "" {
+			referenced[v.cfg.Defaults.Summarization.LLMProvider] = true
+		}
+	}
+
+	if v.cfg.MCPServerRegistry != nil {
+		for _, server := range v.cfg.MCPServerRegistry.GetAll() {
+			if server.Summarization != nil && server.Summarization.LLMProvider != "" {
+				referenced[server.Summarization.LLMProvider] = true
+			}
 		}
 	}
 

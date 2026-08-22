@@ -72,6 +72,12 @@ defaults:
   fallback_providers:
     - provider: "gemini-3.1-pro"
       backend: "google-native"
+  # Optional: summarize large MCP results (and search_past_sessions) with a
+  # cheaper named provider. Unset keeps the calling agent's model.
+  # Omit llm_backend to use langchain.
+  # summarization:
+  #   llm_provider: "google-default"
+  #   llm_backend: "google-native"
 
 mcp_servers:
   kubernetes-server:
@@ -79,6 +85,14 @@ mcp_servers:
       type: "stdio"
       command: "npx"
       args: ["kubernetes-mcp-server"]
+    # Optional overlay: this server's dumps use a different summarization model.
+    # MCP overlays replace the whole server block — restate enablement/thresholds.
+    # summarization:
+    #   enabled: true
+    #   size_threshold_tokens: 5000
+    #   summary_max_token_limit: 1000
+    #   llm_provider: "vertexai-claude-opus"
+    #   llm_backend: "langchain"
 
 agents:
   custom-agent:

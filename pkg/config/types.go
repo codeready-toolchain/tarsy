@@ -47,10 +47,15 @@ const DefaultSizeThresholdTokens = 5000
 
 // SummarizationConfig defines when and how to summarize large MCP responses.
 // Enabled is a *bool: nil means "use default" (enabled), explicit false disables.
+// LLMProvider / LLMBackend are optional; unset means the calling agent's model.
+// On defaults.summarization only provider/backend are valid — enablement and
+// size thresholds stay per-MCP-server.
 type SummarizationConfig struct {
-	Enabled              *bool `yaml:"enabled,omitempty"`
-	SizeThresholdTokens  int   `yaml:"size_threshold_tokens,omitempty" validate:"omitempty,min=100"`
-	SummaryMaxTokenLimit int   `yaml:"summary_max_token_limit,omitempty" validate:"omitempty,min=50"`
+	Enabled              *bool      `yaml:"enabled,omitempty"`
+	SizeThresholdTokens  int        `yaml:"size_threshold_tokens,omitempty" validate:"omitempty,min=100"`
+	SummaryMaxTokenLimit int        `yaml:"summary_max_token_limit,omitempty" validate:"omitempty,min=50"`
+	LLMProvider          string     `yaml:"llm_provider,omitempty"`
+	LLMBackend           LLMBackend `yaml:"llm_backend,omitempty"`
 }
 
 // SummarizationDisabled returns true only when Enabled is explicitly set to false.

@@ -153,7 +153,7 @@ A dedicated response type (not internal config structs):
 
 | Section | Notes |
 |---------|-------|
-| `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only) |
+| `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, **summarization** (provider/backend only), success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only) |
 | `queue` | All worker/poll/timeout fields; durations as strings |
 | `system` | GitHub, Slack, Runbooks, Retention, dashboard URL, allowed WS origins — env **names** only for tokens |
 | `agents` | Full agent fields — **no** `llm_provider` on agents |

@@ -1196,9 +1196,10 @@ agent_chains: {}
 }
 
 func TestLoadAppliesSummarizationDefaults(t *testing.T) {
-	dir := t.TempDir()
+	t.Run("MCP server omitted size_threshold_tokens gets 5000", func(t *testing.T) {
+		dir := t.TempDir()
 
-	tarsyYAML := `
+		tarsyYAML := `
 defaults:
   llm_provider: "google-default"
   max_iterations: 20
@@ -1212,20 +1213,64 @@ mcp_servers:
       summary_max_token_limit: 1200
 agent_chains: {}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
 
-	cfg, err := load(context.Background(), dir)
-	require.NoError(t, err)
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
 
-	server, err := cfg.MCPServerRegistry.Get("my-server")
-	require.NoError(t, err)
-	require.NotNil(t, server.Summarization)
-	assert.Nil(t, server.Summarization.Enabled, "Enabled should be nil when omitted from YAML")
-	assert.False(t, server.Summarization.SummarizationDisabled(), "nil Enabled means enabled by default")
-	assert.Equal(t, DefaultSizeThresholdTokens, server.Summarization.SizeThresholdTokens,
-		"size_threshold_tokens should default to %d when not specified", DefaultSizeThresholdTokens)
-	assert.Equal(t, 1200, server.Summarization.SummaryMaxTokenLimit)
+		server, err := cfg.MCPServerRegistry.Get("my-server")
+		require.NoError(t, err)
+		require.NotNil(t, server.Summarization)
+		assert.Nil(t, server.Summarization.Enabled, "Enabled should be nil when omitted from YAML")
+		assert.False(t, server.Summarization.SummarizationDisabled(), "nil Enabled means enabled by default")
+		assert.Equal(t, DefaultSizeThresholdTokens, server.Summarization.SizeThresholdTokens,
+			"size_threshold_tokens should default to %d when not specified", DefaultSizeThresholdTokens)
+		assert.Equal(t, 1200, server.Summarization.SummaryMaxTokenLimit)
+	})
+
+	t.Run("defaults.summarization parses provider and does not get size filler", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+defaults:
+  llm_provider: "google-default"
+  summarization:
+    llm_provider: "google-default"
+    llm_backend: "google-native"
+agents: {}
+mcp_servers:
+  my-server:
+    transport:
+      type: "http"
+      url: "https://example.com/mcp"
+    summarization:
+      llm_provider: "google-default"
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Defaults)
+		require.NotNil(t, cfg.Defaults.Summarization)
+		assert.Equal(t, "google-default", cfg.Defaults.Summarization.LLMProvider)
+		assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.Summarization.LLMBackend)
+		assert.Nil(t, cfg.Defaults.Summarization.Enabled)
+		assert.Zero(t, cfg.Defaults.Summarization.SizeThresholdTokens,
+			"size-threshold filler must stay MCP-server only")
+		assert.Zero(t, cfg.Defaults.Summarization.SummaryMaxTokenLimit)
+
+		server, err := cfg.MCPServerRegistry.Get("my-server")
+		require.NoError(t, err)
+		require.NotNil(t, server.Summarization)
+		assert.Equal(t, "google-default", server.Summarization.LLMProvider)
+		assert.Empty(t, server.Summarization.LLMBackend,
+			"omitted server llm_backend stays empty; loader must not copy defaults.summarization.llm_backend")
+		assert.Equal(t, DefaultSizeThresholdTokens, server.Summarization.SizeThresholdTokens)
+	})
 }
 
 func TestLoadTarsyYAML_FallbackProviders(t *testing.T) {

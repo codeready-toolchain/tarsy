@@ -734,3 +734,10 @@ func mapAgentStatusToSessionStatus(status agent.ExecutionStatus) alertsession.St
 		return alertsession.StatusFailed
 	}
 }
+
+func defaultSummarization(cfg *config.Config) *config.SummarizationConfig {
+	if cfg == nil || cfg.Defaults == nil {
+		return nil
+	}
+	return cfg.Defaults.Summarization
+}

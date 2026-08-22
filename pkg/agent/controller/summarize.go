@@ -97,7 +97,7 @@ func maybeSummarize(
 	userPrompt := execCtx.PromptBuilder.BuildMCPSummarizationUserPrompt(conversationContext, serverID, toolName, truncatedForLLM)
 
 	// 6. Perform summarization LLM call with streaming
-	summary, usage, err := callSummarizationLLM(ctx, execCtx, systemPrompt, userPrompt, serverID, toolName, estimatedTokens, eventSeq, summarizationStreamTarget{createEvent: true})
+	summary, usage, err := callSummarizationLLM(ctx, execCtx, systemPrompt, userPrompt, serverID, toolName, estimatedTokens, eventSeq, summarizationStreamTarget{createEvent: true}, serverConfig.Summarization)
 	if err != nil {
 		slog.Warn("Summarization LLM call failed, using raw result",
 			"server", serverID, "tool", toolName, "error", err)
@@ -141,8 +141,14 @@ func callSummarizationLLM(
 	estimatedTokens int,
 	eventSeq *int,
 	streamTarget summarizationStreamTarget,
+	serverSummarization *config.SummarizationConfig,
 ) (string, *agent.TokenUsage, error) {
 	startTime := time.Now()
+
+	resolved, err := agent.ResolveSummarizationLLM(execCtx, serverSummarization)
+	if err != nil {
+		return "", nil, fmt.Errorf("summarization LLM call failed: %w", err)
+	}
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemPrompt},
@@ -151,15 +157,19 @@ func callSummarizationLLM(
 
 	input := &agent.GenerateInput{
 		SessionID:   execCtx.SessionID,
-		ExecutionID: execCtx.ExecutionID,
+		ExecutionID: execCtx.ExecutionID + agent.SummarizationExecutionIDSuffix,
 		Messages:    messages,
-		Config:      execCtx.Config.LLMProvider,
+		Config:      resolved.Provider,
 		Tools:       nil, // No tools for summarization
-		Backend:     execCtx.Config.LLMBackend,
+		Backend:     resolved.Backend,
 	}
 
-	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, serverID, toolName, estimatedTokens, eventSeq, streamTarget)
-	metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
+	streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, resolved, serverID, toolName, estimatedTokens, eventSeq, streamTarget)
+	modelName := ""
+	if resolved.Provider != nil {
+		modelName = resolved.Provider.Model
+	}
+	metrics.ObserveLLMCall(resolved.ProviderName, modelName,
 		time.Since(startTime), metricsTokens(streamed, err), err)
 	if err != nil {
 		return "", nil, fmt.Errorf("summarization LLM call failed: %w", err)
@@ -175,7 +185,7 @@ func callSummarizationLLM(
 	// that is separate from the iteration's message sequence, so we store it
 	// inline in llm_request rather than in the Message table.
 	recordSummarizationInteraction(ctx, execCtx, messages, summary,
-		streamed.LLMResponse, startTime)
+		streamed.LLMResponse, startTime, modelName)
 
 	return summary, streamed.Usage, nil
 }
@@ -194,6 +204,7 @@ func callSummarizationLLMWithStreaming(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	input *agent.GenerateInput,
+	resolved agent.ResolvedSummarizationLLM,
 	serverID, toolName string,
 	estimatedTokens int,
 	eventSeq *int,
@@ -254,8 +265,11 @@ func callSummarizationLLMWithStreaming(
 		"tool_name":       toolName,
 		"original_tokens": estimatedTokens,
 	}
-	if execCtx.Config.LLMProvider != nil {
-		metadata["summarization_model"] = execCtx.Config.LLMProvider.Model
+	if resolved.Provider != nil {
+		metadata["summarization_model"] = resolved.Provider.Model
+	}
+	if resolved.ProviderName != "" {
+		metadata["summarization_provider"] = resolved.ProviderName
 	}
 
 	callback := func(chunkType string, delta string) {
@@ -373,6 +387,7 @@ func recordSummarizationInteraction(
 	assistantText string,
 	resp *LLMResponse,
 	startTime time.Time,
+	modelName string,
 ) {
 	durationMs := int(time.Since(startTime).Milliseconds())
 
@@ -411,7 +426,7 @@ func recordSummarizationInteraction(
 		StageID:         &execCtx.StageID,
 		ExecutionID:     &execCtx.ExecutionID,
 		InteractionType: string(llminteraction.InteractionTypeSummarization),
-		ModelName:       execCtx.Config.LLMProvider.Model,
+		ModelName:       modelName,
 		LLMRequest: map[string]any{
 			"messages_count": len(inputMessages),
 			"iteration":      0,

@@ -291,7 +291,8 @@ func executeToolCall(
 			result.RequiredSummarization.SystemPrompt,
 			result.RequiredSummarization.UserPrompt,
 			serverID, toolName, estimatedTokens, eventSeq,
-			summarizationStreamTarget{existingEventID: streamEventID})
+			summarizationStreamTarget{existingEventID: streamEventID},
+			nil)
 		if sumErr != nil {
 			slog.Warn("Required summarization failed",
 				"server", serverID, "tool", toolName, "error", sumErr)

@@ -173,7 +173,7 @@ export interface MCPServerConfigView {
   transport: SanitizedTransport;
   instructions?: string;
   data_masking?: Record<string, unknown> | null;
-  summarization?: Record<string, unknown> | null;
+  summarization?: MCPSummarizationView | null;
 }
 
 /** Agent config view. */
@@ -290,12 +290,26 @@ export interface SkillMetaView {
   description: string;
 }
 
+/** defaults.summarization — named provider/backend only. */
+export interface SummarizationView {
+  llm_provider?: string;
+  llm_backend?: string;
+}
+
+/** MCP server summarization, including server-only size/enablement fields. */
+export interface MCPSummarizationView extends SummarizationView {
+  enabled?: boolean | null;
+  size_threshold_tokens?: number;
+  summary_max_token_limit?: number;
+}
+
 export interface DefaultsView {
   llm_provider?: string;
   max_iterations?: number | null;
   llm_backend?: string;
   fallback_providers?: FallbackProviderView[];
   scoring?: ScoringView | null;
+  summarization?: SummarizationView | null;
   success_policy?: string;
   alert_type?: string;
   runbook?: string;
