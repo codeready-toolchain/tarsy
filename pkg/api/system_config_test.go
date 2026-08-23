@@ -424,7 +424,7 @@ func TestSystemConfigHandler(t *testing.T) {
 					LLMProvider:     "google-default",
 					ComposeProvider: "google-default",
 					MaxIterations:   &maxIter,
-					LLMBackend:    config.LLMBackendNativeGemini,
+					LLMBackend:      config.LLMBackendNativeGemini,
 					Summarization: &config.SummarizationConfig{
 						LLMProvider: "google-default",
 						LLMBackend:  config.LLMBackendLangChain,
