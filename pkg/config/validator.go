@@ -148,6 +148,11 @@ func (v *Validator) validateDefaults() error {
 		return err
 	}
 
+	if defaults.ComposeProvider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(defaults.ComposeProvider)) {
+		return NewValidationError("defaults", "", "compose_provider",
+			fmt.Errorf("LLM provider '%s' not found", defaults.ComposeProvider))
+	}
+
 	// Validate fallback providers if specified
 	if err := v.validateFallbackProviders(defaults.FallbackProviders, "defaults", "", "fallback_providers"); err != nil {
 		return err
@@ -291,6 +296,10 @@ func (v *Validator) validateAgents() error {
 		if agent.Type != "" && !agent.Type.IsValid() {
 			return NewValidationError("agent", name, "type", fmt.Errorf("invalid agent type: %s", agent.Type))
 		}
+		// type: compose is executor-only; YAML may not declare it except on the builtin.
+		if agent.Type == AgentTypeCompose && name != AgentNameCompose {
+			return NewValidationError("agent", name, "type", fmt.Errorf("type %q is executor-only and cannot be used in chain YAML", agent.Type))
+		}
 
 		// Validate LLM backend if specified
 		if agent.LLMBackend != "" && !agent.LLMBackend.IsValid() {
@@ -420,6 +429,10 @@ func (v *Validator) validateChains() error {
 			return NewValidationError("chain", chainID, "llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.LLMProvider))
 		}
 
+		if chain.ComposeProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.ComposeProvider) {
+			return NewValidationError("chain", chainID, "compose_provider", fmt.Errorf("LLM provider '%s' not found", chain.ComposeProvider))
+		}
+
 		// Validate chain-level fallback providers if specified
 		if err := v.validateFallbackProviders(chain.FallbackProviders, "chain", chainID, "fallback_providers"); err != nil {
 			return err
@@ -468,6 +481,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		// Validate agent-level type if specified
 		if agentConfig.Type != "" && !agentConfig.Type.IsValid() {
 			return fmt.Errorf("%s: agent '%s' has invalid type: %s", stageRef, agentConfig.Name, agentConfig.Type)
+		}
+		if agentConfig.Type == AgentTypeCompose {
+			return fmt.Errorf("%s: agent '%s' has type %q which is executor-only and cannot be used in chain YAML", stageRef, agentConfig.Name, agentConfig.Type)
 		}
 
 		// Validate agent-level LLM backend if specified
@@ -719,6 +735,9 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		if v.cfg.Defaults.Summarization != nil && v.cfg.Defaults.Summarization.LLMProvider != "" {
 			referenced[v.cfg.Defaults.Summarization.LLMProvider] = true
 		}
+		if v.cfg.Defaults.ComposeProvider != "" {
+			referenced[v.cfg.Defaults.ComposeProvider] = true
+		}
 	}
 
 	if v.cfg.MCPServerRegistry != nil {
@@ -738,6 +757,9 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		// Chain-level LLM provider
 		if chain.LLMProvider != "" {
 			referenced[chain.LLMProvider] = true
+		}
+		if chain.ComposeProvider != "" {
+			referenced[chain.ComposeProvider] = true
 		}
 
 		// Chain-level fallback providers

@@ -457,6 +457,70 @@ func ResolveExecSummaryConfig(
 	}, nil
 }
 
+// ResolveComposeConfig builds the agent configuration for a compose execution.
+// Provider order (last non-empty wins): defaults.llm_provider → chain.llm_provider
+// → defaults.compose_provider → chain.compose_provider.
+// defaults.compose_provider beats chain.llm_provider so a mid-tier compose default
+// is not overridden by a chain's investigation model.
+func ResolveComposeConfig(
+	cfg *config.Config,
+	chain *config.ChainConfig,
+) (*ResolvedAgentConfig, error) {
+	if chain == nil {
+		return nil, fmt.Errorf("chain configuration cannot be nil")
+	}
+
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
+
+	agentDef, err := cfg.GetAgent(config.AgentNameCompose)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q not found: %w", config.AgentNameCompose, err)
+	}
+
+	backend := resolveLLMBackend(
+		defaults.LLMBackend, agentDef.LLMBackend, chain.LLMBackend,
+	)
+
+	provider, providerName, err := resolveLLMProvider(cfg,
+		defaults.LLMProvider, chain.LLMProvider, defaults.ComposeProvider, chain.ComposeProvider,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	maxIter := resolveMaxIterations(
+		defaults.MaxIterations, agentDef.MaxIterations, chain.MaxIterations, nil,
+	)
+
+	fallbackProviders := resolveFallbackProviders(
+		defaults.FallbackProviders, chain.FallbackProviders,
+	)
+
+	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
+	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
+
+	return &ResolvedAgentConfig{
+		AgentName:                 config.AgentNameCompose,
+		Type:                      config.AgentTypeCompose,
+		LLMBackend:                backend,
+		LLMProvider:               resolvedProvider,
+		LLMProviderName:           providerName,
+		MaxIterations:             maxIter,
+		IterationTimeout:          DefaultIterationTimeout,
+		LLMCallTimeout:            DefaultLLMCallTimeout,
+		ToolCallTimeout:           DefaultToolCallTimeout,
+		CustomInstructions:        agentDef.CustomInstructions,
+		FallbackProviders:         fallbackProviders,
+		ResolvedFallbackProviders: resolvedFallback,
+		InitialResponseTimeout:    DefaultInitialResponseTimeout,
+		StallTimeout:              DefaultStallTimeout,
+		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
+	}, nil
+}
+
 // requiresNativeTools returns true when the agent definition declares at least
 // one enabled native tool. Used to set RequiresNativeTools on ResolvedAgentConfig.
 func requiresNativeTools(agentTools map[config.GoogleNativeTool]bool) bool {

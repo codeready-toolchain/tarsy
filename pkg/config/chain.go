@@ -28,6 +28,9 @@ type ChainConfig struct {
 	// LLM provider for executive summary generation (overrides LLMProvider for this purpose)
 	ExecutiveSummaryProvider string `yaml:"executive_summary_provider,omitempty"`
 
+	// LLM provider for compose (amended-report) generation (overrides defaults.compose_provider)
+	ComposeProvider string `yaml:"compose_provider,omitempty"`
+
 	// Chain-level LLM backend override
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 

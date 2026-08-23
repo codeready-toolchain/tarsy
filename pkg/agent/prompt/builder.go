@@ -152,6 +152,16 @@ func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis string) st
 	return fmt.Sprintf(executiveSummaryUserTemplate, finalAnalysis)
 }
 
+// BuildComposeSystemPrompt returns the system prompt for compose (amended-report) generation.
+func (b *PromptBuilder) BuildComposeSystemPrompt() string {
+	return composeSystemPrompt
+}
+
+// BuildComposeUserPrompt builds the user prompt from the upstream report and action memo.
+func (b *PromptBuilder) BuildComposeUserPrompt(upstreamReport, actionMemo string) string {
+	return fmt.Sprintf(composeUserTemplate, upstreamReport, actionMemo)
+}
+
 func (b *PromptBuilder) BuildScoringSystemPrompt() string {
 	return judgeSystemPrompt
 }

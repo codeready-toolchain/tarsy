@@ -28,8 +28,6 @@ Additionally, executive summary generation is refactored from a special-cased di
 
 ### Stage Type Enum
 
-Five values:
-
 | Value | Description | Created by |
 |-------|-------------|------------|
 | `investigation` | From chain config stage | Session executor (default) |
@@ -37,6 +35,7 @@ Five values:
 | `chat` | User follow-up chat message | Chat path |
 | `exec_summary` | Executive summary of the investigation | Session executor (after refactor) |
 | `scoring` | Quality evaluation | Scoring path (reserved) |
+| `compose` | Amended report after an action stage | Session executor (reserved until PR 2) |
 
 All values exist in the schema from the initial rollout; `exec_summary` and `scoring` gain creation paths when their features are wired. Stage creation remains internal — executors call the stage service; the enum provides schema-level validation.
 

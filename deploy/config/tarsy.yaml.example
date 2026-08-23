@@ -140,6 +140,9 @@ system:
 defaults:
   # Default LLM provider for all agents/chains
   llm_provider: "google-default"
+
+  # Mid-tier provider for compose (amended-report) generation
+  compose_provider: "google-default"
   
   # Default max iterations (forces conclusion when reached, no pause/resume)
   max_iterations: 20

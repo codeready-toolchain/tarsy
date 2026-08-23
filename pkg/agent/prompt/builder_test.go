@@ -143,6 +143,26 @@ func TestBuildExecutiveSummaryPrompts(t *testing.T) {
 	assert.Contains(t, userPrompt, "The root cause was OOM.")
 }
 
+func TestBuildComposePrompts(t *testing.T) {
+	builder := newBuilderForTest()
+
+	systemPrompt := builder.BuildComposeSystemPrompt()
+	assert.Contains(t, systemPrompt, "copy-editor")
+	assert.Contains(t, systemPrompt, "Those two tracks are not interchangeable")
+	assert.Contains(t, systemPrompt, "restarting a pod does not fulfill a recommendation to change a resource limit")
+	assert.Contains(t, systemPrompt, "Do not invent a TARSy-standard template")
+	assert.Contains(t, systemPrompt, "Do not improve prose")
+	assert.Contains(t, systemPrompt, "Do not drop sections")
+
+	userPrompt := builder.BuildComposeUserPrompt("upstream findings", "no action taken")
+	assert.Contains(t, userPrompt, "=== UPSTREAM REPORT ===")
+	assert.Contains(t, userPrompt, "=== END UPSTREAM REPORT ===")
+	assert.Contains(t, userPrompt, "=== ACTION MEMO ===")
+	assert.Contains(t, userPrompt, "=== END ACTION MEMO ===")
+	assert.Contains(t, userPrompt, "upstream findings")
+	assert.Contains(t, userPrompt, "no action taken")
+}
+
 func TestBuildFunctionCallingMessages_ChatMode(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()

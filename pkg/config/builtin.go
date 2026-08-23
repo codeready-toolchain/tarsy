@@ -39,6 +39,7 @@ const (
 	AgentNameExecSummary = "ExecSummaryAgent"
 	AgentNameSynthesis   = "SynthesisAgent"
 	AgentNameScoring     = "ScoringAgent"
+	AgentNameCompose     = "ComposeAgent"
 )
 
 var (
@@ -80,6 +81,17 @@ func initBuiltinAgents() map[string]BuiltinAgentConfig {
 			Description: "Generates executive summary of the investigation",
 			Type:        AgentTypeExecSummary,
 			// No MCP servers — single-shot, no tools
+		},
+		AgentNameCompose: {
+			Description: "Amends the upstream investigation report with the action outcome",
+			Type:        AgentTypeCompose,
+			// No MCP servers — single-shot. Native tools must be explicitly
+			// off: omitting them inherits Gemini google_search / url_context.
+			NativeTools: map[GoogleNativeTool]bool{
+				GoogleNativeToolGoogleSearch:  false,
+				GoogleNativeToolURLContext:    false,
+				GoogleNativeToolCodeExecution: false,
+			},
 		},
 		AgentNameScoring: {
 			Description: "Evaluates session quality via a multi-turn LLM conversation",

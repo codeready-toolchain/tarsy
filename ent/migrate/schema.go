@@ -343,7 +343,7 @@ var (
 	LlmInteractionsColumns = []*schema.Column{
 		{Name: "interaction_id", Type: field.TypeString, Unique: true},
 		{Name: "created_at", Type: field.TypeTime},
-		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring", "memory_extraction"}},
+		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring", "memory_extraction", "composition"}},
 		{Name: "model_name", Type: field.TypeString},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
@@ -644,7 +644,7 @@ var (
 		{Name: "expected_agent_count", Type: field.TypeInt},
 		{Name: "parallel_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"multi_agent", "replica"}},
 		{Name: "success_policy", Type: field.TypeEnum, Nullable: true, Enums: []string{"all", "any"}},
-		{Name: "stage_type", Type: field.TypeEnum, Enums: []string{"investigation", "synthesis", "chat", "exec_summary", "scoring", "action"}, Default: "investigation"},
+		{Name: "stage_type", Type: field.TypeEnum, Enums: []string{"investigation", "synthesis", "chat", "exec_summary", "scoring", "action", "compose"}, Default: "investigation"},
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "active", "completed", "failed", "timed_out", "cancelled"}, Default: "pending"},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "completed_at", Type: field.TypeTime, Nullable: true},

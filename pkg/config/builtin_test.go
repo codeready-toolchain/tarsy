@@ -104,6 +104,12 @@ func TestBuiltinAgents(t *testing.T) {
 			wantType: AgentTypeExecSummary,
 		},
 		{
+			name:     AgentNameCompose,
+			agentID:  AgentNameCompose,
+			wantDesc: "Amends the upstream investigation report with the action outcome",
+			wantType: AgentTypeCompose,
+		},
+		{
 			name:     AgentNameScoring,
 			agentID:  AgentNameScoring,
 			wantDesc: "Evaluates session quality via a multi-turn LLM conversation",
@@ -169,6 +175,26 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 		require.True(t, exists)
 		assert.Empty(t, agent.LLMBackend)
 		assert.Nil(t, agent.NativeTools)
+	})
+
+	t.Run("ComposeAgent has native tools explicitly disabled", func(t *testing.T) {
+		agent, exists := cfg.Agents[AgentNameCompose]
+		require.True(t, exists)
+		assert.Equal(t, AgentTypeCompose, agent.Type)
+		assert.Empty(t, agent.MCPServers)
+		require.NotNil(t, agent.NativeTools)
+
+		val, present := agent.NativeTools[GoogleNativeToolGoogleSearch]
+		assert.True(t, present, "GoogleSearch key must be explicitly present")
+		assert.False(t, val)
+
+		val, present = agent.NativeTools[GoogleNativeToolURLContext]
+		assert.True(t, present, "URLContext key must be explicitly present")
+		assert.False(t, val)
+
+		val, present = agent.NativeTools[GoogleNativeToolCodeExecution]
+		assert.True(t, present, "CodeExecution key must be explicitly present")
+		assert.False(t, val)
 	})
 }
 

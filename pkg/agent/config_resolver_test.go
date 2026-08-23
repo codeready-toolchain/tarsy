@@ -1726,6 +1726,141 @@ func TestResolveExecSummaryConfig(t *testing.T) {
 	})
 }
 
+func TestResolveComposeConfig(t *testing.T) {
+	defaults := &config.Defaults{
+		LLMProvider:     "google-default",
+		ComposeProvider: "anthropic-default",
+		LLMBackend:      config.LLMBackendLangChain,
+	}
+
+	googleProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	openaiProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeOpenAI,
+		Model:     "gpt-5",
+		APIKeyEnv: "OPENAI_API_KEY",
+	}
+	anthropicProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeAnthropic,
+		Model:     "claude-sonnet",
+		APIKeyEnv: "ANTHROPIC_API_KEY",
+	}
+
+	cfg := &config.Config{
+		Defaults: defaults,
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			config.AgentNameCompose: {Type: config.AgentTypeCompose, LLMBackend: config.LLMBackendLangChain},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default":    googleProvider,
+			"openai-default":    openaiProvider,
+			"anthropic-default": anthropicProvider,
+		}),
+	}
+
+	t.Run("uses ComposeAgent type", func(t *testing.T) {
+		resolved, err := ResolveComposeConfig(cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, config.AgentNameCompose, resolved.AgentName)
+		assert.Equal(t, config.AgentTypeCompose, resolved.Type)
+	})
+
+	t.Run("defaults.compose_provider beats chain.llm_provider", func(t *testing.T) {
+		chain := &config.ChainConfig{LLMProvider: "openai-default"}
+		resolved, err := ResolveComposeConfig(cfg, chain)
+		require.NoError(t, err)
+		assert.Equal(t, anthropicProvider, resolved.LLMProvider)
+		assert.Equal(t, "anthropic-default", resolved.LLMProviderName)
+	})
+
+	t.Run("chain.compose_provider beats defaults.compose_provider", func(t *testing.T) {
+		chain := &config.ChainConfig{
+			LLMProvider:     "openai-default",
+			ComposeProvider: "google-default",
+		}
+		resolved, err := ResolveComposeConfig(cfg, chain)
+		require.NoError(t, err)
+		assert.Equal(t, googleProvider, resolved.LLMProvider)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+	})
+
+	t.Run("falls back to chain.llm_provider when compose knobs unset", func(t *testing.T) {
+		cfgNoComposeDefault := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameCompose: {Type: config.AgentTypeCompose},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{LLMProvider: "openai-default"}
+		resolved, err := ResolveComposeConfig(cfgNoComposeDefault, chain)
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+	})
+
+	t.Run("nil chain returns error", func(t *testing.T) {
+		_, err := ResolveComposeConfig(cfg, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("unknown provider returns error", func(t *testing.T) {
+		chain := &config.ChainConfig{ComposeProvider: "nonexistent-provider"}
+		_, err := ResolveComposeConfig(cfg, chain)
+		assert.Error(t, err)
+	})
+
+	t.Run("missing ComposeAgent returns error", func(t *testing.T) {
+		cfgNoAgent := &config.Config{
+			Defaults:            defaults,
+			AgentRegistry:       config.NewAgentRegistry(map[string]*config.AgentConfig{}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		_, err := ResolveComposeConfig(cfgNoAgent, &config.ChainConfig{})
+		assert.Error(t, err)
+	})
+
+	t.Run("all-false native tools strip inherited Gemini tools", func(t *testing.T) {
+		googleWithNative := &config.LLMProviderConfig{
+			Type:      config.LLMProviderTypeGoogle,
+			Model:     "gemini-2.5-pro",
+			APIKeyEnv: "GOOGLE_API_KEY",
+			NativeTools: map[config.GoogleNativeTool]bool{
+				config.GoogleNativeToolGoogleSearch: true,
+				config.GoogleNativeToolURLContext:   true,
+			},
+		}
+		nativeCfg := &config.Config{
+			Defaults: &config.Defaults{LLMProvider: "google-default"},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameCompose: {
+					Type: config.AgentTypeCompose,
+					NativeTools: map[config.GoogleNativeTool]bool{
+						config.GoogleNativeToolGoogleSearch:  false,
+						config.GoogleNativeToolURLContext:    false,
+						config.GoogleNativeToolCodeExecution: false,
+					},
+				},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": googleWithNative,
+			}),
+		}
+
+		resolved, err := ResolveComposeConfig(nativeCfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.False(t, resolved.RequiresNativeTools)
+		require.NotNil(t, resolved.LLMProvider)
+		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
+		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolURLContext])
+		assert.False(t, resolved.LLMProvider.NativeTools[config.GoogleNativeToolCodeExecution])
+		assert.True(t, googleWithNative.NativeTools[config.GoogleNativeToolGoogleSearch],
+			"original provider must not be mutated")
+	})
+}
+
 func TestResolveSkills(t *testing.T) {
 	registry := config.NewSkillRegistry(map[string]*config.SkillConfig{
 		"kubernetes-basics": {

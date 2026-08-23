@@ -421,8 +421,9 @@ func TestSystemConfigHandler(t *testing.T) {
 		s := &Server{
 			cfg: &config.Config{
 				Defaults: &config.Defaults{
-					LLMProvider:   "google-default",
-					MaxIterations: &maxIter,
+					LLMProvider:     "google-default",
+					ComposeProvider: "google-default",
+					MaxIterations:   &maxIter,
 					LLMBackend:    config.LLMBackendNativeGemini,
 					Summarization: &config.SummarizationConfig{
 						LLMProvider: "google-default",
@@ -466,9 +467,10 @@ func TestSystemConfigHandler(t *testing.T) {
 						},
 					},
 					"alpha-chain": {
-						AlertTypes:  []string{"AlphaAlert"},
-						Description: "A chain",
-						LLMProvider: "google-default",
+						AlertTypes:      []string{"AlphaAlert"},
+						Description:     "A chain",
+						LLMProvider:     "google-default",
+						ComposeProvider: "google-default",
 						Stages: []config.StageConfig{
 							{
 								Name: "investigate",
@@ -495,6 +497,7 @@ func TestSystemConfigHandler(t *testing.T) {
 
 		require.NotNil(t, resp.Defaults)
 		assert.Equal(t, "google-default", resp.Defaults.LLMProvider)
+		assert.Equal(t, "google-default", resp.Defaults.ComposeProvider)
 		require.NotNil(t, resp.Defaults.Summarization)
 		assert.Equal(t, "google-default", resp.Defaults.Summarization.LLMProvider)
 		assert.Equal(t, "langchain", resp.Defaults.Summarization.LLMBackend)
@@ -522,6 +525,7 @@ func TestSystemConfigHandler(t *testing.T) {
 		alpha := resp.Chains["alpha-chain"]
 		assert.Equal(t, []string{"AlphaAlert"}, alpha.AlertTypes)
 		assert.Equal(t, "google-default", alpha.LLMProvider)
+		assert.Equal(t, "google-default", alpha.ComposeProvider)
 		require.Len(t, alpha.Stages, 1)
 		assert.Equal(t, "investigate", alpha.Stages[0].Name)
 		require.NotNil(t, alpha.Chat)

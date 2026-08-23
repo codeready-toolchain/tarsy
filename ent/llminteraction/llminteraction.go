@@ -162,6 +162,7 @@ const (
 	InteractionTypeForcedConclusion InteractionType = "forced_conclusion"
 	InteractionTypeScoring          InteractionType = "scoring"
 	InteractionTypeMemoryExtraction InteractionType = "memory_extraction"
+	InteractionTypeComposition      InteractionType = "composition"
 )
 
 func (it InteractionType) String() string {
@@ -171,7 +172,7 @@ func (it InteractionType) String() string {
 // InteractionTypeValidator is a validator for the "interaction_type" field enum values. It is called by the builders before save.
 func InteractionTypeValidator(it InteractionType) error {
 	switch it {
-	case InteractionTypeIteration, InteractionTypeFinalAnalysis, InteractionTypeExecutiveSummary, InteractionTypeChatResponse, InteractionTypeSummarization, InteractionTypeSynthesis, InteractionTypeForcedConclusion, InteractionTypeScoring, InteractionTypeMemoryExtraction:
+	case InteractionTypeIteration, InteractionTypeFinalAnalysis, InteractionTypeExecutiveSummary, InteractionTypeChatResponse, InteractionTypeSummarization, InteractionTypeSynthesis, InteractionTypeForcedConclusion, InteractionTypeScoring, InteractionTypeMemoryExtraction, InteractionTypeComposition:
 		return nil
 	default:
 		return fmt.Errorf("llminteraction: invalid enum value for interaction_type field: %q", it)

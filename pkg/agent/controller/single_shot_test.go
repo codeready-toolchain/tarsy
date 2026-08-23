@@ -386,6 +386,65 @@ func TestExecSummaryController_NoThinkingFallback(t *testing.T) {
 	require.Equal(t, maxEmptyResponseRetries+1, llm.callCount, "should exhaust empty retries")
 }
 
+func TestComposeController_NoThinkingFallback(t *testing.T) {
+	responses := make([]mockLLMResponse, maxEmptyResponseRetries+1)
+	for i := range responses {
+		responses[i] = mockLLMResponse{chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me think about this..."},
+		}}
+	}
+
+	llm := &mockLLMClient{responses: responses}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.ComposeUpstreamReport = "Investigation findings."
+	execCtx.ComposeActionMemo = "No action taken."
+	ctrl := NewComposeController(execCtx.PromptBuilder)
+
+	result, err := ctrl.Run(t.Context(), execCtx, "")
+	require.NoError(t, err)
+	require.Empty(t, result.FinalAnalysis)
+	require.Equal(t, maxEmptyResponseRetries+1, llm.callCount, "should exhaust empty retries")
+}
+
+func TestComposeController_HappyPath(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Amended report with action outcome folded in."},
+				&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+			}},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.ComposeUpstreamReport = "Root cause: OOM in web-1."
+	execCtx.ComposeActionMemo = "No action taken. Memory change needs a CR."
+	ctrl := NewComposeController(execCtx.PromptBuilder)
+
+	prevStageContext := "this previous-stage blob must not appear in compose prompts"
+	result, err := ctrl.Run(t.Context(), execCtx, prevStageContext)
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Contains(t, result.FinalAnalysis, "Amended report")
+	require.Equal(t, 100, result.TokensUsed.TotalTokens)
+	require.Equal(t, 1, llm.callCount)
+
+	require.NotNil(t, llm.lastInput)
+	require.GreaterOrEqual(t, len(llm.lastInput.Messages), 2)
+	require.Nil(t, llm.lastInput.Tools)
+
+	systemMsg := llm.lastInput.Messages[0]
+	userMsg := llm.lastInput.Messages[1]
+	require.Equal(t, agent.RoleSystem, systemMsg.Role)
+	require.Contains(t, systemMsg.Content, "copy-editor")
+	require.Equal(t, agent.RoleUser, userMsg.Role)
+	require.Contains(t, userMsg.Content, "=== UPSTREAM REPORT ===")
+	require.Contains(t, userMsg.Content, "Root cause: OOM in web-1.")
+	require.Contains(t, userMsg.Content, "=== ACTION MEMO ===")
+	require.Contains(t, userMsg.Content, "No action taken. Memory change needs a CR.")
+	require.NotContains(t, userMsg.Content, prevStageContext)
+}
+
 func TestSingleShotController_EmptyResponseRetry(t *testing.T) {
 	// First call returns empty, second succeeds.
 	llm := &mockLLMClient{
