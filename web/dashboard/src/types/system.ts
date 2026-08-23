@@ -267,6 +267,7 @@ export interface ChainConfigView {
   scoring?: ScoringView | null;
   llm_provider?: string;
   executive_summary_provider?: string;
+  compose_provider?: string;
   llm_backend?: string;
   fallback_providers?: FallbackProviderView[];
   max_iterations?: number | null;
@@ -305,6 +306,7 @@ export interface MCPSummarizationView extends SummarizationView {
 
 export interface DefaultsView {
   llm_provider?: string;
+  compose_provider?: string;
   max_iterations?: number | null;
   llm_backend?: string;
   fallback_providers?: FallbackProviderView[];

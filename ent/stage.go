@@ -32,7 +32,7 @@ type Stage struct {
 	ParallelType *stage.ParallelType `json:"parallel_type,omitempty"`
 	// null if count=1, 'all'/'any' if count>1
 	SuccessPolicy *stage.SuccessPolicy `json:"success_policy,omitempty"`
-	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation)
+	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation), compose (amended report after action)
 	StageType stage.StageType `json:"stage_type,omitempty"`
 	// Status holds the value of the "status" field.
 	Status stage.Status `json:"status,omitempty"`
@@ -48,7 +48,7 @@ type Stage struct {
 	ChatID *string `json:"chat_id,omitempty"`
 	// ChatUserMessageID holds the value of the "chat_user_message_id" field.
 	ChatUserMessageID *string `json:"chat_user_message_id,omitempty"`
-	// FK to another stage in the same session (e.g. synthesis -> investigation)
+	// FK to another stage in the same session (e.g. synthesis -> investigation, compose -> action)
 	ReferencedStageID *string `json:"referenced_stage_id,omitempty"`
 	// Whether the action agent executed any remediation tools (null for non-action stages)
 	ActionsExecuted *bool `json:"actions_executed,omitempty"`

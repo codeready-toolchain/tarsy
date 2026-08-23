@@ -36,6 +36,7 @@ Add an optional `referenced_stage_id` column to the `stages` table as a self-ref
 | `chat` | NULL | Chats are session-scoped, not stage-scoped |
 | `exec_summary` | NULL | Summarizes entire session |
 | `scoring` | NULL | Evaluates entire session |
+| `compose` | Points to the triggering action stage | Amended-report sibling |
 
 The field is modeled in the ORM with a self-referential relationship consistent with other stage FKs. A reverse “referencing stages” relation may be generated even if rarely queried — acceptable for consistency.
 

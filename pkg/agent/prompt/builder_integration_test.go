@@ -401,6 +401,19 @@ func TestIntegration_ExecutiveSummary(t *testing.T) {
 	assertGolden(t, "executive_summary", combined)
 }
 
+func TestIntegration_Compose(t *testing.T) {
+	builder := newIntegrationBuilder()
+
+	systemPrompt := builder.BuildComposeSystemPrompt()
+	userPrompt := builder.BuildComposeUserPrompt(
+		"## Findings\nRoot cause: OOM kill due to memory leak in pod-1.\n\n## Recommendations\n- Increase memory limit to 1Gi.",
+		"No action taken. Memory limit change requires a change request.",
+	)
+
+	combined := systemPrompt + "\n\n=== USER PROMPT ===\n\n" + userPrompt
+	assertGolden(t, "compose", combined)
+}
+
 // ===========================================================================
 // Sanity checks: verify golden files match expected structural properties
 // ===========================================================================

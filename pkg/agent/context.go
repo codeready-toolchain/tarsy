@@ -46,6 +46,10 @@ type ExecutionContext struct {
 	// Implemented by prompt.PromptBuilder; interface avoids agent↔prompt import cycle.
 	PromptBuilder PromptBuilder
 
+	// Compose inputs (set by the executor for compose stages; empty otherwise).
+	ComposeUpstreamReport string
+	ComposeActionMemo     string
+
 	// Chat context (nil for non-chat sessions)
 	ChatContext *ChatContext
 
@@ -198,6 +202,8 @@ type PromptBuilder interface {
 	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
 	BuildExecutiveSummarySystemPrompt() string
 	BuildExecutiveSummaryUserPrompt(finalAnalysis string) string
+	BuildComposeSystemPrompt() string
+	BuildComposeUserPrompt(upstreamReport, actionMemo string) string
 	BuildScoringSystemPrompt() string
 	BuildScoringInitialPrompt(sessionInvestigationContext, outputSchema string) string
 	BuildScoringOutputSchemaReminderPrompt(outputSchema string) string

@@ -44,6 +44,14 @@ func (m *mockScoringPromptBuilder) BuildExecutiveSummaryUserPrompt(_ string) str
 	panic("unexpected call")
 }
 
+func (m *mockScoringPromptBuilder) BuildComposeSystemPrompt() string {
+	panic("unexpected call")
+}
+
+func (m *mockScoringPromptBuilder) BuildComposeUserPrompt(_, _ string) string {
+	panic("unexpected call")
+}
+
 func (m *mockScoringPromptBuilder) MCPServerRegistry() *config.MCPServerRegistry {
 	panic("unexpected call")
 }

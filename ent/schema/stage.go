@@ -46,9 +46,9 @@ func (Stage) Fields() []ent.Field {
 
 		// Stage Type
 		field.Enum("stage_type").
-			Values("investigation", "synthesis", "chat", "exec_summary", "scoring", "action").
+			Values("investigation", "synthesis", "chat", "exec_summary", "scoring", "action", "compose").
 			Default("investigation").
-			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation)"),
+			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation), compose (amended report after action)"),
 
 		// Stage-Level Status & Timing (aggregated from agent executions)
 		field.Enum("status").
@@ -83,7 +83,7 @@ func (Stage) Fields() []ent.Field {
 		field.String("referenced_stage_id").
 			Optional().
 			Nillable().
-			Comment("FK to another stage in the same session (e.g. synthesis -> investigation)"),
+			Comment("FK to another stage in the same session (e.g. synthesis -> investigation, compose -> action)"),
 
 		// Action stage outcome
 		field.Bool("actions_executed").

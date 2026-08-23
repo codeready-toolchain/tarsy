@@ -81,6 +81,23 @@ func TestFactory_CreateController(t *testing.T) {
 		assert.True(t, ok, "expected SingleShotController")
 	})
 
+	t.Run("compose type returns SingleShotController", func(t *testing.T) {
+		pb := prompt.NewPromptBuilder(config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{}), nil)
+		composeExecCtx := &agent.ExecutionContext{
+			SessionID:     "test-session",
+			StageID:       "test-stage",
+			AgentName:     "test-agent",
+			AgentIndex:    1,
+			PromptBuilder: pb,
+		}
+		controller, err := factory.CreateController(config.AgentTypeCompose, composeExecCtx)
+		require.NoError(t, err)
+		require.NotNil(t, controller)
+
+		_, ok := controller.(*SingleShotController)
+		assert.True(t, ok, "expected SingleShotController")
+	})
+
 	t.Run("action type returns IteratingController", func(t *testing.T) {
 		controller, err := factory.CreateController(config.AgentTypeAction, execCtx)
 		require.NoError(t, err)

@@ -6,6 +6,9 @@ type Defaults struct {
 	// LLM provider default for all agents/chains
 	LLMProvider string `yaml:"llm_provider,omitempty"`
 
+	// LLM provider for compose (amended-report) generation. Beats chain.llm_provider.
+	ComposeProvider string `yaml:"compose_provider,omitempty"`
+
 	// Max iterations default (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 

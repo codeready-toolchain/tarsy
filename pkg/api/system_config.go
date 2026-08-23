@@ -85,6 +85,7 @@ type ChainView struct {
 	Scoring                  *ScoringView           `json:"scoring,omitempty"`
 	LLMProvider              string                 `json:"llm_provider,omitempty"`
 	ExecutiveSummaryProvider string                 `json:"executive_summary_provider,omitempty"`
+	ComposeProvider          string                 `json:"compose_provider,omitempty"`
 	LLMBackend               string                 `json:"llm_backend,omitempty"`
 	FallbackProviders        []FallbackProviderView `json:"fallback_providers,omitempty"`
 	MaxIterations            *int                   `json:"max_iterations,omitempty"`
@@ -201,6 +202,7 @@ type SkillMetaView struct {
 // DefaultsView is system-wide defaults.
 type DefaultsView struct {
 	LLMProvider       string                 `json:"llm_provider,omitempty"`
+	ComposeProvider   string                 `json:"compose_provider,omitempty"`
 	MaxIterations     *int                   `json:"max_iterations,omitempty"`
 	LLMBackend        string                 `json:"llm_backend,omitempty"`
 	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
@@ -395,6 +397,7 @@ func buildDefaultsView(d *config.Defaults) *DefaultsView {
 	}
 	view := &DefaultsView{
 		LLMProvider:       d.LLMProvider,
+		ComposeProvider:   d.ComposeProvider,
 		MaxIterations:     d.MaxIterations,
 		LLMBackend:        string(d.LLMBackend),
 		FallbackProviders: buildFallbackProviders(d.FallbackProviders),
@@ -638,6 +641,7 @@ func buildChainView(c *config.ChainConfig) ChainView {
 		Scoring:                  buildScoringView(c.Scoring),
 		LLMProvider:              c.LLMProvider,
 		ExecutiveSummaryProvider: c.ExecutiveSummaryProvider,
+		ComposeProvider:          c.ComposeProvider,
 		LLMBackend:               string(c.LLMBackend),
 		FallbackProviders:        buildFallbackProviders(c.FallbackProviders),
 		MaxIterations:            c.MaxIterations,

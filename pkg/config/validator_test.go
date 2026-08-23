@@ -92,6 +92,27 @@ func TestValidateAgents(t *testing.T) {
 			errMsg:  "invalid agent type",
 		},
 		{
+			name: "YAML type compose is rejected",
+			agents: map[string]*AgentConfig{
+				"my-agent": {
+					Type: AgentTypeCompose,
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: true,
+			errMsg:  "executor-only",
+		},
+		{
+			name: "builtin ComposeAgent with type compose is allowed",
+			agents: map[string]*AgentConfig{
+				AgentNameCompose: {
+					Type: AgentTypeCompose,
+				},
+			},
+			servers: map[string]*MCPServerConfig{},
+			wantErr: false,
+		},
+		{
 			name: "agent with invalid LLM backend",
 			agents: map[string]*AgentConfig{
 				"test-agent": {
@@ -318,6 +339,27 @@ func TestValidateChains(t *testing.T) {
 			providers: map[string]*LLMProviderConfig{},
 			wantErr:   true,
 			errMsg:    "LLM provider 'invalid-provider' not found",
+		},
+		{
+			name: "chain with invalid compose_provider",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:      []string{"test"},
+					ComposeProvider: "invalid-compose",
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "compose_provider",
 		},
 		{
 			name: "multiple chains with duplicate alert type",
@@ -1287,6 +1329,27 @@ func TestValidateStageComprehensive(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "stage with type compose is rejected",
+			stage: StageConfig{
+				Name: "stage1",
+				Agents: []StageAgentConfig{
+					{
+						Name: "test-agent",
+						Type: AgentTypeCompose,
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "executor-only",
+		},
+		{
 			name: "stage with invalid agent LLM backend",
 			stage: StageConfig{
 				Name: "stage1",
@@ -2205,6 +2268,14 @@ func TestValidateDefaults(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "pattern_group is required when alert masking is enabled",
+		},
+		{
+			name: "unknown compose_provider fails",
+			defaults: &Defaults{
+				ComposeProvider: "no-such-provider",
+			},
+			wantErr: true,
+			errMsg:  "compose_provider",
 		},
 	}
 
@@ -3846,7 +3917,8 @@ func TestValidateFallbackProviders(t *testing.T) {
 func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
-			LLMProvider: "defaults-primary",
+			LLMProvider:     "defaults-primary",
+			ComposeProvider: "defaults-compose",
 			FallbackProviders: []FallbackProviderEntry{
 				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
 			},
@@ -3867,7 +3939,8 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 		}),
 		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 			"chain1": {
-				AlertTypes: []string{"test"},
+				AlertTypes:      []string{"test"},
+				ComposeProvider: "chain-compose",
 				FallbackProviders: []FallbackProviderEntry{
 					{Provider: "chain-fallback", Backend: LLMBackendLangChain},
 				},
@@ -3907,9 +3980,11 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 	referenced := validator.collectReferencedLLMProviders()
 
 	assert.True(t, referenced["defaults-primary"], "defaults primary provider should be referenced")
+	assert.True(t, referenced["defaults-compose"], "defaults compose provider should be referenced")
 	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
 	assert.True(t, referenced["defaults-summarization"], "defaults summarization provider should be referenced")
 	assert.True(t, referenced["mcp-summarization"], "MCP server summarization provider should be referenced")
+	assert.True(t, referenced["chain-compose"], "chain compose provider should be referenced")
 	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
 	assert.True(t, referenced["chain-subagent"], "chain sub-agent provider should be referenced")
 	assert.True(t, referenced["chat-subagent"], "chat.sub_agents provider should be referenced")

@@ -65,6 +65,21 @@ func NewExecSummaryController(pb agent.PromptBuilder) *SingleShotController {
 	})
 }
 
+// NewComposeController creates a SingleShotController configured for compose.
+// Upstream report and action memo are read from ExecutionContext (not prevStageContext).
+func NewComposeController(pb agent.PromptBuilder) *SingleShotController {
+	return NewSingleShotController(SingleShotConfig{
+		BuildMessages: func(execCtx *agent.ExecutionContext, _ string) []agent.ConversationMessage {
+			return []agent.ConversationMessage{
+				{Role: agent.RoleSystem, Content: pb.BuildComposeSystemPrompt()},
+				{Role: agent.RoleUser, Content: pb.BuildComposeUserPrompt(execCtx.ComposeUpstreamReport, execCtx.ComposeActionMemo)},
+			}
+		},
+		ThinkingFallback: false,
+		InteractionLabel: llminteraction.InteractionTypeComposition,
+	})
+}
+
 // Run executes a single LLM call and returns the result.
 func (c *SingleShotController) Run(
 	ctx context.Context,
