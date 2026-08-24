@@ -621,11 +621,17 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.
 	if err != nil {
 		return result
 	}
+	var latestCompose *ent.Stage
 	for _, stg := range stages {
 		if stg.StageType != stage.StageTypeCompose {
 			continue
 		}
-		if fa := extractFinalAnalysisFromStage(ctx, e.timelineService, stg); fa != "" {
+		if latestCompose == nil || stg.StageIndex > latestCompose.StageIndex {
+			latestCompose = stg
+		}
+	}
+	if latestCompose != nil {
+		if fa := extractFinalAnalysisFromStage(ctx, e.timelineService, latestCompose); fa != "" {
 			result += "\n\n## AMENDED REPORT\n\n" + fa
 		}
 	}

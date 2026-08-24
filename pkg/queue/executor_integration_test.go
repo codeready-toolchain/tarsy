@@ -2146,6 +2146,40 @@ func TestCountExpectedStages(t *testing.T) {
 		// 1 config + 0 synthesis + 0 compose + 1 executive summary = 2
 		assert.Equal(t, 2, countExpectedStages(cfg, chain))
 	})
+
+	t.Run("investigation then consecutive actions adds compose per action", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Investigator": {Type: config.AgentTypeDefault},
+				"Remediator":   {Type: config.AgentTypeAction},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Investigator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+			},
+		}
+		// 3 config + 0 synthesis + 2 compose + 1 executive summary = 6
+		assert.Equal(t, 6, countExpectedStages(cfg, chain))
+	})
+
+	t.Run("consecutive action-only stages do not add compose", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Remediator": {Type: config.AgentTypeAction},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+			},
+		}
+		// 2 config + 0 synthesis + 0 compose + 1 executive summary = 3
+		assert.Equal(t, 3, countExpectedStages(cfg, chain))
+	})
 }
 
 // ────────────────────────────────────────────────────────────
@@ -2928,6 +2962,39 @@ func TestExecutor_ActionOnlyChainSkipsCompose(t *testing.T) {
 	require.Len(t, stages, 2)
 	assert.Equal(t, stage.StageTypeAction, stages[0].StageType)
 	assert.Equal(t, stage.StageTypeExecSummary, stages[1].StageType)
+}
+
+func TestExecutor_ActionOnlyConsecutiveStagesSkipCompose(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{Name: "take-action-1", Agents: []config.StageAgentConfig{{Name: "ActionAgent"}}},
+			{Name: "take-action-2", Agents: []config.StageAgentConfig{{Name: "ActionAgent"}}},
+		},
+	}
+	cfg := actionComposeTestConfig(chain, nil)
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-1"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-2"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary of consecutive action-only chain."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "ACTION-MEMO-2", result.FinalAnalysis)
+
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 3)
+	assert.Equal(t, stage.StageTypeAction, stages[0].StageType)
+	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
 }
 
 func TestExecutor_ComposeLLMFailureConcatAndContinues(t *testing.T) {

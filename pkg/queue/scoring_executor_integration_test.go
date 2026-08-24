@@ -517,6 +517,62 @@ func TestScoringExecutor_BuildScoringContext_FiltersStageTypes(t *testing.T) {
 	assertGolden(t, "context_filters_stage_types", result)
 }
 
+func TestScoringExecutor_BuildScoringContext_UsesLatestComposeReport(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+	ctx := t.Context()
+
+	chainID := "test-chain"
+	cfg := scoringTestConfig(chainID, true)
+
+	executor := NewScoringExecutor(cfg, entClient, &mockLLMClient{}, &testEventPublisher{}, nil, nil)
+	session := createScoringTestSession(t, entClient, chainID, alertsession.StatusCompleted)
+
+	createComposeWithFA := func(name string, idx int, fa string) {
+		t.Helper()
+		stgID := uuid.New().String()
+		_, err := entClient.Stage.Create().
+			SetID(stgID).
+			SetSessionID(session.ID).
+			SetStageName(name).
+			SetStageIndex(idx).
+			SetExpectedAgentCount(1).
+			SetStageType(stage.StageTypeCompose).
+			Save(ctx)
+		require.NoError(t, err)
+
+		execID := uuid.New().String()
+		_, err = entClient.AgentExecution.Create().
+			SetID(execID).
+			SetStageID(stgID).
+			SetSessionID(session.ID).
+			SetAgentName("ComposeAgent").
+			SetAgentIndex(1).
+			SetLlmBackend("langchain").
+			SetStatus("completed").
+			Save(ctx)
+		require.NoError(t, err)
+
+		_, err = entClient.TimelineEvent.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(session.ID).
+			SetStageID(stgID).
+			SetExecutionID(execID).
+			SetSequenceNumber(1).
+			SetEventType(timelineevent.EventTypeFinalAnalysis).
+			SetContent(fa).
+			Save(ctx)
+		require.NoError(t, err)
+	}
+
+	createComposeWithFA("take-action-1 - Amended Report", 2, "EARLIER-AMENDED-REPORT")
+	createComposeWithFA("take-action-2 - Amended Report", 5, "LATEST-AMENDED-REPORT")
+
+	result := executor.buildScoringContext(ctx, session)
+	assert.Contains(t, result, "## AMENDED REPORT")
+	assert.Contains(t, result, "LATEST-AMENDED-REPORT")
+	assert.NotContains(t, result, "EARLIER-AMENDED-REPORT")
+}
+
 func TestScoringExecutor_BuildScoringContext_EmptyForNoStages(t *testing.T) {
 	entClient, _ := util.SetupTestDatabase(t)
 

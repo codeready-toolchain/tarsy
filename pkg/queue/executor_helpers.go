@@ -399,9 +399,9 @@ func applyNativeToolsOverride(resolvedConfig *agent.ResolvedAgentConfig, nt *mod
 
 // countExpectedStages computes the total number of progress steps for the chain,
 // including synthesis stages (for multi-agent/replica stages), compose stages
-// (one per action stage that has an earlier investigation), and the executive
-// summary step. Used for accurate progress reporting so CurrentStageIndex never
-// exceeds TotalStages.
+// (one per action stage that follows an earlier investigation, including each
+// stage in a consecutive action run), and the executive summary step. Used for
+// accurate progress reporting so CurrentStageIndex never exceeds TotalStages.
 func countExpectedStages(cfg *config.Config, chain *config.ChainConfig) int {
 	total := len(chain.Stages)
 	for _, stageCfg := range chain.Stages {

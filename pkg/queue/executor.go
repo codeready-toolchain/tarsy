@@ -211,6 +211,11 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	prevContext := ""
 	dbStageIndex := 0
 	totalExpectedStages := countExpectedStages(e.cfg, chain)
+	// hasCompletedInvestigation gates compose: extractFinalAnalysis also
+	// considers action memos, which would incorrectly trigger compose on
+	// action-only chains (and exceed countExpectedStages).
+	hasCompletedInvestigation := false
+	composeUpstream := ""
 
 	for _, stageCfg := range chain.Stages {
 		// Check for cancellation between stages
@@ -218,9 +223,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			return r
 		}
 
-		// Snapshot upstream report before this YAML stage is appended so compose
-		// sees investigation / investigation-synthesis / prior compose only.
-		upstreamReport := extractFinalAnalysis(completedStages)
+		// Snapshot compose inputs before this YAML stage is appended.
+		upstreamReport := composeUpstream
 
 		// session progress + stage.status: started are published inside executeStage()
 		// after Stage DB record is created (so stageID is always present)
@@ -302,7 +306,14 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 			completedStages = append(completedStages, sr)
 		}
 
-		if sr.stageType == stage.StageTypeAction && upstreamReport != "" {
+		if sr.stageType == stage.StageTypeInvestigation {
+			hasCompletedInvestigation = true
+			if fa := completedStages[len(completedStages)-1].finalAnalysis; fa != "" {
+				composeUpstream = fa
+			}
+		}
+
+		if sr.stageType == stage.StageTypeAction && hasCompletedInvestigation && upstreamReport != "" {
 			composeSr := e.executeComposeStage(ctx, executeStageInput{
 				session:             session,
 				chain:               chain,
@@ -332,6 +343,9 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 
 			// Fail-open: append even when compose LLM failed (concat is already in finalAnalysis).
 			completedStages = append(completedStages, composeSr)
+			if composeSr.finalAnalysis != "" {
+				composeUpstream = composeSr.finalAnalysis
+			}
 		}
 
 		// Build context for next stage
