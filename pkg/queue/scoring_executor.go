@@ -615,7 +615,21 @@ func (e *ScoringExecutor) Stop(gracePeriod time.Duration) {
 // buildScoringContext builds the complete scoring context including alert data,
 // runbook, available tools per agent, and the investigation timeline.
 func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.AlertSession) string {
-	return e.contextBuilder.Build(ctx, session)
+	result := e.contextBuilder.Build(ctx, session)
+
+	stages, err := e.stageService.GetStagesBySession(ctx, session.ID, true)
+	if err != nil {
+		return result
+	}
+	for _, stg := range stages {
+		if stg.StageType != stage.StageTypeCompose {
+			continue
+		}
+		if fa := extractFinalAnalysisFromStage(ctx, e.timelineService, stg); fa != "" {
+			result += "\n\n## AMENDED REPORT\n\n" + fa
+		}
+	}
+	return result
 }
 
 // ────────────────────────────────────────────────────────────

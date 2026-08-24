@@ -15,6 +15,7 @@ export const LLM_INTERACTION_TYPE = {
   FORCED_CONCLUSION: 'forced_conclusion',
   SCORING: 'scoring',
   MEMORY_EXTRACTION: 'memory_extraction',
+  COMPOSITION: 'composition',
 } as const;
 
 export type LLMInteractionType =

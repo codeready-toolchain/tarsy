@@ -592,6 +592,75 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 		"previous chat answer should appear in context")
 	assert.NotContains(t, result.InvestigationContext, "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
 		"exec_summary stage should be skipped by default branch")
+
+	// Compose document stage + action memo that must stay skipped.
+	composeStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "take-action - Amended Report",
+		StageIndex:         3,
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeCompose),
+	})
+	require.NoError(t, err)
+	composeExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    composeStage.ID,
+		SessionID:  session.ID,
+		AgentName:  config.AgentNameCompose,
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+	composeStageID := composeStage.ID
+	composeExecID := composeExec.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &composeStageID,
+		ExecutionID:    &composeExecID,
+		SequenceNumber: 1,
+		EventType:      "final_analysis",
+		Content:        "COMPOSE-AMENDED-REPORT",
+	})
+	require.NoError(t, err)
+
+	actionStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "take-action",
+		StageIndex:         4,
+		ExpectedAgentCount: 1,
+		StageType:          string(stage.StageTypeAction),
+	})
+	require.NoError(t, err)
+	actionExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    actionStage.ID,
+		SessionID:  session.ID,
+		AgentName:  "ActionAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+	actionStageID := actionStage.ID
+	actionExecID := actionExec.ID
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &actionStageID,
+		ExecutionID:    &actionExecID,
+		SequenceNumber: 1,
+		EventType:      "final_analysis",
+		Content:        "ACTION-MEMO-SHOULD-NOT-APPEAR",
+	})
+	require.NoError(t, err)
+
+	result = executor.buildChatContext(ctx, ChatExecuteInput{
+		Chat:    chat,
+		Message: curMsg,
+		Session: session,
+	})
+	assert.Contains(t, result.InvestigationContext, "COMPOSE-AMENDED-REPORT",
+		"compose final_analysis should appear as a document stage")
+	assert.NotContains(t, result.InvestigationContext, "ACTION-MEMO-SHOULD-NOT-APPEAR",
+		"action memos should still be skipped")
+	assert.NotContains(t, result.InvestigationContext, "### Synthesis Result",
+		"compose document must not be labeled as synthesis")
 }
 
 // ────────────────────────────────────────────────────────────

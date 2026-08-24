@@ -64,6 +64,10 @@ export function getInteractionTypeLabel(type: string): string {
       return 'Executive Summary';
     case LLM_INTERACTION_TYPE.CHAT_RESPONSE:
       return 'Chat';
+    case LLM_INTERACTION_TYPE.SYNTHESIS:
+      return 'Synthesis';
+    case LLM_INTERACTION_TYPE.COMPOSITION:
+      return 'Composition';
     case MCP_INTERACTION_TYPE.TOOL_CALL:
       return 'Tool Call';
     case MCP_INTERACTION_TYPE.TOOL_LIST:

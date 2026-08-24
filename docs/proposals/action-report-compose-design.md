@@ -224,7 +224,7 @@ Do not split further (schema-only, dashboard-only, scoring-only). Do not combine
 
 **Must not:** touch `executor.go`, `extractFinalAnalysis`, `buildStageContext`, `countExpectedStages`, the action prompt, e2e expected stage counts, or goldens that encode stage lists.
 
-### PR 2 — Run compose after action
+### PR 2 — Run compose after action - DONE
 
 **Goal:** After each successful action stage (and its synthesis sibling if N>1), insert the compose sibling. Session `final_analysis` becomes that document. Dashboard renders it. Scoring and chat see the output.
 

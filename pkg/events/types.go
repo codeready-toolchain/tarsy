@@ -132,6 +132,7 @@ const (
 	ProgressPhaseConcluding    = "concluding"
 	ProgressPhaseSynthesizing  = "synthesizing"
 	ProgressPhaseFinalizing    = "finalizing"
+	ProgressPhaseAmending      = "amending"
 )
 
 // GlobalSessionsChannel is the channel for session-level status events.

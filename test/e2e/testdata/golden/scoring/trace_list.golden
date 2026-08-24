@@ -151,13 +151,38 @@
     {
       "executions": [
         {
-          "agent_name": "ExecSummaryAgent",
+          "agent_name": "ComposeAgent",
           "execution_id": "{EXEC_ID_5}",
           "llm_interactions": [
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
               "id": "{INTERACTION_ID_12}",
+              "input_tokens": 80,
+              "interaction_type": "composition",
+              "model_name": "test-model",
+              "output_tokens": 25,
+              "total_tokens": 105
+            }
+          ],
+          "mcp_interactions": []
+        }
+      ],
+      "referenced_stage_id": "{STAGE_ID_3}",
+      "stage_id": "{STAGE_ID_4}",
+      "stage_name": "remediation - Amended Report",
+      "stage_type": "compose"
+    },
+    {
+      "executions": [
+        {
+          "agent_name": "ExecSummaryAgent",
+          "execution_id": "{EXEC_ID_6}",
+          "llm_interactions": [
+            {
+              "created_at": "{TIMESTAMP}",
+              "duration_ms": {DURATION_MS},
+              "id": "{INTERACTION_ID_13}",
               "input_tokens": 10,
               "interaction_type": "executive_summary",
               "model_name": "test-model",
@@ -168,7 +193,7 @@
           "mcp_interactions": []
         }
       ],
-      "stage_id": "{STAGE_ID_4}",
+      "stage_id": "{STAGE_ID_5}",
       "stage_name": "Executive Summary",
       "stage_type": "exec_summary"
     },
@@ -176,12 +201,12 @@
       "executions": [
         {
           "agent_name": "ScoringAgent",
-          "execution_id": "{EXEC_ID_6}",
+          "execution_id": "{EXEC_ID_7}",
           "llm_interactions": [
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_13}",
+              "id": "{INTERACTION_ID_14}",
               "input_tokens": 500,
               "interaction_type": "scoring",
               "model_name": "test-model",
@@ -191,7 +216,7 @@
             {
               "created_at": "{TIMESTAMP}",
               "duration_ms": {DURATION_MS},
-              "id": "{INTERACTION_ID_14}",
+              "id": "{INTERACTION_ID_15}",
               "input_tokens": 600,
               "interaction_type": "scoring",
               "model_name": "test-model",
@@ -202,7 +227,7 @@
           "mcp_interactions": []
         }
       ],
-      "stage_id": "{STAGE_ID_5}",
+      "stage_id": "{STAGE_ID_6}",
       "stage_name": "Reflection",
       "stage_type": "scoring"
     }
