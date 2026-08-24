@@ -154,7 +154,7 @@ Action agents (`type: action`) enable automated remediation based on investigati
 - **Stage type derivation:** If all agents in a stage are `type: action`, the executor creates it as `stage_type: action`. This provides DB auditability (`WHERE stage_type = 'action'`), distinct dashboard rendering, and context flow to the exec summary.
 - **Policy guardrails:** Two layers of control — `custom_instructions` describe decision criteria (when to act), `mcp_servers` configuration limits capability (what actions are possible).
 
-The action stage typically runs after investigation/synthesis stages. It receives the upstream analysis via standard `BuildStageContext()`, evaluates findings, and executes justified actions via MCP tools. The action agent emits a **short memo** (decision, evidence, tools, outcome) — not a reprint of the investigation. After each successful action stage that has an upstream investigation/synthesis report, the executor inserts an automatic **compose** sibling (`stage_type: compose`) that copy-edits those two `final_analysis` documents into the session report. Compose is fail-open: LLM failure marks the compose stage `failed` and falls back to mechanical concat; the session still completes.
+The action stage typically runs after investigation/synthesis stages. It receives the upstream analysis via standard `BuildStageContext()`, evaluates findings, and executes justified actions via MCP tools. The action agent emits a **short memo** (decision, evidence, tools, outcome) — not a reprint of the investigation. After a successful action stage, the executor inserts an automatic **compose** sibling (`stage_type: compose`) only when an upstream investigation, synthesis, or prior compose report exists; it copy-edits that report with the action memo into the session report. Action-only chains skip compose. A later action stage may use the previous compose report as its upstream. Compose is fail-open: LLM failure marks the compose stage `failed` and falls back to mechanical concat; the session still completes.
 
 **For detailed design**: See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) and [ADR-0025: Action Report Compose Pass](adr/0025-action-report-compose.md)
 
@@ -315,7 +315,7 @@ sequenceDiagram
         E-->>WS: Publish stage status
     end
 
-    Note over E: After each successful action stage with an<br/>upstream report: insert compose sibling (fail-open)
+    Note over E: After a successful action stage, insert compose sibling<br/>only if investigation/synthesis/prior-compose report exists (fail-open;<br/>skip action-only chains)
     E->>E: Execute exec_summary stage (SingleShotController)
     E->>DB: Update session (completed)
     E-->>WS: Publish session status
@@ -456,7 +456,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`, `agent_timeout`, `max_budget`). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md)
-- **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream report with the action memo into session `final_analysis`. See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
+- **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream investigation, synthesis, or prior compose report with the action memo into session `final_analysis` (skipped on action-only chains; a later action may use the previous compose report; fail-open). See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
 - **Integration Points**: Connect with monitoring systems (AlertManager, PagerDuty) and notification systems (Slack)
