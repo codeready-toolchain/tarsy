@@ -152,7 +152,8 @@ queue:
 **Session Executor**: `pkg/queue/executor.go`
 - `RealSessionExecutor.Execute()` orchestrates the full chain lifecycle
 - Resolves chain config, downloads runbook, iterates stages
-- Extracts final analysis, runs executive summary as a typed `exec_summary` stage via SingleShotController (fail-open)
+- After each successful action stage with an upstream investigation/synthesis/compose report, inserts an automatic `compose` sibling (fail-open; mechanical concat on LLM failure)
+- Extracts final analysis (last non-empty investigation/synthesis/action/compose), runs executive summary as a typed `exec_summary` stage via SingleShotController (fail-open)
 - Maps context errors to session status (timed_out / cancelled)
 
 **Key Implementation Files**:
@@ -239,7 +240,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
-- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `synthesis`, `scoring`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `compose`, `synthesis`, `scoring`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
 - `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing (directory and flat file layouts)
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
@@ -278,6 +279,7 @@ sequenceDiagram
     E->>S: Synthesize parallel results
     S-->>E: Unified analysis
 
+    Note over E: After each successful action stage with an upstream report: compose sibling (fail-open)
     E->>E: Extract final analysis
     E->>E: Execute exec_summary stage (SingleShotController)
 ```
@@ -293,6 +295,7 @@ sequenceDiagram
 - `executeStage()` -- unified handler for all stages (single or multi-agent)
 - `executeAgent()` -- per-agent lifecycle (DB record, config resolution, MCP creation, agent execution)
 - `executeSynthesisStage()` -- automatic synthesis after parallel stages with >1 agent
+- `executeComposeStage()` -- automatic amended-report sibling after a successful action stage (SingleShotController, fail-open)
 - `executeExecSummaryStage()` -- executive summary as a typed `exec_summary` stage via SingleShotController
 - `buildConfigs()` / `buildMultiAgentConfigs()` / `buildReplicaConfigs()` -- execution config building
 
@@ -365,11 +368,11 @@ Non-stage components (executive summary, follow-up chat) use chain-level provide
 **Purpose**: Agent framework, controller system, and dynamic orchestration
 **Key Responsibility**: Agent behavior, iteration patterns, and LLM-driven sub-agent dispatch
 
-Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, ExecSummaryAgent, ScoringAgent, WebResearcher, CodeExecutor, GeneralWorker) and YAML-configured agents.
+Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. The system supports both built-in agents (KubernetesAgent, ChatAgent, SynthesisAgent, ExecSummaryAgent, ComposeAgent, ScoringAgent, WebResearcher, CodeExecutor, GeneralWorker) and YAML-configured agents.
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -380,6 +383,7 @@ graph TB
         BA["BaseAgent<br/>(delegates to Controller)"]
         KA["KubernetesAgent (built-in)"]
         SA["SynthesisAgent (built-in)"]
+        CoA["ComposeAgent (built-in)"]
         CA["ChatAgent (built-in)"]
         WR["WebResearcher (built-in)"]
         CE["CodeExecutor (built-in)"]
@@ -401,6 +405,7 @@ graph TB
 
     BA --> KA
     BA --> SA
+    BA --> CoA
     BA --> CA
     BA --> WR
     BA --> CE
@@ -414,6 +419,7 @@ graph TB
     CE -.-> FC
     GW -.-> FC
     SA -.-> SC
+    CoA -.-> SC
     ScA -.-> SCC
     YA -.-> FC
     YA -.-> SC
@@ -450,6 +456,7 @@ type Controller interface {
 | `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
+| `"compose"` | SingleShotController | Single-shot (one LLM call, no tools) | Copy-edit upstream report + action memo into session report |
 | `"scoring"` | ScoringController | 2-turn LLM conversation (score + tool improvement report) | Session quality evaluation |
 
 **LLMBackend determines the Python SDK path** (orthogonal to controller):
@@ -473,7 +480,7 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
 
 #### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
-Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results and executive summary generation. Receives full investigation history via timeline events (thinking, tool calls, results, analyses).
+Parameterized single-shot controller: one LLM call without tools, configured via `SingleShotConfig`. Used for synthesizing multi-agent investigation results, executive summary generation, and compose (amended report after action). Receives full investigation history via timeline events (thinking, tool calls, results, analyses). Compose is an exception: it receives two `final_analysis` documents only, not the action conversation.
 
 #### ScoringController — 2-turn scoring (`pkg/agent/controller/scoring.go`)
 
@@ -482,7 +489,7 @@ Dedicated controller for session quality evaluation. Orchestrated by `ScoringExe
 ```
 ScoringExecutor.ScoreSession(sessionID)
   → Gather investigation context
-    (stages: investigation + exec_summary + action; synthesis results attached via parent reference)
+    (stages: investigation + exec_summary + action; synthesis results attached via parent reference; compose *output* appended as one extra document, compose *process* omitted)
   → Create scoring Stage + AgentExecution records
   → ScoringController.Run()
     → Turn 1: Outcome-first evaluation (5 dimensions → holistic score) → total_score (0–100) + score_analysis + failure_tags
@@ -570,7 +577,7 @@ System prompt = Tier 1-3 (above)
               + Action task focus
 ```
 
-The safety preamble enforces: require hard evidence before acting, focus on evaluating upstream analysis, prefer inaction over incorrect action, explain reasoning before executing tools, and emit a short action memo rather than reprinting the investigation report. See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) for full design.
+The safety preamble enforces: require hard evidence before acting, focus on evaluating upstream analysis, prefer inaction over incorrect action, explain reasoning before executing tools, and emit a short action memo rather than reprinting the investigation report. Preserve/copy of the investigation into the session report is the compose stage's job. See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) and [ADR-0025: Action Report Compose Pass](adr/0025-action-report-compose.md).
 
 This auto-injection pattern means custom agents with sub-agents or `type: action` receive their respective behavioral guidance without duplicating it in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context.
 
@@ -581,6 +588,7 @@ This auto-injection pattern means custom agents with sub-agents or `type: action
 - `ComposeInstructions()` / `ComposeChatInstructions()` -- instruction composition
 - `BuildMCPSummarizationSystemPrompt()` / `BuildMCPSummarizationUserPrompt()` -- tool result summarization
 - `BuildExecutiveSummarySystemPrompt()` / `BuildExecutiveSummaryUserPrompt()` -- executive summary
+- `BuildComposeSystemPrompt()` / `BuildComposeUserPrompt()` -- format-agnostic copy-edit of upstream report + action memo
 
 #### Forced Conclusion
 
@@ -979,7 +987,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `mcp_selection`, `author`, `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps
 
 **Stage** (`ent/schema/stage.go`):
-`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action), `referenced_stage_id` (nullable FK — synthesis→investigation pairing), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps
@@ -1069,7 +1077,7 @@ graph TB
 - Spawns one goroutine per message (no pool -- chats are rare, one-at-a-time per chat enforced)
 - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
 - Creates Stage (type: `chat`) and AgentExecution records (reusing existing audit trail infrastructure)
-- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning)
+- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only).
 - Runs `agent.Execute()` with same controllers as investigation
 
 **Chat Service** (`pkg/services/chat_service.go`):

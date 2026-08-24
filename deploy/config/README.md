@@ -68,6 +68,11 @@ LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See 
 ```yaml
 defaults:
   llm_provider: "google-default"
+  # Mid-tier model for compose (amended report after action).
+  # Resolution: chain.compose_provider → defaults.compose_provider →
+  # chain.llm_provider → defaults.llm_provider.
+  # chain.llm_provider does not override defaults.compose_provider.
+  compose_provider: "google-default"
   max_iterations: 20
   fallback_providers:
     - provider: "gemini-3.1-pro"

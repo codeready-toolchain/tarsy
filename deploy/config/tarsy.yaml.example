@@ -141,7 +141,8 @@ defaults:
   # Default LLM provider for all agents/chains
   llm_provider: "google-default"
 
-  # Mid-tier provider for compose (amended-report) generation
+  # Mid-tier provider for compose (amended-report) generation.
+  # Beats chain.llm_provider. Override per chain with compose_provider.
   compose_provider: "google-default"
   
   # Default max iterations (forces conclusion when reached, no pause/resume)
