@@ -570,7 +570,7 @@ System prompt = Tier 1-3 (above)
               + Action task focus
 ```
 
-The safety preamble enforces: require hard evidence before acting, focus on evaluating upstream analysis, prefer inaction over incorrect action, explain reasoning before executing tools, and preserve the investigation report amended with an actions section. See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) for full design.
+The safety preamble enforces: require hard evidence before acting, focus on evaluating upstream analysis, prefer inaction over incorrect action, explain reasoning before executing tools, and emit a short action memo rather than reprinting the investigation report. See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) for full design.
 
 This auto-injection pattern means custom agents with sub-agents or `type: action` receive their respective behavioral guidance without duplicating it in `custom_instructions`. The `custom_instructions` field remains purely for domain-specific context.
 

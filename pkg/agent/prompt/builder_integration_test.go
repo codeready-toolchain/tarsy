@@ -305,6 +305,18 @@ func TestIntegration_FunctionCallingInvestigationWithContext(t *testing.T) {
 	assertGolden(t, "function_calling_investigation_with_context", serializeMessages(messages))
 }
 
+func TestIntegration_FunctionCallingAction(t *testing.T) {
+	builder := newIntegrationBuilder()
+	execCtx := newIntegrationExecCtx()
+	execCtx.Config.Type = config.AgentTypeAction
+	prevStageContext := "Agent found OOM issues in pod-1. Memory usage exceeded 512Mi limit."
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, prevStageContext)
+
+	require.Len(t, messages, 2)
+	assertGolden(t, "function_calling_action", serializeMessages(messages))
+}
+
 // ===========================================================================
 // Synthesis test
 // ===========================================================================

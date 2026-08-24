@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ import (
 //   - action stage_type persisted in DB and propagated in stage.status events
 //   - safety preamble injected into action agent's system prompt
 //   - investigation context flows into action stage
-//   - exec summary receives action stage's amended report
+//   - exec summary receives compose amended report, not the raw action memo
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_ActionChain(t *testing.T) {
@@ -142,6 +143,9 @@ func TestE2E_ActionChain(t *testing.T) {
 
 	assert.Equal(t, "remediation - Amended Report", stages[2].StageName)
 	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+	assert.Equal(t, stage.StatusCompleted, stages[2].Status)
+	require.NotNil(t, stages[2].ReferencedStageID, "compose should reference the action stage")
+	assert.Equal(t, stages[1].ID, *stages[2].ReferencedStageID)
 
 	assert.Equal(t, "Executive Summary", stages[3].StageName)
 	assert.Equal(t, stage.StageTypeExecSummary, stages[3].StageType)
@@ -174,6 +178,22 @@ func TestE2E_ActionChain(t *testing.T) {
 	}
 	assert.True(t, hasSafetyPreamble, "action agent should have safety preamble in system prompt")
 
+	var actionSystem string
+	for _, msg := range actionInput.Messages {
+		if msg.Role == agent.RoleSystem {
+			actionSystem = msg.Content
+			break
+		}
+	}
+	require.NotEmpty(t, actionSystem, "action agent should have a system prompt")
+	assert.Contains(t, actionSystem, "short action memo")
+	for _, msg := range actionInput.Messages {
+		assert.NotContains(t, msg.Content, "Preserve the investigation report")
+		assert.NotContains(t, msg.Content, "final report becomes the finalAnalysis")
+		assert.NotContains(t, msg.Content, "preserve the investigation report as-is")
+		assert.NotContains(t, msg.Content, "amended report that preserves")
+	}
+
 	// ── Verify action agent received YES/NO output schema ──
 	var hasOutputSchema bool
 	for _, msg := range actionInput.Messages {
@@ -194,6 +214,11 @@ func TestE2E_ActionChain(t *testing.T) {
 		}
 	}
 	assert.True(t, hasInvestigationContext, "action stage should receive investigation context")
+
+	composeInput := findCapturedInput(captured, "=== UPSTREAM REPORT ===")
+	assertComposeTwoDocPrompt(t, composeInput,
+		"Investigation complete: api-gateway is DOWN",
+		"Restarted api-gateway")
 
 	// ── Verify exec summary receives compose amended report, not the raw action memo ──
 	execSummaryInput := captured[len(captured)-1]
@@ -220,7 +245,8 @@ func TestE2E_ActionChain(t *testing.T) {
 	// Investigation stage should publish "investigating", action stage should publish "remediating".
 	investigationStageID := stages[0].ID
 	remediationStageID := stages[1].ID
-	var sawInvestigating, sawRemediating bool
+	composeStageID := stages[2].ID
+	var sawInvestigating, sawRemediating, sawAmending bool
 	for _, ev := range ws.Events() {
 		if ev.Type != "execution.progress" {
 			continue
@@ -233,9 +259,13 @@ func TestE2E_ActionChain(t *testing.T) {
 		if stgID == remediationStageID && phase == "remediating" {
 			sawRemediating = true
 		}
+		if stgID == composeStageID && phase == "amending" {
+			sawAmending = true
+		}
 	}
 	assert.True(t, sawInvestigating, "should see 'investigating' progress for investigation stage")
 	assert.True(t, sawRemediating, "should see 'remediating' progress for action stage")
+	assert.True(t, sawAmending, "should see 'amending' progress for compose stage")
 
 	// ── Golden file assertions ──
 	traceList := app.GetTraceList(t, sessionID)
@@ -270,4 +300,189 @@ func TestE2E_ActionChain(t *testing.T) {
 	assert.True(t, actionsExec, "session list should report actions_executed=true")
 
 	assert.Equal(t, "completed", sess["status"])
+}
+
+// TestE2E_ActionChain_ComposeFailOpen covers the product-critical fail-open path:
+// compose LLM failure must not fail the session, must persist concat on a failed
+// compose stage, and exec summary must still run on that concat.
+func TestE2E_ActionChain_ComposeFailOpen(t *testing.T) {
+	llm := NewScriptedLLMClient()
+	scriptActionChainInvestigation(llm)
+	scriptActionChainRemediationRestart(llm)
+	llm.AddSequential(LLMScriptEntry{Error: fmt.Errorf("compose LLM failed")})
+	llm.AddSequential(LLMScriptEntry{Text: "Exec summary after compose failure."})
+
+	app := newActionChainApp(t, llm)
+	resp := app.SubmitAlert(t, "test-action", "api-gateway returning 503 errors")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	fa, _ := session["final_analysis"].(string)
+	assert.Contains(t, fa, "Investigation complete: api-gateway is DOWN")
+	assert.Contains(t, fa, "## Action result")
+	assert.Contains(t, fa, "Restarted api-gateway")
+	assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, fa)
+
+	stages := app.QueryStages(t, sessionID)
+	require.Len(t, stages, 4)
+	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+	assert.Equal(t, stage.StatusFailed, stages[2].Status)
+	require.NotNil(t, stages[2].ReferencedStageID)
+	assert.Equal(t, stages[1].ID, *stages[2].ReferencedStageID)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[3].StageType)
+	assert.Equal(t, stage.StatusCompleted, stages[3].Status)
+
+	captured := llm.CapturedInputs()
+	composeInput := findCapturedInput(captured, "=== UPSTREAM REPORT ===")
+	assertComposeTwoDocPrompt(t, composeInput,
+		"Investigation complete: api-gateway is DOWN",
+		"Restarted api-gateway")
+
+	execSummaryInput := captured[len(captured)-1]
+	assert.Contains(t, capturedLLMContent(execSummaryInput), "## Action result",
+		"exec summary should summarize the fail-open concat, not skip compose")
+}
+
+// TestE2E_ActionChain_NoActionStillComposes is the common path the design
+// exists for: remediator takes no action, compose still runs so the session
+// card is not the raw memo.
+func TestE2E_ActionChain_NoActionStillComposes(t *testing.T) {
+	llm := NewScriptedLLMClient()
+	scriptActionChainInvestigation(llm)
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "No automated action is warranted; the outage is already recovering.\nNO"},
+			&agent.UsageChunk{InputTokens: 40, OutputTokens: 20, TotalTokens: 60},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "COMPOSE-NO-ACTION-AMENDED-REPORT"},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 30, TotalTokens: 110},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{Text: "Outage observed; no automated remediation executed."})
+
+	app := newActionChainApp(t, llm)
+	resp := app.SubmitAlert(t, "test-action", "api-gateway returning 503 errors")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	assert.Equal(t, "COMPOSE-NO-ACTION-AMENDED-REPORT", session["final_analysis"])
+
+	stages := app.QueryStages(t, sessionID)
+	require.Len(t, stages, 4)
+	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	require.NotNil(t, stages[1].ActionsExecuted)
+	assert.False(t, *stages[1].ActionsExecuted)
+	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+	assert.Equal(t, stage.StatusCompleted, stages[2].Status)
+
+	composeInput := findCapturedInput(llm.CapturedInputs(), "=== UPSTREAM REPORT ===")
+	assertComposeTwoDocPrompt(t, composeInput,
+		"Investigation complete: api-gateway is DOWN",
+		"No automated action is warranted")
+
+	// Investigator (2) + Remediator (1, no tools) + Compose (1) + Exec summary (1) = 5
+	assert.Equal(t, 5, llm.CallCount())
+}
+
+func newActionChainApp(t *testing.T, llm *ScriptedLLMClient) *TestApp {
+	t.Helper()
+	return NewTestApp(t,
+		WithConfig(configs.Load(t, "action-chain")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"get_service_status": StaticToolHandler(`{"service":"api-gateway","status":"DOWN","error":"503 Service Unavailable","since":"10:00 UTC"}`),
+				"restart_service":    StaticToolHandler(`{"service":"api-gateway","action":"restart","result":"success","new_status":"healthy"}`),
+			},
+		}),
+	)
+}
+
+func scriptActionChainInvestigation(llm *ScriptedLLMClient) {
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Let me check the service status."},
+			&agent.TextChunk{Content: "Checking service health."},
+			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__get_service_status", Arguments: `{"service":"api-gateway"}`},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 25, TotalTokens: 105},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Service is down, confirmed by health check."},
+			&agent.TextChunk{Content: "Investigation complete: api-gateway is DOWN. Health check confirms 503 errors since 10:00 UTC."},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 40, TotalTokens: 140},
+		},
+	})
+}
+
+func scriptActionChainRemediationRestart(llm *ScriptedLLMClient) {
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Evidence is clear — api-gateway is down. Restarting the service."},
+			&agent.TextChunk{Content: "Restarting api-gateway based on confirmed outage."},
+			&agent.ToolCallChunk{CallID: "call-2", Name: "test-mcp__restart_service", Arguments: `{"service":"api-gateway"}`},
+			&agent.UsageChunk{InputTokens: 120, OutputTokens: 30, TotalTokens: 150},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Service restarted successfully."},
+			&agent.TextChunk{Content: "Investigation complete: api-gateway was DOWN.\n\n## Actions Taken\nRestarted api-gateway. Service now healthy (200 OK).\nYES"},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
+		},
+	})
+}
+
+func capturedLLMContent(in *agent.GenerateInput) string {
+	if in == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, msg := range in.Messages {
+		b.WriteString(msg.Content)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func findCapturedInput(inputs []*agent.GenerateInput, substr string) *agent.GenerateInput {
+	for _, in := range inputs {
+		if strings.Contains(capturedLLMContent(in), substr) {
+			return in
+		}
+	}
+	return nil
+}
+
+func assertComposeTwoDocPrompt(t *testing.T, composeIn *agent.GenerateInput, wantUpstream, wantMemo string) {
+	t.Helper()
+	require.NotNil(t, composeIn, "compose LLM call should have been captured")
+	blob := capturedLLMContent(composeIn)
+	assert.Contains(t, blob, "copy-editor")
+	assert.Contains(t, blob, "=== UPSTREAM REPORT ===")
+	assert.Contains(t, blob, "=== ACTION MEMO ===")
+	assert.Contains(t, blob, wantUpstream)
+	assert.Contains(t, blob, wantMemo)
+	assert.Empty(t, composeIn.Tools, "compose is single-shot with no MCP tools")
+	if composeIn.Config != nil {
+		for name, enabled := range composeIn.Config.NativeTools {
+			assert.False(t, enabled, "compose must not enable native tool %s", name)
+		}
+	}
+
+	_, memo, ok := strings.Cut(blob, "=== ACTION MEMO ===")
+	require.True(t, ok, "compose user prompt should include ACTION MEMO fence")
+	memo, _, ok = strings.Cut(memo, "=== END ACTION MEMO ===")
+	require.True(t, ok, "compose user prompt should close ACTION MEMO fence")
+	assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, memo, "compose must not see the YES/NO marker")
 }

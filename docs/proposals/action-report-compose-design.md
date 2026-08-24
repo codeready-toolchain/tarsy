@@ -279,7 +279,7 @@ Downstream (small, same PR — not worth a follow-up):
 
 **Must not:** change `actionBehavioralInstructions` / `actionTaskFocus` / `actionTask`.
 
-### PR 3 — Action agent emits a memo only
+### PR 3 — Action agent emits a memo only - DONE
 
 **Goal:** The remediator stops reprinting the investigation. Compose (already the session card after PR 2) is the only author of the combined document.
 

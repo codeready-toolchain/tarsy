@@ -218,8 +218,12 @@ func TestBuildFunctionCallingMessages_ActionMode(t *testing.T) {
 	assert.Contains(t, messages[0].Content, "Prefer inaction over incorrect action")
 	assert.Contains(t, messages[0].Content, "General SRE Agent Instructions")
 	assert.Contains(t, messages[0].Content, "evaluating the upstream investigation findings")
+	assert.Contains(t, messages[0].Content, "short action memo")
+	assert.NotContains(t, messages[0].Content, "Preserve the investigation report")
 	assert.Contains(t, messages[1].Content, "Alert Details")
 	assert.Contains(t, messages[1].Content, "Investigation found malicious activity.")
+	assert.Contains(t, messages[1].Content, "short action memo covering")
+	assert.NotContains(t, messages[1].Content, "amended report that preserves")
 }
 
 func TestBuildFunctionCallingMessages_SubAgentMode(t *testing.T) {

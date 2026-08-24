@@ -225,6 +225,7 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	assert.Contains(t, stageTypes, stage.StageTypeInvestigation)
 	assert.Contains(t, stageTypes, stage.StageTypeSynthesis, "parallel agents should trigger synthesis")
 	assert.Contains(t, stageTypes, stage.StageTypeAction, "remediation stage should be action type")
+	assert.Contains(t, stageTypes, stage.StageTypeCompose, "action stage should insert a compose sibling")
 	assert.Contains(t, stageTypes, stage.StageTypeExecSummary)
 	assert.Contains(t, stageTypes, stage.StageTypeScoring)
 
