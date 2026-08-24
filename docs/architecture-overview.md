@@ -105,7 +105,7 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 ### 3. Agent Chains & Orchestration
 
 - **Multi-stage workflows** where specialized agents build upon each other's work
-- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
+- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `compose`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
 - **Flexible chain definitions** via YAML configuration without code changes
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
@@ -116,13 +116,13 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Three controller types** (text-based ReAct parsing was completely removed):
 
 - **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
-- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis and executive summary generation.
+- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action).
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
 **Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
@@ -154,9 +154,9 @@ Action agents (`type: action`) enable automated remediation based on investigati
 - **Stage type derivation:** If all agents in a stage are `type: action`, the executor creates it as `stage_type: action`. This provides DB auditability (`WHERE stage_type = 'action'`), distinct dashboard rendering, and context flow to the exec summary.
 - **Policy guardrails:** Two layers of control — `custom_instructions` describe decision criteria (when to act), `mcp_servers` configuration limits capability (what actions are possible).
 
-The action stage typically runs after investigation/synthesis stages. It receives the upstream analysis via standard `BuildStageContext()`, evaluates findings, and executes justified actions via MCP tools. The agent's final report preserves the investigation report and amends it with an actions section.
+The action stage typically runs after investigation/synthesis stages. It receives the upstream analysis via standard `BuildStageContext()`, evaluates findings, and executes justified actions via MCP tools. The action agent emits a **short memo** (decision, evidence, tools, outcome) — not a reprint of the investigation. After a successful action stage, the executor inserts an automatic **compose** sibling (`stage_type: compose`) only when an upstream investigation, synthesis, or prior compose report exists; it copy-edits that report with the action memo into the session report. Action-only chains skip compose. A later action stage may use the previous compose report as its upstream. Compose is fail-open: LLM failure marks the compose stage `failed` and falls back to mechanical concat; the session still completes.
 
-**For detailed design**: See [ADR-0007: Automated Actions](adr/0007-automated-actions.md)
+**For detailed design**: See [ADR-0007: Automated Actions](adr/0007-automated-actions.md) and [ADR-0025: Action Report Compose Pass](adr/0025-action-report-compose.md)
 
 ### 7. MCP Integration & Tool Management
 
@@ -315,6 +315,7 @@ sequenceDiagram
         E-->>WS: Publish stage status
     end
 
+    Note over E: After a successful action stage, insert compose sibling<br/>only if investigation/synthesis/prior-compose report exists (fail-open;<br/>skip action-only chains)
     E->>E: Execute exec_summary stage (SingleShotController)
     E->>DB: Update session (completed)
     E-->>WS: Publish session status
@@ -416,7 +417,7 @@ Each agent operates with a tiered knowledge system composed into its system prom
 
 **Agent Skills** provide modular, reusable knowledge blocks (environment context, classification criteria, report formats) that replace duplicated `custom_instructions` content. Skills follow the industry-standard `SKILL.md` format and are discovered from `<configDir>/skills/` at startup. The `skills` field controls the on-demand catalog (nil = all, `[]` = none), while `required_skills` controls prompt injection — both fields are independent and validated against the registry separately. On-demand skills are loaded via the `load_skill` tool when the LLM determines they're relevant. See [ADR-0012: Agent Skills](adr/0012-agent-skills.md).
 
-When an agent has a non-empty **sub-agent catalog** (resolved from `sub_agents` configuration), an additional behavioral layer is auto-injected after the tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. For **action agents** (`type: action`), a safety-focused behavioral layer is auto-injected — requiring hard evidence before acting, preferring inaction over incorrect action, and preserving the investigation report amended with actions taken. These layers are injected automatically by the prompt builder so that custom agents receive their respective behavioral guidance without duplicating it in custom instructions.
+When an agent has a non-empty **sub-agent catalog** (resolved from `sub_agents` configuration), an additional behavioral layer is auto-injected after the tiers — orchestration strategy, sub-agent catalog, and result delivery mechanics. For **action agents** (`type: action`), a safety-focused behavioral layer is auto-injected — requiring hard evidence before acting, preferring inaction over incorrect action, explaining reasoning before tools, and emitting a short action memo rather than reprinting the investigation. The investigation-first session report is produced by the compose stage ([ADR-0025](adr/0025-action-report-compose.md)). These layers are injected automatically by the prompt builder so that custom agents receive their respective behavioral guidance without duplicating it in custom instructions.
 
 Additionally, **runbook content** (fetched from GitHub or using a configured default) is injected into the user prompt for alert-specific investigation procedures.
 
@@ -455,7 +456,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`, `agent_timeout`, `max_budget`). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md)
-- **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. See [ADR-0007](adr/0007-automated-actions.md)
+- **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream investigation, synthesis, or prior compose report with the action memo into session `final_analysis` (skipped on action-only chains; a later action may use the previous compose report; fail-open). See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
 - **Integration Points**: Connect with monitoring systems (AlertManager, PagerDuty) and notification systems (Slack)

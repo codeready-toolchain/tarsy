@@ -20,9 +20,9 @@ Principles:
 - If evidence is ambiguous or conflicting, report your assessment but do NOT act
 - Explain your reasoning BEFORE executing any action tool
 - Prefer inaction over incorrect action
-- Your final report becomes the finalAnalysis that the exec summary stage will summarize. Preserve the investigation report from previous stages and amend it with an actions section covering: what actions were taken (or why none were taken), the reasoning behind each decision, and the outcome of each action. Do not replace the investigation report with a purely action-oriented summary`
+- Write a short action memo: the decision (act or not), the evidence that justified it, which tools you ran (or why none), and the outcome. Do not reprint or re-author the investigation report`
 
-const actionTaskFocus = "Focus on evaluating the upstream investigation findings and executing justified remediation actions via your available tools. When no action is warranted, explain why and preserve the investigation report as-is."
+const actionTaskFocus = "Focus on evaluating the upstream investigation findings and executing justified remediation actions via your available tools. When no action is warranted, explain why. Your final text is a short action memo, not a copy of the investigation."
 
 // buildActionMessages builds the initial conversation for an action agent.
 // System prompt: Tier 1-3 instructions + safety preamble + task focus.

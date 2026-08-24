@@ -34,7 +34,7 @@ For each potential action:
 2. Explain your reasoning
 3. Execute the action via your available tools, or explain why you chose not to act
 
-When you are done, produce an amended report that preserves the investigation findings and appends an actions section.
+When you are done, write a short action memo covering: the decision, the evidence, tools used (or why none), and the outcome. Do not copy the investigation report.
 
 ` + ActionOutputSchema
 
