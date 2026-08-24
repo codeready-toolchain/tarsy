@@ -319,6 +319,24 @@ func TestExtractFinalAnalysis(t *testing.T) {
 			},
 			want: "Investigation findings",
 		},
+		{
+			name: "compose stage preferred over action memo",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeAction, finalAnalysis: "Raw action memo"},
+				{stageType: stage.StageTypeCompose, finalAnalysis: "Amended composed report"},
+			},
+			want: "Amended composed report",
+		},
+		{
+			name: "failed compose concat preferred over action memo",
+			stages: []stageResult{
+				{stageType: stage.StageTypeInvestigation, finalAnalysis: "Investigation findings"},
+				{stageType: stage.StageTypeAction, finalAnalysis: "Raw action memo"},
+				{stageType: stage.StageTypeCompose, status: alertsession.StatusFailed, finalAnalysis: "Investigation findings\n\n## Action result\n\nRaw action memo"},
+			},
+			want: "Investigation findings\n\n## Action result\n\nRaw action memo",
+		},
 	}
 
 	for _, tt := range tests {
@@ -327,6 +345,19 @@ func TestExtractFinalAnalysis(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestFormatComposeConcat(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t,
+		"upstream report\n\n## Action result\n\naction memo",
+		formatComposeConcat("upstream report", "action memo"),
+	)
+	assert.Equal(t,
+		"\n\n## Action result\n\n",
+		formatComposeConcat("", ""),
+	)
 }
 
 func TestBuildStageContext(t *testing.T) {
@@ -386,6 +417,34 @@ func TestBuildStageContext(t *testing.T) {
 		result := executor.buildStageContext(stages)
 		assert.Contains(t, result, "Found malicious activity")
 		assert.Contains(t, result, "Suspended offending workload")
+	})
+
+	t.Run("includes compose and omits superseded action", func(t *testing.T) {
+		actionID := "action-1"
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", stageID: "inv-1", finalAnalysis: "Found malicious activity"},
+			{stageType: stage.StageTypeAction, stageName: "remediation", stageID: actionID, finalAnalysis: "Raw action memo"},
+			{stageType: stage.StageTypeCompose, stageName: "remediation - Amended Report", referencedStageID: &actionID, finalAnalysis: "Amended composed report"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Found malicious activity")
+		assert.Contains(t, result, "Amended composed report")
+		assert.NotContains(t, result, "Raw action memo")
+	})
+
+	t.Run("omits action-synthesis whose FK points at composed action", func(t *testing.T) {
+		actionID := "action-1"
+		stages := []stageResult{
+			{stageType: stage.StageTypeInvestigation, stageName: "analysis", stageID: "inv-1", finalAnalysis: "Investigation findings"},
+			{stageType: stage.StageTypeAction, stageName: "remediation", stageID: actionID, finalAnalysis: "Raw action memo"},
+			{stageType: stage.StageTypeSynthesis, stageName: "remediation - Synthesis", referencedStageID: &actionID, finalAnalysis: "Synthesized action blob"},
+			{stageType: stage.StageTypeCompose, stageName: "remediation - Amended Report", referencedStageID: &actionID, finalAnalysis: "Amended composed report"},
+		}
+		result := executor.buildStageContext(stages)
+		assert.Contains(t, result, "Investigation findings")
+		assert.Contains(t, result, "Amended composed report")
+		assert.NotContains(t, result, "Raw action memo")
+		assert.NotContains(t, result, "Synthesized action blob")
 	})
 }
 

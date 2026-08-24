@@ -156,6 +156,10 @@ type executeStageInput struct {
 	messageService     *services.MessageService
 	timelineService    *services.TimelineService
 	interactionService *services.InteractionService
+
+	// Compose inputs (set only when executing a compose stage)
+	composeUpstreamReport string
+	composeActionMemo     string
 }
 
 // ────────────────────────────────────────────────────────────
@@ -206,13 +210,21 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	var completedStages []stageResult
 	prevContext := ""
 	dbStageIndex := 0
-	totalExpectedStages := countExpectedStages(chain)
+	totalExpectedStages := countExpectedStages(e.cfg, chain)
+	// hasCompletedInvestigation gates compose: extractFinalAnalysis also
+	// considers action memos, which would incorrectly trigger compose on
+	// action-only chains (and exceed countExpectedStages).
+	hasCompletedInvestigation := false
+	composeUpstream := ""
 
 	for _, stageCfg := range chain.Stages {
 		// Check for cancellation between stages
 		if r := e.mapCancellation(ctx); r != nil {
 			return r
 		}
+
+		// Snapshot compose inputs before this YAML stage is appended.
+		upstreamReport := composeUpstream
 
 		// session progress + stage.status: started are published inside executeStage()
 		// after Stage DB record is created (so stageID is always present)
@@ -249,6 +261,8 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 				Error:  sr.err,
 			}
 		}
+
+		actionMemo := sr.finalAnalysis
 
 		// Synthesis runs after stages with >1 agent (mandatory, no opt-out)
 		if len(sr.agentResults) > 1 {
@@ -287,8 +301,51 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 
 			// Synthesis result replaces investigation result for context passing
 			completedStages = append(completedStages, synthSr)
+			actionMemo = synthSr.finalAnalysis
 		} else {
 			completedStages = append(completedStages, sr)
+		}
+
+		if sr.stageType == stage.StageTypeInvestigation {
+			hasCompletedInvestigation = true
+			if fa := completedStages[len(completedStages)-1].finalAnalysis; fa != "" {
+				composeUpstream = fa
+			}
+		}
+
+		if sr.stageType == stage.StageTypeAction && hasCompletedInvestigation && upstreamReport != "" {
+			composeSr := e.executeComposeStage(ctx, executeStageInput{
+				session:             session,
+				chain:               chain,
+				stageConfig:         stageCfg,
+				stageIndex:          dbStageIndex,
+				prevContext:         prevContext,
+				totalExpectedStages: totalExpectedStages,
+				runbookContent:      runbookContent,
+				stageService:        stageService,
+				messageService:      messageService,
+				timelineService:     timelineService,
+				interactionService:  interactionService,
+			}, sr, upstreamReport, actionMemo)
+
+			publishStageStatus(context.Background(), e.eventPublisher, session.ID, composeSr.stageID, composeSr.stageName, dbStageIndex, composeSr.stageType, composeSr.referencedStageID, mapTerminalStatus(composeSr))
+			dbStageIndex++
+
+			if composeSr.status == alertsession.StatusCancelled || composeSr.status == alertsession.StatusTimedOut {
+				if r := e.mapCancellation(ctx); r != nil {
+					return r
+				}
+				return &ExecutionResult{
+					Status: composeSr.status,
+					Error:  composeSr.err,
+				}
+			}
+
+			// Fail-open: append even when compose LLM failed (concat is already in finalAnalysis).
+			completedStages = append(completedStages, composeSr)
+			if composeSr.finalAnalysis != "" {
+				composeUpstream = composeSr.finalAnalysis
+			}
 		}
 
 		// Build context for next stage
@@ -659,23 +716,25 @@ func (e *RealSessionExecutor) executeAgent(
 
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
-		SessionID:            input.session.ID,
-		StageID:              stg.ID,
-		ExecutionID:          exec.ID,
-		AgentName:            displayName,
-		AgentIndex:           agentIndex + 1, // 1-based
-		AlertData:            input.session.AlertData,
-		AlertType:            input.session.AlertType,
-		StageType:            string(stg.StageType),
-		RunbookContent:       input.runbookContent,
-		Config:               resolvedConfig,
-		LLMClient:            e.llmClient,
-		EventPublisher:       e.eventPublisher,
-		PromptBuilder:        e.promptBuilder,
-		FailedServers:        failedServers,
-		MemoryBriefing:       memoryBriefing,
-		LLMProviders:         e.cfg.LLMProviderRegistry,
-		DefaultSummarization: defaultSummarization(e.cfg),
+		SessionID:             input.session.ID,
+		StageID:               stg.ID,
+		ExecutionID:           exec.ID,
+		AgentName:             displayName,
+		AgentIndex:            agentIndex + 1, // 1-based
+		AlertData:             input.session.AlertData,
+		AlertType:             input.session.AlertType,
+		StageType:             string(stg.StageType),
+		RunbookContent:        input.runbookContent,
+		Config:                resolvedConfig,
+		LLMClient:             e.llmClient,
+		EventPublisher:        e.eventPublisher,
+		PromptBuilder:         e.promptBuilder,
+		FailedServers:         failedServers,
+		MemoryBriefing:        memoryBriefing,
+		LLMProviders:          e.cfg.LLMProviderRegistry,
+		DefaultSummarization:  defaultSummarization(e.cfg),
+		ComposeUpstreamReport: input.composeUpstreamReport,
+		ComposeActionMemo:     input.composeActionMemo,
 		Services: &agent.ServiceBundle{
 			Timeline:    input.timelineService,
 			Message:     input.messageService,
@@ -840,11 +899,14 @@ func (e *RealSessionExecutor) executeAgent(
 // Uses the same resolution order as ResolveAgentConfig: stage override > agent definition.
 // Returns false on any error (e.g. agent not found) — the error will be caught later
 // by ResolveAgentConfig in executeAgent.
-func (e *RealSessionExecutor) allAgentsAreAction(stageConfig config.StageConfig) bool {
+func allAgentsAreAction(cfg *config.Config, stageConfig config.StageConfig) bool {
+	if cfg == nil {
+		return false
+	}
 	for _, ac := range stageConfig.Agents {
 		agentType := ac.Type
 		if agentType == "" {
-			agentDef, err := e.cfg.GetAgent(ac.Name)
+			agentDef, err := cfg.GetAgent(ac.Name)
 			if err != nil {
 				return false
 			}
@@ -855,4 +917,8 @@ func (e *RealSessionExecutor) allAgentsAreAction(stageConfig config.StageConfig)
 		}
 	}
 	return true
+}
+
+func (e *RealSessionExecutor) allAgentsAreAction(stageConfig config.StageConfig) bool {
+	return allAgentsAreAction(e.cfg, stageConfig)
 }

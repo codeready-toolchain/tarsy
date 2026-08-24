@@ -550,6 +550,15 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 				}
 			}
 			continue
+		case stage.StageTypeCompose:
+			if fa := e.extractFinalAnalysis(ctx, stg); fa != "" {
+				investigations = append(investigations, agentctx.StageInvestigation{
+					StageName:       stg.StageName,
+					StageIndex:      stg.StageIndex,
+					DocumentContent: fa,
+				})
+			}
+			continue
 		case stage.StageTypeInvestigation:
 			// Fall through to build per-agent timelines below.
 		default:

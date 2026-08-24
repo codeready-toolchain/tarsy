@@ -428,6 +428,21 @@ func TestFormatStructuredInvestigation(t *testing.T) {
 		assert.Contains(t, result, "Both agents agree: no issues found.")
 	})
 
+	t.Run("document content without synthesis heading", func(t *testing.T) {
+		stages := []StageInvestigation{
+			{
+				StageName:       "take-action - Amended Report",
+				StageIndex:      2,
+				DocumentContent: "Amended report after action.",
+			},
+		}
+
+		result := FormatStructuredInvestigation(stages, "")
+
+		assert.Contains(t, result, "Amended report after action.")
+		assert.NotContains(t, result, "### Synthesis Result")
+	})
+
 	t.Run("executive summary", func(t *testing.T) {
 		result := FormatStructuredInvestigation(nil, "Overall: system is healthy.")
 

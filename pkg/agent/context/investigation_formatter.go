@@ -21,6 +21,7 @@ type StageInvestigation struct {
 	StageIndex      int
 	Agents          []AgentInvestigation
 	SynthesisResult string // final_analysis from the synthesis stage, if any
+	DocumentContent string // stand-alone document (e.g. compose amended report); not labeled as synthesis
 }
 
 // AgentInvestigation holds one agent's investigation data.
@@ -68,6 +69,11 @@ func FormatStructuredInvestigation(stages []StageInvestigation, executiveSummary
 		if stg.SynthesisResult != "" {
 			sb.WriteString("### Synthesis Result\n\n")
 			sb.WriteString(stg.SynthesisResult)
+			sb.WriteString("\n\n")
+		}
+
+		if stg.DocumentContent != "" {
+			sb.WriteString(stg.DocumentContent)
 			sb.WriteString("\n\n")
 		}
 	}
@@ -225,7 +231,7 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 
 		default:
 			prevWasLlmResponse = false
-			sb.WriteString("**" + strings.ReplaceAll(string(event.EventType), "_", " ") + ":**\n\n")
+			fmt.Fprintf(sb, "**%s:**\n\n", strings.ReplaceAll(string(event.EventType), "_", " "))
 			sb.WriteString(event.Content)
 			sb.WriteString("\n\n")
 		}

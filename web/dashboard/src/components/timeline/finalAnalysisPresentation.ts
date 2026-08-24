@@ -28,6 +28,8 @@ export function getFinalAnalysisPresentation(
       return { label: `ANSWER${suffix}`, emoji: '🎯', color: 'success.main' };
     case STAGE_TYPE.ACTION:
       return { label: `RESULT${suffix}`, emoji: '🎯', color: 'success.main' };
+    case STAGE_TYPE.COMPOSE:
+      return { label: `AMENDED REPORT${suffix}`, emoji: '🎯', color: 'success.main' };
     default:
       return { label: `CONCLUSION${suffix}`, emoji: '🎯', color: 'success.main' };
   }

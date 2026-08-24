@@ -73,6 +73,14 @@ func TestE2E_ActionChain(t *testing.T) {
 		},
 	})
 
+	// ── Compose (amended report) ──
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "COMPOSE-AMENDED-REPORT-BLOB"},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 30, TotalTokens: 110},
+		},
+	})
+
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
@@ -118,10 +126,11 @@ func TestE2E_ActionChain(t *testing.T) {
 	session := app.GetSession(t, sessionID)
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["executive_summary"])
+	assert.Equal(t, "COMPOSE-AMENDED-REPORT-BLOB", session["final_analysis"])
 
-	// ── Stage assertions: investigation + remediation + exec_summary ──
+	// ── Stage assertions: investigation + remediation + compose + exec_summary ──
 	stages := app.QueryStages(t, sessionID)
-	require.Len(t, stages, 3)
+	require.Len(t, stages, 4)
 
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
@@ -131,8 +140,11 @@ func TestE2E_ActionChain(t *testing.T) {
 	require.NotNil(t, stages[1].ActionsExecuted, "action stage should have actions_executed set")
 	assert.True(t, *stages[1].ActionsExecuted, "action stage should report actions_executed=true")
 
-	assert.Equal(t, "Executive Summary", stages[2].StageName)
-	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
+	assert.Equal(t, "remediation - Amended Report", stages[2].StageName)
+	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+
+	assert.Equal(t, "Executive Summary", stages[3].StageName)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[3].StageType)
 
 	// ── Timeline events for the action stage should have YES/NO stripped ──
 	timeline := app.QueryTimeline(t, sessionID)
@@ -183,21 +195,23 @@ func TestE2E_ActionChain(t *testing.T) {
 	}
 	assert.True(t, hasInvestigationContext, "action stage should receive investigation context")
 
-	// ── Verify exec summary receives action stage's amended report ──
+	// ── Verify exec summary receives compose amended report, not the raw action memo ──
 	execSummaryInput := captured[len(captured)-1]
-	var hasActionContent bool
+	var hasComposeContent, hasRawActionMemo bool
 	for _, msg := range execSummaryInput.Messages {
-		if strings.Contains(msg.Content, "Actions Taken") &&
-			strings.Contains(msg.Content, "Restarted api-gateway") {
-			hasActionContent = true
-			break
+		if strings.Contains(msg.Content, "COMPOSE-AMENDED-REPORT-BLOB") {
+			hasComposeContent = true
+		}
+		if strings.Contains(msg.Content, "Restarted api-gateway") {
+			hasRawActionMemo = true
 		}
 	}
-	assert.True(t, hasActionContent, "exec summary should include action stage's report")
+	assert.True(t, hasComposeContent, "exec summary should include compose amended report")
+	assert.False(t, hasRawActionMemo, "exec summary should not include the raw action memo")
 
 	// ── LLM call count ──
-	// Investigator (2) + Remediator (2) + Exec summary (1) = 5
-	assert.Equal(t, 5, llm.CallCount())
+	// Investigator (2) + Remediator (2) + Compose (1) + Exec summary (1) = 6
+	assert.Equal(t, 6, llm.CallCount())
 
 	// ── WS event structural assertions ──
 	AssertEventsInOrder(t, ws.Events(), testdata.ActionChainExpectedEvents)
@@ -227,7 +241,7 @@ func TestE2E_ActionChain(t *testing.T) {
 	traceList := app.GetTraceList(t, sessionID)
 	traceStages, ok := traceList["stages"].([]interface{})
 	require.True(t, ok, "stages should be an array")
-	require.Len(t, traceStages, 3, "should have 3 stages (investigation + remediation + exec_summary)")
+	require.Len(t, traceStages, 4, "should have 4 stages (investigation + remediation + compose + exec_summary)")
 
 	normalizer := NewNormalizer(sessionID)
 	for _, rawStage := range traceStages {

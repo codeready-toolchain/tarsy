@@ -61,7 +61,7 @@ func scriptExecSummary(llm *ScriptedLLMClient) {
 //	Stage 2: remediation (Remediator, action type)
 //	+ Executive summary
 //
-// LLM calls: Investigator(2) + MetricsChecker(1) + Synthesis(1) + Remediator(2) + ExecSummary(1) = 7.
+// LLM calls: Investigator(2) + MetricsChecker(1) + Synthesis(1) + Remediator(2) + Compose(1) + ExecSummary(1) = 8.
 func scriptRichPipeline(llm *ScriptedLLMClient) {
 	// ── Investigator (routed, parallel): tool call + final answer ──
 	llm.AddRouted("Investigator", LLMScriptEntry{
@@ -111,6 +111,14 @@ func scriptRichPipeline(llm *ScriptedLLMClient) {
 			&agent.ThinkingChunk{Content: "Restart successful."},
 			&agent.TextChunk{Content: "Remediation complete: restarted pod-1.\n\n## Actions Taken\nRestarted pod-1. Recommend increasing memory limit to 1Gi."},
 			&agent.UsageChunk{InputTokens: 100, OutputTokens: 40, TotalTokens: 140},
+		},
+	})
+
+	// ── Compose (amended report) ──
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "COMPOSE-SCORING-AMENDED-REPORT"},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 25, TotalTokens: 105},
 		},
 	})
 
@@ -164,7 +172,7 @@ func scriptScoringSuccess(llm *ScriptedLLMClient) {
 func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
-	// Rich pipeline (7) + scoring (2) = 9 total.
+	// Rich pipeline (8) + scoring (2) = 10 total.
 	scriptRichPipeline(llm)
 	scriptScoringSuccess(llm)
 
@@ -413,8 +421,8 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	AssertAllEventsHaveSessionID(t, wsEvents, sessionID)
 	AssertEventsInOrder(t, wsEvents, testdata.ScoringExpectedEvents)
 
-	// Verify total LLM call count: pipeline (7) + scoring (2) = 9.
-	assert.Equal(t, 9, llm.CallCount())
+	// Verify total LLM call count: pipeline (8) + scoring (2) = 10.
+	assert.Equal(t, 10, llm.CallCount())
 }
 
 func TestE2E_Scoring_Disabled_NoAutoTrigger(t *testing.T) {
@@ -476,7 +484,7 @@ func TestE2E_Scoring_Disabled_NoAutoTrigger(t *testing.T) {
 func TestE2E_Scoring_ReScoreAPI(t *testing.T) {
 	llm := NewScriptedLLMClient()
 
-	// Rich pipeline (7) + auto scoring (2) + re-score (2) = 11 total.
+	// Rich pipeline (8) + auto scoring (2) + re-score (2) = 12 total.
 	scriptRichPipeline(llm)
 	scriptScoringSuccess(llm)
 
@@ -570,7 +578,7 @@ func TestE2E_Scoring_ReScoreAPI(t *testing.T) {
 	assert.Equal(t, float64(82), summaryResp["total_score"])
 	assert.Equal(t, "completed", summaryResp["scoring_status"])
 
-	assert.Equal(t, 11, llm.CallCount())
+	assert.Equal(t, 12, llm.CallCount())
 }
 
 func TestE2E_Scoring_API_DuplicatePrevention(t *testing.T) {

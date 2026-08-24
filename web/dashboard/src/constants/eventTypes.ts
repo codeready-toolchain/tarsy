@@ -38,6 +38,7 @@ export const PROGRESS_PHASE_DISTILLING = 'distilling' as const;
 export const PROGRESS_PHASE_CONCLUDING = 'concluding' as const;
 export const PROGRESS_PHASE_SYNTHESIZING = 'synthesizing' as const;
 export const PROGRESS_PHASE_FINALIZING = 'finalizing' as const;
+export const PROGRESS_PHASE_AMENDING = 'amending' as const;
 
 /**
  * Human-readable status messages for each progress phase.
@@ -51,6 +52,7 @@ export const PHASE_STATUS_MESSAGE: Record<string, string> = {
   [PROGRESS_PHASE_CONCLUDING]: 'Concluding...',
   [PROGRESS_PHASE_SYNTHESIZING]: 'Synthesizing...',
   [PROGRESS_PHASE_FINALIZING]: 'Finalizing...',
+  [PROGRESS_PHASE_AMENDING]: 'Amending report...',
 };
 
 // Stage type values
@@ -61,6 +63,7 @@ export const STAGE_TYPE = {
   EXEC_SUMMARY: 'exec_summary',
   SCORING: 'scoring',
   ACTION: 'action',
+  COMPOSE: 'compose',
 } as const;
 
 export type StageType = (typeof STAGE_TYPE)[keyof typeof STAGE_TYPE];
@@ -71,6 +74,7 @@ export const COLLAPSIBLE_STAGE_TYPES: ReadonlySet<string> = new Set<string>([
   STAGE_TYPE.EXEC_SUMMARY,
   STAGE_TYPE.ACTION,
   STAGE_TYPE.SCORING,
+  STAGE_TYPE.COMPOSE,
 ]);
 
 // Timeline event types (for routing to renderers)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -99,12 +100,34 @@ func applySafetyNet(result *ExecutionResult, ctxErr error, sessionTimeout time.D
 
 // buildStageContext converts completed stageResults into a context string
 // for the next stage's agent prompt.
-// Only investigation, synthesis, and action stages contribute to the next-stage context;
-// exec_summary and scoring stages are excluded as a safety guard.
+// Investigation, synthesis, action, and compose stages contribute; exec_summary
+// and scoring are excluded. An action superseded by a later compose (and any
+// synthesis whose FK points at that action) is omitted so the next stage sees
+// the amended report rather than the raw memo.
 func (e *RealSessionExecutor) buildStageContext(stages []stageResult) string {
+	var supersededActionIDs []string
+	for _, s := range stages {
+		if s.stageType == stage.StageTypeCompose && s.referencedStageID != nil {
+			supersededActionIDs = append(supersededActionIDs, *s.referencedStageID)
+		}
+	}
+
 	var results []agentctx.StageResult
 	for _, s := range stages {
-		if s.stageType != stage.StageTypeInvestigation && s.stageType != stage.StageTypeSynthesis && s.stageType != stage.StageTypeAction {
+		switch s.stageType {
+		case stage.StageTypeCompose:
+			// always include
+		case stage.StageTypeAction:
+			if slices.Contains(supersededActionIDs, s.stageID) {
+				continue
+			}
+		case stage.StageTypeSynthesis:
+			if s.referencedStageID != nil && slices.Contains(supersededActionIDs, *s.referencedStageID) {
+				continue
+			}
+		case stage.StageTypeInvestigation:
+			// include
+		default:
 			continue
 		}
 		results = append(results, agentctx.StageResult{
@@ -116,13 +139,16 @@ func (e *RealSessionExecutor) buildStageContext(stages []stageResult) string {
 }
 
 // extractFinalAnalysis returns the final analysis from the last completed stage.
-// Only considers investigation, synthesis, and action stages; exec_summary and
-// scoring stages are excluded as a safety guard.
+// Considers investigation, synthesis, action, and compose; exec_summary and
+// scoring are excluded. Status is ignored so a failed compose concat still wins.
 // Searches in reverse to find the most recent stage with a non-empty analysis.
 func extractFinalAnalysis(stages []stageResult) string {
 	for i := len(stages) - 1; i >= 0; i-- {
 		s := stages[i]
-		if s.stageType != stage.StageTypeInvestigation && s.stageType != stage.StageTypeSynthesis && s.stageType != stage.StageTypeAction {
+		if s.stageType != stage.StageTypeInvestigation &&
+			s.stageType != stage.StageTypeSynthesis &&
+			s.stageType != stage.StageTypeAction &&
+			s.stageType != stage.StageTypeCompose {
 			continue
 		}
 		if s.finalAnalysis != "" {
@@ -372,10 +398,11 @@ func applyNativeToolsOverride(resolvedConfig *agent.ResolvedAgentConfig, nt *mod
 }
 
 // countExpectedStages computes the total number of progress steps for the chain,
-// including synthesis stages (for multi-agent/replica stages) and the executive
-// summary step. Used for accurate progress reporting so CurrentStageIndex never
-// exceeds TotalStages.
-func countExpectedStages(chain *config.ChainConfig) int {
+// including synthesis stages (for multi-agent/replica stages), compose stages
+// (one per action stage that follows an earlier investigation, including each
+// stage in a consecutive action run), and the executive summary step. Used for
+// accurate progress reporting so CurrentStageIndex never exceeds TotalStages.
+func countExpectedStages(cfg *config.Config, chain *config.ChainConfig) int {
 	total := len(chain.Stages)
 	for _, stageCfg := range chain.Stages {
 		if len(stageCfg.Agents) > 1 || stageCfg.Replicas > 1 {
@@ -383,6 +410,17 @@ func countExpectedStages(chain *config.ChainConfig) int {
 		}
 	}
 	total++ // executive summary step
+
+	seenInvestigation := false
+	for _, stageCfg := range chain.Stages {
+		if !allAgentsAreAction(cfg, stageCfg) {
+			seenInvestigation = true
+			continue
+		}
+		if seenInvestigation {
+			total++ // compose stage will follow this action
+		}
+	}
 	return total
 }
 

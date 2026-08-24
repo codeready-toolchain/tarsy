@@ -66,6 +66,7 @@ func TestProgressPhaseConstants(t *testing.T) {
 		ProgressPhaseConcluding,
 		ProgressPhaseSynthesizing,
 		ProgressPhaseFinalizing,
+		ProgressPhaseAmending,
 	}
 
 	seen := make(map[string]bool)

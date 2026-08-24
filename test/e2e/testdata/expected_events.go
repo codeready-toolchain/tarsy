@@ -803,6 +803,15 @@ var ActionChainExpectedEvents = []ExpectedEvent{
 
 	{Type: "stage.status", StageName: "remediation", Status: "completed"},
 
+	// ── Compose amended report ──
+	{Type: "stage.status", StageName: "remediation - Amended Report", Status: "started"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_response",
+		Content: "COMPOSE-AMENDED-REPORT-BLOB"},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed",
+		Content: "COMPOSE-AMENDED-REPORT-BLOB"},
+	{Type: "stage.status", StageName: "remediation - Amended Report", Status: "completed"},
+
 	// ── Executive summary ── (DB-only, no WS timeline events)
 	{Type: "session.status", Status: "completed"},
 }
@@ -847,6 +856,13 @@ var ScoringExpectedEvents = []ExpectedEvent{
 	{Type: "timeline_event.completed", EventType: "llm_response", Group: 2},
 	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed"},
 	{Type: "stage.status", StageName: "remediation", Status: "completed"},
+
+	// ── Compose amended report ──
+	{Type: "stage.status", StageName: "remediation - Amended Report", Status: "started"},
+	{Type: "timeline_event.created", EventType: "llm_response", Status: "streaming"},
+	{Type: "timeline_event.completed", EventType: "llm_response"},
+	{Type: "timeline_event.created", EventType: "final_analysis", Status: "completed"},
+	{Type: "stage.status", StageName: "remediation - Amended Report", Status: "completed"},
 
 	// ── Executive summary stage ──
 	{Type: "stage.status", StageName: "Executive Summary", Status: "started"},

@@ -212,6 +212,10 @@ func testConfig(chainID string, chain *config.ChainConfig) *config.Config {
 				Type:       config.AgentTypeExecSummary,
 				LLMBackend: config.LLMBackendLangChain,
 			},
+			config.AgentNameCompose: {
+				Type:       config.AgentTypeCompose,
+				LLMBackend: config.LLMBackendLangChain,
+			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"test-provider": {
@@ -2055,7 +2059,7 @@ func TestCountExpectedStages(t *testing.T) {
 			},
 		}
 		// 2 config stages + 0 synthesis + 1 executive summary = 3
-		assert.Equal(t, 3, countExpectedStages(chain))
+		assert.Equal(t, 3, countExpectedStages(nil, chain))
 	})
 
 	t.Run("multi-agent stage adds synthesis", func(t *testing.T) {
@@ -2066,7 +2070,7 @@ func TestCountExpectedStages(t *testing.T) {
 			},
 		}
 		// 2 config stages + 1 synthesis (for first stage) + 1 executive summary = 4
-		assert.Equal(t, 4, countExpectedStages(chain))
+		assert.Equal(t, 4, countExpectedStages(nil, chain))
 	})
 
 	t.Run("replica stage adds synthesis", func(t *testing.T) {
@@ -2076,7 +2080,7 @@ func TestCountExpectedStages(t *testing.T) {
 			},
 		}
 		// 1 config stage + 1 synthesis (replicas > 1) + 1 executive summary = 3
-		assert.Equal(t, 3, countExpectedStages(chain))
+		assert.Equal(t, 3, countExpectedStages(nil, chain))
 	})
 
 	t.Run("all stages multi-agent", func(t *testing.T) {
@@ -2087,13 +2091,94 @@ func TestCountExpectedStages(t *testing.T) {
 			},
 		}
 		// 2 config stages + 2 synthesis + 1 executive summary = 5
-		assert.Equal(t, 5, countExpectedStages(chain))
+		assert.Equal(t, 5, countExpectedStages(nil, chain))
 	})
 
 	t.Run("empty chain", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		// 0 config stages + 0 synthesis + 1 executive summary = 1
-		assert.Equal(t, 1, countExpectedStages(chain))
+		assert.Equal(t, 1, countExpectedStages(nil, chain))
+	})
+
+	t.Run("investigation then action adds compose", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Investigator": {Type: config.AgentTypeDefault},
+				"Remediator":   {Type: config.AgentTypeAction},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Investigator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+			},
+		}
+		// 2 config + 0 synthesis + 1 compose + 1 executive summary = 4
+		assert.Equal(t, 4, countExpectedStages(cfg, chain))
+	})
+
+	t.Run("action-only chain does not add compose", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Remediator": {Type: config.AgentTypeAction},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+			},
+		}
+		// 1 config + 0 synthesis + 0 compose + 1 executive summary = 2
+		assert.Equal(t, 2, countExpectedStages(cfg, chain))
+	})
+
+	t.Run("investigation-only chain does not add compose", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Investigator": {Type: config.AgentTypeDefault},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Investigator"}}},
+			},
+		}
+		// 1 config + 0 synthesis + 0 compose + 1 executive summary = 2
+		assert.Equal(t, 2, countExpectedStages(cfg, chain))
+	})
+
+	t.Run("investigation then consecutive actions adds compose per action", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Investigator": {Type: config.AgentTypeDefault},
+				"Remediator":   {Type: config.AgentTypeAction},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Investigator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+			},
+		}
+		// 3 config + 0 synthesis + 2 compose + 1 executive summary = 6
+		assert.Equal(t, 6, countExpectedStages(cfg, chain))
+	})
+
+	t.Run("consecutive action-only stages do not add compose", func(t *testing.T) {
+		cfg := &config.Config{
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Remediator": {Type: config.AgentTypeAction},
+			}),
+		}
+		chain := &config.ChainConfig{
+			Stages: []config.StageConfig{
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+				{Agents: []config.StageAgentConfig{{Name: "Remediator"}}},
+			},
+		}
+		// 2 config + 0 synthesis + 0 compose + 1 executive summary = 3
+		assert.Equal(t, 3, countExpectedStages(cfg, chain))
 	})
 }
 
@@ -2503,6 +2588,10 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 				Type:       config.AgentTypeExecSummary,
 				LLMBackend: config.LLMBackendLangChain,
 			},
+			config.AgentNameCompose: {
+				Type:       config.AgentTypeCompose,
+				LLMBackend: config.LLMBackendLangChain,
+			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"test-provider": {
@@ -2525,6 +2614,10 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Classification: MALICIOUS. Confidence: HIGH. Evidence: unauthorized access from IP 10.0.0.5.\n\n## Actions Taken\nSuspended workload per security policy. Reasoning: high-confidence malicious classification.\nYES"},
 			}},
+			// Compose
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "COMPOSE-AMENDED-REPORT"},
+			}},
 			// Exec summary
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Security incident detected and remediated."},
@@ -2542,12 +2635,12 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, result.Status)
 	assert.Nil(t, result.Error)
 
-	// Verify Stage DB records: investigation + action + exec_summary
+	// Verify Stage DB records: investigation + action + compose + exec_summary
 	stages, err := entClient.Stage.Query().
 		Order(ent.Asc(stage.FieldStageIndex)).
 		All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 3)
+	require.Len(t, stages, 4)
 
 	assert.Equal(t, "investigation", stages[0].StageName)
 	assert.Equal(t, stage.StageTypeInvestigation, stages[0].StageType)
@@ -2557,8 +2650,15 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 	require.NotNil(t, stages[1].ActionsExecuted, "action stage should have actions_executed set")
 	assert.True(t, *stages[1].ActionsExecuted, "action stage should report actions_executed=true")
 
-	assert.Equal(t, "Executive Summary", stages[2].StageName)
-	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
+	assert.Equal(t, "take-action - Amended Report", stages[2].StageName)
+	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+	require.NotNil(t, stages[2].ReferencedStageID)
+	assert.Equal(t, stages[1].ID, *stages[2].ReferencedStageID)
+
+	assert.Equal(t, "Executive Summary", stages[3].StageName)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[3].StageType)
+
+	assert.Equal(t, "COMPOSE-AMENDED-REPORT", result.FinalAnalysis)
 
 	// Verify YES/NO marker was stripped from action stage timeline events
 	actionTimeline, err := entClient.TimelineEvent.Query().
@@ -2612,17 +2712,39 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 	}
 	assert.True(t, foundSafetyPreamble, "action stage should have safety preamble in system prompt")
 
-	// Verify exec summary receives the action stage's final analysis (not just investigation)
+	// Compose receives both the snapshotted investigation report and the action memo.
 	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
-	execSummaryInput := llm.capturedInputs[2]
-	var foundActionContent bool
-	for _, msg := range execSummaryInput.Messages {
-		if strings.Contains(msg.Content, "Actions Taken") {
-			foundActionContent = true
-			break
+	composeInput := llm.capturedInputs[2]
+	var foundUpstream, foundActionMemo, foundComposeSystem bool
+	for _, msg := range composeInput.Messages {
+		if msg.Role == agent.RoleSystem && strings.Contains(msg.Content, "copy-editor") {
+			foundComposeSystem = true
+		}
+		if strings.Contains(msg.Content, "unauthorized access from IP 10.0.0.5") {
+			foundUpstream = true
+		}
+		if strings.Contains(msg.Content, "Suspended workload per security policy") {
+			foundActionMemo = true
 		}
 	}
-	assert.True(t, foundActionContent, "exec summary should receive the action stage's amended report")
+	assert.True(t, foundComposeSystem, "compose call should use the compose system prompt")
+	assert.True(t, foundUpstream, "compose should receive the investigation report")
+	assert.True(t, foundActionMemo, "compose should receive the action memo")
+
+	// Verify exec summary receives the compose amended report (not the raw action memo)
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 4)
+	execSummaryInput := llm.capturedInputs[3]
+	var foundComposeContent, foundRawMemo bool
+	for _, msg := range execSummaryInput.Messages {
+		if strings.Contains(msg.Content, "COMPOSE-AMENDED-REPORT") {
+			foundComposeContent = true
+		}
+		if strings.Contains(msg.Content, "Suspended workload per security policy") {
+			foundRawMemo = true
+		}
+	}
+	assert.True(t, foundComposeContent, "exec summary should receive the compose amended report")
+	assert.False(t, foundRawMemo, "exec summary should not receive the raw action memo")
 }
 
 func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
@@ -2667,6 +2789,10 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 				Type:       config.AgentTypeExecSummary,
 				LLMBackend: config.LLMBackendLangChain,
 			},
+			config.AgentNameCompose: {
+				Type:       config.AgentTypeCompose,
+				LLMBackend: config.LLMBackendLangChain,
+			},
 		}),
 		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 			"test-provider": {
@@ -2685,6 +2811,9 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 			}},
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "No automated remediation warranted. Evidence does not support action.\nNO"},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "COMPOSE-NO-ACTION-REPORT"},
 			}},
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "No security incident. Investigation complete."},
@@ -2706,12 +2835,16 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 		Order(ent.Asc(stage.FieldStageIndex)).
 		All(context.Background())
 	require.NoError(t, err)
-	require.Len(t, stages, 3)
+	require.Len(t, stages, 4)
 
 	assert.Equal(t, "take-action", stages[1].StageName)
 	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
 	require.NotNil(t, stages[1].ActionsExecuted, "action stage should have actions_executed set")
 	assert.False(t, *stages[1].ActionsExecuted, "action stage should report actions_executed=false when no actions taken")
+
+	assert.Equal(t, "take-action - Amended Report", stages[2].StageName)
+	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+	assert.Equal(t, "COMPOSE-NO-ACTION-REPORT", result.FinalAnalysis)
 
 	// Verify NO marker was stripped from timeline events
 	noActionTimeline, err := entClient.TimelineEvent.Query().
@@ -2725,6 +2858,358 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 		assert.NotRegexp(t, `(?m)^\s*(YES|NO)\s*$`, evt.Content,
 			"action stage %s timeline event should have YES/NO marker stripped", evt.EventType)
 	}
+}
+
+func actionComposeTestConfig(chain *config.ChainConfig, extraAgents map[string]*config.AgentConfig) *config.Config {
+	maxIter := 1
+	agents := map[string]*config.AgentConfig{
+		"TestAgent": {
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		"ActionAgent": {
+			Type:          config.AgentTypeAction,
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		config.AgentNameExecSummary: {
+			Type:       config.AgentTypeExecSummary,
+			LLMBackend: config.LLMBackendLangChain,
+		},
+		config.AgentNameCompose: {
+			Type:       config.AgentTypeCompose,
+			LLMBackend: config.LLMBackendLangChain,
+		},
+		config.AgentNameSynthesis: {
+			Type:          config.AgentTypeSynthesis,
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+	}
+	for name, cfg := range extraAgents {
+		agents[name] = cfg
+	}
+	return &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(agents),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		}),
+		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+}
+
+func investigationThenActionChain() *config.ChainConfig {
+	return &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{Name: "investigation", Agents: []config.StageAgentConfig{{Name: "TestAgent"}}},
+			{Name: "take-action", Agents: []config.StageAgentConfig{{Name: "ActionAgent"}}},
+		},
+	}
+}
+
+func assertComposeConcatOnTimeline(t *testing.T, client *ent.Client, composeStageID, want string) {
+	t.Helper()
+	events, err := client.TimelineEvent.Query().
+		Where(
+			timelineevent.StageID(composeStageID),
+			timelineevent.EventTypeEQ(timelineevent.EventTypeFinalAnalysis),
+		).
+		All(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, events, "compose stage should persist concat as a final_analysis timeline event")
+	found := false
+	for _, evt := range events {
+		if evt.Content == want {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "compose timeline final_analysis should equal fail-open concat")
+}
+
+func TestExecutor_ActionOnlyChainSkipsCompose(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{Name: "take-action", Agents: []config.StageAgentConfig{{Name: "ActionAgent"}}},
+		},
+	}
+	cfg := actionComposeTestConfig(chain, nil)
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-ONLY"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary of action-only chain."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "ACTION-MEMO-ONLY", result.FinalAnalysis)
+
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 2)
+	assert.Equal(t, stage.StageTypeAction, stages[0].StageType)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[1].StageType)
+}
+
+func TestExecutor_ActionOnlyConsecutiveStagesSkipCompose(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{Name: "take-action-1", Agents: []config.StageAgentConfig{{Name: "ActionAgent"}}},
+			{Name: "take-action-2", Agents: []config.StageAgentConfig{{Name: "ActionAgent"}}},
+		},
+	}
+	cfg := actionComposeTestConfig(chain, nil)
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-1"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-2"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary of consecutive action-only chain."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "ACTION-MEMO-2", result.FinalAnalysis)
+
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 3)
+	assert.Equal(t, stage.StageTypeAction, stages[0].StageType)
+	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[2].StageType)
+}
+
+func TestExecutor_ComposeLLMFailureConcatAndContinues(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := investigationThenActionChain()
+	cfg := actionComposeTestConfig(chain, nil)
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "INV-UPSTREAM"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO"}}},
+			{err: fmt.Errorf("compose LLM failed")},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary after compose failure."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Nil(t, result.Error)
+	assert.Equal(t, formatComposeConcat("INV-UPSTREAM", "ACTION-MEMO"), result.FinalAnalysis)
+
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 4)
+	assert.Equal(t, stage.StageTypeCompose, stages[2].StageType)
+	assert.Equal(t, stage.StatusFailed, stages[2].Status)
+	assert.Equal(t, stage.StageTypeExecSummary, stages[3].StageType)
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 4)
+	assertComposeConcatOnTimeline(t, entClient, stages[2].ID, formatComposeConcat("INV-UPSTREAM", "ACTION-MEMO"))
+}
+
+func TestExecutor_ComposeEmptyOutputConcat(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := investigationThenActionChain()
+	cfg := actionComposeTestConfig(chain, nil)
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "INV-UPSTREAM"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "   "}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "   "}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "   "}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary after empty compose."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, formatComposeConcat("INV-UPSTREAM", "ACTION-MEMO"), result.FinalAnalysis)
+
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 4)
+	assert.Equal(t, stage.StatusFailed, stages[2].Status)
+	assertComposeConcatOnTimeline(t, entClient, stages[2].ID, formatComposeConcat("INV-UPSTREAM", "ACTION-MEMO"))
+}
+
+func TestExecutor_ComposeUsesChainComposeProvider(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := investigationThenActionChain()
+	chain.ComposeProvider = "compose-provider"
+	cfg := actionComposeTestConfig(chain, nil)
+	cfg.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"test-provider":    {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		"compose-provider": {Type: config.LLMProviderTypeGoogle, Model: "compose-model"},
+	})
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "INV-UPSTREAM"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "COMPOSE-OUT"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary after compose."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
+
+	actionInput := llm.capturedInputs[1]
+	require.NotNil(t, actionInput.Config)
+	assert.Equal(t, "test-model", actionInput.Config.Model)
+
+	composeInput := llm.capturedInputs[2]
+	require.NotNil(t, composeInput.Config)
+	assert.Equal(t, "compose-model", composeInput.Config.Model)
+}
+
+func TestExecutor_ComposeCancelDoesNotConcatComplete(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := investigationThenActionChain()
+	cfg := actionComposeTestConfig(chain, nil)
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "INV-UPSTREAM"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO"}}},
+			{err: context.Canceled},
+		},
+	}
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, publisher, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resultCh := make(chan *ExecutionResult, 1)
+	go func() {
+		resultCh <- executor.Execute(ctx, session)
+	}()
+
+	timeout := time.After(5 * time.Second)
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-tick.C:
+			if publisher.hasStageStatus("take-action - Amended Report", events.StageStatusStarted) ||
+				publisher.hasStageStatus("take-action", events.StageStatusCompleted) {
+				cancel()
+				result := <-resultCh
+				require.NotNil(t, result)
+				assert.Contains(t, []alertsession.Status{
+					alertsession.StatusCancelled,
+					alertsession.StatusFailed,
+				}, result.Status)
+				assert.NotEqual(t, formatComposeConcat("INV-UPSTREAM", "ACTION-MEMO"), result.FinalAnalysis)
+				return
+			}
+		case result := <-resultCh:
+			require.NotNil(t, result)
+			assert.Contains(t, []alertsession.Status{
+				alertsession.StatusCancelled,
+				alertsession.StatusFailed,
+			}, result.Status)
+			assert.NotEqual(t, formatComposeConcat("INV-UPSTREAM", "ACTION-MEMO"), result.FinalAnalysis)
+			return
+		case <-timeout:
+			t.Fatal("timed out waiting for compose cancel")
+		}
+	}
+}
+
+func TestExecutor_ParallelActionComposeUsesSynthesisMemo(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 1
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{Name: "investigation", Agents: []config.StageAgentConfig{{Name: "TestAgent"}}},
+			{Name: "take-action", Agents: []config.StageAgentConfig{
+				{Name: "ActionAgent"},
+				{Name: "ActionAgent2"},
+			}},
+		},
+	}
+	cfg := actionComposeTestConfig(chain, map[string]*config.AgentConfig{
+		"ActionAgent2": {
+			Type:          config.AgentTypeAction,
+			LLMBackend:    config.LLMBackendLangChain,
+			MaxIterations: &maxIter,
+		},
+	})
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "INV-UPSTREAM"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-1"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO-2"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "SYNTH-ACTION-BLOB"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "COMPOSE-FROM-SYNTH"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary of parallel action."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "COMPOSE-FROM-SYNTH", result.FinalAnalysis)
+
+	stages, err := entClient.Stage.Query().Order(ent.Asc(stage.FieldStageIndex)).All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, stages, 5) // investigation, action, action-synthesis, compose, exec summary
+	assert.Equal(t, stage.StageTypeAction, stages[1].StageType)
+	assert.Equal(t, stage.StageTypeSynthesis, stages[2].StageType)
+	assert.Equal(t, stage.StageTypeCompose, stages[3].StageType)
+	require.NotNil(t, stages[3].ReferencedStageID)
+	assert.Equal(t, stages[1].ID, *stages[3].ReferencedStageID)
+
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 5)
+	composeInput := llm.capturedInputs[4]
+	var sawUpstream, sawSynthMemo bool
+	for _, msg := range composeInput.Messages {
+		if strings.Contains(msg.Content, "INV-UPSTREAM") {
+			sawUpstream = true
+		}
+		if strings.Contains(msg.Content, "SYNTH-ACTION-BLOB") {
+			sawSynthMemo = true
+		}
+	}
+	assert.True(t, sawUpstream, "compose should receive investigation upstream snapshotted before action synthesis")
+	assert.True(t, sawSynthMemo, "compose memo should be the action synthesis blob")
 }
 
 func TestExecutor_MemoryEnabled_BriefingAndRecallTool(t *testing.T) {
