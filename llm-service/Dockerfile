@@ -1,11 +1,13 @@
 FROM mirror.gcr.io/library/python:3.13-slim
 
-RUN pip install --no-cache-dir uv
-
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# Hash-pinned export of uv.lock. Regenerate with: make llm-requirements
+# Do not install or run uv here. It segfaults under QEMU when cross-building
+# linux/amd64 on Apple Silicon.
+COPY requirements.txt .
+RUN python -m venv /app/.venv \
+    && /app/.venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY . .
 

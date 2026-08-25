@@ -18,6 +18,7 @@ Never invent alternate package-manager commands if these work.
 - Dashboard: `make test-dashboard`
 - Codegen: `make ent-generate`, `make proto-generate`
 - Migrations: `make migrate-create NAME=add_feature` — then apply the `db-migration-review` skill
+- LLM image deps: after changing `llm-service/uv.lock`, run `make llm-requirements`
 
 ## Skills
 

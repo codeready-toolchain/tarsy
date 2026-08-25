@@ -144,6 +144,9 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Check requirements.txt matches uv.lock
+        run: make llm-requirements-check
+
       - name: Install dependencies
         working-directory: llm-service
         run: uv sync --extra test

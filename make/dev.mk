@@ -76,7 +76,7 @@ doctor: ## Check if dev prerequisites are installed
 # =============================================================================
 
 .PHONY: check-all
-check-all: fmt build lint-fix test ## Format, build, lint, and run all tests
+check-all: fmt build lint-fix llm-requirements-check test ## Format, build, lint, and run all tests
 	@echo ""
 	@echo -e "$(GREEN)✅ All checks passed!$(NC)"
 
@@ -307,6 +307,21 @@ proto-clean: ## Clean generated proto files
 # =============================================================================
 # Dependencies
 # =============================================================================
+
+# Hash-pinned requirements.txt used by llm-service/Dockerfile. Keep in sync with uv.lock.
+LLM_REQUIREMENTS_EXPORT := uv export --frozen --no-dev --no-emit-project --no-editable --no-header
+
+.PHONY: llm-requirements
+llm-requirements: ## Export llm-service/requirements.txt from uv.lock (container image)
+	@echo -e "$(YELLOW)Exporting llm-service/requirements.txt from uv.lock...$(NC)"
+	@cd llm-service && $(LLM_REQUIREMENTS_EXPORT) -o requirements.txt >/dev/null
+	@echo -e "$(GREEN)✅ llm-service/requirements.txt updated$(NC)"
+
+.PHONY: llm-requirements-check
+llm-requirements-check: ## Verify llm-service/requirements.txt matches uv.lock
+	@echo -e "$(YELLOW)Checking llm-service/requirements.txt matches uv.lock...$(NC)"
+	@diff -u llm-service/requirements.txt <(cd llm-service && $(LLM_REQUIREMENTS_EXPORT))
+	@echo -e "$(GREEN)✅ llm-service/requirements.txt is in sync$(NC)"
 
 .PHONY: setup
 setup: ## Install all dependencies (Go + Python + Dashboard) and bootstrap config
