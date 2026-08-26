@@ -133,6 +133,7 @@ function renderUsagePage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mockGetFilterOptions.mockResolvedValue({
     alert_types: ['kubernetes'],
     chain_ids: ['default'],
@@ -171,6 +172,128 @@ describe('UsagePage', () => {
     expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
       'Last 30 days',
     );
+  });
+
+  it('restores a saved time preset and filters from localStorage', async () => {
+    localStorage.setItem(
+      'tarsy-usage-filters',
+      JSON.stringify({
+        date_preset: '7d',
+        start_date: null,
+        end_date: null,
+        alert_type: 'kubernetes',
+        chain_id: 'default',
+        rank_by: 'tokens',
+      }),
+    );
+    mockGetUsageSummary.mockResolvedValue(makeSummary({ rank_by: 'tokens' }));
+
+    renderUsagePage();
+
+    await waitFor(() => {
+      expect(mockGetUsageSummary).toHaveBeenCalled();
+    });
+
+    const params = mockGetUsageSummary.mock.calls[0][0];
+    const start = new Date(params.start_date).getTime();
+    const end = new Date(params.end_date).getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+    expect(end - start).toBeGreaterThan(6 * dayMs);
+    expect(end - start).toBeLessThan(8 * dayMs);
+    expect(params.alert_type).toBe('kubernetes');
+    expect(params.chain_id).toBe('default');
+    expect(params.rank_by).toBe('tokens');
+
+    expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
+      'Last 7 days',
+    );
+    expect(screen.getByRole('combobox', { name: 'Alert type' })).toHaveValue('kubernetes');
+    expect(screen.getByRole('combobox', { name: 'Chain' })).toHaveValue('default');
+  });
+
+  it('restores a custom date range from localStorage', async () => {
+    localStorage.setItem(
+      'tarsy-usage-filters',
+      JSON.stringify({
+        date_preset: null,
+        start_date: '2026-01-01T00:00:00.000Z',
+        end_date: '2026-01-15T00:00:00.000Z',
+        alert_type: null,
+        chain_id: null,
+      }),
+    );
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+
+    renderUsagePage();
+
+    await waitFor(() => {
+      expect(mockGetUsageSummary).toHaveBeenCalled();
+    });
+
+    const params = mockGetUsageSummary.mock.calls[0][0];
+    expect(params.start_date).toBe('2026-01-01T00:00:00.000Z');
+    expect(params.end_date).toBe('2026-01-15T00:00:00.000Z');
+  });
+
+  it('falls back to 30d when the stored preset is unknown', async () => {
+    localStorage.setItem(
+      'tarsy-usage-filters',
+      JSON.stringify({
+        date_preset: 'not-a-real-preset',
+        start_date: null,
+        end_date: null,
+        alert_type: null,
+        chain_id: null,
+      }),
+    );
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+
+    renderUsagePage();
+
+    await waitFor(() => {
+      expect(mockGetUsageSummary).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
+      'Last 30 days',
+    );
+  });
+
+  it('persists the time range across remounts', async () => {
+    const user = userEvent.setup();
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+
+    const { unmount } = renderUsagePage();
+    await screen.findByText('Totals');
+
+    await user.click(screen.getByRole('button', { name: 'Select time range' }));
+    await user.click(await screen.findByRole('button', { name: 'Last 7 days' }));
+    await user.click(screen.getByRole('button', { name: 'Apply Filter' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
+        'Last 7 days',
+      );
+    });
+
+    unmount();
+    mockGetUsageSummary.mockClear();
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+
+    renderUsagePage();
+
+    await waitFor(() => {
+      expect(mockGetUsageSummary).toHaveBeenCalled();
+    });
+    expect(screen.getByRole('button', { name: 'Select time range' })).toHaveTextContent(
+      'Last 7 days',
+    );
+    const params = mockGetUsageSummary.mock.calls[0][0];
+    const start = new Date(params.start_date).getTime();
+    const end = new Date(params.end_date).getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+    expect(end - start).toBeGreaterThan(6 * dayMs);
+    expect(end - start).toBeLessThan(8 * dayMs);
   });
 
   it('re-fetches when rank_by changes', async () => {
