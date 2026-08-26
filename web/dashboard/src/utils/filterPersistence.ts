@@ -1,8 +1,8 @@
 /**
- * localStorage persistence for dashboard filter, pagination, and sort state.
+ * localStorage persistence for dashboard filter, pagination, sort, and Usage page state.
  */
 
-import type { SessionFilter, PaginationState, SortState, TriageFilter } from '../types/dashboard.ts';
+import type { SessionFilter, PaginationState, SortState, TriageFilter, UsagePageFilters } from '../types/dashboard.ts';
 
 // Storage keys
 const FILTER_KEY = 'tarsy-filters';
@@ -10,6 +10,7 @@ const PAGINATION_KEY = 'tarsy-pagination';
 const SORT_KEY = 'tarsy-sort';
 const DASHBOARD_TAB_KEY = 'tarsy-dashboard-tab';
 const TRIAGE_FILTERS_KEY = 'tarsy-triage-filters';
+const USAGE_FILTERS_KEY = 'tarsy-usage-filters';
 
 // ────────────────────────────────────────────────────────────
 // Defaults
@@ -143,6 +144,7 @@ export function clearAllDashboardState(): void {
     localStorage.removeItem(SORT_KEY);
     localStorage.removeItem(DASHBOARD_TAB_KEY);
     localStorage.removeItem(TRIAGE_FILTERS_KEY);
+    localStorage.removeItem(USAGE_FILTERS_KEY);
   } catch {
     // ignore
   }
@@ -170,6 +172,28 @@ export function loadTriageFilters(): TriageFilter | null {
     if (raw) return JSON.parse(raw) as TriageFilter;
   } catch {
     // ignore
+  }
+  return null;
+}
+
+// ────────────────────────────────────────────────────────────
+// Usage page filters
+// ────────────────────────────────────────────────────────────
+
+export function saveUsageFiltersToStorage(filters: UsagePageFilters): void {
+  try {
+    localStorage.setItem(USAGE_FILTERS_KEY, JSON.stringify(filters));
+  } catch {
+    // quota exceeded or private browsing — silently ignore
+  }
+}
+
+export function loadUsageFiltersFromStorage(): UsagePageFilters | null {
+  try {
+    const raw = localStorage.getItem(USAGE_FILTERS_KEY);
+    if (raw) return JSON.parse(raw) as UsagePageFilters;
+  } catch {
+    // corrupted data — ignore
   }
   return null;
 }

@@ -52,8 +52,13 @@ import { websocketService } from '../services/websocket.ts';
 import { EVENT_SESSION_STATUS } from '../constants/eventTypes.ts';
 import { isTerminalStatus, type SessionStatus } from '../constants/sessionStatus.ts';
 import { formatEstimatedCostUsd, formatTimestamp, formatTokens, formatTokensCompact } from '../utils/format.ts';
+import {
+  loadUsageFiltersFromStorage,
+  saveUsageFiltersToStorage,
+} from '../utils/filterPersistence.ts';
 import { sessionDetailPath } from '../constants/routes.ts';
 import type { UsageRankBy, UsageSummaryResponse } from '../types/api.ts';
+import type { UsagePageFilters } from '../types/dashboard.ts';
 import type { SessionStatusPayload } from '../types/events.ts';
 
 /** Throttle for re-fetching the summary in response to WebSocket session events —
@@ -63,6 +68,61 @@ const WS_REFRESH_THROTTLE_MS = 2000;
 function defaultThirtyDayRange(): { start: Date; end: Date; preset: string } {
   const range = USAGE_TIME_PRESETS.find((p) => p.value === '30d')!.getDateRange();
   return { start: range.start, end: range.end, preset: '30d' };
+}
+
+function parseStoredDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function rangeFromStoredFilters(saved: UsagePageFilters | null): {
+  start: Date;
+  end: Date;
+  preset: string | null;
+} {
+  const fallback = defaultThirtyDayRange();
+  if (!saved) return fallback;
+
+  if (saved.date_preset) {
+    const preset = USAGE_TIME_PRESETS.find((p) => p.value === saved.date_preset);
+    if (preset) {
+      const range = preset.getDateRange();
+      return { start: range.start, end: range.end, preset: preset.value };
+    }
+  }
+
+  const start = parseStoredDate(saved.start_date);
+  const end = parseStoredDate(saved.end_date);
+  if (start && end && start < end) {
+    return { start, end, preset: null };
+  }
+
+  return fallback;
+}
+
+function parseStoredRankBy(value: unknown): UsageRankBy | undefined {
+  return value === 'cost' || value === 'tokens' ? value : undefined;
+}
+
+function loadInitialUsageView(): {
+  start: Date;
+  end: Date;
+  preset: string | null;
+  alertType: string | null;
+  chainId: string | null;
+  rankBy: UsageRankBy | undefined;
+} {
+  const saved = loadUsageFiltersFromStorage();
+  const range = rangeFromStoredFilters(saved);
+  return {
+    start: range.start,
+    end: range.end,
+    preset: range.preset,
+    alertType: saved?.alert_type ?? null,
+    chainId: saved?.chain_id ?? null,
+    rankBy: parseStoredRankBy(saved?.rank_by),
+  };
 }
 
 /** Explains exactly what "Incomplete" means for a model's priced status. */
@@ -88,16 +148,27 @@ function unpricedCostTooltip(tokenCount: number | undefined, interactionCount: n
 }
 
 export function UsagePage() {
-  const initial = defaultThirtyDayRange();
+  const [initial] = useState(loadInitialUsageView);
   const [startDate, setStartDate] = useState<Date>(initial.start);
   const [endDate, setEndDate] = useState<Date>(initial.end);
   const [datePreset, setDatePreset] = useState<string | null>(initial.preset);
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
 
-  const [alertType, setAlertType] = useState<string | null>(null);
-  const [chainId, setChainId] = useState<string | null>(null);
+  const [alertType, setAlertType] = useState<string | null>(initial.alertType);
+  const [chainId, setChainId] = useState<string | null>(initial.chainId);
   /** Undefined = let the server pick the default (cost when enabled, else tokens). */
-  const [rankBy, setRankBy] = useState<UsageRankBy | undefined>(undefined);
+  const [rankBy, setRankBy] = useState<UsageRankBy | undefined>(initial.rankBy);
+
+  useEffect(() => {
+    saveUsageFiltersToStorage({
+      date_preset: datePreset,
+      start_date: datePreset ? null : startDate.toISOString(),
+      end_date: datePreset ? null : endDate.toISOString(),
+      alert_type: alertType,
+      chain_id: chainId,
+      rank_by: rankBy,
+    });
+  }, [startDate, endDate, datePreset, alertType, chainId, rankBy]);
 
   const [alertTypeOptions, setAlertTypeOptions] = useState<string[]>([]);
   const [chainIdOptions, setChainIdOptions] = useState<string[]>([]);

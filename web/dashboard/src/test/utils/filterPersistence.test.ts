@@ -20,8 +20,10 @@ import {
   clearAllDashboardState,
   saveTriageFilters,
   loadTriageFilters,
+  saveUsageFiltersToStorage,
+  loadUsageFiltersFromStorage,
 } from '../../utils/filterPersistence';
-import type { SessionFilter, SortState } from '../../types/dashboard';
+import type { SessionFilter, SortState, UsagePageFilters } from '../../types/dashboard';
 
 // ---------------------------------------------------------------------------
 // localStorage mock
@@ -228,6 +230,42 @@ describe('triage filters persistence', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Usage filters persistence
+// ---------------------------------------------------------------------------
+
+describe('usage filters persistence', () => {
+  const filters: UsagePageFilters = {
+    date_preset: '7d',
+    start_date: null,
+    end_date: null,
+    alert_type: 'kubernetes',
+    chain_id: 'default',
+    rank_by: 'tokens',
+  };
+
+  it('round-trips a valid filters object', () => {
+    saveUsageFiltersToStorage(filters);
+    expect(loadUsageFiltersFromStorage()).toEqual(filters);
+  });
+
+  it('returns null when nothing saved', () => {
+    expect(loadUsageFiltersFromStorage()).toBeNull();
+  });
+
+  it('returns null for corrupted JSON', () => {
+    localStorageMock.setItem('tarsy-usage-filters', '{broken');
+    expect(loadUsageFiltersFromStorage()).toBeNull();
+  });
+
+  it('silently handles storage errors on save', () => {
+    localStorageMock.setItem.mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError');
+    });
+    expect(() => saveUsageFiltersToStorage(filters)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // clearAllDashboardState
 // ---------------------------------------------------------------------------
 
@@ -237,6 +275,13 @@ describe('clearAllDashboardState', () => {
     savePaginationToStorage({ page: 5 });
     saveSortToStorage({ field: 'created_at', direction: 'desc' });
     saveTriageFilters({ assignee: 'mine' });
+    saveUsageFiltersToStorage({
+      date_preset: '7d',
+      start_date: null,
+      end_date: null,
+      alert_type: null,
+      chain_id: null,
+    });
 
     clearAllDashboardState();
 
@@ -244,5 +289,6 @@ describe('clearAllDashboardState', () => {
     expect(loadPaginationFromStorage()).toBeNull();
     expect(loadSortFromStorage()).toBeNull();
     expect(loadTriageFilters()).toBeNull();
+    expect(loadUsageFiltersFromStorage()).toBeNull();
   });
 });

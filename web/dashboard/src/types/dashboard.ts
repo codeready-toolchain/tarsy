@@ -38,3 +38,14 @@ export type DashboardTab = 'sessions' | 'triage';
 export interface TriageFilter {
   assignee: 'all' | 'mine' | 'unassigned';
 }
+
+/** Persisted Usage page filters (time window + optional drill-down). */
+export interface UsagePageFilters {
+  /** Preset value (e.g. '7d', 'mtd'); null means a custom start/end. */
+  date_preset: string | null;
+  start_date: string | null; // RFC3339, used when date_preset is null
+  end_date: string | null; // RFC3339, used when date_preset is null
+  alert_type: string | null;
+  chain_id: string | null;
+  rank_by?: 'cost' | 'tokens';
+}
