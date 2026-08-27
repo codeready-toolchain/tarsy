@@ -45,6 +45,10 @@ const (
 	FieldTotalTokens = "total_tokens"
 	// FieldThinkingTokens holds the string denoting the thinking_tokens field in the database.
 	FieldThinkingTokens = "thinking_tokens"
+	// FieldCacheReadTokens holds the string denoting the cache_read_tokens field in the database.
+	FieldCacheReadTokens = "cache_read_tokens"
+	// FieldCacheCreationTokens holds the string denoting the cache_creation_tokens field in the database.
+	FieldCacheCreationTokens = "cache_creation_tokens"
 	// FieldEstimatedCostUsd holds the string denoting the estimated_cost_usd field in the database.
 	FieldEstimatedCostUsd = "estimated_cost_usd"
 	// FieldDurationMs holds the string denoting the duration_ms field in the database.
@@ -128,6 +132,8 @@ var Columns = []string{
 	FieldOutputTokens,
 	FieldTotalTokens,
 	FieldThinkingTokens,
+	FieldCacheReadTokens,
+	FieldCacheCreationTokens,
 	FieldEstimatedCostUsd,
 	FieldDurationMs,
 	FieldErrorMessage,
@@ -245,6 +251,16 @@ func ByTotalTokens(opts ...sql.OrderTermOption) OrderOption {
 // ByThinkingTokens orders the results by the thinking_tokens field.
 func ByThinkingTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldThinkingTokens, opts...).ToFunc()
+}
+
+// ByCacheReadTokens orders the results by the cache_read_tokens field.
+func ByCacheReadTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheReadTokens, opts...).ToFunc()
+}
+
+// ByCacheCreationTokens orders the results by the cache_creation_tokens field.
+func ByCacheCreationTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCacheCreationTokens, opts...).ToFunc()
 }
 
 // ByEstimatedCostUsd orders the results by the estimated_cost_usd field.

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
@@ -40,6 +41,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		alertData                            string
 		investText, summaryText              string
 		invIn, invOut, invTotal, invThinking int
+		invCacheRead                         int
 		sumIn, sumOut, sumTotal              int
 	}
 	specs := []sessionSpec{
@@ -48,7 +50,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			investText:  "A investigation complete.",
 			summaryText: "A executive summary.",
 			invIn:       100, invOut: 50, invTotal: 150, invThinking: 1000,
-			sumIn: 30, sumOut: 10, sumTotal: 40,
+			invCacheRead: 40,
+			sumIn:        30, sumOut: 10, sumTotal: 40,
 		},
 		{
 			alertData:   "Usage session B",
@@ -65,10 +68,11 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			Chunks: []agent.Chunk{
 				&agent.TextChunk{Content: s.investText},
 				&agent.UsageChunk{
-					InputTokens:    s.invIn,
-					OutputTokens:   s.invOut,
-					TotalTokens:    s.invTotal,
-					ThinkingTokens: s.invThinking,
+					InputTokens:     s.invIn,
+					OutputTokens:    s.invOut,
+					TotalTokens:     s.invTotal,
+					ThinkingTokens:  s.invThinking,
+					CacheReadTokens: s.invCacheRead,
 				},
 			},
 		})
@@ -118,6 +122,32 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		totalTok += tok
 		totalCost += cost
 	}
+
+	t.Run("PersistsCacheReadOnInteraction", func(t *testing.T) {
+		rows, err := app.EntClient.LLMInteraction.Query().
+			Where(llminteraction.SessionID(ids[0])).
+			All(t.Context())
+		require.NoError(t, err)
+		var found bool
+		for _, row := range rows {
+			if row.CacheReadTokens == nil {
+				continue
+			}
+			found = true
+			assert.Equal(t, specs[0].invCacheRead, *row.CacheReadTokens)
+			assert.Nil(t, row.CacheCreationTokens)
+		}
+		require.True(t, found, "session A investigation should persist cache_read_tokens")
+
+		bRows, err := app.EntClient.LLMInteraction.Query().
+			Where(llminteraction.SessionID(ids[1])).
+			All(t.Context())
+		require.NoError(t, err)
+		for _, row := range bRows {
+			assert.Nil(t, row.CacheReadTokens)
+			assert.Nil(t, row.CacheCreationTokens)
+		}
+	})
 
 	t.Run("SessionListCost", func(t *testing.T) {
 		list := app.GetSessionList(t, "")

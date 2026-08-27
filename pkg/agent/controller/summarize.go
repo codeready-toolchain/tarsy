@@ -557,6 +557,7 @@ func recordSummarizationInteraction(
 	durationMs := int(time.Since(startTime).Milliseconds())
 
 	var inputTokens, outputTokens, totalTokens, thinkingTokens *int
+	var cacheReadTokens, cacheCreationTokens *int
 	var textLen int
 
 	if resp != nil {
@@ -565,9 +566,15 @@ func recordSummarizationInteraction(
 			outputTokens = &resp.Usage.OutputTokens
 			totalTokens = &resp.Usage.TotalTokens
 			// TokenUsage has no presence flag (proto scalars default to 0). Persist
-			// thinking only when > 0 so unreported LangChain zeros stay nil.
+			// thinking/cache only when > 0 so unreported LangChain zeros stay nil.
 			if resp.Usage.ThinkingTokens > 0 {
 				thinkingTokens = &resp.Usage.ThinkingTokens
+			}
+			if resp.Usage.CacheReadTokens > 0 {
+				cacheReadTokens = &resp.Usage.CacheReadTokens
+			}
+			if resp.Usage.CacheCreationTokens > 0 {
+				cacheCreationTokens = &resp.Usage.CacheCreationTokens
 			}
 		}
 		textLen = len(resp.Text)
@@ -601,11 +608,13 @@ func recordSummarizationInteraction(
 			"text_length":      textLen,
 			"tool_calls_count": 0,
 		},
-		InputTokens:    inputTokens,
-		OutputTokens:   outputTokens,
-		TotalTokens:    totalTokens,
-		ThinkingTokens: thinkingTokens,
-		DurationMs:     &durationMs,
+		InputTokens:         inputTokens,
+		OutputTokens:        outputTokens,
+		TotalTokens:         totalTokens,
+		ThinkingTokens:      thinkingTokens,
+		CacheReadTokens:     cacheReadTokens,
+		CacheCreationTokens: cacheCreationTokens,
+		DurationMs:          &durationMs,
 	})
 	if err != nil {
 		slog.Error("Failed to record summarization LLM interaction",

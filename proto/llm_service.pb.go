@@ -916,13 +916,15 @@ func (x *GroundingSupport) GetGroundingChunkIndices() []int32 {
 
 // UsageInfo reports token consumption for this LLM call.
 type UsageInfo struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	InputTokens    int32                  `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
-	OutputTokens   int32                  `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
-	TotalTokens    int32                  `protobuf:"varint,3,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`
-	ThinkingTokens int32                  `protobuf:"varint,4,opt,name=thinking_tokens,json=thinkingTokens,proto3" json:"thinking_tokens,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	InputTokens         int32                  `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens        int32                  `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	TotalTokens         int32                  `protobuf:"varint,3,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`
+	ThinkingTokens      int32                  `protobuf:"varint,4,opt,name=thinking_tokens,json=thinkingTokens,proto3" json:"thinking_tokens,omitempty"`
+	CacheReadTokens     int32                  `protobuf:"varint,5,opt,name=cache_read_tokens,json=cacheReadTokens,proto3" json:"cache_read_tokens,omitempty"`             // Provider cache-hit tokens when reported
+	CacheCreationTokens int32                  `protobuf:"varint,6,opt,name=cache_creation_tokens,json=cacheCreationTokens,proto3" json:"cache_creation_tokens,omitempty"` // Provider cache-write tokens when reported
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UsageInfo) Reset() {
@@ -979,6 +981,20 @@ func (x *UsageInfo) GetTotalTokens() int32 {
 func (x *UsageInfo) GetThinkingTokens() int32 {
 	if x != nil {
 		return x.ThinkingTokens
+	}
+	return 0
+}
+
+func (x *UsageInfo) GetCacheReadTokens() int32 {
+	if x != nil {
+		return x.CacheReadTokens
+	}
+	return 0
+}
+
+func (x *UsageInfo) GetCacheCreationTokens() int32 {
+	if x != nil {
+		return x.CacheCreationTokens
 	}
 	return 0
 }
@@ -1219,12 +1235,14 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	"startIndex\x12\x1b\n" +
 	"\tend_index\x18\x02 \x01(\x05R\bendIndex\x12\x12\n" +
 	"\x04text\x18\x03 \x01(\tR\x04text\x126\n" +
-	"\x17grounding_chunk_indices\x18\x04 \x03(\x05R\x15groundingChunkIndices\"\x9f\x01\n" +
+	"\x17grounding_chunk_indices\x18\x04 \x03(\x05R\x15groundingChunkIndices\"\xff\x01\n" +
 	"\tUsageInfo\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12!\n" +
 	"\ftotal_tokens\x18\x03 \x01(\x05R\vtotalTokens\x12'\n" +
-	"\x0fthinking_tokens\x18\x04 \x01(\x05R\x0ethinkingTokens\"W\n" +
+	"\x0fthinking_tokens\x18\x04 \x01(\x05R\x0ethinkingTokens\x12*\n" +
+	"\x11cache_read_tokens\x18\x05 \x01(\x05R\x0fcacheReadTokens\x122\n" +
+	"\x15cache_creation_tokens\x18\x06 \x01(\x05R\x13cacheCreationTokens\"W\n" +
 	"\tErrorInfo\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12\x1c\n" +

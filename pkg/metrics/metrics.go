@@ -90,7 +90,7 @@ var (
 
 	LLMTokensTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "tarsy_llm_tokens_total",
-		Help: "Tokens consumed (input/output/thinking).",
+		Help: "Tokens consumed (input/output/thinking/cache_read/cache_creation).",
 	}, []string{"provider", "model", "direction"})
 
 	LLMFallbacksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -164,7 +164,8 @@ var WSConnectionsActive = promauto.NewGauge(prometheus.GaugeOpts{
 
 // LLMTokens carries token counts without importing pkg/agent.
 type LLMTokens struct {
-	Input, Output, Thinking int
+	Input, Output, Thinking  int
+	CacheRead, CacheCreation int
 }
 
 // ObserveLLMCall records metrics for a single LLM call. Safe to call with
@@ -182,6 +183,12 @@ func ObserveLLMCall(provider, model string, duration time.Duration, tokens *LLMT
 		LLMTokensTotal.WithLabelValues(provider, model, "output").Add(float64(tokens.Output))
 		if tokens.Thinking > 0 {
 			LLMTokensTotal.WithLabelValues(provider, model, "thinking").Add(float64(tokens.Thinking))
+		}
+		if tokens.CacheRead > 0 {
+			LLMTokensTotal.WithLabelValues(provider, model, "cache_read").Add(float64(tokens.CacheRead))
+		}
+		if tokens.CacheCreation > 0 {
+			LLMTokensTotal.WithLabelValues(provider, model, "cache_creation").Add(float64(tokens.CacheCreation))
 		}
 	}
 }

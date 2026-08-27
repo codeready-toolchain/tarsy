@@ -67,8 +67,10 @@ type ExecutionResult struct {
 
 // TokenUsage aggregates token consumption across multiple LLM calls.
 type TokenUsage struct {
-	InputTokens    int
-	OutputTokens   int
-	TotalTokens    int
-	ThinkingTokens int
+	InputTokens         int
+	OutputTokens        int
+	TotalTokens         int
+	ThinkingTokens      int
+	CacheReadTokens     int
+	CacheCreationTokens int
 }

@@ -8776,44 +8776,48 @@ func (m *InvestigationMemoryMutation) ResetEdge(name string) error {
 // LLMInteractionMutation represents an operation that mutates the LLMInteraction nodes in the graph.
 type LLMInteractionMutation struct {
 	config
-	op                     Op
-	typ                    string
-	id                     *string
-	created_at             *time.Time
-	interaction_type       *llminteraction.InteractionType
-	model_name             *string
-	llm_request            *map[string]interface{}
-	llm_response           *map[string]interface{}
-	thinking_content       *string
-	response_metadata      *map[string]interface{}
-	input_tokens           *int
-	addinput_tokens        *int
-	output_tokens          *int
-	addoutput_tokens       *int
-	total_tokens           *int
-	addtotal_tokens        *int
-	thinking_tokens        *int
-	addthinking_tokens     *int
-	estimated_cost_usd     *float64
-	addestimated_cost_usd  *float64
-	duration_ms            *int
-	addduration_ms         *int
-	error_message          *string
-	clearedFields          map[string]struct{}
-	session                *string
-	clearedsession         bool
-	stage                  *string
-	clearedstage           bool
-	agent_execution        *string
-	clearedagent_execution bool
-	last_message           *string
-	clearedlast_message    bool
-	timeline_events        map[string]struct{}
-	removedtimeline_events map[string]struct{}
-	clearedtimeline_events bool
-	done                   bool
-	oldValue               func(context.Context) (*LLMInteraction, error)
-	predicates             []predicate.LLMInteraction
+	op                       Op
+	typ                      string
+	id                       *string
+	created_at               *time.Time
+	interaction_type         *llminteraction.InteractionType
+	model_name               *string
+	llm_request              *map[string]interface{}
+	llm_response             *map[string]interface{}
+	thinking_content         *string
+	response_metadata        *map[string]interface{}
+	input_tokens             *int
+	addinput_tokens          *int
+	output_tokens            *int
+	addoutput_tokens         *int
+	total_tokens             *int
+	addtotal_tokens          *int
+	thinking_tokens          *int
+	addthinking_tokens       *int
+	cache_read_tokens        *int
+	addcache_read_tokens     *int
+	cache_creation_tokens    *int
+	addcache_creation_tokens *int
+	estimated_cost_usd       *float64
+	addestimated_cost_usd    *float64
+	duration_ms              *int
+	addduration_ms           *int
+	error_message            *string
+	clearedFields            map[string]struct{}
+	session                  *string
+	clearedsession           bool
+	stage                    *string
+	clearedstage             bool
+	agent_execution          *string
+	clearedagent_execution   bool
+	last_message             *string
+	clearedlast_message      bool
+	timeline_events          map[string]struct{}
+	removedtimeline_events   map[string]struct{}
+	clearedtimeline_events   bool
+	done                     bool
+	oldValue                 func(context.Context) (*LLMInteraction, error)
+	predicates               []predicate.LLMInteraction
 }
 
 var _ ent.Mutation = (*LLMInteractionMutation)(nil)
@@ -9661,6 +9665,146 @@ func (m *LLMInteractionMutation) ResetThinkingTokens() {
 	delete(m.clearedFields, llminteraction.FieldThinkingTokens)
 }
 
+// SetCacheReadTokens sets the "cache_read_tokens" field.
+func (m *LLMInteractionMutation) SetCacheReadTokens(i int) {
+	m.cache_read_tokens = &i
+	m.addcache_read_tokens = nil
+}
+
+// CacheReadTokens returns the value of the "cache_read_tokens" field in the mutation.
+func (m *LLMInteractionMutation) CacheReadTokens() (r int, exists bool) {
+	v := m.cache_read_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCacheReadTokens returns the old "cache_read_tokens" field's value of the LLMInteraction entity.
+// If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LLMInteractionMutation) OldCacheReadTokens(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCacheReadTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCacheReadTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCacheReadTokens: %w", err)
+	}
+	return oldValue.CacheReadTokens, nil
+}
+
+// AddCacheReadTokens adds i to the "cache_read_tokens" field.
+func (m *LLMInteractionMutation) AddCacheReadTokens(i int) {
+	if m.addcache_read_tokens != nil {
+		*m.addcache_read_tokens += i
+	} else {
+		m.addcache_read_tokens = &i
+	}
+}
+
+// AddedCacheReadTokens returns the value that was added to the "cache_read_tokens" field in this mutation.
+func (m *LLMInteractionMutation) AddedCacheReadTokens() (r int, exists bool) {
+	v := m.addcache_read_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCacheReadTokens clears the value of the "cache_read_tokens" field.
+func (m *LLMInteractionMutation) ClearCacheReadTokens() {
+	m.cache_read_tokens = nil
+	m.addcache_read_tokens = nil
+	m.clearedFields[llminteraction.FieldCacheReadTokens] = struct{}{}
+}
+
+// CacheReadTokensCleared returns if the "cache_read_tokens" field was cleared in this mutation.
+func (m *LLMInteractionMutation) CacheReadTokensCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldCacheReadTokens]
+	return ok
+}
+
+// ResetCacheReadTokens resets all changes to the "cache_read_tokens" field.
+func (m *LLMInteractionMutation) ResetCacheReadTokens() {
+	m.cache_read_tokens = nil
+	m.addcache_read_tokens = nil
+	delete(m.clearedFields, llminteraction.FieldCacheReadTokens)
+}
+
+// SetCacheCreationTokens sets the "cache_creation_tokens" field.
+func (m *LLMInteractionMutation) SetCacheCreationTokens(i int) {
+	m.cache_creation_tokens = &i
+	m.addcache_creation_tokens = nil
+}
+
+// CacheCreationTokens returns the value of the "cache_creation_tokens" field in the mutation.
+func (m *LLMInteractionMutation) CacheCreationTokens() (r int, exists bool) {
+	v := m.cache_creation_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCacheCreationTokens returns the old "cache_creation_tokens" field's value of the LLMInteraction entity.
+// If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LLMInteractionMutation) OldCacheCreationTokens(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCacheCreationTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCacheCreationTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCacheCreationTokens: %w", err)
+	}
+	return oldValue.CacheCreationTokens, nil
+}
+
+// AddCacheCreationTokens adds i to the "cache_creation_tokens" field.
+func (m *LLMInteractionMutation) AddCacheCreationTokens(i int) {
+	if m.addcache_creation_tokens != nil {
+		*m.addcache_creation_tokens += i
+	} else {
+		m.addcache_creation_tokens = &i
+	}
+}
+
+// AddedCacheCreationTokens returns the value that was added to the "cache_creation_tokens" field in this mutation.
+func (m *LLMInteractionMutation) AddedCacheCreationTokens() (r int, exists bool) {
+	v := m.addcache_creation_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCacheCreationTokens clears the value of the "cache_creation_tokens" field.
+func (m *LLMInteractionMutation) ClearCacheCreationTokens() {
+	m.cache_creation_tokens = nil
+	m.addcache_creation_tokens = nil
+	m.clearedFields[llminteraction.FieldCacheCreationTokens] = struct{}{}
+}
+
+// CacheCreationTokensCleared returns if the "cache_creation_tokens" field was cleared in this mutation.
+func (m *LLMInteractionMutation) CacheCreationTokensCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldCacheCreationTokens]
+	return ok
+}
+
+// ResetCacheCreationTokens resets all changes to the "cache_creation_tokens" field.
+func (m *LLMInteractionMutation) ResetCacheCreationTokens() {
+	m.cache_creation_tokens = nil
+	m.addcache_creation_tokens = nil
+	delete(m.clearedFields, llminteraction.FieldCacheCreationTokens)
+}
+
 // SetEstimatedCostUsd sets the "estimated_cost_usd" field.
 func (m *LLMInteractionMutation) SetEstimatedCostUsd(f float64) {
 	m.estimated_cost_usd = &f
@@ -10059,7 +10203,7 @@ func (m *LLMInteractionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LLMInteractionMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 20)
 	if m.session != nil {
 		fields = append(fields, llminteraction.FieldSessionID)
 	}
@@ -10104,6 +10248,12 @@ func (m *LLMInteractionMutation) Fields() []string {
 	}
 	if m.thinking_tokens != nil {
 		fields = append(fields, llminteraction.FieldThinkingTokens)
+	}
+	if m.cache_read_tokens != nil {
+		fields = append(fields, llminteraction.FieldCacheReadTokens)
+	}
+	if m.cache_creation_tokens != nil {
+		fields = append(fields, llminteraction.FieldCacheCreationTokens)
 	}
 	if m.estimated_cost_usd != nil {
 		fields = append(fields, llminteraction.FieldEstimatedCostUsd)
@@ -10152,6 +10302,10 @@ func (m *LLMInteractionMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalTokens()
 	case llminteraction.FieldThinkingTokens:
 		return m.ThinkingTokens()
+	case llminteraction.FieldCacheReadTokens:
+		return m.CacheReadTokens()
+	case llminteraction.FieldCacheCreationTokens:
+		return m.CacheCreationTokens()
 	case llminteraction.FieldEstimatedCostUsd:
 		return m.EstimatedCostUsd()
 	case llminteraction.FieldDurationMs:
@@ -10197,6 +10351,10 @@ func (m *LLMInteractionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldTotalTokens(ctx)
 	case llminteraction.FieldThinkingTokens:
 		return m.OldThinkingTokens(ctx)
+	case llminteraction.FieldCacheReadTokens:
+		return m.OldCacheReadTokens(ctx)
+	case llminteraction.FieldCacheCreationTokens:
+		return m.OldCacheCreationTokens(ctx)
 	case llminteraction.FieldEstimatedCostUsd:
 		return m.OldEstimatedCostUsd(ctx)
 	case llminteraction.FieldDurationMs:
@@ -10317,6 +10475,20 @@ func (m *LLMInteractionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetThinkingTokens(v)
 		return nil
+	case llminteraction.FieldCacheReadTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCacheReadTokens(v)
+		return nil
+	case llminteraction.FieldCacheCreationTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCacheCreationTokens(v)
+		return nil
 	case llminteraction.FieldEstimatedCostUsd:
 		v, ok := value.(float64)
 		if !ok {
@@ -10358,6 +10530,12 @@ func (m *LLMInteractionMutation) AddedFields() []string {
 	if m.addthinking_tokens != nil {
 		fields = append(fields, llminteraction.FieldThinkingTokens)
 	}
+	if m.addcache_read_tokens != nil {
+		fields = append(fields, llminteraction.FieldCacheReadTokens)
+	}
+	if m.addcache_creation_tokens != nil {
+		fields = append(fields, llminteraction.FieldCacheCreationTokens)
+	}
 	if m.addestimated_cost_usd != nil {
 		fields = append(fields, llminteraction.FieldEstimatedCostUsd)
 	}
@@ -10380,6 +10558,10 @@ func (m *LLMInteractionMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalTokens()
 	case llminteraction.FieldThinkingTokens:
 		return m.AddedThinkingTokens()
+	case llminteraction.FieldCacheReadTokens:
+		return m.AddedCacheReadTokens()
+	case llminteraction.FieldCacheCreationTokens:
+		return m.AddedCacheCreationTokens()
 	case llminteraction.FieldEstimatedCostUsd:
 		return m.AddedEstimatedCostUsd()
 	case llminteraction.FieldDurationMs:
@@ -10420,6 +10602,20 @@ func (m *LLMInteractionMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddThinkingTokens(v)
+		return nil
+	case llminteraction.FieldCacheReadTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCacheReadTokens(v)
+		return nil
+	case llminteraction.FieldCacheCreationTokens:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCacheCreationTokens(v)
 		return nil
 	case llminteraction.FieldEstimatedCostUsd:
 		v, ok := value.(float64)
@@ -10470,6 +10666,12 @@ func (m *LLMInteractionMutation) ClearedFields() []string {
 	if m.FieldCleared(llminteraction.FieldThinkingTokens) {
 		fields = append(fields, llminteraction.FieldThinkingTokens)
 	}
+	if m.FieldCleared(llminteraction.FieldCacheReadTokens) {
+		fields = append(fields, llminteraction.FieldCacheReadTokens)
+	}
+	if m.FieldCleared(llminteraction.FieldCacheCreationTokens) {
+		fields = append(fields, llminteraction.FieldCacheCreationTokens)
+	}
 	if m.FieldCleared(llminteraction.FieldEstimatedCostUsd) {
 		fields = append(fields, llminteraction.FieldEstimatedCostUsd)
 	}
@@ -10519,6 +10721,12 @@ func (m *LLMInteractionMutation) ClearField(name string) error {
 		return nil
 	case llminteraction.FieldThinkingTokens:
 		m.ClearThinkingTokens()
+		return nil
+	case llminteraction.FieldCacheReadTokens:
+		m.ClearCacheReadTokens()
+		return nil
+	case llminteraction.FieldCacheCreationTokens:
+		m.ClearCacheCreationTokens()
 		return nil
 	case llminteraction.FieldEstimatedCostUsd:
 		m.ClearEstimatedCostUsd()
@@ -10581,6 +10789,12 @@ func (m *LLMInteractionMutation) ResetField(name string) error {
 		return nil
 	case llminteraction.FieldThinkingTokens:
 		m.ResetThinkingTokens()
+		return nil
+	case llminteraction.FieldCacheReadTokens:
+		m.ResetCacheReadTokens()
+		return nil
+	case llminteraction.FieldCacheCreationTokens:
+		m.ResetCacheCreationTokens()
 		return nil
 	case llminteraction.FieldEstimatedCostUsd:
 		m.ResetEstimatedCostUsd()

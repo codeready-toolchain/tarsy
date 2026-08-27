@@ -120,6 +120,16 @@ func ThinkingTokens(v int) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEQ(FieldThinkingTokens, v))
 }
 
+// CacheReadTokens applies equality check predicate on the "cache_read_tokens" field. It's identical to CacheReadTokensEQ.
+func CacheReadTokens(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldCacheReadTokens, v))
+}
+
+// CacheCreationTokens applies equality check predicate on the "cache_creation_tokens" field. It's identical to CacheCreationTokensEQ.
+func CacheCreationTokens(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldCacheCreationTokens, v))
+}
+
 // EstimatedCostUsd applies equality check predicate on the "estimated_cost_usd" field. It's identical to EstimatedCostUsdEQ.
 func EstimatedCostUsd(v float64) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEQ(FieldEstimatedCostUsd, v))
@@ -833,6 +843,106 @@ func ThinkingTokensIsNil() predicate.LLMInteraction {
 // ThinkingTokensNotNil applies the NotNil predicate on the "thinking_tokens" field.
 func ThinkingTokensNotNil() predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldNotNull(FieldThinkingTokens))
+}
+
+// CacheReadTokensEQ applies the EQ predicate on the "cache_read_tokens" field.
+func CacheReadTokensEQ(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldCacheReadTokens, v))
+}
+
+// CacheReadTokensNEQ applies the NEQ predicate on the "cache_read_tokens" field.
+func CacheReadTokensNEQ(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNEQ(FieldCacheReadTokens, v))
+}
+
+// CacheReadTokensIn applies the In predicate on the "cache_read_tokens" field.
+func CacheReadTokensIn(vs ...int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIn(FieldCacheReadTokens, vs...))
+}
+
+// CacheReadTokensNotIn applies the NotIn predicate on the "cache_read_tokens" field.
+func CacheReadTokensNotIn(vs ...int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotIn(FieldCacheReadTokens, vs...))
+}
+
+// CacheReadTokensGT applies the GT predicate on the "cache_read_tokens" field.
+func CacheReadTokensGT(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGT(FieldCacheReadTokens, v))
+}
+
+// CacheReadTokensGTE applies the GTE predicate on the "cache_read_tokens" field.
+func CacheReadTokensGTE(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGTE(FieldCacheReadTokens, v))
+}
+
+// CacheReadTokensLT applies the LT predicate on the "cache_read_tokens" field.
+func CacheReadTokensLT(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLT(FieldCacheReadTokens, v))
+}
+
+// CacheReadTokensLTE applies the LTE predicate on the "cache_read_tokens" field.
+func CacheReadTokensLTE(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLTE(FieldCacheReadTokens, v))
+}
+
+// CacheReadTokensIsNil applies the IsNil predicate on the "cache_read_tokens" field.
+func CacheReadTokensIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldCacheReadTokens))
+}
+
+// CacheReadTokensNotNil applies the NotNil predicate on the "cache_read_tokens" field.
+func CacheReadTokensNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldCacheReadTokens))
+}
+
+// CacheCreationTokensEQ applies the EQ predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensEQ(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldCacheCreationTokens, v))
+}
+
+// CacheCreationTokensNEQ applies the NEQ predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensNEQ(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNEQ(FieldCacheCreationTokens, v))
+}
+
+// CacheCreationTokensIn applies the In predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensIn(vs ...int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIn(FieldCacheCreationTokens, vs...))
+}
+
+// CacheCreationTokensNotIn applies the NotIn predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensNotIn(vs ...int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotIn(FieldCacheCreationTokens, vs...))
+}
+
+// CacheCreationTokensGT applies the GT predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensGT(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGT(FieldCacheCreationTokens, v))
+}
+
+// CacheCreationTokensGTE applies the GTE predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensGTE(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGTE(FieldCacheCreationTokens, v))
+}
+
+// CacheCreationTokensLT applies the LT predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensLT(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLT(FieldCacheCreationTokens, v))
+}
+
+// CacheCreationTokensLTE applies the LTE predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensLTE(v int) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLTE(FieldCacheCreationTokens, v))
+}
+
+// CacheCreationTokensIsNil applies the IsNil predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldCacheCreationTokens))
+}
+
+// CacheCreationTokensNotNil applies the NotNil predicate on the "cache_creation_tokens" field.
+func CacheCreationTokensNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldCacheCreationTokens))
 }
 
 // EstimatedCostUsdEQ applies the EQ predicate on the "estimated_cost_usd" field.

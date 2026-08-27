@@ -70,6 +70,22 @@ func TestCollectStream(t *testing.T) {
 		assert.Equal(t, 5, resp.Usage.ThinkingTokens)
 	})
 
+	t.Run("last usage chunk wins including cache fields", func(t *testing.T) {
+		ch := make(chan agent.Chunk, 2)
+		ch <- &agent.UsageChunk{InputTokens: 10, OutputTokens: 1, TotalTokens: 11, CacheReadTokens: 8, CacheCreationTokens: 2}
+		ch <- &agent.UsageChunk{InputTokens: 20, OutputTokens: 5, TotalTokens: 25, CacheReadTokens: 15, CacheCreationTokens: 3}
+		close(ch)
+
+		resp, err := collectStream(ch)
+		require.NoError(t, err)
+		require.NotNil(t, resp.Usage)
+		assert.Equal(t, 20, resp.Usage.InputTokens)
+		assert.Equal(t, 5, resp.Usage.OutputTokens)
+		assert.Equal(t, 25, resp.Usage.TotalTokens)
+		assert.Equal(t, 15, resp.Usage.CacheReadTokens)
+		assert.Equal(t, 3, resp.Usage.CacheCreationTokens)
+	})
+
 	t.Run("code execution chunks collected", func(t *testing.T) {
 		ch := make(chan agent.Chunk, 1)
 		ch <- &agent.CodeExecutionChunk{Code: "print('hi')", Result: "hi"}
@@ -1014,6 +1030,7 @@ func TestStreamedResponse_MetricsTokens(t *testing.T) {
 		s := &StreamedResponse{LLMResponse: &LLMResponse{
 			Usage: &agent.TokenUsage{
 				InputTokens: 100, OutputTokens: 200, ThinkingTokens: 50,
+				CacheReadTokens: 12, CacheCreationTokens: 4,
 			},
 		}}
 		tokens := s.MetricsTokens()
@@ -1021,6 +1038,8 @@ func TestStreamedResponse_MetricsTokens(t *testing.T) {
 		assert.Equal(t, 100, tokens.Input)
 		assert.Equal(t, 200, tokens.Output)
 		assert.Equal(t, 50, tokens.Thinking)
+		assert.Equal(t, 12, tokens.CacheRead)
+		assert.Equal(t, 4, tokens.CacheCreation)
 	})
 }
 
@@ -1038,13 +1057,15 @@ func TestMetricsTokens(t *testing.T) {
 	t.Run("extracts from PartialOutputError", func(t *testing.T) {
 		poe := &PartialOutputError{
 			Cause: fmt.Errorf("stream error"),
-			Usage: &agent.TokenUsage{InputTokens: 5, OutputTokens: 3, ThinkingTokens: 1},
+			Usage: &agent.TokenUsage{InputTokens: 5, OutputTokens: 3, ThinkingTokens: 1, CacheReadTokens: 2, CacheCreationTokens: 7},
 		}
 		tokens := metricsTokens(nil, poe)
 		require.NotNil(t, tokens)
 		assert.Equal(t, 5, tokens.Input)
 		assert.Equal(t, 3, tokens.Output)
 		assert.Equal(t, 1, tokens.Thinking)
+		assert.Equal(t, 2, tokens.CacheRead)
+		assert.Equal(t, 7, tokens.CacheCreation)
 	})
 
 	t.Run("nil when no usage anywhere", func(t *testing.T) {

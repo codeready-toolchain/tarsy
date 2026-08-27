@@ -718,6 +718,7 @@ class TestGoogleNativeProvider:
         mock_usage.candidates_token_count = 20
         mock_usage.total_token_count = 30
         mock_usage.thoughts_token_count = 5
+        mock_usage.cached_content_token_count = 4
         
         mock_chunk = MagicMock()
         mock_chunk.candidates = [mock_candidate]
@@ -750,6 +751,8 @@ class TestGoogleNativeProvider:
         assert usage.output_tokens == 20
         assert usage.total_tokens == 30
         assert usage.thinking_tokens == 5
+        assert usage.cache_read_tokens == 4
+        assert usage.cache_creation_tokens == 0
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})

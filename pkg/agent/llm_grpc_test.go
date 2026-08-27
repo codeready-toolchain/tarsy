@@ -214,10 +214,12 @@ func TestFromProtoResponse(t *testing.T) {
 		resp := &llmv1.GenerateResponse{
 			Content: &llmv1.GenerateResponse_Usage{
 				Usage: &llmv1.UsageInfo{
-					InputTokens:    100,
-					OutputTokens:   200,
-					TotalTokens:    300,
-					ThinkingTokens: 50,
+					InputTokens:         100,
+					OutputTokens:        200,
+					TotalTokens:         300,
+					ThinkingTokens:      50,
+					CacheReadTokens:     25,
+					CacheCreationTokens: 10,
 				},
 			},
 		}
@@ -228,6 +230,8 @@ func TestFromProtoResponse(t *testing.T) {
 		assert.Equal(t, 200, uc.OutputTokens)
 		assert.Equal(t, 300, uc.TotalTokens)
 		assert.Equal(t, 50, uc.ThinkingTokens)
+		assert.Equal(t, 25, uc.CacheReadTokens)
+		assert.Equal(t, 10, uc.CacheCreationTokens)
 	})
 
 	t.Run("error info", func(t *testing.T) {

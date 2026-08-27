@@ -29,8 +29,19 @@ Required sections:
 - **Design Principles** — key constraints and guiding goals
 - **Architecture / How It Works** — components, relationships, data flows (use diagrams where helpful)
 - **Core Concepts** — key abstractions and their roles
-- **Implementation Plan** — phases or steps, what changes where
+- **Implementation Plan** — PR-sized steps (see below)
 - **Open Questions** — summary list cross-referencing the questions doc
+
+#### Implementation Plan
+
+Write it for an AI implementer, not a human project plan. Split **code** into PRs; non-code steps (research, configuration-only, docs-only) are fine when they are not a PR.
+
+Each PR:
+- Leaves the product fully working. New behavior may land incrementally and only be “complete” in a later PR. Do **not** break existing functionality unless the payoff is clearly worth it — call that out for discussion.
+- Is one logical chunk: not a dump, not a drive-by. Split or merge only when it makes implementation easier.
+- Ships tests with the change. Deferring tests (e.g. e2e until the feature is whole) is OK if the plan says **what** is deferred, **to which PR**, and **why**.
+
+For each PR/step: what lands, where, tests in this PR vs later, any temporary gap vs current behavior.
 
 For each unresolved decision, add an inline marker in the relevant section:
 ```
@@ -101,6 +112,7 @@ Update `docs/proposals/{name}-design.md` to reflect all decisions:
  - Remove open question markers that are now resolved
  - Fill in concrete design choices where placeholders existed
  - Ensure the document is internally consistent — decisions made later in the walk-through may affect sections written earlier
+ - Rewrite the Implementation Plan as PR-sized steps (rules above)
  - Update the status header to `Final` (or `In Review`, as appropriate)
 
 ---

@@ -248,7 +248,10 @@ func TestMaybeSummarize(t *testing.T) {
 	t.Run("stores inline conversation in LLM interaction", func(t *testing.T) {
 		mockLLM := &mockLLMClient{
 			responses: []mockLLMResponse{
-				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Summary result"}}},
+				{chunks: []agent.Chunk{
+					&agent.TextChunk{Content: "Summary result"},
+					&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100, CacheReadTokens: 60},
+				}},
 			},
 		}
 
@@ -278,6 +281,9 @@ func TestMaybeSummarize(t *testing.T) {
 		require.Len(t, interactions, 1)
 		assert.Equal(t, "summarization", string(interactions[0].InteractionType))
 		assert.Equal(t, "test-model", interactions[0].ModelName)
+		require.NotNil(t, interactions[0].CacheReadTokens)
+		assert.Equal(t, 60, *interactions[0].CacheReadTokens)
+		assert.Nil(t, interactions[0].CacheCreationTokens)
 
 		// Check inline conversation exists in llm_request.
 		llmReq := interactions[0].LlmRequest

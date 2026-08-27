@@ -65,6 +65,30 @@ func TestObserveLLMCall(t *testing.T) {
 
 		assert.Equal(t, before, testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-no-think", "m", "thinking")))
 	})
+
+	t.Run("non-zero cache directions increment", func(t *testing.T) {
+		beforeRead := testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-cache", "m", "cache_read"))
+		beforeCreate := testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-cache", "m", "cache_creation"))
+
+		ObserveLLMCall("test-cache", "m", time.Second, &LLMTokens{
+			Input: 10, Output: 20, CacheRead: 40, CacheCreation: 8,
+		}, nil)
+
+		assert.Equal(t, beforeRead+40, testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-cache", "m", "cache_read")))
+		assert.Equal(t, beforeCreate+8, testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-cache", "m", "cache_creation")))
+	})
+
+	t.Run("zero cache tokens skip cache counters", func(t *testing.T) {
+		beforeRead := testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-no-cache", "m", "cache_read"))
+		beforeCreate := testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-no-cache", "m", "cache_creation"))
+
+		ObserveLLMCall("test-no-cache", "m", time.Second, &LLMTokens{
+			Input: 10, Output: 20, CacheRead: 0, CacheCreation: 0,
+		}, nil)
+
+		assert.Equal(t, beforeRead, testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-no-cache", "m", "cache_read")))
+		assert.Equal(t, beforeCreate, testutil.ToFloat64(LLMTokensTotal.WithLabelValues("test-no-cache", "m", "cache_creation")))
+	})
 }
 
 func TestErrorCode(t *testing.T) {

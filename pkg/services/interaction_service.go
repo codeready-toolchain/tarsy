@@ -68,6 +68,12 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 	if req.ThinkingTokens != nil {
 		builder = builder.SetThinkingTokens(*req.ThinkingTokens)
 	}
+	if req.CacheReadTokens != nil {
+		builder = builder.SetCacheReadTokens(*req.CacheReadTokens)
+	}
+	if req.CacheCreationTokens != nil {
+		builder = builder.SetCacheCreationTokens(*req.CacheCreationTokens)
+	}
 	if req.DurationMs != nil {
 		builder = builder.SetDurationMs(*req.DurationMs)
 	}
