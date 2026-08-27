@@ -457,6 +457,106 @@ class TestLangChainProviderStreaming:
         assert usage_responses[0].usage.input_tokens == 100
         assert usage_responses[0].usage.output_tokens == 80
         assert usage_responses[0].usage.total_tokens == 180
+        assert usage_responses[0].usage.cache_read_tokens == 0
+        assert usage_responses[0].usage.cache_creation_tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_stream_cache_tokens_last_wins_not_wiped_by_output_only_chunk(self, provider):
+        """Cache fields last-win when reported; later output-only usage does not wipe them."""
+        chunk1 = AIMessageChunk(content="Hello")
+        chunk1.usage_metadata = {
+            "input_tokens": 100,
+            "output_tokens": 0,
+            "total_tokens": 100,
+            "input_token_details": {"cache_read": 70, "cache_creation": 20},
+        }
+
+        chunk2 = AIMessageChunk(content=" world")
+        chunk2.usage_metadata = {"input_tokens": 0, "output_tokens": 50, "total_tokens": 50}
+
+        async def mock_astream(messages):
+            yield chunk1
+            yield chunk2
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage_responses = [r for r in responses if r.HasField("usage")]
+        assert len(usage_responses) == 1
+        assert usage_responses[0].usage.input_tokens == 100
+        assert usage_responses[0].usage.output_tokens == 50
+        assert usage_responses[0].usage.cache_read_tokens == 70
+        assert usage_responses[0].usage.cache_creation_tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_stream_cache_tokens_last_wins_across_reported_chunks(self, provider):
+        chunk1 = AIMessageChunk(content="a")
+        chunk1.usage_metadata = {
+            "input_tokens": 10,
+            "output_tokens": 1,
+            "total_tokens": 11,
+            "input_token_details": {"cache_read": 8},
+        }
+        chunk2 = AIMessageChunk(content="b")
+        chunk2.usage_metadata = {
+            "input_tokens": 0,
+            "output_tokens": 2,
+            "total_tokens": 2,
+            "input_token_details": {"cache_read": 9, "cache_creation": 1},
+        }
+
+        async def mock_astream(messages):
+            yield chunk1
+            yield chunk2
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage = [r for r in responses if r.HasField("usage")]
+        assert usage[0].usage.input_tokens == 10
+        assert usage[0].usage.output_tokens == 3
+        assert usage[0].usage.cache_read_tokens == 9
+        assert usage[0].usage.cache_creation_tokens == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_emits_usage_from_response_metadata_cache_only(self, provider):
+        """Cache fields in response_metadata still yield UsageInfo when usage_metadata is None."""
+        chunk = AIMessageChunk(content="Response text")
+        chunk.usage_metadata = None
+        chunk.response_metadata = {
+            "usage": {
+                "cache_read_input_tokens": 40,
+                "cache_creation_input_tokens": 10,
+            }
+        }
+
+        async def mock_astream(messages):
+            yield chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage_responses = [r for r in responses if r.HasField("usage")]
+        assert len(usage_responses) == 1
+        assert usage_responses[0].usage.input_tokens == 0
+        assert usage_responses[0].usage.output_tokens == 0
+        assert usage_responses[0].usage.cache_read_tokens == 40
+        assert usage_responses[0].usage.cache_creation_tokens == 10
 
     @pytest.mark.asyncio
     async def test_stream_usage_metadata(self, provider):

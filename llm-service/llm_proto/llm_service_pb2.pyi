@@ -20,7 +20,7 @@ class GenerateRequest(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[ToolDefinition]
     execution_id: str
     clear_cache: bool
-    def __init__(self, session_id: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[ConversationMessage, _Mapping]]] = ..., llm_config: _Optional[_Union[LLMConfig, _Mapping]] = ..., tools: _Optional[_Iterable[_Union[ToolDefinition, _Mapping]]] = ..., execution_id: _Optional[str] = ..., clear_cache: bool = ...) -> None: ...
+    def __init__(self, session_id: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[ConversationMessage, _Mapping]]] = ..., llm_config: _Optional[_Union[LLMConfig, _Mapping]] = ..., tools: _Optional[_Iterable[_Union[ToolDefinition, _Mapping]]] = ..., execution_id: _Optional[str] = ..., clear_cache: _Optional[bool] = ...) -> None: ...
 
 class GenerateResponse(_message.Message):
     __slots__ = ("text", "thinking", "tool_call", "usage", "error", "code_execution", "grounding", "is_final")
@@ -40,7 +40,7 @@ class GenerateResponse(_message.Message):
     code_execution: CodeExecutionDelta
     grounding: GroundingDelta
     is_final: bool
-    def __init__(self, text: _Optional[_Union[TextDelta, _Mapping]] = ..., thinking: _Optional[_Union[ThinkingDelta, _Mapping]] = ..., tool_call: _Optional[_Union[ToolCallDelta, _Mapping]] = ..., usage: _Optional[_Union[UsageInfo, _Mapping]] = ..., error: _Optional[_Union[ErrorInfo, _Mapping]] = ..., code_execution: _Optional[_Union[CodeExecutionDelta, _Mapping]] = ..., grounding: _Optional[_Union[GroundingDelta, _Mapping]] = ..., is_final: bool = ...) -> None: ...
+    def __init__(self, text: _Optional[_Union[TextDelta, _Mapping]] = ..., thinking: _Optional[_Union[ThinkingDelta, _Mapping]] = ..., tool_call: _Optional[_Union[ToolCallDelta, _Mapping]] = ..., usage: _Optional[_Union[UsageInfo, _Mapping]] = ..., error: _Optional[_Union[ErrorInfo, _Mapping]] = ..., code_execution: _Optional[_Union[CodeExecutionDelta, _Mapping]] = ..., grounding: _Optional[_Union[GroundingDelta, _Mapping]] = ..., is_final: _Optional[bool] = ...) -> None: ...
 
 class ConversationMessage(_message.Message):
     __slots__ = ("role", "content", "tool_calls", "tool_call_id", "tool_name")
@@ -139,16 +139,20 @@ class GroundingSupport(_message.Message):
     def __init__(self, start_index: _Optional[int] = ..., end_index: _Optional[int] = ..., text: _Optional[str] = ..., grounding_chunk_indices: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class UsageInfo(_message.Message):
-    __slots__ = ("input_tokens", "output_tokens", "total_tokens", "thinking_tokens")
+    __slots__ = ("input_tokens", "output_tokens", "total_tokens", "thinking_tokens", "cache_read_tokens", "cache_creation_tokens")
     INPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     TOTAL_TOKENS_FIELD_NUMBER: _ClassVar[int]
     THINKING_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    CACHE_READ_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    CACHE_CREATION_TOKENS_FIELD_NUMBER: _ClassVar[int]
     input_tokens: int
     output_tokens: int
     total_tokens: int
     thinking_tokens: int
-    def __init__(self, input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., total_tokens: _Optional[int] = ..., thinking_tokens: _Optional[int] = ...) -> None: ...
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    def __init__(self, input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., total_tokens: _Optional[int] = ..., thinking_tokens: _Optional[int] = ..., cache_read_tokens: _Optional[int] = ..., cache_creation_tokens: _Optional[int] = ...) -> None: ...
 
 class ErrorInfo(_message.Message):
     __slots__ = ("message", "code", "retryable")
@@ -158,7 +162,7 @@ class ErrorInfo(_message.Message):
     message: str
     code: str
     retryable: bool
-    def __init__(self, message: _Optional[str] = ..., code: _Optional[str] = ..., retryable: bool = ...) -> None: ...
+    def __init__(self, message: _Optional[str] = ..., code: _Optional[str] = ..., retryable: _Optional[bool] = ...) -> None: ...
 
 class LLMConfig(_message.Message):
     __slots__ = ("provider", "model", "api_key_env", "credentials_env", "base_url", "native_tools", "project", "location", "backend")
@@ -168,7 +172,7 @@ class LLMConfig(_message.Message):
         VALUE_FIELD_NUMBER: _ClassVar[int]
         key: str
         value: bool
-        def __init__(self, key: _Optional[str] = ..., value: bool = ...) -> None: ...
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[bool] = ...) -> None: ...
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     API_KEY_ENV_FIELD_NUMBER: _ClassVar[int]

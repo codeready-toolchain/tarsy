@@ -215,10 +215,12 @@ func fromProtoResponse(resp *llmv1.GenerateResponse) Chunk {
 		return chunk
 	case *llmv1.GenerateResponse_Usage:
 		return &UsageChunk{
-			InputTokens:    int(c.Usage.InputTokens),
-			OutputTokens:   int(c.Usage.OutputTokens),
-			TotalTokens:    int(c.Usage.TotalTokens),
-			ThinkingTokens: int(c.Usage.ThinkingTokens),
+			InputTokens:         int(c.Usage.InputTokens),
+			OutputTokens:        int(c.Usage.OutputTokens),
+			TotalTokens:         int(c.Usage.TotalTokens),
+			ThinkingTokens:      int(c.Usage.ThinkingTokens),
+			CacheReadTokens:     int(c.Usage.CacheReadTokens),
+			CacheCreationTokens: int(c.Usage.CacheCreationTokens),
 		}
 	case *llmv1.GenerateResponse_Error:
 		return &ErrorChunk{

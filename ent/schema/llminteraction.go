@@ -79,6 +79,14 @@ func (LLMInteraction) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Provider thinking/reasoning tokens when reported (e.g. Google native)"),
+		field.Int("cache_read_tokens").
+			Optional().
+			Nillable().
+			Comment("Provider cache-hit tokens when reported"),
+		field.Int("cache_creation_tokens").
+			Optional().
+			Nillable().
+			Comment("Provider cache-write tokens when reported"),
 		field.Float("estimated_cost_usd").
 			Optional().
 			Nillable().

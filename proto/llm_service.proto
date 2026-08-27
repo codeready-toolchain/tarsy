@@ -176,6 +176,8 @@ message UsageInfo {
   int32 output_tokens = 2;
   int32 total_tokens = 3;
   int32 thinking_tokens = 4;
+  int32 cache_read_tokens = 5;      // Provider cache-hit tokens when reported
+  int32 cache_creation_tokens = 6;  // Provider cache-write tokens when reported
 }
 
 // ErrorInfo signals an error from the LLM provider.

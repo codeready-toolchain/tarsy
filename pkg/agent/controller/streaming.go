@@ -237,10 +237,12 @@ loop:
 				resp.Groundings = append(resp.Groundings, *c)
 			case *agent.UsageChunk:
 				resp.Usage = &agent.TokenUsage{
-					InputTokens:    c.InputTokens,
-					OutputTokens:   c.OutputTokens,
-					TotalTokens:    c.TotalTokens,
-					ThinkingTokens: c.ThinkingTokens,
+					InputTokens:         c.InputTokens,
+					OutputTokens:        c.OutputTokens,
+					TotalTokens:         c.TotalTokens,
+					ThinkingTokens:      c.ThinkingTokens,
+					CacheReadTokens:     c.CacheReadTokens,
+					CacheCreationTokens: c.CacheCreationTokens,
 				}
 			case *agent.ErrorChunk:
 				if loopDetected {
@@ -315,9 +317,11 @@ func (s *StreamedResponse) MetricsTokens() *metrics.LLMTokens {
 		return nil
 	}
 	return &metrics.LLMTokens{
-		Input:    s.Usage.InputTokens,
-		Output:   s.Usage.OutputTokens,
-		Thinking: s.Usage.ThinkingTokens,
+		Input:         s.Usage.InputTokens,
+		Output:        s.Usage.OutputTokens,
+		Thinking:      s.Usage.ThinkingTokens,
+		CacheRead:     s.Usage.CacheReadTokens,
+		CacheCreation: s.Usage.CacheCreationTokens,
 	}
 }
 
@@ -331,9 +335,11 @@ func metricsTokens(resp *StreamedResponse, err error) *metrics.LLMTokens {
 	var poe *PartialOutputError
 	if errors.As(err, &poe) && poe.Usage != nil {
 		return &metrics.LLMTokens{
-			Input:    poe.Usage.InputTokens,
-			Output:   poe.Usage.OutputTokens,
-			Thinking: poe.Usage.ThinkingTokens,
+			Input:         poe.Usage.InputTokens,
+			Output:        poe.Usage.OutputTokens,
+			Thinking:      poe.Usage.ThinkingTokens,
+			CacheRead:     poe.Usage.CacheReadTokens,
+			CacheCreation: poe.Usage.CacheCreationTokens,
 		}
 	}
 	return nil

@@ -61,13 +61,15 @@ func TestAccumulateUsage(t *testing.T) {
 func TestAccumulateTokenUsage(t *testing.T) {
 	t.Run("adds usage to total", func(t *testing.T) {
 		total := &agent.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}
-		usage := &agent.TokenUsage{InputTokens: 20, OutputTokens: 30, TotalTokens: 50, ThinkingTokens: 8}
+		usage := &agent.TokenUsage{InputTokens: 20, OutputTokens: 30, TotalTokens: 50, ThinkingTokens: 8, CacheReadTokens: 6, CacheCreationTokens: 3}
 
 		accumulateTokenUsage(total, usage)
 		assert.Equal(t, 30, total.InputTokens)
 		assert.Equal(t, 35, total.OutputTokens)
 		assert.Equal(t, 65, total.TotalTokens)
 		assert.Equal(t, 8, total.ThinkingTokens)
+		assert.Equal(t, 6, total.CacheReadTokens)
+		assert.Equal(t, 3, total.CacheCreationTokens)
 	})
 
 	t.Run("nil usage is no-op", func(t *testing.T) {
@@ -479,4 +481,51 @@ func TestRecordLLMInteraction_ZeroThinkingTokensLeftNil(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Nil(t, rows[0].ThinkingTokens)
 	require.NotNil(t, rows[0].EstimatedCostUsd)
+}
+
+func TestRecordLLMInteraction_CacheTokens(t *testing.T) {
+	tests := []struct {
+		name       string
+		read       int
+		create     int
+		wantRead   *int
+		wantCreate *int
+	}{
+		{name: "both positive", read: 400, create: 50, wantRead: new(400), wantCreate: new(50)},
+		{name: "read only", read: 400, create: 0, wantRead: new(400)},
+		{name: "zeros left nil", read: 0, create: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			execCtx := newTestExecCtx(t, nil, nil)
+			ctx := t.Context()
+
+			recordLLMInteraction(ctx, execCtx, 1, llminteraction.InteractionTypeIteration, 1, &LLMResponse{
+				Text: "ok",
+				Usage: &agent.TokenUsage{
+					InputTokens:         1000,
+					OutputTokens:        500,
+					TotalTokens:         1500,
+					CacheReadTokens:     tt.read,
+					CacheCreationTokens: tt.create,
+				},
+			}, nil, time.Now())
+
+			rows, err := execCtx.Services.Interaction.GetLLMInteractionsList(ctx, execCtx.SessionID)
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			if tt.wantRead == nil {
+				assert.Nil(t, rows[0].CacheReadTokens)
+			} else {
+				require.NotNil(t, rows[0].CacheReadTokens)
+				assert.Equal(t, *tt.wantRead, *rows[0].CacheReadTokens)
+			}
+			if tt.wantCreate == nil {
+				assert.Nil(t, rows[0].CacheCreationTokens)
+			} else {
+				require.NotNil(t, rows[0].CacheCreationTokens)
+				assert.Equal(t, *tt.wantCreate, *rows[0].CacheCreationTokens)
+			}
+		})
+	}
 }

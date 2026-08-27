@@ -27,6 +27,33 @@ EMPTY_RESPONSE_RETRY_DELAY = 3  # seconds
 MODEL_CONTENT_CACHE_TTL = 3600  # 1 hour
 
 
+def _token_count(value) -> int:
+    if not value:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _usage_from_google(um) -> pb.GenerateResponse:
+    """Map Gemini usage_metadata onto proto UsageInfo.
+
+    input_tokens stays inclusive (prompt_token_count includes cached tokens).
+    Implicit Gemini writes have no creation surcharge.
+    """
+    return pb.GenerateResponse(
+        usage=pb.UsageInfo(
+            input_tokens=um.prompt_token_count or 0,
+            output_tokens=um.candidates_token_count or 0,
+            total_tokens=um.total_token_count or 0,
+            thinking_tokens=_token_count(getattr(um, "thoughts_token_count", 0)),
+            cache_read_tokens=_token_count(getattr(um, "cached_content_token_count", 0)),
+            cache_creation_tokens=0,
+        )
+    )
+
+
 class GoogleNativeProvider(LLMProvider):
     """LLM provider using Google's native genai SDK.
 
@@ -468,15 +495,7 @@ class GoogleNativeProvider(LLMProvider):
                     if not chunk.candidates:
                         # Still check for usage on content-less chunks
                         if chunk.usage_metadata:
-                            um = chunk.usage_metadata
-                            last_usage = pb.GenerateResponse(
-                                usage=pb.UsageInfo(
-                                    input_tokens=um.prompt_token_count or 0,
-                                    output_tokens=um.candidates_token_count or 0,
-                                    total_tokens=um.total_token_count or 0,
-                                    thinking_tokens=getattr(um, "thoughts_token_count", 0) or 0,
-                                )
-                            )
+                            last_usage = _usage_from_google(chunk.usage_metadata)
                         continue
 
                     candidate = chunk.candidates[0]
@@ -490,15 +509,7 @@ class GoogleNativeProvider(LLMProvider):
                     if not candidate.content or not candidate.content.parts:
                         # Still check for usage on content-less chunks
                         if chunk.usage_metadata:
-                            um = chunk.usage_metadata
-                            last_usage = pb.GenerateResponse(
-                                usage=pb.UsageInfo(
-                                    input_tokens=um.prompt_token_count or 0,
-                                    output_tokens=um.candidates_token_count or 0,
-                                    total_tokens=um.total_token_count or 0,
-                                    thinking_tokens=getattr(um, "thoughts_token_count", 0) or 0,
-                                )
-                            )
+                            last_usage = _usage_from_google(chunk.usage_metadata)
                         continue
 
                     # Cache the original Content for replay in subsequent calls.
@@ -548,15 +559,7 @@ class GoogleNativeProvider(LLMProvider):
 
                     # Buffer usage info (will be yielded after content is confirmed)
                     if chunk.usage_metadata:
-                        um = chunk.usage_metadata
-                        last_usage = pb.GenerateResponse(
-                            usage=pb.UsageInfo(
-                                input_tokens=um.prompt_token_count or 0,
-                                output_tokens=um.candidates_token_count or 0,
-                                total_tokens=um.total_token_count or 0,
-                                thinking_tokens=getattr(um, "thoughts_token_count", 0) or 0,
-                            )
-                        )
+                        last_usage = _usage_from_google(chunk.usage_metadata)
 
         except genai_errors.ServerError as exc:
             # 5xx errors from Google API are transient and should be retried

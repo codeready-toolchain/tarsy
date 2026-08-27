@@ -22,12 +22,12 @@ func TestIteratingController_HappyPath(t *testing.T) {
 				&agent.ThinkingChunk{Content: "Let me check the pods."},
 				&agent.TextChunk{Content: "I'll check the pods."},
 				&agent.ToolCallChunk{CallID: "call-1", Name: "k8s.get_pods", Arguments: "{}"},
-				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30},
+				&agent.UsageChunk{InputTokens: 10, OutputTokens: 20, TotalTokens: 30, CacheReadTokens: 8, CacheCreationTokens: 2},
 			}},
 			{chunks: []agent.Chunk{
 				&agent.ThinkingChunk{Content: "Pods look healthy."},
 				&agent.TextChunk{Content: "The pods are all running. Everything is healthy."},
-				&agent.UsageChunk{InputTokens: 15, OutputTokens: 25, TotalTokens: 40},
+				&agent.UsageChunk{InputTokens: 15, OutputTokens: 25, TotalTokens: 40, CacheReadTokens: 12},
 			}},
 		},
 	}
@@ -49,6 +49,8 @@ func TestIteratingController_HappyPath(t *testing.T) {
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Equal(t, "The pods are all running. Everything is healthy.", result.FinalAnalysis)
 	require.Equal(t, 70, result.TokensUsed.TotalTokens)
+	require.Equal(t, 20, result.TokensUsed.CacheReadTokens)
+	require.Equal(t, 2, result.TokensUsed.CacheCreationTokens)
 	require.Equal(t, 2, llm.callCount)
 }
 

@@ -5,7 +5,7 @@ import warnings
 
 from . import llm_service_pb2 as llm__service__pb2
 
-GRPC_GENERATED_VERSION = '1.76.0'
+GRPC_GENERATED_VERSION = '1.81.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class LLMServiceStub(object):
+class LLMServiceStub:
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -41,7 +41,7 @@ class LLMServiceStub(object):
                 _registered_method=True)
 
 
-class LLMServiceServicer(object):
+class LLMServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def Generate(self, request, context):
@@ -69,7 +69,7 @@ def add_LLMServiceServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class LLMService(object):
+class LLMService:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod

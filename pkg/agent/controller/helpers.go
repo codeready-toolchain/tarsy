@@ -32,6 +32,8 @@ func accumulateTokenUsage(total *agent.TokenUsage, usage *agent.TokenUsage) {
 	total.OutputTokens += usage.OutputTokens
 	total.TotalTokens += usage.TotalTokens
 	total.ThinkingTokens += usage.ThinkingTokens
+	total.CacheReadTokens += usage.CacheReadTokens
+	total.CacheCreationTokens += usage.CacheCreationTokens
 }
 
 // recordLLMInteraction creates an LLMInteraction record in the database.
@@ -51,6 +53,7 @@ func recordLLMInteraction(
 
 	var thinkingPtr *string
 	var inputTokens, outputTokens, totalTokens, thinkingTokens *int
+	var cacheReadTokens, cacheCreationTokens *int
 	var textLen, toolCallsCount int
 
 	if resp != nil {
@@ -62,9 +65,15 @@ func recordLLMInteraction(
 			outputTokens = &resp.Usage.OutputTokens
 			totalTokens = &resp.Usage.TotalTokens
 			// TokenUsage has no presence flag (proto scalars default to 0). Persist
-			// thinking only when > 0 so unreported LangChain zeros stay nil.
+			// thinking/cache only when > 0 so unreported LangChain zeros stay nil.
 			if resp.Usage.ThinkingTokens > 0 {
 				thinkingTokens = &resp.Usage.ThinkingTokens
+			}
+			if resp.Usage.CacheReadTokens > 0 {
+				cacheReadTokens = &resp.Usage.CacheReadTokens
+			}
+			if resp.Usage.CacheCreationTokens > 0 {
+				cacheCreationTokens = &resp.Usage.CacheCreationTokens
 			}
 		}
 		textLen = len(resp.Text)
@@ -105,21 +114,23 @@ func recordLLMInteraction(
 	}
 
 	interaction, err := execCtx.Services.Interaction.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
-		SessionID:        execCtx.SessionID,
-		StageID:          &execCtx.StageID,
-		ExecutionID:      &execCtx.ExecutionID,
-		InteractionType:  string(interactionType),
-		ModelName:        execCtx.Config.LLMProvider.Model,
-		LastMessageID:    lastMessageID,
-		LLMRequest:       llmRequestMeta,
-		LLMResponse:      llmResponseMeta,
-		ResponseMetadata: responseMeta,
-		ThinkingContent:  thinkingPtr,
-		InputTokens:      inputTokens,
-		OutputTokens:     outputTokens,
-		TotalTokens:      totalTokens,
-		ThinkingTokens:   thinkingTokens,
-		DurationMs:       &durationMs,
+		SessionID:           execCtx.SessionID,
+		StageID:             &execCtx.StageID,
+		ExecutionID:         &execCtx.ExecutionID,
+		InteractionType:     string(interactionType),
+		ModelName:           execCtx.Config.LLMProvider.Model,
+		LastMessageID:       lastMessageID,
+		LLMRequest:          llmRequestMeta,
+		LLMResponse:         llmResponseMeta,
+		ResponseMetadata:    responseMeta,
+		ThinkingContent:     thinkingPtr,
+		InputTokens:         inputTokens,
+		OutputTokens:        outputTokens,
+		TotalTokens:         totalTokens,
+		ThinkingTokens:      thinkingTokens,
+		CacheReadTokens:     cacheReadTokens,
+		CacheCreationTokens: cacheCreationTokens,
+		DurationMs:          &durationMs,
 	})
 	if err != nil {
 		slog.Error("Failed to record LLM interaction",

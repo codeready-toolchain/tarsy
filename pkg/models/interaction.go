@@ -2,22 +2,24 @@ package models
 
 // CreateLLMInteractionRequest contains fields for creating an LLM interaction
 type CreateLLMInteractionRequest struct {
-	SessionID        string         `json:"session_id"`
-	StageID          *string        `json:"stage_id,omitempty"`     // nil for session-level interactions
-	ExecutionID      *string        `json:"execution_id,omitempty"` // nil for session-level interactions
-	InteractionType  string         `json:"interaction_type"`       // "iteration", "final_analysis", "executive_summary", "chat_response"
-	ModelName        string         `json:"model_name"`
-	LastMessageID    *string        `json:"last_message_id,omitempty"`
-	LLMRequest       map[string]any `json:"llm_request"`
-	LLMResponse      map[string]any `json:"llm_response"`
-	ThinkingContent  *string        `json:"thinking_content,omitempty"`
-	ResponseMetadata map[string]any `json:"response_metadata,omitempty"`
-	InputTokens      *int           `json:"input_tokens,omitempty"`
-	OutputTokens     *int           `json:"output_tokens,omitempty"`
-	TotalTokens      *int           `json:"total_tokens,omitempty"`
-	ThinkingTokens   *int           `json:"thinking_tokens,omitempty"`
-	DurationMs       *int           `json:"duration_ms,omitempty"`
-	ErrorMessage     *string        `json:"error_message,omitempty"`
+	SessionID           string         `json:"session_id"`
+	StageID             *string        `json:"stage_id,omitempty"`     // nil for session-level interactions
+	ExecutionID         *string        `json:"execution_id,omitempty"` // nil for session-level interactions
+	InteractionType     string         `json:"interaction_type"`       // "iteration", "final_analysis", "executive_summary", "chat_response"
+	ModelName           string         `json:"model_name"`
+	LastMessageID       *string        `json:"last_message_id,omitempty"`
+	LLMRequest          map[string]any `json:"llm_request"`
+	LLMResponse         map[string]any `json:"llm_response"`
+	ThinkingContent     *string        `json:"thinking_content,omitempty"`
+	ResponseMetadata    map[string]any `json:"response_metadata,omitempty"`
+	InputTokens         *int           `json:"input_tokens,omitempty"`
+	OutputTokens        *int           `json:"output_tokens,omitempty"`
+	TotalTokens         *int           `json:"total_tokens,omitempty"`
+	ThinkingTokens      *int           `json:"thinking_tokens,omitempty"`
+	CacheReadTokens     *int           `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens *int           `json:"cache_creation_tokens,omitempty"`
+	DurationMs          *int           `json:"duration_ms,omitempty"`
+	ErrorMessage        *string        `json:"error_message,omitempty"`
 }
 
 // CreateMCPInteractionRequest contains fields for creating an MCP interaction

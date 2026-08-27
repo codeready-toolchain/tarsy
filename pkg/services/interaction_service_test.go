@@ -127,6 +127,39 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		assert.InDelta(t, 2.2, *interaction.EstimatedCostUsd, 1e-9)
 	})
 
+	t.Run("cache tokens persisted without changing estimate", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+		cacheRead, cacheCreate := 400_000, 50_000
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:           session.ID,
+			InteractionType:     "iteration",
+			ModelName:           "priced-model",
+			LLMRequest:          map[string]any{},
+			LLMResponse:         map[string]any{},
+			InputTokens:         &input,
+			OutputTokens:        &output,
+			ThinkingTokens:      &thinking,
+			CacheReadTokens:     &cacheRead,
+			CacheCreationTokens: &cacheCreate,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row.CacheReadTokens)
+		assert.Equal(t, cacheRead, *row.CacheReadTokens)
+		require.NotNil(t, row.CacheCreationTokens)
+		assert.Equal(t, cacheCreate, *row.CacheCreationTokens)
+		require.NotNil(t, row.EstimatedCostUsd)
+		// Same as input/output/thinking only — cache is not priced in this PR.
+		assert.InDelta(t, 2.2, *row.EstimatedCostUsd, 1e-9)
+	})
+
 	t.Run("thinking persisted when estimation disabled", func(t *testing.T) {
 		disabled, err := cost.NewBook(&cost.Config{Enabled: false})
 		require.NoError(t, err)
@@ -202,6 +235,33 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		assert.Nil(t, row.InputTokens)
 		assert.Nil(t, row.OutputTokens)
 		assert.Nil(t, row.ThinkingTokens)
+		assert.Nil(t, row.CacheReadTokens)
+		assert.Nil(t, row.CacheCreationTokens)
+		assert.Nil(t, row.EstimatedCostUsd)
+	})
+
+	t.Run("cache-only usage skips estimation", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+		cacheRead := 400_000
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:       session.ID,
+			InteractionType: "iteration",
+			ModelName:       "priced-model",
+			LLMRequest:      map[string]any{},
+			LLMResponse:     map[string]any{},
+			CacheReadTokens: &cacheRead,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row.CacheReadTokens)
+		assert.Equal(t, cacheRead, *row.CacheReadTokens)
 		assert.Nil(t, row.EstimatedCostUsd)
 	})
 

@@ -187,6 +187,34 @@ func (_c *LLMInteractionCreate) SetNillableThinkingTokens(v *int) *LLMInteractio
 	return _c
 }
 
+// SetCacheReadTokens sets the "cache_read_tokens" field.
+func (_c *LLMInteractionCreate) SetCacheReadTokens(v int) *LLMInteractionCreate {
+	_c.mutation.SetCacheReadTokens(v)
+	return _c
+}
+
+// SetNillableCacheReadTokens sets the "cache_read_tokens" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableCacheReadTokens(v *int) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetCacheReadTokens(*v)
+	}
+	return _c
+}
+
+// SetCacheCreationTokens sets the "cache_creation_tokens" field.
+func (_c *LLMInteractionCreate) SetCacheCreationTokens(v int) *LLMInteractionCreate {
+	_c.mutation.SetCacheCreationTokens(v)
+	return _c
+}
+
+// SetNillableCacheCreationTokens sets the "cache_creation_tokens" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableCacheCreationTokens(v *int) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetCacheCreationTokens(*v)
+	}
+	return _c
+}
+
 // SetEstimatedCostUsd sets the "estimated_cost_usd" field.
 func (_c *LLMInteractionCreate) SetEstimatedCostUsd(v float64) *LLMInteractionCreate {
 	_c.mutation.SetEstimatedCostUsd(v)
@@ -431,6 +459,14 @@ func (_c *LLMInteractionCreate) createSpec() (*LLMInteraction, *sqlgraph.CreateS
 	if value, ok := _c.mutation.ThinkingTokens(); ok {
 		_spec.SetField(llminteraction.FieldThinkingTokens, field.TypeInt, value)
 		_node.ThinkingTokens = &value
+	}
+	if value, ok := _c.mutation.CacheReadTokens(); ok {
+		_spec.SetField(llminteraction.FieldCacheReadTokens, field.TypeInt, value)
+		_node.CacheReadTokens = &value
+	}
+	if value, ok := _c.mutation.CacheCreationTokens(); ok {
+		_spec.SetField(llminteraction.FieldCacheCreationTokens, field.TypeInt, value)
+		_node.CacheCreationTokens = &value
 	}
 	if value, ok := _c.mutation.EstimatedCostUsd(); ok {
 		_spec.SetField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)

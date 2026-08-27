@@ -114,7 +114,10 @@ type GroundingSupport struct {
 }
 
 // UsageChunk reports token consumption for this LLM call.
-type UsageChunk struct{ InputTokens, OutputTokens, TotalTokens, ThinkingTokens int }
+type UsageChunk struct {
+	InputTokens, OutputTokens, TotalTokens, ThinkingTokens int
+	CacheReadTokens, CacheCreationTokens                   int
+}
 
 // ErrorChunk signals an error from the LLM provider.
 type ErrorChunk struct {

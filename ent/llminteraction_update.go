@@ -230,6 +230,60 @@ func (_u *LLMInteractionUpdate) ClearThinkingTokens() *LLMInteractionUpdate {
 	return _u
 }
 
+// SetCacheReadTokens sets the "cache_read_tokens" field.
+func (_u *LLMInteractionUpdate) SetCacheReadTokens(v int) *LLMInteractionUpdate {
+	_u.mutation.ResetCacheReadTokens()
+	_u.mutation.SetCacheReadTokens(v)
+	return _u
+}
+
+// SetNillableCacheReadTokens sets the "cache_read_tokens" field if the given value is not nil.
+func (_u *LLMInteractionUpdate) SetNillableCacheReadTokens(v *int) *LLMInteractionUpdate {
+	if v != nil {
+		_u.SetCacheReadTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheReadTokens adds value to the "cache_read_tokens" field.
+func (_u *LLMInteractionUpdate) AddCacheReadTokens(v int) *LLMInteractionUpdate {
+	_u.mutation.AddCacheReadTokens(v)
+	return _u
+}
+
+// ClearCacheReadTokens clears the value of the "cache_read_tokens" field.
+func (_u *LLMInteractionUpdate) ClearCacheReadTokens() *LLMInteractionUpdate {
+	_u.mutation.ClearCacheReadTokens()
+	return _u
+}
+
+// SetCacheCreationTokens sets the "cache_creation_tokens" field.
+func (_u *LLMInteractionUpdate) SetCacheCreationTokens(v int) *LLMInteractionUpdate {
+	_u.mutation.ResetCacheCreationTokens()
+	_u.mutation.SetCacheCreationTokens(v)
+	return _u
+}
+
+// SetNillableCacheCreationTokens sets the "cache_creation_tokens" field if the given value is not nil.
+func (_u *LLMInteractionUpdate) SetNillableCacheCreationTokens(v *int) *LLMInteractionUpdate {
+	if v != nil {
+		_u.SetCacheCreationTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheCreationTokens adds value to the "cache_creation_tokens" field.
+func (_u *LLMInteractionUpdate) AddCacheCreationTokens(v int) *LLMInteractionUpdate {
+	_u.mutation.AddCacheCreationTokens(v)
+	return _u
+}
+
+// ClearCacheCreationTokens clears the value of the "cache_creation_tokens" field.
+func (_u *LLMInteractionUpdate) ClearCacheCreationTokens() *LLMInteractionUpdate {
+	_u.mutation.ClearCacheCreationTokens()
+	return _u
+}
+
 // SetEstimatedCostUsd sets the "estimated_cost_usd" field.
 func (_u *LLMInteractionUpdate) SetEstimatedCostUsd(v float64) *LLMInteractionUpdate {
 	_u.mutation.ResetEstimatedCostUsd()
@@ -473,6 +527,24 @@ func (_u *LLMInteractionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.ThinkingTokensCleared() {
 		_spec.ClearField(llminteraction.FieldThinkingTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.CacheReadTokens(); ok {
+		_spec.SetField(llminteraction.FieldCacheReadTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheReadTokens(); ok {
+		_spec.AddField(llminteraction.FieldCacheReadTokens, field.TypeInt, value)
+	}
+	if _u.mutation.CacheReadTokensCleared() {
+		_spec.ClearField(llminteraction.FieldCacheReadTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.CacheCreationTokens(); ok {
+		_spec.SetField(llminteraction.FieldCacheCreationTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheCreationTokens(); ok {
+		_spec.AddField(llminteraction.FieldCacheCreationTokens, field.TypeInt, value)
+	}
+	if _u.mutation.CacheCreationTokensCleared() {
+		_spec.ClearField(llminteraction.FieldCacheCreationTokens, field.TypeInt)
 	}
 	if value, ok := _u.mutation.EstimatedCostUsd(); ok {
 		_spec.SetField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)
@@ -794,6 +866,60 @@ func (_u *LLMInteractionUpdateOne) ClearThinkingTokens() *LLMInteractionUpdateOn
 	return _u
 }
 
+// SetCacheReadTokens sets the "cache_read_tokens" field.
+func (_u *LLMInteractionUpdateOne) SetCacheReadTokens(v int) *LLMInteractionUpdateOne {
+	_u.mutation.ResetCacheReadTokens()
+	_u.mutation.SetCacheReadTokens(v)
+	return _u
+}
+
+// SetNillableCacheReadTokens sets the "cache_read_tokens" field if the given value is not nil.
+func (_u *LLMInteractionUpdateOne) SetNillableCacheReadTokens(v *int) *LLMInteractionUpdateOne {
+	if v != nil {
+		_u.SetCacheReadTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheReadTokens adds value to the "cache_read_tokens" field.
+func (_u *LLMInteractionUpdateOne) AddCacheReadTokens(v int) *LLMInteractionUpdateOne {
+	_u.mutation.AddCacheReadTokens(v)
+	return _u
+}
+
+// ClearCacheReadTokens clears the value of the "cache_read_tokens" field.
+func (_u *LLMInteractionUpdateOne) ClearCacheReadTokens() *LLMInteractionUpdateOne {
+	_u.mutation.ClearCacheReadTokens()
+	return _u
+}
+
+// SetCacheCreationTokens sets the "cache_creation_tokens" field.
+func (_u *LLMInteractionUpdateOne) SetCacheCreationTokens(v int) *LLMInteractionUpdateOne {
+	_u.mutation.ResetCacheCreationTokens()
+	_u.mutation.SetCacheCreationTokens(v)
+	return _u
+}
+
+// SetNillableCacheCreationTokens sets the "cache_creation_tokens" field if the given value is not nil.
+func (_u *LLMInteractionUpdateOne) SetNillableCacheCreationTokens(v *int) *LLMInteractionUpdateOne {
+	if v != nil {
+		_u.SetCacheCreationTokens(*v)
+	}
+	return _u
+}
+
+// AddCacheCreationTokens adds value to the "cache_creation_tokens" field.
+func (_u *LLMInteractionUpdateOne) AddCacheCreationTokens(v int) *LLMInteractionUpdateOne {
+	_u.mutation.AddCacheCreationTokens(v)
+	return _u
+}
+
+// ClearCacheCreationTokens clears the value of the "cache_creation_tokens" field.
+func (_u *LLMInteractionUpdateOne) ClearCacheCreationTokens() *LLMInteractionUpdateOne {
+	_u.mutation.ClearCacheCreationTokens()
+	return _u
+}
+
 // SetEstimatedCostUsd sets the "estimated_cost_usd" field.
 func (_u *LLMInteractionUpdateOne) SetEstimatedCostUsd(v float64) *LLMInteractionUpdateOne {
 	_u.mutation.ResetEstimatedCostUsd()
@@ -1067,6 +1193,24 @@ func (_u *LLMInteractionUpdateOne) sqlSave(ctx context.Context) (_node *LLMInter
 	}
 	if _u.mutation.ThinkingTokensCleared() {
 		_spec.ClearField(llminteraction.FieldThinkingTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.CacheReadTokens(); ok {
+		_spec.SetField(llminteraction.FieldCacheReadTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheReadTokens(); ok {
+		_spec.AddField(llminteraction.FieldCacheReadTokens, field.TypeInt, value)
+	}
+	if _u.mutation.CacheReadTokensCleared() {
+		_spec.ClearField(llminteraction.FieldCacheReadTokens, field.TypeInt)
+	}
+	if value, ok := _u.mutation.CacheCreationTokens(); ok {
+		_spec.SetField(llminteraction.FieldCacheCreationTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCacheCreationTokens(); ok {
+		_spec.AddField(llminteraction.FieldCacheCreationTokens, field.TypeInt, value)
+	}
+	if _u.mutation.CacheCreationTokensCleared() {
+		_spec.ClearField(llminteraction.FieldCacheCreationTokens, field.TypeInt)
 	}
 	if value, ok := _u.mutation.EstimatedCostUsd(); ok {
 		_spec.SetField(llminteraction.FieldEstimatedCostUsd, field.TypeFloat64, value)

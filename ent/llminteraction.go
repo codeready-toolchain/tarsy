@@ -52,6 +52,10 @@ type LLMInteraction struct {
 	TotalTokens *int `json:"total_tokens,omitempty"`
 	// Provider thinking/reasoning tokens when reported (e.g. Google native)
 	ThinkingTokens *int `json:"thinking_tokens,omitempty"`
+	// Provider cache-hit tokens when reported
+	CacheReadTokens *int `json:"cache_read_tokens,omitempty"`
+	// Provider cache-write tokens when reported
+	CacheCreationTokens *int `json:"cache_creation_tokens,omitempty"`
 	// Point-in-time list-price estimate; null if unpriced or estimation disabled
 	EstimatedCostUsd *float64 `json:"estimated_cost_usd,omitempty"`
 	// DurationMs holds the value of the "duration_ms" field.
@@ -143,7 +147,7 @@ func (*LLMInteraction) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case llminteraction.FieldEstimatedCostUsd:
 			values[i] = new(sql.NullFloat64)
-		case llminteraction.FieldInputTokens, llminteraction.FieldOutputTokens, llminteraction.FieldTotalTokens, llminteraction.FieldThinkingTokens, llminteraction.FieldDurationMs:
+		case llminteraction.FieldInputTokens, llminteraction.FieldOutputTokens, llminteraction.FieldTotalTokens, llminteraction.FieldThinkingTokens, llminteraction.FieldCacheReadTokens, llminteraction.FieldCacheCreationTokens, llminteraction.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
 		case llminteraction.FieldID, llminteraction.FieldSessionID, llminteraction.FieldStageID, llminteraction.FieldExecutionID, llminteraction.FieldInteractionType, llminteraction.FieldModelName, llminteraction.FieldLastMessageID, llminteraction.FieldThinkingContent, llminteraction.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -273,6 +277,20 @@ func (_m *LLMInteraction) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ThinkingTokens = new(int)
 				*_m.ThinkingTokens = int(value.Int64)
+			}
+		case llminteraction.FieldCacheReadTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_read_tokens", values[i])
+			} else if value.Valid {
+				_m.CacheReadTokens = new(int)
+				*_m.CacheReadTokens = int(value.Int64)
+			}
+		case llminteraction.FieldCacheCreationTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field cache_creation_tokens", values[i])
+			} else if value.Valid {
+				_m.CacheCreationTokens = new(int)
+				*_m.CacheCreationTokens = int(value.Int64)
 			}
 		case llminteraction.FieldEstimatedCostUsd:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -414,6 +432,16 @@ func (_m *LLMInteraction) String() string {
 	builder.WriteString(", ")
 	if v := _m.ThinkingTokens; v != nil {
 		builder.WriteString("thinking_tokens=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.CacheReadTokens; v != nil {
+		builder.WriteString("cache_read_tokens=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.CacheCreationTokens; v != nil {
+		builder.WriteString("cache_creation_tokens=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
