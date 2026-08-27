@@ -15,6 +15,7 @@ Cost is persisted on each `llm_interaction` at write time. Session list, detail,
 - [Session APIs](#session-apis)
 - [Usage API](#usage-api)
 - [Thinking tokens](#thinking-tokens)
+- [Cache tokens](#cache-tokens)
 - [Known gaps](#known-gaps)
 - [Completeness](#completeness)
 
@@ -23,7 +24,7 @@ Cost is persisted on each `llm_interaction` at write time. Session list, detail,
 When cost estimation is **enabled** (default):
 
 1. On each LLM interaction write, TARSy resolves rates for `model_name`.
-2. It computes `estimated_cost_usd` from input / output / thinking tokens.
+2. It computes `estimated_cost_usd` from uncached input / output / thinking / cache-read / cache-creation tokens.
 3. The value is stored on the row (point-in-time). Later price-book changes do not rewrite history.
 
 When cost estimation is **disabled**:
@@ -83,20 +84,28 @@ Config Viewer (`system.cost_estimation`) shows `enabled`, override rates, all co
 
 ```
 cost_usd =
-    input_tokens    * rates.input
-  + output_tokens   * rates.output
-  + thinking_tokens * rates.reasoning   # only when thinking_tokens > 0
+    input_tokens           * rates.input          # uncached (full-price) input
+  + cache_read_tokens      * rates.cache_read
+  + cache_creation_tokens  * rates.cache_creation
+  + output_tokens          * rates.output
+  + thinking_tokens        * rates.reasoning      # only when thinking_tokens > 0
 ```
+
+TARSy `input_tokens` is **uncached** billed input. It is not Gemini’s raw `prompt_token_count` and not LangChain’s inclusive `usage_metadata.input_tokens`. Cache hits are stored separately as `cache_read_tokens` / `cache_creation_tokens`.
 
 Reasoning rate = LiteLLM `output_cost_per_reasoning_token` when present, otherwise the output rate.
 
+Cache rates come from the catalog/snapshot (`cache_read_input_token_cost`, and for Claude 1h writes `cache_creation_input_token_cost_above_1hr`) when those fields exist. YAML promotions/`model_rates` stay input/output only; when they win, cache rates are derived from the resolved input rate (read = 0.1×; create = 2× if the model name contains `claude`, else 1.25×). Missing catalog cache rates use the same multipliers so cache is never priced at $0. Claude 1h writes never use the 5m `cache_creation_input_token_cost`.
+
 **Context tiers (B-scoped):**
 
-1. If the catalog has `*_above_{N}k_tokens` and `input_tokens` ≥ threshold → use those rates (e.g. Gemini 3.1 Pro at 200k).
+1. If the catalog has `*_above_{N}k_tokens` and **prompt size** (`input_tokens + cache_read_tokens + cache_creation_tokens`) ≥ threshold → use those rates (e.g. Gemini 3.1 Pro at 200k).
 2. Else if `tiered_pricing` ranges exist → pick the single matching tier (no blending).
 3. Else → flat base rates.
 
 Priority / flex / batch rates and YAML override tiers are out of scope for v1.
+
+Rows written before cache pricing (and Gemini rows written before `input_tokens` was normalized) keep the old meaning: Gemini `input_tokens` included cached tokens. Usage windows that mix pre- and post-change rows are inexact on `input_tokens`; `total_tokens` is unchanged.
 
 ## Session APIs
 
@@ -134,6 +143,7 @@ Rules:
 - `totals.session_count` is the number of matching sessions in the window (same filters; includes sessions with no LLM rows). When estimation is enabled and `session_count > 0`, `totals.average_cost_usd` is `estimated_cost_usd / session_count`.
 - `by_model[]`, `by_alert_type[]`, and `by_chain[]` rows include `session_count` and (when estimation is enabled) `average_cost_usd`. For models, `session_count` is distinct sessions that used that model — a session that hits two models counts toward both.
 - `by_model[]` rows carry `priced` (bool: all token-bearing rows for that model are priced) and `unpriced_interaction_count` (count of token-bearing rows for that model with no resolved rate); the dashboard surfaces the count in the "Incomplete" chip's tooltip.
+- `totals` and `by_model[]` include `cache_read_tokens` and `cache_creation_tokens` SUMs. The Usage page shows these as StatCards (keep the **Input tokens** label = uncached) and by-model columns. Session list, by-alert-type, by-chain, top-sessions, and Usage charts do **not** SUM cache in v1.
 - `totals.unpriced_interaction_count` is that same row count across the window. `totals.unpriced_token_count` is `SUM(total_tokens)` of those unpriced rows; the Usage Est. cost caption shows it compactly (e.g. `1.2M unpriced`), with a tooltip of the form `1.2M tokens from 838 LLM interactions had no resolved rate`.
 - Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
@@ -147,14 +157,22 @@ Window edge case: a long-running session started before the window is excluded e
 - LangChain backends typically report `0` today — no LangChain thinking extraction in v1.
 - Thinking tokens are included in cost when > 0.
 
+## Cache tokens
+
+- Columns: `llm_interactions.cache_read_tokens` / `cache_creation_tokens` (nullable; persisted when > 0).
+- Python normalizes proto `input_tokens` to uncached input and reports cache counts separately.
+- Gemini implicit cache reads are extracted from `cached_content_token_count` (no creation surcharge).
+- Priced at write time using catalog cache rates or derived multipliers (see [How estimates are computed](#how-estimates-are-computed)).
+- Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do.
+
 ## Known gaps
 
 | Gap | Impact |
 |-----|--------|
-| Cache read/write tokens | Not persisted; estimates may undercount models that discount cached input |
 | LangChain thinking usage | Often stored as 0; cost uses input/output only |
 | Negotiated enterprise rates | Catalog is public list price — use YAML overrides |
 | Historical sessions | Pre-feature rows stay null until a future backfill |
+| Mixed pre-normalization rows | Older Gemini `input_tokens` included cached tokens; mixed Usage windows are inexact on input |
 
 ## Completeness
 
@@ -166,4 +184,4 @@ Session list/detail/summary, `ExecutionOverview`, and `GET /api/v1/usage/summary
 | `partial` | Some token-bearing rows are unpriced (null cost) |
 | `none` | No priced token-bearing rows |
 
-A **token-bearing** interaction has any of `input_tokens`, `output_tokens`, or `thinking_tokens` > 0. Explicit `$0` is priced (complete); SQL `NULL` is unpriced. Unpriced includes: unknown models, heuristic conflicts, estimation disabled at write time, and pre-feature rows. Completeness is derived from **counts**, not from `COALESCE(SUM(estimated_cost_usd), 0)`.
+A **token-bearing** interaction has any of `input_tokens`, `output_tokens`, `thinking_tokens`, `cache_read_tokens`, or `cache_creation_tokens` > 0. Explicit `$0` is priced (complete); SQL `NULL` is unpriced. Unpriced includes: unknown models, heuristic conflicts, estimation disabled at write time, and pre-feature rows. Completeness is derived from **counts**, not from `COALESCE(SUM(estimated_cost_usd), 0)`.

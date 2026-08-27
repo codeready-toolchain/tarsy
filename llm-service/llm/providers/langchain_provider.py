@@ -26,7 +26,11 @@ from langchain_core.messages import (
 from llm_proto import llm_service_pb2 as pb
 from llm.providers.base import LLMProvider
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
-from llm.providers.usage import extract_cache_tokens
+from llm.providers.usage import (
+    extract_anthropic_raw_input,
+    extract_cache_tokens,
+    uncached_input_tokens,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +404,7 @@ class LangChainProvider(LLMProvider):
         cache_read_tokens = 0
         cache_creation_tokens = 0
         has_cache_usage = False
+        anthropic_raw_input: Optional[int] = None
 
         # Accumulate tool call chunks by index.
         # LangChain may split tool calls across multiple chunks.
@@ -540,6 +545,12 @@ class LangChainProvider(LLMProvider):
                         cache_read_tokens, cache_creation_tokens = extracted
                         has_cache_usage = True
 
+                    raw_input = extract_anthropic_raw_input(
+                        getattr(chunk, "response_metadata", None),
+                    )
+                    if raw_input is not None:
+                        anthropic_raw_input = raw_input
+
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
 
@@ -563,7 +574,12 @@ class LangChainProvider(LLMProvider):
         if accumulated_input_tokens or accumulated_output_tokens or has_cache_usage:
             yield pb.GenerateResponse(
                 usage=pb.UsageInfo(
-                    input_tokens=accumulated_input_tokens,
+                    input_tokens=uncached_input_tokens(
+                        accumulated_input_tokens,
+                        cache_read_tokens,
+                        cache_creation_tokens,
+                        anthropic_raw_input,
+                    ),
                     output_tokens=accumulated_output_tokens,
                     total_tokens=accumulated_total_tokens,
                     cache_read_tokens=cache_read_tokens,

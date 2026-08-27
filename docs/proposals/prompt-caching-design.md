@@ -130,7 +130,7 @@ Provider fallback (`ClearCache`) already switches model; the new prefix cannot h
 
 TARSy already uses `ChatOpenAI` with the Responses API for reasoning GPT-5 models (`langchain-openai>=1.6`). If constructor-only params ever prove required for Responses streaming, bind a per-request runnable instead of putting cache policy on the shared `_model_cache` instance. Bump `langchain-openai` if 1.6 does not forward `prompt_cache_options` / breakpoints.
 
-**GPT-5.5 and older** (anything that does not match `gpt-5.` with minor ≥ 6, including builtin `openai-default` → `gpt-5.2`, `gpt-5`, `gpt-5-mini`): automatic prefix cache. Extract `cached_tokens` / `cache_write_tokens` if present. Send no `prompt_cache_options`.
+**GPT-5.5 and older** (anything that does not match `gpt-5.` with integer minor ≥ 6, including `gpt-5.2`, `gpt-5`, `gpt-5-mini`): automatic prefix cache. Extract `cached_tokens` / `cache_write_tokens` if present. Send no `prompt_cache_options`. Built-in `openai-default` is GPT-5.6 and therefore takes the GPT-5.6+ path when `prompt_cache` is set.
 
 **GPT-5.6 and later** (model id matches `gpt-5.` with integer minor **≥ 6**, case-insensitive, including dated/variant suffixes such as `gpt-5.6-sol`). `gpt-5`, `gpt-5-mini`, `gpt-5.2` do **not** match `gpt-5.`+minor. When `prompt_cache` is set:
 
@@ -278,7 +278,7 @@ No live-provider e2e in this repo (`ScriptedLLMClient`). Cover extraction, cost,
 
 **Done when:** a live Gemini or GPT-5.2 session can show non-zero `cache_read_tokens` in `llm_interactions`.
 
-### PR2 — Normalize input + price cache + Usage rollup
+### PR2 — Normalize input + price cache + Usage rollup - DONE
 
 **Lands:** Python subtract so proto `input_tokens` is uncached. `catalogEntry` cache rates (`cache_read_input_token_cost`, `cache_creation_input_token_cost`, `cache_creation_input_token_cost_above_1hr`); refresh `pkg/cost/snapshot.json`. `cost.Estimate` / `Book.Estimate`: cache counts, prompt-size tiering (`uncached + cache_read + cache_creation`), overlay derive 0.1× read and 2× create if model name contains `claude` else 1.25×; Claude 1h must not use the 5m catalog create rate. `tokenBearingPredicateSQL` + `estimateCost` skip rules include cache. Usage API: `SUM` cache on **totals and by-model only**; dashboard StatCards + by-model columns (`UsagePage.tsx`, `pkg/models/session.go`, `pkg/services/session_service_usage.go`). Docs: `docs/session-usage-cost.md` (formula, `input_tokens` meaning, mixed pre-PR2 rows); drop the “cache tokens not persisted” gap.
 

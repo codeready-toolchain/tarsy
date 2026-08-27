@@ -20,8 +20,14 @@ type rawCatalogEntry map[string]any
 type catalogEntry struct {
 	HasInput                    bool
 	HasOutput                   bool
+	HasCacheRead                bool
+	HasCacheCreate              bool
+	HasCacheCreateAbove1hr      bool
 	InputCostPerToken           float64
 	OutputCostPerToken          float64
+	CacheReadCost               float64
+	CacheCreateCost             float64
+	CacheCreateAbove1hr         float64
 	OutputCostPerReasoningToken *float64
 	InputCostAbove              map[int]float64 // threshold tokens → rate
 	OutputCostAbove             map[int]float64
@@ -80,6 +86,18 @@ func parseEntry(raw rawCatalogEntry) (catalogEntry, bool) {
 
 	if r, ok := asFloat(raw["output_cost_per_reasoning_token"]); ok {
 		e.OutputCostPerReasoningToken = &r
+	}
+	if r, ok := asFloat(raw["cache_read_input_token_cost"]); ok {
+		e.HasCacheRead = true
+		e.CacheReadCost = r
+	}
+	if r, ok := asFloat(raw["cache_creation_input_token_cost"]); ok {
+		e.HasCacheCreate = true
+		e.CacheCreateCost = r
+	}
+	if r, ok := asFloat(raw["cache_creation_input_token_cost_above_1hr"]); ok {
+		e.HasCacheCreateAbove1hr = true
+		e.CacheCreateAbove1hr = r
 	}
 
 	for k, v := range raw {
@@ -182,8 +200,9 @@ func fetchCatalog(ctx context.Context, client *http.Client, url string, maxBody 
 	return entries, nil
 }
 
-// ratesForInput selects flat / above_Nk / tiered rates for the given input token count.
-// Returns ok=false when a required input or output rate is absent (not merely zero).
+// ratesForInput selects flat / above_Nk / tiered rates for the given prompt size
+// (uncached + cache_read + cache_creation). Returns ok=false when a required
+// input or output rate is absent (not merely zero).
 func (e catalogEntry) ratesForInput(inputTokens int) (Rates, bool) {
 	hasIn, hasOut := e.HasInput, e.HasOutput
 	in, out := e.InputCostPerToken, e.OutputCostPerToken

@@ -26,7 +26,7 @@ func TestEstimate_OverrideWins(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cost, prov := book.Estimate("gemini-3.1-pro-preview", 1_000_000, 1_000_000, 0)
+	cost, prov := book.Estimate("gemini-3.1-pro-preview", Tokens{Input: 1_000_000, Output: 1_000_000})
 	require.NotNil(t, cost)
 	if prov != ProvenanceOverride {
 		t.Fatalf("provenance = %q, want %q", prov, ProvenanceOverride)
@@ -43,7 +43,7 @@ func TestEstimate_Unpriced(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cost, prov := book.Estimate("totally-unknown-model-xyz", 100, 50, 0)
+	cost, prov := book.Estimate("totally-unknown-model-xyz", Tokens{Input: 100, Output: 50})
 	if cost != nil {
 		t.Fatalf("expected nil cost, got %v", *cost)
 	}
@@ -58,7 +58,7 @@ func TestEstimate_Disabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cost, prov := book.Estimate("gemini-3.6-flash", 1000, 500, 0)
+	cost, prov := book.Estimate("gemini-3.6-flash", Tokens{Input: 1000, Output: 500})
 	if cost != nil {
 		t.Fatalf("expected nil when disabled, got %v", *cost)
 	}
@@ -72,7 +72,7 @@ func TestEstimate_Disabled(t *testing.T) {
 
 func TestEstimate_NilBook(t *testing.T) {
 	var book *Book
-	cost, prov := book.Estimate("gemini-3.6-flash", 100, 50, 0)
+	cost, prov := book.Estimate("gemini-3.6-flash", Tokens{Input: 100, Output: 50})
 	if cost != nil || prov != ProvenanceUnpriced {
 		t.Fatalf("nil book: cost=%v prov=%q", cost, prov)
 	}
@@ -89,13 +89,13 @@ func TestEstimate_GeminiAbove200k(t *testing.T) {
 
 	// Snapshot has gemini-3.1-pro-preview with above_200k rates:
 	// base: 2e-6 / 1.2e-5; above: 4e-6 / 1.8e-5
-	below, provBelow := book.Estimate("gemini-3.1-pro-preview", 100_000, 1000, 0)
+	below, provBelow := book.Estimate("gemini-3.1-pro-preview", Tokens{Input: 100_000, Output: 1000})
 	require.NotNil(t, below)
 	if provBelow != Provenance("snapshot:gemini-3.1-pro-preview") {
 		t.Fatalf("provenance = %q", provBelow)
 	}
 
-	above, provAbove := book.Estimate("gemini-3.1-pro-preview", 200_000, 1000, 0)
+	above, provAbove := book.Estimate("gemini-3.1-pro-preview", Tokens{Input: 200_000, Output: 1000})
 	require.NotNil(t, above)
 	if provAbove != Provenance("snapshot:gemini-3.1-pro-preview") {
 		t.Fatalf("provenance = %q", provAbove)
@@ -140,7 +140,7 @@ func TestEstimate_ClaudeSnapshotRates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			costUSD, prov := book.Estimate(tt.model, 1_000_000, 1_000_000, 0)
+			costUSD, prov := book.Estimate(tt.model, Tokens{Input: 1_000_000, Output: 1_000_000})
 			require.NotNil(t, costUSD)
 			assert.Equal(t, tt.wantProv, prov)
 			assert.InDelta(t, tt.wantUSD, *costUSD, 1e-9)
@@ -155,8 +155,8 @@ func TestEstimate_TieredPricing(t *testing.T) {
 	}
 
 	// dashscope/qwen-flash: tier0 [0,256k) cheaper than tier1 [256k,1M)
-	low, _ := book.Estimate("dashscope/qwen-flash", 1000, 1000, 0)
-	high, _ := book.Estimate("dashscope/qwen-flash", 300_000, 1000, 0)
+	low, _ := book.Estimate("dashscope/qwen-flash", Tokens{Input: 1000, Output: 1000})
+	high, _ := book.Estimate("dashscope/qwen-flash", Tokens{Input: 300_000, Output: 1000})
 	require.NotNil(t, low)
 	require.NotNil(t, high)
 	if *high <= *low {
@@ -171,8 +171,8 @@ func TestEstimate_ThinkingTokens(t *testing.T) {
 	}
 
 	// gemini-3.6-flash has output_cost_per_reasoning_token
-	without, _ := book.Estimate("gemini-3.6-flash", 1000, 1000, 0)
-	with, _ := book.Estimate("gemini-3.6-flash", 1000, 1000, 500)
+	without, _ := book.Estimate("gemini-3.6-flash", Tokens{Input: 1000, Output: 1000})
+	with, _ := book.Estimate("gemini-3.6-flash", Tokens{Input: 1000, Output: 1000, Thinking: 500})
 	require.NotNil(t, without)
 	require.NotNil(t, with)
 	if *with <= *without {
@@ -188,7 +188,7 @@ func TestEstimate_HeuristicSuffixMatch(t *testing.T) {
 
 	// TARSy stores bare model; snapshot has gemini/gemini-3.6-flash and gemini-3.6-flash (exact).
 	// Bare name hits exact first.
-	cost, prov := book.Estimate("gemini-3.6-flash", 1000, 100, 0)
+	cost, prov := book.Estimate("gemini-3.6-flash", Tokens{Input: 1000, Output: 100})
 	if cost == nil {
 		t.Fatal("expected match")
 	}
@@ -224,7 +224,7 @@ func TestBook_CatalogFetch(t *testing.T) {
 
 	book.refreshOnce(t.Context())
 
-	cost, prov := book.Estimate("test-model", 1_000_000, 0, 0)
+	cost, prov := book.Estimate("test-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, cost)
 	if prov != Provenance("catalog:test-model") {
 		t.Fatalf("provenance = %q", prov)
@@ -265,7 +265,7 @@ func TestBook_StatusUsesSnapshotWhenFetchFails(t *testing.T) {
 	}
 
 	// Snapshot still prices known models.
-	cost, _ := book.Estimate("gemini-3.6-flash", 100, 50, 0)
+	cost, _ := book.Estimate("gemini-3.6-flash", Tokens{Input: 100, Output: 50})
 	if cost == nil {
 		t.Fatal("snapshot should still price")
 	}
@@ -297,7 +297,7 @@ func TestBook_OverrideBeatsCatalog(t *testing.T) {
 	book.SetCatalogURLForTest(srv.URL)
 	book.refreshOnce(t.Context())
 
-	costUSD, prov := book.Estimate("gemini-3.6-flash", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("gemini-3.6-flash", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, ProvenanceOverride, prov)
 	assert.InDelta(t, 1.0, *costUSD, 1e-9)
@@ -343,14 +343,14 @@ func TestBook_EstimateConcurrentWithRefresh(t *testing.T) {
 			for range 50 {
 				book.refreshOnce(t.Context())
 
-				snapCost, snapProv := book.Estimate("gemini-3.6-flash", 100, 50, 0)
+				snapCost, snapProv := book.Estimate("gemini-3.6-flash", Tokens{Input: 100, Output: 50})
 				assert.NotNil(t, snapCost)
 				assert.Equal(t, Provenance("snapshot:gemini-3.6-flash"), snapProv)
 				if snapCost != nil {
 					assert.InDelta(t, snapshotCost, *snapCost, 1e-12)
 				}
 
-				catCost, catProv := book.Estimate("concurrent-model", 1000, 100, 0)
+				catCost, catProv := book.Estimate("concurrent-model", Tokens{Input: 1000, Output: 100})
 				assert.NotNil(t, catCost)
 				assert.Equal(t, Provenance("catalog:concurrent-model"), catProv)
 				if catCost != nil {
@@ -388,7 +388,7 @@ func TestEstimate_PromotionActive(t *testing.T) {
 		return time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	})
 
-	costUSD, prov := book.Estimate("promo-only-model", 1_000_000, 1_000_000, 0)
+	costUSD, prov := book.Estimate("promo-only-model", Tokens{Input: 1_000_000, Output: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:gemini-3.7-flash-intro"), prov)
 	assert.InDelta(t, 4.5, *costUSD, 1e-9)
@@ -415,7 +415,7 @@ func TestEstimate_PromotionBeatsModelRates(t *testing.T) {
 		return time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
 	})
 
-	costUSD, prov := book.Estimate("shared-model", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("shared-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:shared-model"), prov)
 	assert.InDelta(t, 1.0, *costUSD, 1e-9)
@@ -442,7 +442,7 @@ func TestEstimate_PromotionBeforeStart(t *testing.T) {
 		return time.Date(2026, 7, 31, 23, 59, 59, 0, time.UTC)
 	})
 
-	costUSD, prov := book.Estimate("shared-model", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("shared-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, ProvenanceOverride, prov)
 	assert.InDelta(t, 10.0, *costUSD, 1e-9)
@@ -468,7 +468,7 @@ func TestEstimate_PromotionAfterEnd(t *testing.T) {
 	// Half-open: end instant is expired.
 	book.SetNowForTest(func() time.Time { return end })
 
-	costUSD, prov := book.Estimate("shared-model", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("shared-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, ProvenanceOverride, prov)
 	assert.InDelta(t, 10.0, *costUSD, 1e-9)
@@ -490,7 +490,7 @@ func TestEstimate_PromotionOmittedStart(t *testing.T) {
 		return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	})
 
-	costUSD, prov := book.Estimate("open-start-model", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("open-start-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:open-start-model"), prov)
 	assert.InDelta(t, 0.5, *costUSD, 1e-9)
@@ -513,7 +513,7 @@ func TestEstimate_PromotionExactNameMiss(t *testing.T) {
 	})
 
 	// Prefixed alias must not match promotion (exact name only).
-	costUSD, prov := book.Estimate("gemini/gemini-3.7-flash", 1000, 0, 0)
+	costUSD, prov := book.Estimate("gemini/gemini-3.7-flash", Tokens{Input: 1000})
 	// May still be priced via snapshot heuristics, but not via promotion.
 	assert.NotEqual(t, Provenance("promotion:gemini-3.7-flash"), prov)
 	_ = costUSD
@@ -535,7 +535,7 @@ func TestEstimate_PromotionDisabledIgnored(t *testing.T) {
 		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	})
 
-	costUSD, prov := book.Estimate("promo-model", 1000, 500, 0)
+	costUSD, prov := book.Estimate("promo-model", Tokens{Input: 1000, Output: 500})
 	assert.Nil(t, costUSD)
 	assert.Equal(t, ProvenanceUnpriced, prov)
 }
@@ -556,19 +556,19 @@ func TestEstimate_PromotionHalfOpenDateBoundary(t *testing.T) {
 	require.NoError(t, err)
 
 	book.SetNowForTest(func() time.Time { return start })
-	costUSD, prov := book.Estimate("boundary-model", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("boundary-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:boundary-model"), prov)
 
 	book.SetNowForTest(func() time.Time {
 		return time.Date(2026, 9, 30, 23, 59, 59, 0, time.UTC)
 	})
-	costUSD, prov = book.Estimate("boundary-model", 1_000_000, 0, 0)
+	costUSD, prov = book.Estimate("boundary-model", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:boundary-model"), prov)
 
 	book.SetNowForTest(func() time.Time { return end })
-	costUSD, prov = book.Estimate("boundary-model", 1_000_000, 0, 0)
+	costUSD, prov = book.Estimate("boundary-model", Tokens{Input: 1_000_000})
 	assert.Nil(t, costUSD)
 	assert.Equal(t, ProvenanceUnpriced, prov)
 }
@@ -618,7 +618,7 @@ func TestEstimate_PromotionThinkingUsesOutputRate(t *testing.T) {
 	})
 
 	// 1M in + 0.5M out + 0.1M thinking@output = 1 + 1 + 0.2 = 2.2
-	costUSD, prov := book.Estimate("think-model", 1_000_000, 500_000, 100_000)
+	costUSD, prov := book.Estimate("think-model", Tokens{Input: 1_000_000, Output: 500_000, Thinking: 100_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:think-model"), prov)
 	assert.InDelta(t, 2.2, *costUSD, 1e-9)
@@ -642,15 +642,159 @@ func TestEstimate_PromotionBeatsSnapshot(t *testing.T) {
 		return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	})
 
-	costUSD, prov := book.Estimate("gemini-3.7-flash", 1_000_000, 0, 0)
+	costUSD, prov := book.Estimate("gemini-3.7-flash", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("promotion:flash-intro"), prov)
 	assert.InDelta(t, 0.1, *costUSD, 1e-9)
 
 	// After window: falls through to snapshot (not promo rates).
 	book.SetNowForTest(func() time.Time { return end })
-	costUSD, prov = book.Estimate("gemini-3.7-flash", 1_000_000, 0, 0)
+	costUSD, prov = book.Estimate("gemini-3.7-flash", Tokens{Input: 1_000_000})
 	require.NotNil(t, costUSD)
 	assert.Equal(t, Provenance("snapshot:gemini-3.7-flash"), prov)
 	assert.InDelta(t, 0.75, *costUSD, 1e-9) // snapshot intro rate
+}
+
+func TestEstimate_OverlayDerivesCacheRates(t *testing.T) {
+	book, err := NewBook(&Config{
+		Enabled: true,
+		ModelRates: map[string]ModelRateOverride{
+			"priced-model":    {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			"claude-sonnet-5": {InputPerMillion: 2.0, OutputPerMillion: 10.0},
+		},
+	})
+	require.NoError(t, err)
+
+	t.Run("non-claude 0.1 read 1.25 create", func(t *testing.T) {
+		costUSD, prov := book.Estimate("priced-model", Tokens{
+			Input: 1_000_000, CacheRead: 1_000_000, CacheCreation: 1_000_000,
+		})
+		require.NotNil(t, costUSD)
+		assert.Equal(t, ProvenanceOverride, prov)
+		// 1.0 + 0.1 + 1.25 = 2.35
+		assert.InDelta(t, 2.35, *costUSD, 1e-9)
+	})
+
+	t.Run("claude overlay 2x create", func(t *testing.T) {
+		costUSD, prov := book.Estimate("claude-sonnet-5", Tokens{
+			CacheCreation: 1_000_000,
+		})
+		require.NotNil(t, costUSD)
+		assert.Equal(t, ProvenanceOverride, prov)
+		assert.InDelta(t, 4.0, *costUSD, 1e-9)
+	})
+}
+
+func TestEstimate_GeminiCacheHeavyUses200kTier(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	// Uncached 50k would stay on base rates; prompt size 200k must pick above_200k.
+	// Catalog cache_read for this model is 2e-7 (not 0.1× of the 200k input rate).
+	costUSD, prov := book.Estimate("gemini-3.1-pro-preview", Tokens{
+		Input: 50_000, CacheRead: 150_000, Output: 1000,
+	})
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("snapshot:gemini-3.1-pro-preview"), prov)
+	want := 50_000*4e-6 + 150_000*2e-7 + 1000*1.8e-5
+	assert.InDelta(t, want, *costUSD, 1e-9)
+}
+
+func TestEstimate_ClaudeSnapshotUses1hCreateNot5m(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	costUSD, prov := book.Estimate("claude-sonnet-5", Tokens{CacheCreation: 1_000_000})
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("snapshot:claude-sonnet-5"), prov)
+	// 5m catalog create would be $2.50; 1h field is $4.00.
+	assert.InDelta(t, 4.0, *costUSD, 1e-9)
+}
+
+func TestEstimate_GeminiCacheReadPricedNotFullInput(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	costUSD, _ := book.Estimate("gemini-3.1-pro-preview", Tokens{
+		Input: 60_000, CacheRead: 40_000,
+	})
+	require.NotNil(t, costUSD)
+	// Below 200k: uncached at 2e-6, cache_read at catalog 2e-7.
+	want := 60_000*2e-6 + 40_000*2e-7
+	assert.InDelta(t, want, *costUSD, 1e-9)
+}
+
+func TestEstimate_GPT56SnapshotRates(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	below, prov := book.Estimate("gpt-5.6", Tokens{Input: 100_000, Output: 1000})
+	require.NotNil(t, below)
+	assert.Equal(t, Provenance("snapshot:gpt-5.6"), prov)
+	assert.InDelta(t, 100_000*4e-6+1000*2e-5, *below, 1e-9)
+
+	above, _ := book.Estimate("gpt-5.6", Tokens{Input: 272_000, Output: 1000})
+	require.NotNil(t, above)
+	assert.InDelta(t, 272_000*8e-6+1000*3e-5, *above, 1e-9)
+
+	create, _ := book.Estimate("gpt-5.6", Tokens{CacheCreation: 1_000_000})
+	require.NotNil(t, create)
+	assert.InDelta(t, 5.0, *create, 1e-9)
+}
+
+func TestEstimate_PromotionDerivesCacheRates(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	book, err := NewBook(&Config{
+		Enabled: true,
+		Promotions: []Promotion{
+			{
+				ID:               "gpt-intro",
+				Model:            "promo-gpt",
+				Start:            &start,
+				End:              end,
+				InputPerMillion:  0.75,
+				OutputPerMillion: 3.75,
+			},
+			{
+				ID:               "claude-intro",
+				Model:            "promo-claude",
+				Start:            &start,
+				End:              end,
+				InputPerMillion:  0.75,
+				OutputPerMillion: 3.75,
+			},
+		},
+	})
+	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time { return now })
+
+	t.Run("non-claude 0.1 read 1.25 create", func(t *testing.T) {
+		costUSD, prov := book.Estimate("promo-gpt", Tokens{
+			CacheRead: 1_000_000, CacheCreation: 1_000_000,
+		})
+		require.NotNil(t, costUSD)
+		assert.Equal(t, Provenance("promotion:gpt-intro"), prov)
+		// 0.75*0.1 + 0.75*1.25 = 0.075 + 0.9375
+		assert.InDelta(t, 1.0125, *costUSD, 1e-9)
+	})
+
+	t.Run("claude 2x create", func(t *testing.T) {
+		costUSD, prov := book.Estimate("promo-claude", Tokens{CacheCreation: 1_000_000})
+		require.NotNil(t, costUSD)
+		assert.Equal(t, Provenance("promotion:claude-intro"), prov)
+		assert.InDelta(t, 1.5, *costUSD, 1e-9)
+	})
+}
+
+func TestEstimate_MissingSnapshotCacheDerives(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	costUSD, prov := book.Estimate("dashscope/qwen-flash", Tokens{CacheRead: 1000})
+	require.NotNil(t, costUSD)
+	assert.Equal(t, Provenance("snapshot:dashscope/qwen-flash"), prov)
+	// First tier input 5e-08; snapshot omits cache_read → 0.1×.
+	assert.InDelta(t, 1000*5e-09, *costUSD, 1e-15)
 }

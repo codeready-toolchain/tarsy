@@ -853,7 +853,12 @@ Shared convention between Go and Python:
 | `gemini-2.5-flash` | google | gemini-2.5-flash | 1M |
 | `gemini-2.5-pro` | google | gemini-2.5-pro | 1M |
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
-| `openai-default` | openai | gpt-5.2 | 400K |
+| `openai-default` | openai | gpt-5.6 | 1.05M |
+| `gpt-5.6` | openai | gpt-5.6 | 1.05M |
+| `gpt-5.6-sol` | openai | gpt-5.6-sol | 1.05M |
+| `gpt-5.6-terra` | openai | gpt-5.6-terra | 1.05M |
+| `gpt-5.6-luna` | openai | gpt-5.6-luna | 1.05M |
+| `gpt-5.2` | openai | gpt-5.2 | 400K |
 | `anthropic-default` | anthropic | claude-sonnet-5 | 1M |
 | `xai-default` | xai | grok-4.6 | 500K |
 | `vertexai-default` | vertexai | claude-sonnet-5 | 1M |

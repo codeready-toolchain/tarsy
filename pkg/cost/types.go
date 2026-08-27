@@ -97,9 +97,20 @@ type CatalogStatus struct {
 
 // Rates are per-token USD rates used for estimation.
 type Rates struct {
-	Input     float64
-	Output    float64
-	Reasoning *float64 // nil → Estimate uses Output for thinking tokens
+	Input         float64
+	Output        float64
+	Reasoning     *float64 // nil → Estimate uses Output for thinking tokens
+	CacheRead     float64
+	CacheCreation float64
+}
+
+// Tokens are the billed token counts for one estimate.
+type Tokens struct {
+	Input         int
+	Output        int
+	Thinking      int
+	CacheRead     int
+	CacheCreation int
 }
 
 // resolved holds rates plus provenance for a successful match.

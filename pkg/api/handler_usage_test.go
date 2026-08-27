@@ -141,6 +141,8 @@ func TestUsageSummaryHandler_Validation(t *testing.T) {
 				} else {
 					assert.Equal(t, models.UsageRankBy(v), resp.RankBy)
 				}
+				assert.Equal(t, int64(0), resp.Totals.CacheReadTokens)
+				assert.Equal(t, int64(0), resp.Totals.CacheCreationTokens)
 			})
 		}
 	})

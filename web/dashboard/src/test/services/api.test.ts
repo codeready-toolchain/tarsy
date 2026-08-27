@@ -221,7 +221,7 @@ describe('API methods', () => {
         cost_estimation_enabled: true,
         window: { start: '2026-01-01T00:00:00Z', end: '2026-01-31T00:00:00Z' },
         rank_by: 'cost',
-        totals: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+        totals: { input_tokens: 1, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0, total_tokens: 3 },
         by_model: [],
         by_alert_type: [],
         by_chain: [],

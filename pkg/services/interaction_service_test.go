@@ -127,7 +127,7 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		assert.InDelta(t, 2.2, *interaction.EstimatedCostUsd, 1e-9)
 	})
 
-	t.Run("cache tokens persisted without changing estimate", func(t *testing.T) {
+	t.Run("cache tokens are priced from overlay multipliers", func(t *testing.T) {
 		book, err := cost.NewBook(&cost.Config{
 			Enabled: true,
 			ModelRates: map[string]cost.ModelRateOverride{
@@ -156,8 +156,8 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		require.NotNil(t, row.CacheCreationTokens)
 		assert.Equal(t, cacheCreate, *row.CacheCreationTokens)
 		require.NotNil(t, row.EstimatedCostUsd)
-		// Same as input/output/thinking only — cache is not priced in this PR.
-		assert.InDelta(t, 2.2, *row.EstimatedCostUsd, 1e-9)
+		// 2.2 input/output/thinking + 400k*0.1×$1/M + 50k*1.25×$1/M = 2.3025
+		assert.InDelta(t, 2.3025, *row.EstimatedCostUsd, 1e-9)
 	})
 
 	t.Run("thinking persisted when estimation disabled", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		assert.Nil(t, row.EstimatedCostUsd)
 	})
 
-	t.Run("cache-only usage skips estimation", func(t *testing.T) {
+	t.Run("cache-only usage still estimates", func(t *testing.T) {
 		book, err := cost.NewBook(&cost.Config{
 			Enabled: true,
 			ModelRates: map[string]cost.ModelRateOverride{
@@ -262,7 +262,35 @@ func TestInteractionService_CreateLLMInteraction_CostAndThinking(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, row.CacheReadTokens)
 		assert.Equal(t, cacheRead, *row.CacheReadTokens)
-		assert.Nil(t, row.EstimatedCostUsd)
+		require.NotNil(t, row.EstimatedCostUsd)
+		assert.InDelta(t, 0.04, *row.EstimatedCostUsd, 1e-9)
+	})
+
+	t.Run("cache-creation-only usage still estimates", func(t *testing.T) {
+		book, err := cost.NewBook(&cost.Config{
+			Enabled: true,
+			ModelRates: map[string]cost.ModelRateOverride{
+				"priced-model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
+			},
+		})
+		require.NoError(t, err)
+		svc := NewInteractionService(client.Client, messageService, book)
+		cacheCreate := 400_000
+
+		row, err := svc.CreateLLMInteraction(ctx, models.CreateLLMInteractionRequest{
+			SessionID:           session.ID,
+			InteractionType:     "iteration",
+			ModelName:           "priced-model",
+			LLMRequest:          map[string]any{},
+			LLMResponse:         map[string]any{},
+			CacheCreationTokens: &cacheCreate,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row.CacheCreationTokens)
+		assert.Equal(t, cacheCreate, *row.CacheCreationTokens)
+		require.NotNil(t, row.EstimatedCostUsd)
+		// 400k * 1.25× $1/M
+		assert.InDelta(t, 0.5, *row.EstimatedCostUsd, 1e-9)
 	})
 
 	t.Run("explicit zero tokens still estimate", func(t *testing.T) {

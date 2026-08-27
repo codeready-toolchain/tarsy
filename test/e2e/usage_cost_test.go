@@ -20,11 +20,16 @@ const (
 	usageCostOutputPerMillion = 2.0
 )
 
-// estimateUSD mirrors pkg/cost.Estimate for YAML overrides (thinking uses output rate).
-func estimateUSD(inputTokens, outputTokens, thinkingTokens int) float64 {
-	return float64(inputTokens)*usageCostInputPerMillion/1_000_000 +
-		float64(outputTokens)*usageCostOutputPerMillion/1_000_000 +
-		float64(thinkingTokens)*usageCostOutputPerMillion/1_000_000
+// estimateUSD mirrors pkg/cost.Estimate for YAML overrides (thinking uses output rate;
+// cache read = 0.1× input, cache create = 1.25× input for non-Claude models).
+func estimateUSD(inputTokens, outputTokens, thinkingTokens, cacheRead, cacheCreate int) float64 {
+	inputRate := usageCostInputPerMillion / 1_000_000
+	outputRate := usageCostOutputPerMillion / 1_000_000
+	return float64(inputTokens)*inputRate +
+		float64(outputTokens)*outputRate +
+		float64(thinkingTokens)*outputRate +
+		float64(cacheRead)*0.1*inputRate +
+		float64(cacheCreate)*1.25*inputRate
 }
 
 // TestUsageCost_PipelinePersistsAndExposesCost runs a minimal single-stage chain
@@ -111,8 +116,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		in := s.invIn + s.sumIn
 		out := s.invOut + s.sumOut
 		tok := s.invTotal + s.sumTotal
-		cost := estimateUSD(s.invIn, s.invOut, s.invThinking) +
-			estimateUSD(s.sumIn, s.sumOut, 0)
+		cost := estimateUSD(s.invIn, s.invOut, s.invThinking, s.invCacheRead, 0) +
+			estimateUSD(s.sumIn, s.sumOut, 0, 0, 0)
 		expectedByID[ids[i]] = sessionExpected{
 			inputTokens: in, outputTokens: out, totalTokens: tok,
 			estimatedCost: cost,
@@ -206,6 +211,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, totalIn, toInt(totals["input_tokens"]))
 		assert.Equal(t, totalOut, toInt(totals["output_tokens"]))
+		assert.Equal(t, specs[0].invCacheRead, toInt(totals["cache_read_tokens"]))
+		assert.Equal(t, 0, toInt(totals["cache_creation_tokens"]))
 		assert.Equal(t, totalTok, toInt(totals["total_tokens"]))
 		assert.Equal(t, 2, toInt(totals["session_count"]))
 		assert.InDelta(t, totalCost, toFloat(totals["estimated_cost_usd"]), 1e-12)
@@ -221,6 +228,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.Equal(t, "test-model", model["model_name"])
 		assert.Equal(t, true, model["priced"])
 		assert.Equal(t, 0, toInt(model["unpriced_interaction_count"]))
+		assert.Equal(t, specs[0].invCacheRead, toInt(model["cache_read_tokens"]))
+		assert.Equal(t, 0, toInt(model["cache_creation_tokens"]))
 		assert.Equal(t, 2, toInt(model["session_count"]))
 		assert.InDelta(t, totalCost, toFloat(model["estimated_cost_usd"]), 1e-12)
 		assert.InDelta(t, totalCost/2, toFloat(model["average_cost_usd"]), 1e-12)

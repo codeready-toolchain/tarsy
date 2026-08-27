@@ -100,20 +100,27 @@ func (s *InteractionService) estimateCost(req models.CreateLLMInteractionRequest
 		return nil
 	}
 	// No usage fields at all → skip estimation (distinct from explicit zeros).
-	if req.InputTokens == nil && req.OutputTokens == nil && req.ThinkingTokens == nil {
+	if req.InputTokens == nil && req.OutputTokens == nil && req.ThinkingTokens == nil &&
+		req.CacheReadTokens == nil && req.CacheCreationTokens == nil {
 		return nil
 	}
-	input, output, thinking := 0, 0, 0
+	tok := cost.Tokens{}
 	if req.InputTokens != nil {
-		input = *req.InputTokens
+		tok.Input = *req.InputTokens
 	}
 	if req.OutputTokens != nil {
-		output = *req.OutputTokens
+		tok.Output = *req.OutputTokens
 	}
 	if req.ThinkingTokens != nil {
-		thinking = *req.ThinkingTokens
+		tok.Thinking = *req.ThinkingTokens
 	}
-	costUSD, _ := s.costBook.Estimate(req.ModelName, input, output, thinking)
+	if req.CacheReadTokens != nil {
+		tok.CacheRead = *req.CacheReadTokens
+	}
+	if req.CacheCreationTokens != nil {
+		tok.CacheCreation = *req.CacheCreationTokens
+	}
+	costUSD, _ := s.costBook.Estimate(req.ModelName, tok)
 	return costUSD
 }
 

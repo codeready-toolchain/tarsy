@@ -90,7 +90,7 @@ func (b *Book) Enabled() bool {
 
 // Estimate resolves rates for modelName and returns estimated USD cost.
 // Returns (nil, ProvenanceUnpriced) when estimation is disabled or the model is unpriced.
-func (b *Book) Estimate(modelName string, inputTokens, outputTokens, thinkingTokens int) (*float64, Provenance) {
+func (b *Book) Estimate(modelName string, t Tokens) (*float64, Provenance) {
 	if b == nil {
 		return nil, ProvenanceUnpriced
 	}
@@ -102,11 +102,12 @@ func (b *Book) Estimate(modelName string, inputTokens, outputTokens, thinkingTok
 		return nil, ProvenanceUnpriced
 	}
 
-	res, ok := b.resolveLocked(modelName, inputTokens, b.now())
+	promptSize := t.Input + t.CacheRead + t.CacheCreation
+	res, ok := b.resolveLocked(modelName, promptSize, b.now())
 	if !ok {
 		return nil, ProvenanceUnpriced
 	}
-	cost := Estimate(res.rates, inputTokens, outputTokens, thinkingTokens)
+	cost := Estimate(res.rates, t)
 	return &cost, res.provenance
 }
 
@@ -254,10 +255,10 @@ func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (
 			label = p.ID
 		}
 		return resolved{
-			rates: overrideRates(ModelRateOverride{
+			rates: applyCacheRates(overrideRates(ModelRateOverride{
 				InputPerMillion:  p.InputPerMillion,
 				OutputPerMillion: p.OutputPerMillion,
-			}),
+			}), modelName, nil),
 			provenance: Provenance(string(ProvenancePromotion) + ":" + label),
 			matchKey:   modelName,
 		}, true
@@ -266,7 +267,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (
 	// 2. YAML overrides (exact model_name).
 	if o, ok := b.overrides[modelName]; ok {
 		return resolved{
-			rates:      overrideRates(o),
+			rates:      applyCacheRates(overrideRates(o), modelName, nil),
 			provenance: ProvenanceOverride,
 			matchKey:   modelName,
 		}, true
@@ -276,7 +277,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (
 	if e, key, ok := findInCatalog(b.catalog, modelName); ok {
 		if rates, ok := e.ratesForInput(inputTokens); ok {
 			return resolved{
-				rates:      rates,
+				rates:      applyCacheRates(rates, modelName, &e),
 				provenance: Provenance(string(ProvenanceCatalog) + ":" + key),
 				matchKey:   key,
 			}, true
@@ -287,7 +288,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (
 	if e, key, ok := findInCatalog(b.snapshot, modelName); ok {
 		if rates, ok := e.ratesForInput(inputTokens); ok {
 			return resolved{
-				rates:      rates,
+				rates:      applyCacheRates(rates, modelName, &e),
 				provenance: Provenance(string(ProvenanceSnapshot) + ":" + key),
 				matchKey:   key,
 			}, true

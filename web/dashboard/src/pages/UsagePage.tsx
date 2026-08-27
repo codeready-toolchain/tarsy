@@ -379,6 +379,8 @@ export function UsagePage() {
                   <StatCard label="Total tokens" value={formatTokens(summary.totals.total_tokens)} />
                   <StatCard label="Input tokens" value={formatTokens(summary.totals.input_tokens)} />
                   <StatCard label="Output tokens" value={formatTokens(summary.totals.output_tokens)} />
+                  <StatCard label="Cache read" value={formatTokens(summary.totals.cache_read_tokens)} />
+                  <StatCard label="Cache create" value={formatTokens(summary.totals.cache_creation_tokens)} />
                   {costEnabled && (
                     <>
                       <StatCard
@@ -419,6 +421,8 @@ export function UsagePage() {
                         { label: 'Tokens', align: 'right' },
                         { label: 'In', align: 'right' },
                         { label: 'Out', align: 'right' },
+                        { label: 'Cache read', align: 'right' },
+                        { label: 'Cache create', align: 'right' },
                         { label: 'Est. cost', align: 'right' },
                         { label: 'Avg. / session', align: 'right' },
                         { label: 'Priced', align: 'center' },
@@ -428,6 +432,8 @@ export function UsagePage() {
                         { label: 'Tokens', align: 'right' },
                         { label: 'In', align: 'right' },
                         { label: 'Out', align: 'right' },
+                        { label: 'Cache read', align: 'right' },
+                        { label: 'Cache create', align: 'right' },
                       ]
                 }
                 empty={summary.by_model.length === 0}
@@ -438,6 +444,8 @@ export function UsagePage() {
                     <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                     <TableCell align="right">{formatTokens(row.input_tokens)}</TableCell>
                     <TableCell align="right">{formatTokens(row.output_tokens)}</TableCell>
+                    <TableCell align="right">{formatTokens(row.cache_read_tokens)}</TableCell>
+                    <TableCell align="right">{formatTokens(row.cache_creation_tokens)}</TableCell>
                     {costEnabled && (
                       <>
                         <TableCell align="right">{formatEstimatedCostUsd(row.estimated_cost_usd)}</TableCell>

@@ -381,6 +381,8 @@ type UsageTotals struct {
 	SessionCount             int64            `json:"session_count"`
 	InputTokens              int64            `json:"input_tokens"`
 	OutputTokens             int64            `json:"output_tokens"`
+	CacheReadTokens          int64            `json:"cache_read_tokens"`
+	CacheCreationTokens      int64            `json:"cache_creation_tokens"`
 	TotalTokens              int64            `json:"total_tokens"`
 	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
 	AverageCostUsd           *float64         `json:"average_cost_usd,omitempty"` // estimated_cost_usd / session_count
@@ -395,6 +397,8 @@ type UsageModelBreakdown struct {
 	SessionCount             int64    `json:"session_count"`
 	InputTokens              int64    `json:"input_tokens"`
 	OutputTokens             int64    `json:"output_tokens"`
+	CacheReadTokens          int64    `json:"cache_read_tokens"`
+	CacheCreationTokens      int64    `json:"cache_creation_tokens"`
 	TotalTokens              int64    `json:"total_tokens"`
 	EstimatedCostUsd         *float64 `json:"estimated_cost_usd,omitempty"`
 	AverageCostUsd           *float64 `json:"average_cost_usd,omitempty"`           // estimated_cost_usd / session_count

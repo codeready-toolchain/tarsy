@@ -1,8 +1,12 @@
-"""Tests for LangChain cache-token extraction (no input_tokens subtract)."""
+"""Tests for LangChain cache-token extraction and uncached input_tokens."""
 
 import pytest
 
-from llm.providers.usage import extract_cache_tokens
+from llm.providers.usage import (
+    extract_anthropic_raw_input,
+    extract_cache_tokens,
+    uncached_input_tokens,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -114,3 +118,41 @@ class TestExtractCacheTokens:
             usage_metadata={"input_token_details": {"cache_read": 0, "cache_creation": 4}}
         )
         assert result == (0, 4)
+
+
+class TestUncachedInputTokens:
+    def test_subtracts_inclusive_cache_read_and_create(self):
+        assert uncached_input_tokens(100, 70, 20) == 10
+
+    def test_clamps_over_subtract_to_zero(self):
+        assert uncached_input_tokens(10, 40, 80) == 0
+
+    def test_anthropic_raw_skips_subtract(self):
+        assert uncached_input_tokens(100, 40, 80, anthropic_raw_input=20) == 20
+
+    def test_google_cache_read_only(self):
+        assert uncached_input_tokens(4000, 3500, 0) == 500
+
+
+class TestExtractAnthropicRawInput:
+    def test_none_when_no_anthropic_cache_keys(self):
+        assert extract_anthropic_raw_input({"usage": {"input_tokens": 50}}) is None
+        assert extract_anthropic_raw_input(
+            {"usage": {"input_tokens": 200, "cached_tokens": 50}}
+        ) is None
+
+    def test_returns_raw_uncached_input(self):
+        assert extract_anthropic_raw_input(
+            {
+                "usage": {
+                    "input_tokens": 20,
+                    "cache_read_input_tokens": 40,
+                    "cache_creation_input_tokens": 80,
+                }
+            }
+        ) == 20
+
+    def test_none_when_input_tokens_missing(self):
+        assert extract_anthropic_raw_input(
+            {"usage": {"cache_read_input_tokens": 40}}
+        ) is None

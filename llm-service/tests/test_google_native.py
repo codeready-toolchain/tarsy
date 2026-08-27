@@ -747,7 +747,7 @@ class TestGoogleNativeProvider:
         usage_responses = [r for r in responses if r.HasField("usage")]
         assert len(usage_responses) == 1
         usage = usage_responses[0].usage
-        assert usage.input_tokens == 10
+        assert usage.input_tokens == 6
         assert usage.output_tokens == 20
         assert usage.total_tokens == 30
         assert usage.thinking_tokens == 5
