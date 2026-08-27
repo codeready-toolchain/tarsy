@@ -1069,10 +1069,72 @@ class TestLangChainPromptCacheBreakpoints:
 
         assert "prompt_cache_options" not in captured["ctor"]
         assert "prompt_cache_key" not in captured["ctor"]
+        assert captured["ctor"]["max_retries"] == 0
         assert captured["bind"]["prompt_cache_key"] == "exec-99"
         assert captured["bind"]["prompt_cache_options"] == {
             "mode": "explicit", "ttl": "30m",
         }
+        assert "max_retries" not in captured["bind"]
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    def test_anthropic_max_retries_on_constructor_not_bind(self, provider):
+        captured = {}
+
+        class FakeChatAnthropic:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                captured["tools"] = tools
+                return self
+
+            def bind(self, **kwargs):
+                captured["bind"] = kwargs
+                return self
+
+        with patch("langchain_anthropic.ChatAnthropic", FakeChatAnthropic):
+            config = pb.LLMConfig(
+                provider="anthropic", model="claude-sonnet-4-5",
+                api_key_env="ANTHROPIC_API_KEY",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.ANTHROPIC, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
+        assert "bind" not in captured
+
+    def test_vertex_claude_max_retries_on_constructor_not_bind(self, provider):
+        captured = {}
+
+        class FakeChatAnthropicVertex:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                captured["tools"] = tools
+                return self
+
+            def bind(self, **kwargs):
+                captured["bind"] = kwargs
+                return self
+
+        with patch(
+            "langchain_google_vertexai.model_garden.ChatAnthropicVertex",
+            FakeChatAnthropicVertex,
+        ):
+            config = pb.LLMConfig(
+                provider="vertexai",
+                model="claude-sonnet-4-5",
+                project="p",
+                location="us-east5",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.ANTHROPIC, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
+        assert "bind" not in captured
 
     @pytest.mark.parametrize("model", ["gpt-5.5", "gpt-5.2", "gpt-5", "gpt-5-mini"])
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})

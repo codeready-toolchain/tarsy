@@ -102,11 +102,7 @@ class LangChainProvider(LLMProvider):
             model = model.bind(
                 prompt_cache_options=prompt_cache.openai_prompt_cache_options(strip_ttl),
                 prompt_cache_key=execution_id,
-                max_retries=0,
             )
-        elif cache_kind == prompt_cache.ANTHROPIC:
-            # Per-request: don't let Vertex SDK retry the same 400 three times.
-            model = model.bind(max_retries=0)
         return model
 
     # ── Reasoning/thinking configuration per provider ──────────────────
@@ -199,6 +195,7 @@ class LangChainProvider(LLMProvider):
                 api_key=_require_api_key(),
                 streaming=True,
                 stream_usage=True,
+                max_retries=0,
                 **reasoning_kwargs,
             )
 
@@ -210,6 +207,7 @@ class LangChainProvider(LLMProvider):
                 "api_key": _require_api_key(),
                 "streaming": True,
                 "max_tokens": 32000,
+                "max_retries": 0,
             }
             # thinking_kwargs may override max_tokens to ensure budget_tokens < max_tokens
             base_kwargs.update(thinking_kwargs)
@@ -245,6 +243,7 @@ class LangChainProvider(LLMProvider):
                     location=config.location,
                     streaming=True,
                     max_tokens=max_tokens,
+                    max_retries=0,
                     model_kwargs=thinking_kwargs,
                 )
             else:
