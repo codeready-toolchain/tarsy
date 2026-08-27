@@ -154,6 +154,46 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		}
 	})
 
+	t.Run("TraceExposesCacheTokensPerInteraction", func(t *testing.T) {
+		trace := app.GetTraceList(t, ids[0])
+		items := collectTraceLLMItems(t, trace)
+
+		var iteration, execSummary map[string]interface{}
+		for _, item := range items {
+			switch item["interaction_type"] {
+			case "iteration":
+				iteration = item
+			case "executive_summary":
+				execSummary = item
+			}
+		}
+		require.NotNil(t, iteration, "expected an investigation iteration in trace")
+		require.NotNil(t, execSummary, "expected an executive_summary in trace")
+
+		assert.Equal(t, specs[0].invCacheRead, toInt(iteration["cache_read_tokens"]))
+		_, hasCreate := iteration["cache_creation_tokens"]
+		assert.False(t, hasCreate, "cache_creation_tokens must be omitted when unset")
+
+		_, hasRead := execSummary["cache_read_tokens"]
+		assert.False(t, hasRead, "exec summary must omit cache_read_tokens")
+		_, hasSummaryCreate := execSummary["cache_creation_tokens"]
+		assert.False(t, hasSummaryCreate, "exec summary must omit cache_creation_tokens")
+
+		detail := app.GetLLMInteractionDetail(t, ids[0], iteration["id"].(string))
+		assert.Equal(t, specs[0].invCacheRead, toInt(detail["cache_read_tokens"]))
+		_, hasDetailCreate := detail["cache_creation_tokens"]
+		assert.False(t, hasDetailCreate, "detail cache_creation_tokens must be omitted when unset")
+	})
+
+	t.Run("InvestigationSetsPromptCacheExecSummaryDoesNot", func(t *testing.T) {
+		inputs := llm.CapturedInputs()
+		require.Len(t, inputs, 4) // 2 sessions × (investigation + exec summary)
+		assert.True(t, inputs[0].PromptCache, "session A investigation")
+		assert.False(t, inputs[1].PromptCache, "session A exec summary")
+		assert.True(t, inputs[2].PromptCache, "session B investigation")
+		assert.False(t, inputs[3].PromptCache, "session B exec summary")
+	})
+
 	t.Run("SessionListCost", func(t *testing.T) {
 		list := app.GetSessionList(t, "")
 		assert.Equal(t, true, list["cost_estimation_enabled"])
@@ -172,6 +212,10 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			assert.Equal(t, exp.totalTokens, toInt(sess["total_tokens"]), "session %s total_tokens", id)
 			assert.InDelta(t, exp.estimatedCost, toFloat(sess["estimated_cost_usd"]), 1e-12, "session %s cost", id)
 			assert.Equal(t, "complete", sess["cost_completeness"], "session %s completeness", id)
+			_, hasCacheRead := sess["cache_read_tokens"]
+			assert.False(t, hasCacheRead, "session list must not SUM cache tokens")
+			_, hasCacheCreate := sess["cache_creation_tokens"]
+			assert.False(t, hasCacheCreate, "session list must not SUM cache tokens")
 		}
 	})
 
@@ -187,6 +231,10 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.InDelta(t, exp.estimatedCost, toFloat(detail["estimated_cost_usd"]), 1e-12)
 		assert.Equal(t, "complete", detail["cost_completeness"])
 		assert.Equal(t, 0, toInt(detail["unpriced_interaction_count"]))
+		_, hasCacheRead := detail["cache_read_tokens"]
+		assert.False(t, hasCacheRead, "session detail must not SUM cache tokens")
+		_, hasCacheCreate := detail["cache_creation_tokens"]
+		assert.False(t, hasCacheCreate, "session detail must not SUM cache tokens")
 
 		summary := app.GetSessionSummary(t, id)
 		assert.Equal(t, true, summary["cost_estimation_enabled"])
@@ -276,6 +324,10 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		ce, ok := system["cost_estimation"].(map[string]interface{})
 		require.True(t, ok, "system.cost_estimation should be present")
 		assert.Equal(t, true, ce["enabled"])
+
+		pc, ok := system["prompt_caching"].(map[string]interface{})
+		require.True(t, ok, "system.prompt_caching should be present")
+		assert.Equal(t, true, pc["enabled"])
 
 		rates, ok := ce["model_rates"].(map[string]interface{})
 		require.True(t, ok)
@@ -369,4 +421,33 @@ func TestUsageCost_EstimationDisabled(t *testing.T) {
 	system := sysCfg["system"].(map[string]interface{})
 	ce := system["cost_estimation"].(map[string]interface{})
 	assert.Equal(t, false, ce["enabled"])
+}
+
+func collectTraceLLMItems(t *testing.T, trace map[string]interface{}) []map[string]interface{} {
+	t.Helper()
+	var items []map[string]interface{}
+	add := func(raw []interface{}) {
+		for _, item := range raw {
+			m, ok := item.(map[string]interface{})
+			require.True(t, ok)
+			items = append(items, m)
+		}
+	}
+	stages, ok := trace["stages"].([]interface{})
+	require.True(t, ok, "trace stages should be an array")
+	for _, rawStage := range stages {
+		stg, ok := rawStage.(map[string]interface{})
+		require.True(t, ok)
+		execs, _ := stg["executions"].([]interface{})
+		for _, rawExec := range execs {
+			exec, ok := rawExec.(map[string]interface{})
+			require.True(t, ok)
+			llmItems, _ := exec["llm_interactions"].([]interface{})
+			add(llmItems)
+		}
+	}
+	if sess, ok := trace["session_interactions"].([]interface{}); ok {
+		add(sess)
+	}
+	return items
 }
