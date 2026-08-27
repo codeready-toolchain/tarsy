@@ -1077,3 +1077,41 @@ func TestMetricsTokens(t *testing.T) {
 		assert.Nil(t, metricsTokens(nil, fmt.Errorf("generic error")))
 	})
 }
+
+func TestCallLLMWithStreaming_PromptCacheAND(t *testing.T) {
+	tests := []struct {
+		name     string
+		eligible bool
+		enabled  bool
+		nilCfg   bool
+		want     bool
+	}{
+		{name: "eligible and enabled", eligible: true, enabled: true, want: true},
+		{name: "eligible but cluster off", eligible: true, enabled: false, want: false},
+		{name: "ineligible even when enabled", eligible: false, enabled: true, want: false},
+		{name: "nil resolved config defaults to enabled", eligible: true, nilCfg: true, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			llm := &mockLLMClient{
+				capture: true,
+				responses: []mockLLMResponse{{
+					chunks: []agent.Chunk{&agent.TextChunk{Content: "ok"}},
+				}},
+			}
+			execCtx := &agent.ExecutionContext{}
+			if !tt.nilCfg {
+				execCtx.Config = &agent.ResolvedAgentConfig{PromptCachingEnabled: tt.enabled}
+			}
+			input := &agent.GenerateInput{PromptCache: tt.eligible}
+			eventSeq := 0
+
+			_, err := callLLMWithStreaming(t.Context(), execCtx, llm, input, &eventSeq)
+			require.NoError(t, err)
+			require.Len(t, llm.capturedInputs, 1)
+			assert.Equal(t, tt.want, llm.capturedInputs[0].PromptCache)
+			assert.Equal(t, tt.eligible, input.PromptCache, "caller GenerateInput must not be mutated")
+		})
+	}
+}

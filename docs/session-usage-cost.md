@@ -162,6 +162,7 @@ Window edge case: a long-running session started before the window is excluded e
 - Columns: `llm_interactions.cache_read_tokens` / `cache_creation_tokens` (nullable; persisted when > 0).
 - Python normalizes proto `input_tokens` to uncached input and reports cache counts separately.
 - Gemini implicit cache reads are extracted from `cached_content_token_count` (no creation surcharge).
+- Looping Claude / GPT-5.6+ breakpoints honor `system.prompt_caching.enabled` (default on). That kill switch does not disable Gemini implicit caching.
 - Priced at write time using catalog cache rates or derived multipliers (see [How estimates are computed](#how-estimates-are-computed)).
 - Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do.
 

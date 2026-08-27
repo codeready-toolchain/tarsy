@@ -376,6 +376,9 @@ export interface SystemSettingsView {
       last_error?: string;
     };
   } | null;
+  prompt_caching?: {
+    enabled: boolean;
+  } | null;
   dashboard_url?: string;
   allowed_ws_origins: string[];
 }

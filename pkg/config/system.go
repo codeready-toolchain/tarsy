@@ -21,6 +21,12 @@ type SlackConfig struct {
 	Channel  string // Slack channel ID (e.g., "C12345678")
 }
 
+// PromptCachingConfig holds resolved provider prompt-caching settings.
+// Enabled defaults to true when system.prompt_caching is omitted.
+type PromptCachingConfig struct {
+	Enabled bool
+}
+
 // CostEstimationConfig holds resolved LLM cost-estimation settings.
 // Enabled defaults to true when system.cost_estimation is omitted.
 type CostEstimationConfig struct {

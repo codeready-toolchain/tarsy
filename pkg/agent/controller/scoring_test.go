@@ -118,6 +118,9 @@ func TestScoringController_Run(t *testing.T) {
 
 		// Verify 2 LLM calls
 		assert.Equal(t, 2, mock.callCount)
+		require.Len(t, mock.capturedInputs, 2)
+		assert.False(t, mock.capturedInputs[0].PromptCache)
+		assert.False(t, mock.capturedInputs[1].PromptCache)
 	})
 
 	t.Run("failure tags extracted from analysis", func(t *testing.T) {

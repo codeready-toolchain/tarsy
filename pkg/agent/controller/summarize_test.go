@@ -242,6 +242,7 @@ func TestMaybeSummarize(t *testing.T) {
 		assert.Equal(t, config.LLMBackendLangChain, mockLLM.lastInput.Backend)
 		assert.Nil(t, mockLLM.lastInput.Config.NativeTools)
 		assert.Equal(t, execCtx.ExecutionID+agent.SummarizationExecutionIDSuffix, mockLLM.lastInput.ExecutionID)
+		assert.False(t, mockLLM.lastInput.PromptCache)
 		assert.True(t, execCtx.Config.LLMProvider.NativeTools[config.GoogleNativeToolGoogleSearch])
 	})
 

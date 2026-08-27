@@ -24,6 +24,7 @@ from langchain_core.messages import (
 )
 
 from llm_proto import llm_service_pb2 as pb
+from llm.providers import prompt_cache
 from llm.providers.base import LLMProvider
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 from llm.providers.usage import (
@@ -72,8 +73,18 @@ class LangChainProvider(LLMProvider):
         # re-initializing HTTP clients on every request.
         self._model_cache: Dict[Tuple[str, str, str], object] = {}
 
-    def _get_or_create_model(self, config: pb.LLMConfig, tools: List[pb.ToolDefinition]):
-        """Get or create a cached LangChain chat model, with tools bound if provided."""
+    def _get_or_create_model(
+        self,
+        config: pb.LLMConfig,
+        tools: List[pb.ToolDefinition],
+        cache_kind: str = prompt_cache.NONE,
+        strip_ttl: bool = False,
+        execution_id: str = "",
+    ):
+        """Get or create a cached LangChain chat model, with tools bound if provided.
+
+        Cache policy is applied per request (not on the shared ChatOpenAI instance).
+        """
         cache_key = (config.provider, config.model, config.api_key_env)
         if cache_key not in self._model_cache:
             self._model_cache[cache_key] = self._create_chat_model(config)
@@ -86,7 +97,16 @@ class LangChainProvider(LLMProvider):
                     len(tools), config.model,
                 )
             else:
-                model = self._bind_tools(model, list(tools))
+                model = self._bind_tools(model, list(tools), cache_kind, strip_ttl)
+        if cache_kind == prompt_cache.OPENAI_EXPLICIT:
+            model = model.bind(
+                prompt_cache_options=prompt_cache.openai_prompt_cache_options(strip_ttl),
+                prompt_cache_key=execution_id,
+                max_retries=0,
+            )
+        elif cache_kind == prompt_cache.ANTHROPIC:
+            # Per-request: don't let Vertex SDK retry the same 400 three times.
+            model = model.bind(max_retries=0)
         return model
 
     # ── Reasoning/thinking configuration per provider ──────────────────
@@ -238,62 +258,148 @@ class LangChainProvider(LLMProvider):
                     **thinking_kwargs,
                 )
 
-    def _convert_messages(self, messages: List[pb.ConversationMessage]) -> List[BaseMessage]:
+    def _convert_messages(
+        self,
+        messages: List[pb.ConversationMessage],
+        cache_kind: str = prompt_cache.NONE,
+        strip_ttl: bool = False,
+    ) -> List[BaseMessage]:
         """Convert proto messages to LangChain message objects."""
         result: List[BaseMessage] = []
         for idx, msg in enumerate(messages):
-            if msg.role == "system":
-                result.append(SystemMessage(content=msg.content))
-            elif msg.role == "user":
-                result.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                content = msg.content or ""
-                tool_calls = []
-                for tc in msg.tool_calls:
-                    try:
-                        args = json.loads(tc.arguments) if tc.arguments else {}
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            "Failed to parse tool call arguments as JSON, using empty args: %s",
-                            tc.arguments,
-                        )
-                        args = {}
-                    tool_calls.append({
-                        "id": tc.id,
-                        "name": tool_name_to_api(tc.name),
-                        "args": args,
-                    })
-                result.append(AIMessage(content=content, tool_calls=tool_calls))
-            elif msg.role == "tool":
-                result.append(ToolMessage(
-                    content=msg.content,
-                    tool_call_id=msg.tool_call_id,
-                    name=tool_name_to_api(msg.tool_name) if msg.tool_name else "",
-                ))
-            else:
-                raise ValueError(
-                    f"Unrecognized message role {msg.role!r} at index {idx}. "
-                    f"Expected one of: system, user, assistant, tool."
-                )
+            result.append(self._convert_one_message(idx, msg))
+        if cache_kind == prompt_cache.ANTHROPIC:
+            return self._mark_anthropic_cache(result, messages, prompt_cache.cache_control(strip_ttl))
+        if cache_kind == prompt_cache.OPENAI_EXPLICIT:
+            return self._mark_openai_cache(result, messages)
         return result
 
+    def _convert_one_message(self, idx: int, msg: pb.ConversationMessage) -> BaseMessage:
+        if msg.role == "system":
+            return SystemMessage(content=msg.content)
+        if msg.role == "user":
+            return HumanMessage(content=msg.content)
+        if msg.role == "assistant":
+            content = msg.content or ""
+            tool_calls = []
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.arguments) if tc.arguments else {}
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Failed to parse tool call arguments as JSON, using empty args: %s",
+                        tc.arguments,
+                    )
+                    args = {}
+                tool_calls.append({
+                    "id": tc.id,
+                    "name": tool_name_to_api(tc.name),
+                    "args": args,
+                })
+            return AIMessage(content=content, tool_calls=tool_calls)
+        if msg.role == "tool":
+            return ToolMessage(
+                content=msg.content,
+                tool_call_id=msg.tool_call_id,
+                name=tool_name_to_api(msg.tool_name) if msg.tool_name else "",
+            )
+        raise ValueError(
+            f"Unrecognized message role {msg.role!r} at index {idx}. "
+            f"Expected one of: system, user, assistant, tool."
+        )
+
     @staticmethod
-    def _bind_tools(model, tools: List[pb.ToolDefinition]):
+    def _with_cache_marker(msg: BaseMessage, key: str, value: dict) -> BaseMessage:
+        text = msg.content if isinstance(msg.content, str) else str(msg.content or "")
+        block = {"type": "text", "text": text, key: value}
+        extra = dict(getattr(msg, "additional_kwargs", None) or {})
+        extra[key] = value
+        if isinstance(msg, SystemMessage):
+            return SystemMessage(content=[block])
+        if isinstance(msg, HumanMessage):
+            return HumanMessage(content=[block])
+        if isinstance(msg, AIMessage):
+            return AIMessage(
+                content=[block],
+                tool_calls=msg.tool_calls,
+                additional_kwargs=extra,
+            )
+        if isinstance(msg, ToolMessage):
+            return ToolMessage(
+                content=[block],
+                tool_call_id=msg.tool_call_id,
+                name=msg.name,
+                additional_kwargs=extra,
+            )
+        return msg
+
+    def _mark_anthropic_cache(
+        self,
+        converted: List[BaseMessage],
+        proto_messages: List[pb.ConversationMessage],
+        control: dict,
+    ) -> List[BaseMessage]:
+        out = list(converted)
+        for i, proto in enumerate(proto_messages):
+            if proto.role == "system":
+                out[i] = self._with_cache_marker(out[i], "cache_control", control)
+        if proto_messages and proto_messages[-1].role != "system":
+            out[-1] = self._with_cache_marker(out[-1], "cache_control", control)
+        return out
+
+    def _mark_openai_cache(
+        self,
+        converted: List[BaseMessage],
+        proto_messages: List[pb.ConversationMessage],
+    ) -> List[BaseMessage]:
+        out = list(converted)
+        breakpoint = dict(prompt_cache.PROMPT_CACHE_BREAKPOINT)
+        for i, proto in enumerate(proto_messages):
+            if proto.role == "system":
+                out[i] = self._with_cache_marker(out[i], "prompt_cache_breakpoint", breakpoint)
+        idx = prompt_cache.last_non_tool_index(proto_messages)
+        if idx >= 0 and proto_messages[idx].role != "system":
+            out[idx] = self._with_cache_marker(
+                out[idx], "prompt_cache_breakpoint", breakpoint,
+            )
+        return out
+
+    @staticmethod
+    def _bind_tools(
+        model,
+        tools: List[pb.ToolDefinition],
+        cache_kind: str = prompt_cache.NONE,
+        strip_ttl: bool = False,
+    ):
         """Bind MCP tools to the model via LangChain's bind_tools()."""
         langchain_tools = []
-        for tool in tools:
+        for i, tool in enumerate(tools):
             try:
                 schema = json.loads(tool.parameters_schema) if tool.parameters_schema else {}
             except json.JSONDecodeError:
                 schema = {}
-            langchain_tools.append({
-                "type": "function",
-                "function": {
+            last = i == len(tools) - 1
+            if cache_kind == prompt_cache.ANTHROPIC:
+                item = {
                     "name": tool_name_to_api(tool.name),
                     "description": tool.description,
-                    "parameters": schema,
-                },
-            })
+                    "input_schema": schema,
+                }
+                if last:
+                    item["cache_control"] = prompt_cache.cache_control(strip_ttl)
+                langchain_tools.append(item)
+            else:
+                item = {
+                    "type": "function",
+                    "function": {
+                        "name": tool_name_to_api(tool.name),
+                        "description": tool.description,
+                        "parameters": schema,
+                    },
+                }
+                if cache_kind == prompt_cache.OPENAI_EXPLICIT and last:
+                    item["prompt_cache_breakpoint"] = dict(prompt_cache.PROMPT_CACHE_BREAKPOINT)
+                langchain_tools.append(item)
         if langchain_tools:
             return model.bind_tools(langchain_tools)
         return model
@@ -311,75 +417,95 @@ class LangChainProvider(LLMProvider):
             request.session_id, request.execution_id,
         )
 
-        try:
-            model = self._get_or_create_model(config, list(request.tools))
-        except (ValueError, ImportError) as e:
-            code = "credentials" if "not set" in str(e) else "invalid_request"
-            yield pb.GenerateResponse(
-                error=pb.ErrorInfo(message=str(e), code=code, retryable=False),
-                is_final=True,
-            )
-            return
+        cache_kind = prompt_cache.classify_cache(
+            config, request.prompt_cache, request.execution_id,
+        )
+        variants = prompt_cache.cache_degrade_sequence(cache_kind)
 
-        try:
-            messages = self._convert_messages(list(request.messages))
-        except ValueError as e:
-            yield pb.GenerateResponse(
-                error=pb.ErrorInfo(message=str(e), code="invalid_request", retryable=False),
-                is_final=True,
-            )
-            return
-
-        # Retry loop — same pattern as GoogleNativeProvider.
-        # Only retry when zero chunks have been yielded to the caller.
         last_error: Optional[Exception] = None
-        for attempt in range(MAX_RETRIES):
-            chunks_yielded = 0
+        for variant_idx, (kind, strip_ttl) in enumerate(variants):
             try:
-                async for chunk in self._stream_response(model, messages, request_id):
-                    yield chunk
-                    chunks_yielded += 1
-                return  # Success
-            except _RetryableError as e:
-                if chunks_yielded > 0:
-                    logger.exception(
-                        "[%s] Retryable error after %d chunks already yielded, "
-                        "cannot retry safely",
-                        request_id, chunks_yielded,
+                model = self._get_or_create_model(
+                    config, list(request.tools), kind, strip_ttl, request.execution_id,
+                )
+                messages = self._convert_messages(list(request.messages), kind, strip_ttl)
+            except (ValueError, ImportError) as e:
+                code = "credentials" if "not set" in str(e) else "invalid_request"
+                yield pb.GenerateResponse(
+                    error=pb.ErrorInfo(message=str(e), code=code, retryable=False),
+                    is_final=True,
+                )
+                return
+
+            # Retry loop — same pattern as GoogleNativeProvider.
+            # Only retry when zero chunks have been yielded to the caller.
+            for attempt in range(MAX_RETRIES):
+                chunks_yielded = 0
+                try:
+                    async for chunk in self._stream_response(model, messages, request_id):
+                        yield chunk
+                        chunks_yielded += 1
+                    return  # Success
+                except _RetryableError as e:
+                    if chunks_yielded > 0:
+                        logger.exception(
+                            "[%s] Retryable error after %d chunks already yielded, "
+                            "cannot retry safely",
+                            request_id, chunks_yielded,
+                        )
+                        yield pb.GenerateResponse(
+                            error=pb.ErrorInfo(
+                                message=f"Stream failed after partial output ({chunks_yielded} chunks): {e}",
+                                code="partial_stream_error",
+                                retryable=False,
+                            ),
+                            is_final=True,
+                        )
+                        return
+                    last_error = e
+                    delay = RETRY_BACKOFF_BASE ** attempt
+                    logger.warning(
+                        "[%s] Retryable error (attempt %d/%d), retrying in %ds: %s",
+                        request_id, attempt + 1, MAX_RETRIES, delay, e,
                     )
+                    await asyncio.sleep(delay)
+                except Exception as e:
+                    if (
+                        prompt_cache.is_bad_request(e)
+                        and chunks_yielded == 0
+                        and variant_idx + 1 < len(variants)
+                    ):
+                        logger.warning(
+                            "[%s] Prompt-cache 400 (kind=%s strip_ttl=%s), degrading: %s",
+                            request_id, kind, strip_ttl, e,
+                        )
+                        last_error = e
+                        break
+                    logger.exception("[%s] Non-retryable error", request_id)
                     yield pb.GenerateResponse(
                         error=pb.ErrorInfo(
-                            message=f"Stream failed after partial output ({chunks_yielded} chunks): {e}",
-                            code="partial_stream_error",
+                            message=f"Generation failed: {e}",
+                            code="provider_error",
                             retryable=False,
                         ),
                         is_final=True,
                     )
                     return
-                last_error = e
-                delay = RETRY_BACKOFF_BASE ** attempt
-                logger.warning(
-                    "[%s] Retryable error (attempt %d/%d), retrying in %ds: %s",
-                    request_id, attempt + 1, MAX_RETRIES, delay, e,
-                )
-                await asyncio.sleep(delay)
-            except Exception as e:
-                logger.exception("[%s] Non-retryable error", request_id)
+            else:
                 yield pb.GenerateResponse(
                     error=pb.ErrorInfo(
-                        message=f"Generation failed: {e}",
-                        code="provider_error",
+                        message=f"Generation failed after {MAX_RETRIES} retries: {last_error}",
+                        code="max_retries",
                         retryable=False,
                     ),
                     is_final=True,
                 )
                 return
 
-        # All retries exhausted
         yield pb.GenerateResponse(
             error=pb.ErrorInfo(
-                message=f"Generation failed after {MAX_RETRIES} retries: {last_error}",
-                code="max_retries",
+                message=f"Generation failed: {last_error}",
+                code="provider_error",
                 retryable=False,
             ),
             is_final=True,

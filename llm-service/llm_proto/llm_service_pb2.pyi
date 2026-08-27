@@ -7,20 +7,22 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class GenerateRequest(_message.Message):
-    __slots__ = ("session_id", "messages", "llm_config", "tools", "execution_id", "clear_cache")
+    __slots__ = ("session_id", "messages", "llm_config", "tools", "execution_id", "clear_cache", "prompt_cache")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     MESSAGES_FIELD_NUMBER: _ClassVar[int]
     LLM_CONFIG_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_ID_FIELD_NUMBER: _ClassVar[int]
     CLEAR_CACHE_FIELD_NUMBER: _ClassVar[int]
+    PROMPT_CACHE_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     messages: _containers.RepeatedCompositeFieldContainer[ConversationMessage]
     llm_config: LLMConfig
     tools: _containers.RepeatedCompositeFieldContainer[ToolDefinition]
     execution_id: str
     clear_cache: bool
-    def __init__(self, session_id: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[ConversationMessage, _Mapping]]] = ..., llm_config: _Optional[_Union[LLMConfig, _Mapping]] = ..., tools: _Optional[_Iterable[_Union[ToolDefinition, _Mapping]]] = ..., execution_id: _Optional[str] = ..., clear_cache: _Optional[bool] = ...) -> None: ...
+    prompt_cache: bool
+    def __init__(self, session_id: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[ConversationMessage, _Mapping]]] = ..., llm_config: _Optional[_Union[LLMConfig, _Mapping]] = ..., tools: _Optional[_Iterable[_Union[ToolDefinition, _Mapping]]] = ..., execution_id: _Optional[str] = ..., clear_cache: _Optional[bool] = ..., prompt_cache: _Optional[bool] = ...) -> None: ...
 
 class GenerateResponse(_message.Message):
     __slots__ = ("text", "thinking", "tool_call", "usage", "error", "code_execution", "grounding", "is_final")

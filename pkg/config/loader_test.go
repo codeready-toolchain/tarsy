@@ -1112,6 +1112,60 @@ agent_chains: {}
 		assert.True(t, cfg.CostEstimation.Enabled)
 	})
 
+	t.Run("prompt_caching enabled true when omitted", func(t *testing.T) {
+		dir := setupTestConfigDir(t)
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.PromptCaching)
+		assert.True(t, cfg.PromptCaching.Enabled, "prompt caching enabled by default when omitted")
+	})
+
+	t.Run("prompt_caching block parsed from YAML", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  prompt_caching:
+    enabled: false
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.PromptCaching)
+		assert.False(t, cfg.PromptCaching.Enabled)
+	})
+
+	t.Run("prompt_caching enabled true when block present without enabled", func(t *testing.T) {
+		dir := t.TempDir()
+
+		tarsyYAML := `
+system:
+  prompt_caching: {}
+defaults:
+  llm_provider: "google-default"
+  max_iterations: 20
+agents: {}
+mcp_servers: {}
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.PromptCaching)
+		assert.True(t, cfg.PromptCaching.Enabled)
+	})
+
 	t.Run("cost_estimation promotions parsed from YAML", func(t *testing.T) {
 		dir := t.TempDir()
 

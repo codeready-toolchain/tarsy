@@ -12,6 +12,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
@@ -130,6 +131,7 @@ func (c *IteratingController) Run(
 			Tools:       tools, // Tools bound for native calling
 			Backend:     execCtx.Config.LLMBackend,
 			ClearCache:  fbState.consumeClearCache(),
+			PromptCache: execCtx.Config.Type != config.AgentTypeAction,
 		}, &eventSeq)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
@@ -353,6 +355,7 @@ func (c *IteratingController) forceConclusion(
 			Tools:       nil, // No tools — force conclusion
 			Backend:     execCtx.Config.LLMBackend,
 			ClearCache:  fbState.consumeClearCache(),
+			PromptCache: false,
 		}, eventSeq, forcedMeta)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,

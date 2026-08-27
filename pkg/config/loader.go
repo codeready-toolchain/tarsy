@@ -31,6 +31,7 @@ type SystemYAMLConfig struct {
 	Runbooks         *RunbooksYAMLConfig       `yaml:"runbooks"`
 	Slack            *SlackYAMLConfig          `yaml:"slack"`
 	CostEstimation   *CostEstimationYAMLConfig `yaml:"cost_estimation"`
+	PromptCaching    *PromptCachingYAMLConfig  `yaml:"prompt_caching"`
 	Retention        *RetentionConfig          `yaml:"retention"`
 	// Holidays replaces the built-in global holiday list when non-empty.
 	// Each entry is year-agnostic MM-DD (UTC) used for Tier 0 calendar context.
@@ -43,6 +44,12 @@ type CostEstimationYAMLConfig struct {
 	Enabled    *bool                          `yaml:"enabled,omitempty"`
 	ModelRates map[string]ModelRateYAMLConfig `yaml:"model_rates,omitempty"`
 	Promotions []PromotionYAMLConfig          `yaml:"promotions,omitempty"`
+}
+
+// PromptCachingYAMLConfig holds prompt-caching settings from YAML.
+// Enabled is a *bool: nil (or whole block omitted) means enabled (default true).
+type PromptCachingYAMLConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty"`
 }
 
 // ModelRateYAMLConfig is a flat per-million USD override from YAML.
@@ -215,11 +222,12 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks + Slack + CostEstimation + Retention + DashboardURL + WS Origins + Holidays)
+	// Resolve system config (GitHub + Runbooks + Slack + CostEstimation + PromptCaching + Retention + DashboardURL + WS Origins + Holidays)
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
 	slackCfg := resolveSlackConfig(tarsyConfig.System)
 	costEstimationCfg := resolveCostEstimationConfig(tarsyConfig.System)
+	promptCachingCfg := resolvePromptCachingConfig(tarsyConfig.System)
 	retentionCfg := resolveRetentionConfig(tarsyConfig.System)
 	dashboardURL := resolveDashboardURL(tarsyConfig.System)
 	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
@@ -233,6 +241,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		Runbooks:            runbooksCfg,
 		Slack:               slackCfg,
 		CostEstimation:      costEstimationCfg,
+		PromptCaching:       promptCachingCfg,
 		Retention:           retentionCfg,
 		DashboardURL:        dashboardURL,
 		AllowedWSOrigins:    allowedWSOrigins,
@@ -404,6 +413,20 @@ func resolveCostEstimationConfig(sys *SystemYAMLConfig) *CostEstimationConfig {
 		}
 	}
 
+	return cfg
+}
+
+// resolvePromptCachingConfig resolves prompt-caching config from system YAML.
+// Default: enabled=true when the block is omitted entirely.
+func resolvePromptCachingConfig(sys *SystemYAMLConfig) *PromptCachingConfig {
+	cfg := &PromptCachingConfig{Enabled: true}
+
+	if sys == nil || sys.PromptCaching == nil {
+		return cfg
+	}
+	if sys.PromptCaching.Enabled != nil {
+		cfg.Enabled = *sys.PromptCaching.Enabled
+	}
 	return cfg
 }
 
