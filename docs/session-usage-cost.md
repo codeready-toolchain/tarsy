@@ -2,7 +2,7 @@
 
 TARSy can attach an **estimated USD cost** to each LLM interaction at write time, using list prices from a price book. Estimates are for operator judgment — they are **not** invoice truth.
 
-**Architecture decisions:** [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md)
+**Architecture decisions:** [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md)
 
 Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The dashboard shows soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when estimation is enabled. Fleet dig-in is available on the **Usage** page (`/usage`, hamburger → Usage) via `GET /api/v1/usage/summary`. Config Viewer exposes the effective toggle, overrides, promotions (with lifecycle status), and catalog status under System → Cost estimation (`GET /api/v1/system/config`).
 
@@ -164,7 +164,7 @@ Window edge case: a long-running session started before the window is excluded e
 - Gemini implicit cache reads are extracted from `cached_content_token_count` (no creation surcharge).
 - Looping Claude / GPT-5.6+ breakpoints honor `system.prompt_caching.enabled` (default on). That kill switch does not disable Gemini implicit caching.
 - Priced at write time using catalog cache rates or derived multipliers (see [How estimates are computed](#how-estimates-are-computed)).
-- Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do.
+- Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do. Trace LLM list and detail show per-call cache read/create counts.
 
 ## Known gaps
 

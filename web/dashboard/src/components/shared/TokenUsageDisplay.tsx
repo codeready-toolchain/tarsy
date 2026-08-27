@@ -8,6 +8,8 @@ export interface TokenUsageData {
   input_tokens?: number | null;
   output_tokens?: number | null;
   total_tokens?: number | null;
+  cache_read_tokens?: number | null;
+  cache_creation_tokens?: number | null;
 }
 
 export interface TokenUsageDisplayProps {
@@ -17,6 +19,81 @@ export interface TokenUsageDisplayProps {
   showBreakdown?: boolean;
   label?: string;
   color?: ChipProps['color'];
+}
+
+function formatCacheCompactLabel(
+  cacheReadTokens: number | null,
+  cacheCreationTokens: number | null,
+): string {
+  const parts: string[] = [];
+  if (cacheReadTokens != null) {
+    parts.push(`${formatTokensCompact(cacheReadTokens)} cache read`);
+  }
+  if (cacheCreationTokens != null) {
+    parts.push(`${formatTokensCompact(cacheCreationTokens)} cache create`);
+  }
+  return parts.join(' · ');
+}
+
+function CacheTokenSegments({
+  cacheReadTokens,
+  cacheCreationTokens,
+  size,
+  separated,
+}: {
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+  size: 'small' | 'medium' | 'large';
+  separated?: boolean;
+}) {
+  const fs = size === 'small' ? '0.7rem' : '0.75rem';
+  const labelFs = size === 'small' ? '0.65rem' : '0.7rem';
+  if (cacheReadTokens == null && cacheCreationTokens == null) {
+    return null;
+  }
+  return (
+    <Box
+      component="span"
+      aria-label="Cache tokens"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'baseline',
+        gap: 0.5,
+        flexWrap: 'wrap',
+      }}
+    >
+      {separated && (
+        <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs, mx: 0.25 }}>
+          |
+        </Typography>
+      )}
+      {cacheReadTokens != null && (
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.25 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: fs, fontWeight: 600 }}>
+            {formatTokensCompact(cacheReadTokens)}
+          </Typography>
+          <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+            cache read
+          </Typography>
+        </Box>
+      )}
+      {cacheReadTokens != null && cacheCreationTokens != null && (
+        <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+          ·
+        </Typography>
+      )}
+      {cacheCreationTokens != null && (
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.25 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: fs, fontWeight: 600 }}>
+            {formatTokensCompact(cacheCreationTokens)}
+          </Typography>
+          <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+            cache create
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 /**
@@ -35,8 +112,12 @@ function TokenUsageDisplay({
   const totalTokens = tokenData.total_tokens ?? null;
   const inputTokens = tokenData.input_tokens ?? null;
   const outputTokens = tokenData.output_tokens ?? null;
+  const cacheReadTokens = tokenData.cache_read_tokens ?? null;
+  const cacheCreationTokens = tokenData.cache_creation_tokens ?? null;
+  const hasCache = cacheReadTokens != null || cacheCreationTokens != null;
+  const hasMain = inputTokens != null || outputTokens != null || totalTokens != null;
 
-  if ([totalTokens, inputTokens, outputTokens].every(v => v == null)) {
+  if ([totalTokens, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens].every(v => v == null)) {
     return null;
   }
 
@@ -48,17 +129,30 @@ function TokenUsageDisplay({
     return 'success';
   };
 
+  const cacheSegments = (
+    <CacheTokenSegments
+      cacheReadTokens={cacheReadTokens}
+      cacheCreationTokens={cacheCreationTokens}
+      size={size}
+      separated={hasMain}
+    />
+  );
+
   // Badge variant - simple chip display
   if (variant === 'badge') {
     const hasInputOutput = inputTokens != null || outputTokens != null;
+    const cacheLabel = formatCacheCompactLabel(cacheReadTokens, cacheCreationTokens);
+    const baseLabel = hasInputOutput
+      ? `${formatTokensCompact(inputTokens)} • ${formatTokensCompact(outputTokens)} = ${formatTokensCompact(totalTokens)}`
+      : totalTokens != null
+        ? formatTokensCompact(totalTokens)
+        : '';
+    const chipLabel =
+      baseLabel && cacheLabel ? `${baseLabel} (${cacheLabel})` : [baseLabel, cacheLabel].filter(Boolean).join(' ');
     return (
       <Chip
         size={size === 'large' ? 'medium' : size}
-        label={
-          hasInputOutput
-            ? `${formatTokensCompact(inputTokens)} • ${formatTokensCompact(outputTokens)} = ${formatTokensCompact(totalTokens)}`
-            : formatTokensCompact(totalTokens)
-        }
+        label={chipLabel}
         color={color === 'default' ? getTokenColor(totalTokens) : color}
         variant="outlined"
         sx={{ 
@@ -72,7 +166,7 @@ function TokenUsageDisplay({
   // Inline variant - minimal text display
   if (variant === 'inline') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexWrap: 'wrap' }}>
         {label && (
           <Typography 
             variant="caption" 
@@ -144,11 +238,12 @@ function TokenUsageDisplay({
           >
             {formatTokensCompact(totalTokens)}
           </Typography>
-        ) : (
+        ) : !hasCache ? (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: size === 'small' ? '0.7rem' : '0.75rem', fontWeight: 500 }}>
             —
           </Typography>
-        )}
+        ) : null}
+        {cacheSegments}
       </Box>
     );
   }
@@ -158,7 +253,7 @@ function TokenUsageDisplay({
     const fs = size === 'small' ? '0.7rem' : '0.75rem';
     const labelFs = size === 'small' ? '0.65rem' : '0.7rem';
     return (
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, flexWrap: 'wrap' }}>
         {totalTokens != null && (
           <>
             <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 700, color: 'warning.main' }}>
@@ -183,6 +278,7 @@ function TokenUsageDisplay({
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>out</Typography>
           </>
         )}
+        {cacheSegments}
       </Box>
     );
   }
@@ -190,7 +286,7 @@ function TokenUsageDisplay({
   // Compact variant - single line with full breakdown
   if (variant === 'compact') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
         {label && (
           <Typography 
             variant="caption" 
@@ -263,7 +359,7 @@ function TokenUsageDisplay({
           >
             {formatTokensCompact(totalTokens)}
           </Typography>
-        ) : (
+        ) : !hasCache ? (
           <Typography 
             variant="caption" 
             color="text.secondary" 
@@ -274,7 +370,8 @@ function TokenUsageDisplay({
           >
             —
           </Typography>
-        )}
+        ) : null}
+        {cacheSegments}
       </Box>
     );
   }
@@ -302,28 +399,30 @@ function TokenUsageDisplay({
         flexWrap="wrap"
         alignItems={size === 'small' ? 'flex-start' : 'center'}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Typography 
-            variant="body2" 
-            color="text.secondary"
-            sx={{ 
-              fontSize: size === 'small' ? '0.75rem' : undefined,
-              fontWeight: 500 
-            }}
-          >
-            <strong>Total:</strong>
-          </Typography>
-          <Typography 
-            variant="body2"
-            sx={{ 
-              fontWeight: 600,
-              fontSize: size === 'small' ? '0.8rem' : '0.875rem',
-              color: totalTokens && totalTokens > 2000 ? 'warning.main' : 'text.primary'
-            }}
-          >
-            {formatTokens(totalTokens)}
-          </Typography>
-        </Box>
+        {(totalTokens != null || inputTokens != null || outputTokens != null) && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              sx={{ 
+                fontSize: size === 'small' ? '0.75rem' : undefined,
+                fontWeight: 500 
+              }}
+            >
+              <strong>Total:</strong>
+            </Typography>
+            <Typography 
+              variant="body2"
+              sx={{ 
+                fontWeight: 600,
+                fontSize: size === 'small' ? '0.8rem' : '0.875rem',
+                color: totalTokens && totalTokens > 2000 ? 'warning.main' : 'text.primary'
+              }}
+            >
+              {formatTokens(totalTokens)}
+            </Typography>
+          </Box>
+        )}
 
         {showBreakdown && (inputTokens != null || outputTokens != null) && (
           <>
@@ -371,6 +470,48 @@ function TokenUsageDisplay({
               </Box>
             )}
           </>
+        )}
+
+        {cacheReadTokens != null && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: size === 'small' ? '0.75rem' : undefined }}
+            >
+              <strong>Cache read:</strong>
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontSize: size === 'small' ? '0.8rem' : undefined,
+                fontWeight: 500,
+              }}
+            >
+              {formatTokens(cacheReadTokens)}
+            </Typography>
+          </Box>
+        )}
+
+        {cacheCreationTokens != null && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: size === 'small' ? '0.75rem' : undefined }}
+            >
+              <strong>Cache create:</strong>
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontSize: size === 'small' ? '0.8rem' : undefined,
+                fontWeight: 500,
+              }}
+            >
+              {formatTokens(cacheCreationTokens)}
+            </Typography>
+          </Box>
         )}
       </Stack>
     </Box>

@@ -239,7 +239,7 @@ graph TB
 - `pkg/config/loader.go` -- YAML loading, template resolution, merging
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
-- `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention)
+- `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention, CostEstimation, PromptCaching)
 - `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `compose`, `synthesis`, `scoring`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
 - `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing (directory and flat file layouts)
@@ -477,6 +477,8 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
    - If **tool calls** in response: execute each tool, append results, continue
    - If **no tool calls**: this is the final answer -- create `final_analysis` event, return
 4. If max iterations reached: `forceConclusion()` -- call LLM WITHOUT tools to force text-only response
+
+Investigation / chat / orchestrator / sub-agent loops (`AgentTypeDefault`) set `PromptCache` on the iterating Generate so Python can attach Claude `cache_control` / GPT-5.6+ OpenAI breakpoints. Action loops and forced conclusion leave it off. See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
 #### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
@@ -808,7 +810,7 @@ type LLMClient interface {
 
 Chunk types: `TextChunk`, `ThinkingChunk`, `ToolCallChunk`, `CodeExecutionChunk`, `UsageChunk`, `ErrorChunk`, `GroundingChunk`.
 
-**GenerateInput** carries: `SessionID`, `ExecutionID`, `Messages`, `Config` (LLMProviderConfig), `Tools`, `Backend`.
+**GenerateInput** carries: `SessionID`, `ExecutionID`, `Messages`, `Config` (LLMProviderConfig), `Tools`, `Backend`, `PromptCache` (eligible looping investigation-style calls; AND-ed with `system.prompt_caching.enabled` before gRPC).
 
 #### Python Side: Provider Routing
 
@@ -823,10 +825,11 @@ Generate(request) -> backend = request.llm_config.backend || "google-native"
 - Thought signatures for multi-turn reasoning continuity
 - Native function calling (structured tool calls)
 - Per-execution content caching (1-hour TTL)
+- Extracts `cached_content_token_count` as cache-read tokens (implicit caching; no explicit `CachedContent`)
 
 **LangChainProvider** (`llm/providers/langchain_provider.py`):
 - Multi-provider: OpenAI (`ChatOpenAI`), Anthropic (`ChatAnthropic`), xAI (`ChatXAI`), Google (`ChatGoogleGenerativeAI`), VertexAI
-- Model caching by `(provider, model, api_key_env)` tuple
+- Model caching by `(provider, model, api_key_env)` tuple (cache policy is **not** on the shared instance; Claude `cache_control` / OpenAI `prompt_cache_options` are per-request when `prompt_cache` is true)
 - `bind_tools()` for structured function calling
 - Streaming via `astream()` with thinking content extraction
 
@@ -842,7 +845,8 @@ Shared convention between Go and Python:
 
 - **RPC**: `Generate(GenerateRequest) returns (stream GenerateResponse)`
 - **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`
-- **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures)
+- **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures); `prompt_cache` (Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints — Go ANDs eligibility with `system.prompt_caching.enabled`)
+- **UsageInfo**: `input_tokens` is **uncached** billed input; `cache_read_tokens` / `cache_creation_tokens` persisted when > 0. Python normalizes provider-inclusive counts before streaming usage.
 - **Response streaming**: `TextDelta`, `ThinkingDelta`, `ToolCallDelta`, `UsageInfo`, `ErrorInfo`, `CodeExecutionDelta`, `GroundingDelta`
 
 #### Built-in LLM Providers
@@ -1149,8 +1153,8 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
-- **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`. Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), and [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md).
-- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md).
+- **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`. Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). Usage totals and by-model include cache-read / cache-creation SUMs (session list / header / `ExecutionOverview` do not). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status) and `system.prompt_caching.enabled`. See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md) and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
 #### Text Search
 
@@ -1539,6 +1543,8 @@ type TraceListResponse struct {
 }
 ```
 
+LLM list items and detail include optional `cache_read_tokens` / `cache_creation_tokens` (omitted when unset). Session list / header / `ExecutionOverview` do not carry those fields. See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+
 **Level 2: LLM Interaction Detail** (`GET /sessions/:id/trace/llm/:interaction_id`)
 Full LLM interaction with reconstructed conversation from the Message table. For self-contained interactions (summarization), conversation extracted from inline `llm_request` JSON.
 
@@ -1603,7 +1609,7 @@ All metrics are declared as package-level vars registered against `prometheus.De
 |----------|-------------|--------|
 | Session Lifecycle | `tarsy_sessions_submitted_total`, `tarsy_sessions_terminal_total`, `tarsy_session_duration_seconds`, `tarsy_session_wait_seconds`, `tarsy_sessions_active`, `tarsy_sessions_queued` | `alert_type`, `status` |
 | Worker Pool | `tarsy_workers_total`, `tarsy_workers_active`, `tarsy_orphans_recovered_total` | — |
-| LLM Calls | `tarsy_llm_calls_total`, `tarsy_llm_errors_total`, `tarsy_llm_duration_seconds`, `tarsy_llm_tokens_total`, `tarsy_llm_fallbacks_total` | `provider`, `model`, `direction`, `error_code` |
+| LLM Calls | `tarsy_llm_calls_total`, `tarsy_llm_errors_total`, `tarsy_llm_duration_seconds`, `tarsy_llm_tokens_total` (`direction`: `input` / `output` / `thinking` / `cache_read` / `cache_creation`), `tarsy_llm_fallbacks_total` | `provider`, `model`, `direction`, `error_code` |
 | MCP Tool Calls | `tarsy_mcp_calls_total`, `tarsy_mcp_errors_total`, `tarsy_mcp_duration_seconds`, `tarsy_mcp_health_status` | `server`, `tool` |
 | HTTP API | `tarsy_http_requests_total`, `tarsy_http_duration_seconds` | `method`, `path`, `status_code` |
 | WebSocket | `tarsy_ws_connections_active` | — |

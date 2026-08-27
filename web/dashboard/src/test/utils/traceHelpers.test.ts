@@ -197,6 +197,25 @@ describe('mergeAndSortInteractions', () => {
     expect(result[0].total_tokens).toBe(1500);
   });
 
+  it('preserves LLM cache token fields', () => {
+    const exec = makeExecution({
+      llm_interactions: [
+        {
+          id: 'llm-1',
+          interaction_type: 'iteration',
+          model_name: 'gemini',
+          created_at: '2025-01-15T10:00:00Z',
+          total_tokens: 1500,
+          cache_read_tokens: 40,
+          cache_creation_tokens: 10,
+        },
+      ],
+    });
+    const result = mergeAndSortInteractions(exec);
+    expect(result[0].cache_read_tokens).toBe(40);
+    expect(result[0].cache_creation_tokens).toBe(10);
+  });
+
   it('preserves MCP-specific fields', () => {
     const exec = makeExecution({
       mcp_interactions: [
@@ -498,6 +517,25 @@ describe('formatLLMDetailForCopy', () => {
     expect(text).toContain('[Tool Call] get_logs');
     expect(text).toContain('Model: gemini-2.0-flash');
     expect(text).toContain('Tokens: 5,000');
+  });
+
+  it('includes cache token lines when present', () => {
+    const detail: LLMInteractionDetailResponse = {
+      id: 'llm-1',
+      interaction_type: 'iteration',
+      model_name: 'gemini-2.0-flash',
+      total_tokens: 5000,
+      cache_read_tokens: 40,
+      cache_creation_tokens: 10,
+      conversation: [],
+      llm_request: {},
+      llm_response: {},
+      created_at: '2025-01-15T10:00:00Z',
+    };
+
+    const text = formatLLMDetailForCopy(detail);
+    expect(text).toContain('Cache read: 40');
+    expect(text).toContain('Cache create: 10');
   });
 
   it('handles structured content in messages', () => {
