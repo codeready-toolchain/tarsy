@@ -463,6 +463,82 @@ func TestResolveAgentConfig(t *testing.T) {
 	})
 }
 
+func TestPromptCachingEnabledCopiedOnResolve(t *testing.T) {
+	provider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	base := func(promptCaching *config.PromptCachingConfig) *config.Config {
+		return &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+				LLMBackend:  config.LLMBackendLangChain,
+			},
+			PromptCaching: promptCaching,
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				config.AgentNameKubernetes:  {},
+				config.AgentNameChat:        {},
+				config.AgentNameScoring:     {Type: config.AgentTypeScoring},
+				config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
+				config.AgentNameCompose:     {Type: config.AgentTypeCompose},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default": provider,
+			}),
+		}
+	}
+
+	resolvers := []struct {
+		name    string
+		resolve func(*config.Config) (*ResolvedAgentConfig, error)
+	}{
+		{
+			name: "ResolveAgentConfig",
+			resolve: func(cfg *config.Config) (*ResolvedAgentConfig, error) {
+				return ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{}, config.StageAgentConfig{Name: config.AgentNameKubernetes})
+			},
+		},
+		{
+			name: "ResolveChatAgentConfig",
+			resolve: func(cfg *config.Config) (*ResolvedAgentConfig, error) {
+				return ResolveChatAgentConfig(cfg, &config.ChainConfig{}, nil)
+			},
+		},
+		{
+			name: "ResolveScoringConfig",
+			resolve: func(cfg *config.Config) (*ResolvedAgentConfig, error) {
+				return ResolveScoringConfig(cfg, &config.ChainConfig{}, nil)
+			},
+		},
+		{
+			name: "ResolveExecSummaryConfig",
+			resolve: func(cfg *config.Config) (*ResolvedAgentConfig, error) {
+				return ResolveExecSummaryConfig(cfg, &config.ChainConfig{})
+			},
+		},
+		{
+			name: "ResolveComposeConfig",
+			resolve: func(cfg *config.Config) (*ResolvedAgentConfig, error) {
+				return ResolveComposeConfig(cfg, &config.ChainConfig{})
+			},
+		},
+	}
+
+	for _, r := range resolvers {
+		t.Run(r.name+"/omitted means enabled", func(t *testing.T) {
+			resolved, err := r.resolve(base(nil))
+			require.NoError(t, err)
+			assert.True(t, resolved.PromptCachingEnabled)
+		})
+		t.Run(r.name+"/disabled", func(t *testing.T) {
+			resolved, err := r.resolve(base(&config.PromptCachingConfig{Enabled: false}))
+			require.NoError(t, err)
+			assert.False(t, resolved.PromptCachingEnabled)
+		})
+	}
+}
+
 func TestResolveChatAgentConfig(t *testing.T) {
 	maxIter25 := 25
 	defaults := &config.Defaults{

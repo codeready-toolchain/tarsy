@@ -260,6 +260,7 @@ type SystemView struct {
 	Runbooks         *RunbooksView       `json:"runbooks,omitempty"`
 	Retention        *RetentionView      `json:"retention,omitempty"`
 	CostEstimation   *CostEstimationView `json:"cost_estimation,omitempty"`
+	PromptCaching    *PromptCachingView  `json:"prompt_caching,omitempty"`
 	DashboardURL     string              `json:"dashboard_url,omitempty"`
 	AllowedWSOrigins []string            `json:"allowed_ws_origins"`
 }
@@ -270,6 +271,11 @@ type CostEstimationView struct {
 	ModelRates map[string]ModelRateView `json:"model_rates,omitempty"`
 	Promotions []PromotionView          `json:"promotions,omitempty"`
 	Catalog    CostCatalogStatusView    `json:"catalog"`
+}
+
+// PromptCachingView is the cluster prompt-caching kill switch for Config Viewer.
+type PromptCachingView struct {
+	Enabled bool `json:"enabled"`
 }
 
 // ModelRateView is a flat per-million USD override.
@@ -482,7 +488,16 @@ func buildSystemView(cfg *config.Config, costBook *cost.Book) SystemView {
 		}
 	}
 	view.CostEstimation = buildCostEstimationView(cfg.CostEstimation, costBook)
+	view.PromptCaching = buildPromptCachingView(cfg.PromptCaching)
 	return view
+}
+
+func buildPromptCachingView(cfg *config.PromptCachingConfig) *PromptCachingView {
+	enabled := true
+	if cfg != nil {
+		enabled = cfg.Enabled
+	}
+	return &PromptCachingView{Enabled: enabled}
 }
 
 func buildCostEstimationView(cfg *config.CostEstimationConfig, book *cost.Book) *CostEstimationView {

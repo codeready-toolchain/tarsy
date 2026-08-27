@@ -24,6 +24,9 @@ type Config struct {
 	// Cost estimation configuration (resolved from system.cost_estimation)
 	CostEstimation *CostEstimationConfig
 
+	// Prompt caching configuration (resolved from system.prompt_caching)
+	PromptCaching *PromptCachingConfig
+
 	// Retention and cleanup configuration (resolved from system.retention)
 	Retention *RetentionConfig
 

@@ -114,7 +114,7 @@ func ResolveAgentConfig(
 	skillAgentDef := effectiveAgentDefForSkills(agentDef, agentConfig)
 	requiredSkills, onDemandSkills := resolveSkills(cfg, &skillAgentDef)
 
-	return &ResolvedAgentConfig{
+	return withPromptCaching(&ResolvedAgentConfig{
 		AgentName:                 agentConfig.Name,
 		Type:                      agentType,
 		LLMBackend:                backend,
@@ -133,7 +133,7 @@ func ResolveAgentConfig(
 		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
 		RequiredSkillContent:      requiredSkills,
 		OnDemandSkills:            onDemandSkills,
-	}, nil
+	}, cfg), nil
 }
 
 // ResolveChatProviderName resolves the LLM provider name for a chat execution
@@ -244,7 +244,7 @@ func ResolveChatAgentConfig(
 
 	requiredSkills, onDemandSkills := resolveSkills(cfg, agentDef)
 
-	return &ResolvedAgentConfig{
+	return withPromptCaching(&ResolvedAgentConfig{
 		AgentName: agentName,
 		// Chat always uses the iterating function-calling controller,
 		// regardless of what the agent definition's Type field says.
@@ -265,7 +265,7 @@ func ResolveChatAgentConfig(
 		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
 		RequiredSkillContent:      requiredSkills,
 		OnDemandSkills:            onDemandSkills,
-	}, nil
+	}, cfg), nil
 }
 
 // ResolveScoringConfig builds the agent configuration for a scoring execution.
@@ -364,7 +364,7 @@ func ResolveScoringConfig(
 
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
-	return &ResolvedAgentConfig{
+	return withPromptCaching(&ResolvedAgentConfig{
 		AgentName:                 agentName,
 		Type:                      config.AgentTypeScoring,
 		LLMBackend:                backend,
@@ -381,7 +381,7 @@ func ResolveScoringConfig(
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
 		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
-	}, nil
+	}, cfg), nil
 }
 
 // ResolveExecSummaryConfig builds the agent configuration for an executive summary execution.
@@ -438,7 +438,7 @@ func ResolveExecSummaryConfig(
 
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
-	return &ResolvedAgentConfig{
+	return withPromptCaching(&ResolvedAgentConfig{
 		AgentName:                 config.AgentNameExecSummary,
 		Type:                      config.AgentTypeExecSummary,
 		LLMBackend:                backend,
@@ -454,7 +454,7 @@ func ResolveExecSummaryConfig(
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
 		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
-	}, nil
+	}, cfg), nil
 }
 
 // ResolveComposeConfig builds the agent configuration for a compose execution.
@@ -502,7 +502,7 @@ func ResolveComposeConfig(
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
 
-	return &ResolvedAgentConfig{
+	return withPromptCaching(&ResolvedAgentConfig{
 		AgentName:                 config.AgentNameCompose,
 		Type:                      config.AgentTypeCompose,
 		LLMBackend:                backend,
@@ -518,7 +518,7 @@ func ResolveComposeConfig(
 		InitialResponseTimeout:    DefaultInitialResponseTimeout,
 		StallTimeout:              DefaultStallTimeout,
 		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
-	}, nil
+	}, cfg), nil
 }
 
 // requiresNativeTools returns true when the agent definition declares at least
@@ -530,6 +530,20 @@ func requiresNativeTools(agentTools map[config.GoogleNativeTool]bool) bool {
 		}
 	}
 	return false
+}
+
+// withPromptCaching copies cluster-wide system.prompt_caching.enabled onto the
+// resolved config. Omitted / nil means enabled (same omit-means-on as YAML).
+func withPromptCaching(resolved *ResolvedAgentConfig, cfg *config.Config) *ResolvedAgentConfig {
+	resolved.PromptCachingEnabled = promptCachingEnabledFrom(cfg)
+	return resolved
+}
+
+func promptCachingEnabledFrom(cfg *config.Config) bool {
+	if cfg == nil || cfg.PromptCaching == nil {
+		return true
+	}
+	return cfg.PromptCaching.Enabled
 }
 
 // applyAgentNativeTools clones the provider and merges agent-level native tool

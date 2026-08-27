@@ -290,7 +290,7 @@ No live-provider e2e in this repo (`ScriptedLLMClient`). Cover extraction, cost,
 
 **Done when:** a Gemini cache-read row is priced at cache-read rate, not full input; Usage totals show cache columns.
 
-### PR3 — Enable looping-call caching
+### PR3 — Enable looping-call caching - DONE
 
 **Lands:** `GenerateInput.PromptCache` + `GenerateRequest.prompt_cache = 7`. `system.prompt_caching.enabled` (`*bool`, default true) on `pkg/config`; copy onto exec context; AND in `callLLMWithStreaming`. `PromptCache: true` only on iterating **loop** when `Type != AgentTypeAction` (`iterating.go` ~125); **false** on action loops, forced conclusion (~348), scoring, single-shot, summarization. Python: Claude/Vertex `cache_control` 1h on last tool (Anthropic tool dicts; skip if no tools), system, last message; dedicated 400-retry (strip TTL, then strip `cache_control`) — not the existing `_RetryableError` loop. OpenAI GPT-5.6+ (`gpt-5.` minor ≥ 6): per-request `prompt_cache_options` + `prompt_cache_key=execution_id` (not `ChatOpenAI` constructor); breakpoints on last tool, system content block (not Responses `instructions`), last non-tool-result; 400-retry strip. Older OpenAI: extract only. Config Viewer + `tarsy.yaml.example` + `deploy/config/README.md` for the toggle (`pkg/api/system_config.go`, `ConfigViewer.tsx`).
 

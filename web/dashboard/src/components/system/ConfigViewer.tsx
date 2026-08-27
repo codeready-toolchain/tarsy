@@ -364,12 +364,28 @@ function KeyValueBlock({ data }: { data: unknown }) {
 }
 
 function SystemDetails({ system }: { system: SystemSettingsView }) {
-  const { cost_estimation: costEstimation, ...rest } = system;
+  const { cost_estimation: costEstimation, prompt_caching: promptCaching, ...rest } = system;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <KeyValueBlock data={rest} />
+      {promptCaching && <PromptCachingDetails promptCaching={promptCaching} />}
       {costEstimation && <CostEstimationDetails costEstimation={costEstimation} />}
     </Box>
+  );
+}
+
+function PromptCachingDetails({
+  promptCaching,
+}: {
+  promptCaching: NonNullable<SystemSettingsView['prompt_caching']>;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5 }}>
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Prompt caching
+      </Typography>
+      <Field label="enabled" value={String(promptCaching.enabled)} />
+    </Paper>
   );
 }
 

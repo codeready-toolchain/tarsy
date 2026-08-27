@@ -27,6 +27,7 @@ type GenerateInput struct {
 	Tools       []ToolDefinition  // nil = no tools
 	Backend     config.LLMBackend // see config.LLMBackendNativeGemini, config.LLMBackendLangChain
 	ClearCache  bool              // signal to clear provider content cache (e.g. on fallback provider switch)
+	PromptCache bool              // apply Claude cache_control / OpenAI 5.6+ breakpoints (AND-ed with cluster toggle before gRPC)
 }
 
 // Conversation message roles.

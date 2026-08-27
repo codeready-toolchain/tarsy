@@ -25,12 +25,13 @@ const (
 // Go builds the full conversation and sends it each time.
 type GenerateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`       // For logging/tracing
-	Messages      []*ConversationMessage `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`                          // Full conversation history
-	LlmConfig     *LLMConfig             `protobuf:"bytes,3,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"`       // Provider configuration
-	Tools         []*ToolDefinition      `protobuf:"bytes,4,rep,name=tools,proto3" json:"tools,omitempty"`                                // Available tools (empty = no tools)
-	ExecutionId   string                 `protobuf:"bytes,5,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"` // AgentExecution ID — used by Python for thought signature cache key
-	ClearCache    bool                   `protobuf:"varint,6,opt,name=clear_cache,json=clearCache,proto3" json:"clear_cache,omitempty"`   // Signal to clear provider content cache (e.g., on fallback provider switch)
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`        // For logging/tracing
+	Messages      []*ConversationMessage `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`                           // Full conversation history
+	LlmConfig     *LLMConfig             `protobuf:"bytes,3,opt,name=llm_config,json=llmConfig,proto3" json:"llm_config,omitempty"`        // Provider configuration
+	Tools         []*ToolDefinition      `protobuf:"bytes,4,rep,name=tools,proto3" json:"tools,omitempty"`                                 // Available tools (empty = no tools)
+	ExecutionId   string                 `protobuf:"bytes,5,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`  // AgentExecution ID — used by Python for thought signature cache key
+	ClearCache    bool                   `protobuf:"varint,6,opt,name=clear_cache,json=clearCache,proto3" json:"clear_cache,omitempty"`    // Signal to clear provider content cache (e.g., on fallback provider switch)
+	PromptCache   bool                   `protobuf:"varint,7,opt,name=prompt_cache,json=promptCache,proto3" json:"prompt_cache,omitempty"` // Claude cache_control / OpenAI 5.6+ breakpoints; Go ANDs the cluster toggle
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -103,6 +104,13 @@ func (x *GenerateRequest) GetExecutionId() string {
 func (x *GenerateRequest) GetClearCache() bool {
 	if x != nil {
 		return x.ClearCache
+	}
+	return false
+}
+
+func (x *GenerateRequest) GetPromptCache() bool {
+	if x != nil {
+		return x.PromptCache
 	}
 	return false
 }
@@ -1173,7 +1181,7 @@ var File_proto_llm_service_proto protoreflect.FileDescriptor
 
 const file_proto_llm_service_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/llm_service.proto\x12\x06llm.v1\"\x8d\x02\n" +
+	"\x17proto/llm_service.proto\x12\x06llm.v1\"\xb0\x02\n" +
 	"\x0fGenerateRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x127\n" +
@@ -1183,7 +1191,8 @@ const file_proto_llm_service_proto_rawDesc = "" +
 	"\x05tools\x18\x04 \x03(\v2\x16.llm.v1.ToolDefinitionR\x05tools\x12!\n" +
 	"\fexecution_id\x18\x05 \x01(\tR\vexecutionId\x12\x1f\n" +
 	"\vclear_cache\x18\x06 \x01(\bR\n" +
-	"clearCache\"\x9f\x03\n" +
+	"clearCache\x12!\n" +
+	"\fprompt_cache\x18\a \x01(\bR\vpromptCache\"\x9f\x03\n" +
 	"\x10GenerateResponse\x12'\n" +
 	"\x04text\x18\x01 \x01(\v2\x11.llm.v1.TextDeltaH\x00R\x04text\x123\n" +
 	"\bthinking\x18\x02 \x01(\v2\x15.llm.v1.ThinkingDeltaH\x00R\bthinking\x124\n" +

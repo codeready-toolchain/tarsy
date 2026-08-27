@@ -368,7 +368,9 @@ func callLLMWithStreaming(
 	llmCtx, llmCancel := context.WithCancel(ctx)
 	defer llmCancel()
 
-	stream, err := llmClient.Generate(llmCtx, input)
+	grpcInput := *input
+	grpcInput.PromptCache = input.PromptCache && promptCachingEnabled(execCtx)
+	stream, err := llmClient.Generate(llmCtx, &grpcInput)
 	if err != nil {
 		return nil, fmt.Errorf("LLM Generate failed: %w", err)
 	}
@@ -640,4 +642,11 @@ func mergeMetadata(base, extra map[string]interface{}) map[string]interface{} {
 		merged[k] = v
 	}
 	return merged
+}
+
+func promptCachingEnabled(execCtx *agent.ExecutionContext) bool {
+	if execCtx == nil || execCtx.Config == nil {
+		return true
+	}
+	return execCtx.Config.PromptCachingEnabled
 }

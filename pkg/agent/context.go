@@ -157,6 +157,10 @@ type ResolvedAgentConfig struct {
 	// OnDemandSkills: skills available via load_skill tool.
 	// Names + descriptions for the catalog prompt (Tier 2.6). Bodies loaded on tool call.
 	OnDemandSkills []SkillCatalogEntry
+
+	// PromptCachingEnabled is cluster-wide system.prompt_caching.enabled
+	// (default true). Copied from config at resolve time; not per-agent YAML.
+	PromptCachingEnabled bool
 }
 
 // ResolvedSkill is a skill whose full body has been resolved from the registry.

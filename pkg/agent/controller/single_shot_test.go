@@ -142,6 +142,7 @@ func TestSynthesisController_PromptBuilderIntegration(t *testing.T) {
 
 	// Synthesis should NOT pass tools
 	require.Nil(t, llm.lastInput.Tools)
+	require.False(t, llm.lastInput.PromptCache)
 }
 
 func TestSynthesisController_WithGrounding(t *testing.T) {

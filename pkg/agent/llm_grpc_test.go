@@ -306,6 +306,33 @@ func TestToProtoRequest_ClearCache(t *testing.T) {
 	})
 }
 
+func TestToProtoRequest_PromptCache(t *testing.T) {
+	t.Run("PromptCache false by default", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:   "session-1",
+			ExecutionID: "exec-1",
+			Messages:    []ConversationMessage{{Role: "user", Content: "hello"}},
+			Config:      &config.LLMProviderConfig{Model: "test-model", Type: config.LLMProviderTypeGoogle},
+			Backend:     config.LLMBackendNativeGemini,
+		}
+		req := toProtoRequest(input)
+		assert.False(t, req.PromptCache)
+	})
+
+	t.Run("PromptCache propagated when true", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:   "session-1",
+			ExecutionID: "exec-1",
+			Messages:    []ConversationMessage{{Role: "user", Content: "hello"}},
+			Config:      &config.LLMProviderConfig{Model: "test-model", Type: config.LLMProviderTypeGoogle},
+			Backend:     config.LLMBackendNativeGemini,
+			PromptCache: true,
+		}
+		req := toProtoRequest(input)
+		assert.True(t, req.PromptCache)
+	})
+}
+
 func TestToProtoTools(t *testing.T) {
 	t.Run("nil tools returns nil", func(t *testing.T) {
 		assert.Nil(t, toProtoTools(nil))

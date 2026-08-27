@@ -237,7 +237,7 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 		},
 	})
 
-	llm := &mockLLMClient{responses: responses}
+	llm := &mockLLMClient{capture: true, responses: responses}
 	tools := []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}}
 	executor := &mockToolExecutor{
 		tools: tools,
@@ -270,6 +270,12 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected final_analysis timeline event")
+
+	require.Len(t, llm.capturedInputs, 4)
+	for i := range 3 {
+		assert.True(t, llm.capturedInputs[i].PromptCache, "loop call %d should request prompt cache", i)
+	}
+	assert.False(t, llm.capturedInputs[3].PromptCache, "forced conclusion must not request prompt cache")
 }
 
 func TestIteratingController_ThinkingContent(t *testing.T) {
@@ -1406,4 +1412,57 @@ func TestIteratingController_FallbackSetsTimelineEvent(t *testing.T) {
 		}
 	}
 	require.True(t, foundFallbackEvent, "should have a provider_fallback timeline event")
+}
+
+func TestIteratingController_PromptCache(t *testing.T) {
+	loopChunks := []agent.Chunk{
+		&agent.TextChunk{Content: "Investigation complete."},
+	}
+
+	t.Run("investigation loop sets PromptCache", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture:   true,
+			responses: []mockLLMResponse{{chunks: loopChunks}},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		ctrl := NewIteratingController()
+
+		result, err := ctrl.Run(context.Background(), execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Len(t, llm.capturedInputs, 1)
+		assert.True(t, llm.capturedInputs[0].PromptCache)
+	})
+
+	t.Run("action loop does not set PromptCache", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture:   true,
+			responses: []mockLLMResponse{{chunks: loopChunks}},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.Type = config.AgentTypeAction
+		ctrl := NewIteratingController()
+
+		result, err := ctrl.Run(context.Background(), execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Len(t, llm.capturedInputs, 1)
+		assert.False(t, llm.capturedInputs[0].PromptCache)
+	})
+
+	t.Run("cluster toggle AND disables PromptCache", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture:   true,
+			responses: []mockLLMResponse{{chunks: loopChunks}},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.PromptCachingEnabled = false
+		ctrl := NewIteratingController()
+
+		result, err := ctrl.Run(context.Background(), execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Len(t, llm.capturedInputs, 1)
+		assert.False(t, llm.capturedInputs[0].PromptCache)
+	})
 }

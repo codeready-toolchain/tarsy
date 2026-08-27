@@ -12,6 +12,7 @@ from langchain_core.messages import (
 )
 
 from llm_proto import llm_service_pb2 as pb
+from llm.providers import prompt_cache
 from llm.providers.langchain_provider import LangChainProvider, _RetryableError
 
 pytestmark = pytest.mark.unit
@@ -940,3 +941,322 @@ class TestLangChainProviderGenerate:
             assert responses[0].error.code == "provider_error"
             assert "Something unexpected" in responses[0].error.message
             assert responses[0].is_final
+
+
+def _looping_tool_history():
+    return [
+        pb.ConversationMessage(role="system", content="You are an SRE agent."),
+        pb.ConversationMessage(role="user", content="Check pods."),
+        pb.ConversationMessage(
+            role="assistant",
+            content="",
+            tool_calls=[pb.ToolCall(id="tc1", name="k8s.get_pods", arguments="{}")],
+        ),
+        pb.ConversationMessage(
+            role="tool",
+            tool_call_id="tc1",
+            tool_name="k8s.get_pods",
+            content="pod-1 Running",
+        ),
+    ]
+
+
+def _sample_tools():
+    return [
+        pb.ToolDefinition(
+            name="k8s.get_pods",
+            description="List pods",
+            parameters_schema='{"type": "object"}',
+        ),
+        pb.ToolDefinition(
+            name="k8s.get_logs",
+            description="Get logs",
+            parameters_schema='{"type": "object"}',
+        ),
+    ]
+
+
+class TestLangChainPromptCacheBreakpoints:
+    def test_anthropic_tools_and_messages(self, provider):
+        mock_model = MagicMock()
+        mock_model.bind_tools.return_value = mock_model
+        tools = _sample_tools()
+        LangChainProvider._bind_tools(
+            mock_model, tools, cache_kind=prompt_cache.ANTHROPIC,
+        )
+        bound = mock_model.bind_tools.call_args[0][0]
+        assert bound[0]["name"] == "k8s__get_pods"
+        assert "input_schema" in bound[0]
+        assert "cache_control" not in bound[0]
+        assert bound[-1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+
+        converted = provider._convert_messages(
+            _looping_tool_history(), prompt_cache.ANTHROPIC,
+        )
+        system = converted[0]
+        assert isinstance(system.content, list)
+        assert system.content[0]["cache_control"]["ttl"] == "1h"
+        last = converted[-1]
+        assert isinstance(last, ToolMessage)
+        assert last.additional_kwargs["cache_control"]["ttl"] == "1h"
+        assert last.content[0]["cache_control"]["ttl"] == "1h"
+
+    def test_anthropic_skips_tool_breakpoint_when_no_tools(self, provider):
+        mock_model = MagicMock()
+        result = LangChainProvider._bind_tools(
+            mock_model, [], cache_kind=prompt_cache.ANTHROPIC,
+        )
+        mock_model.bind_tools.assert_not_called()
+        assert result is mock_model
+
+    def test_no_markers_when_cache_off(self, provider):
+        messages = provider._convert_messages(_looping_tool_history())
+        assert isinstance(messages[0].content, str)
+        assert messages[-1].additional_kwargs.get("cache_control") in (None, {})
+
+        mock_model = MagicMock()
+        mock_model.bind_tools.return_value = mock_model
+        LangChainProvider._bind_tools(mock_model, _sample_tools())
+        bound = mock_model.bind_tools.call_args[0][0]
+        assert bound[0]["type"] == "function"
+        assert "cache_control" not in bound[-1]
+        assert "prompt_cache_breakpoint" not in bound[-1]
+
+    def test_openai_walk_back_past_tool_result(self, provider):
+        converted = provider._convert_messages(
+            _looping_tool_history(), prompt_cache.OPENAI_EXPLICIT,
+        )
+        system = converted[0]
+        assert system.content[0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        assistant = converted[2]
+        assert assistant.content[0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        tool = converted[3]
+        assert isinstance(tool, ToolMessage)
+        assert "prompt_cache_breakpoint" not in (tool.additional_kwargs or {})
+
+        mock_model = MagicMock()
+        mock_model.bind_tools.return_value = mock_model
+        LangChainProvider._bind_tools(
+            mock_model, _sample_tools(), cache_kind=prompt_cache.OPENAI_EXPLICIT,
+        )
+        bound = mock_model.bind_tools.call_args[0][0]
+        assert bound[-1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        assert "prompt_cache_breakpoint" not in bound[0]
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
+    def test_openai_options_not_on_constructor(self, provider):
+        captured = {}
+
+        class FakeChatOpenAI:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                captured["tools"] = tools
+                return self
+
+            def bind(self, **kwargs):
+                captured["bind"] = kwargs
+                return self
+
+        with patch("langchain_openai.ChatOpenAI", FakeChatOpenAI):
+            config = pb.LLMConfig(
+                provider="openai", model="gpt-5.6", api_key_env="OPENAI_API_KEY",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.OPENAI_EXPLICIT, False, "exec-99",
+            )
+
+        assert "prompt_cache_options" not in captured["ctor"]
+        assert "prompt_cache_key" not in captured["ctor"]
+        assert captured["ctor"]["max_retries"] == 0
+        assert captured["bind"]["prompt_cache_key"] == "exec-99"
+        assert captured["bind"]["prompt_cache_options"] == {
+            "mode": "explicit", "ttl": "30m",
+        }
+        assert "max_retries" not in captured["bind"]
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    def test_anthropic_max_retries_on_constructor_not_bind(self, provider):
+        captured = {}
+
+        class FakeChatAnthropic:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                captured["tools"] = tools
+                return self
+
+            def bind(self, **kwargs):
+                captured["bind"] = kwargs
+                return self
+
+        with patch("langchain_anthropic.ChatAnthropic", FakeChatAnthropic):
+            config = pb.LLMConfig(
+                provider="anthropic", model="claude-sonnet-4-5",
+                api_key_env="ANTHROPIC_API_KEY",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.ANTHROPIC, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
+        assert "bind" not in captured
+
+    def test_vertex_claude_max_retries_on_constructor_not_bind(self, provider):
+        captured = {}
+
+        class FakeChatAnthropicVertex:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                captured["tools"] = tools
+                return self
+
+            def bind(self, **kwargs):
+                captured["bind"] = kwargs
+                return self
+
+        with patch(
+            "langchain_google_vertexai.model_garden.ChatAnthropicVertex",
+            FakeChatAnthropicVertex,
+        ):
+            config = pb.LLMConfig(
+                provider="vertexai",
+                model="claude-sonnet-4-5",
+                project="p",
+                location="us-east5",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.ANTHROPIC, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
+        assert "bind" not in captured
+
+    @pytest.mark.parametrize("model", ["gpt-5.5", "gpt-5.2", "gpt-5", "gpt-5-mini"])
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
+    def test_older_openai_does_not_bind_cache_options(self, provider, model):
+        captured = {}
+
+        class FakeChatOpenAI:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                captured["tools"] = tools
+                return self
+
+            def bind(self, **kwargs):
+                captured["bind"] = kwargs
+                return self
+
+        with patch("langchain_openai.ChatOpenAI", FakeChatOpenAI):
+            config = pb.LLMConfig(
+                provider="openai", model=model, api_key_env="OPENAI_API_KEY",
+            )
+            kind = prompt_cache.classify_cache(config, True, "exec-1")
+            assert kind == prompt_cache.NONE
+            provider._get_or_create_model(config, _sample_tools(), kind, False, "exec-1")
+
+        assert "bind" not in captured
+        assert "prompt_cache_breakpoint" not in captured["tools"][-1]
+
+    @pytest.mark.asyncio
+    async def test_openai_two_turn_create_then_read(self, provider):
+        histories = [
+            _looping_tool_history()[:-1],  # turn 1 ends at assistant tool call
+            _looping_tool_history(),  # turn 2 ends in tool result
+        ]
+        usages = [
+            {"input_tokens": 1000, "output_tokens": 20, "total_tokens": 1020,
+             "input_token_details": {"cache_write_tokens": 800, "cached_tokens": 0}},
+            {"input_tokens": 1100, "output_tokens": 30, "total_tokens": 1130,
+             "input_token_details": {"cached_tokens": 800, "cache_write_tokens": 0}},
+        ]
+        call = {"n": 0}
+
+        class MockModel:
+            def astream(self, messages):
+                idx = call["n"]
+                call["n"] += 1
+                last = messages[-1]
+                if idx == 1:
+                    assert isinstance(last, ToolMessage)
+                    assert "prompt_cache_breakpoint" not in (last.additional_kwargs or {})
+
+                async def gen():
+                    chunk = AIMessageChunk(content="ok")
+                    chunk.usage_metadata = usages[idx]
+                    yield chunk
+                return gen()
+
+        with patch.object(provider, "_get_or_create_model", return_value=MockModel()):
+            results = []
+            for history in histories:
+                request = pb.GenerateRequest(
+                    session_id="sess-1",
+                    execution_id="exec-1",
+                    prompt_cache=True,
+                    llm_config=pb.LLMConfig(
+                        provider="openai", model="gpt-5.6", api_key_env="TEST_KEY",
+                    ),
+                    messages=history,
+                    tools=_sample_tools(),
+                )
+                usage = None
+                async for resp in provider.generate(request):
+                    if resp.HasField("usage"):
+                        usage = resp.usage
+                results.append(usage)
+
+        assert results[0].cache_creation_tokens == 800
+        assert results[1].cache_read_tokens == 800
+
+    @pytest.mark.asyncio
+    async def test_400_strip_ttl_then_all(self, provider):
+        class Fake400(Exception):
+            status_code = 400
+
+        kinds = []
+        attempt = {"n": 0}
+
+        def fake_get(config, tools, cache_kind=prompt_cache.NONE, strip_ttl=False, execution_id=""):
+            kinds.append((cache_kind, strip_ttl))
+
+            class Model:
+                def astream(self, messages):
+                    async def gen():
+                        attempt["n"] += 1
+                        if attempt["n"] < 3:
+                            raise Fake400("extra inputs are not permitted")
+                        chunk = AIMessageChunk(content="ok after strip")
+                        chunk.usage_metadata = None
+                        yield chunk
+                    return gen()
+            return Model()
+
+        with patch.object(provider, "_get_or_create_model", side_effect=fake_get):
+            request = pb.GenerateRequest(
+                session_id="sess-1",
+                execution_id="exec-1",
+                prompt_cache=True,
+                llm_config=pb.LLMConfig(
+                    provider="anthropic", model="claude-sonnet-4-5", api_key_env="TEST_KEY",
+                ),
+                messages=[pb.ConversationMessage(role="user", content="hi")],
+            )
+            texts = []
+            async for resp in provider.generate(request):
+                if resp.HasField("text"):
+                    texts.append(resp.text.content)
+
+        assert kinds == [
+            (prompt_cache.ANTHROPIC, False),
+            (prompt_cache.ANTHROPIC, True),
+            (prompt_cache.NONE, False),
+        ]
+        assert texts == ["ok after strip"]
+

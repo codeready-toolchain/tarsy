@@ -57,13 +57,15 @@ These files are **tracked in git** and serve as templates:
 
 Main configuration file containing:
 
-- **`system:`** - Infrastructure settings (GitHub, runbooks, Slack, retention, **cost estimation**)
+- **`system:`** - Infrastructure settings (GitHub, runbooks, Slack, retention, **cost estimation**, **prompt caching**)
 - **`defaults:`** - System-wide default values
 - **`mcp_servers:`** - MCP server configurations
 - **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
 - **`agent_chains:`** - Multi-stage agent chain definitions
 
 LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See [Session Usage Cost](../../docs/session-usage-cost.md), [ADR-0020](../../docs/adr/0020-session-usage-cost.md), and [ADR-0023](../../docs/adr/0023-cost-promotions.md) for overrides, promotions, catalog/snapshot behavior, and estimate caveats.
+
+Provider prompt caching (`system.prompt_caching`) is enabled by default. When on, looping investigation-style agents send Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints. Setting `enabled: false` is a GitOps kill switch and does **not** disable Gemini implicit caching.
 
 ```yaml
 defaults:

@@ -126,6 +126,13 @@ system:
     #     input_per_million: 0.75
     #     output_per_million: 3.75
 
+  # Provider prompt caching for looping investigation / chat / orchestrator /
+  # sub-agent Generate calls (Claude cache_control, GPT-5.6+ explicit breakpoints).
+  # Enabled by default when this block is omitted. When disabled, TARSy does not
+  # send those breakpoints (Gemini implicit caching is unaffected).
+  prompt_caching:
+    enabled: true
+
   # Data retention and cleanup (all values below are defaults)
   retention:
     session_retention_days: 365      # Soft-delete completed sessions older than N days

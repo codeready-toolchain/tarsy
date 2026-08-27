@@ -411,6 +411,20 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.NotEmpty(t, resp.System.CostEstimation.Promotions[0].Status)
 	})
 
+	t.Run("includes prompt_caching enabled by default", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{}, nil)
+		require.NotNil(t, resp.System.PromptCaching)
+		assert.True(t, resp.System.PromptCaching.Enabled)
+	})
+
+	t.Run("includes prompt_caching disabled from config", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			PromptCaching: &config.PromptCachingConfig{Enabled: false},
+		}, nil)
+		require.NotNil(t, resp.System.PromptCaching)
+		assert.False(t, resp.System.PromptCaching.Enabled)
+	})
+
 	t.Run("includes chains defaults memory and orchestrator duration strings", func(t *testing.T) {
 		maxIter := 10
 		maxConcurrent := 3
