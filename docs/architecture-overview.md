@@ -100,7 +100,7 @@ A stateless gRPC microservice with a single RPC: `Generate(GenerateRequest) retu
 - **GoogleNativeProvider**: Gemini models via `google-genai` SDK with native thinking features, thought signatures for multi-turn reasoning, and native function calling
 - **LangChainProvider**: Multi-provider support (OpenAI, Anthropic, xAI, Google, VertexAI) via LangChain ecosystem with structured tool calling
 
-The Python service has zero orchestration state and zero MCP knowledge. It receives messages + config via gRPC, calls the LLM provider API, and streams response chunks back.
+The Python service has zero orchestration state and zero MCP knowledge. It receives messages + config via gRPC, calls the LLM provider API, and streams response chunks back. On eligible looping investigation-style calls it attaches Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints when `GenerateRequest.prompt_cache` is set; all backends extract cache usage into `UsageInfo`. See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
 ### 3. Agent Chains & Orchestration
 
@@ -218,7 +218,9 @@ TARSy can automatically send Slack notifications when alert processing starts (f
 
 TARSy estimates USD cost for LLM interactions at write time (list prices from a LiteLLM catalog + YAML overrides + time-bounded promotions + bundled snapshot). Soft **Est. $** appears next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled (default on). A dedicated **Usage** page (`/usage`) provides date-window fleet dig-in (tokens and estimated cost) via `GET /api/v1/usage/summary`. Estimates are not invoice truth.
 
-**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), and [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md).
+Provider prompt caching (Claude `cache_control`, GPT-5.6+ OpenAI explicit breakpoints, Gemini implicit) is measured and priced: `input_tokens` is uncached input; cache read/create are stored and billed separately. Trace LLM list/detail show per-call cache counts; Usage totals and by-model SUMs them. Session list / header / `ExecutionOverview` do not. Cluster kill switch: `system.prompt_caching.enabled` (default on; does not disable Gemini implicit caching).
+
+**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
 ### 13. Prometheus Metrics
 
@@ -226,7 +228,7 @@ TARSy exports Prometheus metrics via a `/metrics` endpoint on the existing HTTP 
 
 - **Session metrics**: submission counts, terminal state counts, processing duration, queue wait time, active/queued gauges (DB-polled)
 - **Worker metrics**: configured workers, active workers (event-driven), orphan recovery count
-- **LLM metrics**: call counts, errors, duration histograms, token usage, provider fallback events — labeled by `provider`+`model`
+- **LLM metrics**: call counts, errors, duration histograms, token usage (`direction` includes `input` / `output` / `thinking` / `cache_read` / `cache_creation`), provider fallback events — labeled by `provider`+`model`
 - **MCP metrics**: call counts, errors, duration histograms, health status — labeled by `server`+`tool`
 - **HTTP metrics**: request counts and duration via Echo middleware — labeled by `method`+`path`+`status_code`
 - **WebSocket metrics**: active connection gauge
