@@ -43,6 +43,8 @@ export interface UsageTotals {
   session_count: number;
   input_tokens: number;
   output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   total_tokens: number;
   estimated_cost_usd?: number | null;
   /** estimated_cost_usd / session_count; omitted when count is 0 or estimation is disabled */
@@ -59,6 +61,8 @@ export interface UsageModelBreakdown {
   session_count: number;
   input_tokens: number;
   output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   total_tokens: number;
   estimated_cost_usd?: number | null;
   average_cost_usd?: number | null;

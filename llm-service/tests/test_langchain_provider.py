@@ -488,7 +488,7 @@ class TestLangChainProviderStreaming:
 
         usage_responses = [r for r in responses if r.HasField("usage")]
         assert len(usage_responses) == 1
-        assert usage_responses[0].usage.input_tokens == 100
+        assert usage_responses[0].usage.input_tokens == 10
         assert usage_responses[0].usage.output_tokens == 50
         assert usage_responses[0].usage.cache_read_tokens == 70
         assert usage_responses[0].usage.cache_creation_tokens == 20
@@ -523,7 +523,7 @@ class TestLangChainProviderStreaming:
             responses.append(resp)
 
         usage = [r for r in responses if r.HasField("usage")]
-        assert usage[0].usage.input_tokens == 10
+        assert usage[0].usage.input_tokens == 0
         assert usage[0].usage.output_tokens == 3
         assert usage[0].usage.cache_read_tokens == 9
         assert usage[0].usage.cache_creation_tokens == 1
@@ -557,6 +557,41 @@ class TestLangChainProviderStreaming:
         assert usage_responses[0].usage.output_tokens == 0
         assert usage_responses[0].usage.cache_read_tokens == 40
         assert usage_responses[0].usage.cache_creation_tokens == 10
+
+    @pytest.mark.asyncio
+    async def test_stream_anthropic_raw_input_is_already_uncached(self, provider):
+        """Anthropic raw usage.input_tokens is uncached; do not subtract from LC inclusive."""
+        chunk = AIMessageChunk(content="Response text")
+        chunk.usage_metadata = {
+            "input_tokens": 100,
+            "output_tokens": 5,
+            "total_tokens": 105,
+            "input_token_details": {"cache_read": 40, "cache_creation": 0},
+        }
+        chunk.response_metadata = {
+            "usage": {
+                "input_tokens": 20,
+                "cache_read_input_tokens": 40,
+                "cache_creation_input_tokens": 80,
+            }
+        }
+
+        async def mock_astream(messages):
+            yield chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage_responses = [r for r in responses if r.HasField("usage")]
+        assert len(usage_responses) == 1
+        assert usage_responses[0].usage.input_tokens == 20
+        assert usage_responses[0].usage.cache_read_tokens == 40
+        assert usage_responses[0].usage.cache_creation_tokens == 80
 
     @pytest.mark.asyncio
     async def test_stream_usage_metadata(self, provider):

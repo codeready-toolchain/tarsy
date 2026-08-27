@@ -39,16 +39,19 @@ def _token_count(value) -> int:
 def _usage_from_google(um) -> pb.GenerateResponse:
     """Map Gemini usage_metadata onto proto UsageInfo.
 
-    input_tokens stays inclusive (prompt_token_count includes cached tokens).
-    Implicit Gemini writes have no creation surcharge.
+    input_tokens is uncached (prompt_token_count minus cached_content_token_count).
+    Implicit Gemini writes have no creation surcharge. total_tokens is left as
+    the provider-reported total.
     """
+    cache_read = _token_count(getattr(um, "cached_content_token_count", 0))
+    prompt = um.prompt_token_count or 0
     return pb.GenerateResponse(
         usage=pb.UsageInfo(
-            input_tokens=um.prompt_token_count or 0,
+            input_tokens=max(prompt - cache_read, 0),
             output_tokens=um.candidates_token_count or 0,
             total_tokens=um.total_token_count or 0,
             thinking_tokens=_token_count(getattr(um, "thoughts_token_count", 0)),
-            cache_read_tokens=_token_count(getattr(um, "cached_content_token_count", 0)),
+            cache_read_tokens=cache_read,
             cache_creation_tokens=0,
         )
     )

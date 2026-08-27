@@ -1319,7 +1319,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 // --- Aggregate helpers ---
 
 // tokenBearingPredicateSQL matches LLM rows that contribute to cost completeness.
-const tokenBearingPredicateSQL = `(COALESCE(input_tokens, 0) > 0 OR COALESCE(output_tokens, 0) > 0 OR COALESCE(thinking_tokens, 0) > 0)`
+const tokenBearingPredicateSQL = `(COALESCE(input_tokens, 0) > 0 OR COALESCE(output_tokens, 0) > 0 OR COALESCE(thinking_tokens, 0) > 0 OR COALESCE(cache_read_tokens, 0) > 0 OR COALESCE(cache_creation_tokens, 0) > 0)`
 
 // llmSessionStats holds session-level LLM interaction aggregates.
 type llmSessionStats struct {

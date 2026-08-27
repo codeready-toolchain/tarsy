@@ -163,6 +163,40 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 		assert.Contains(t, string(raw), `"priced":false`)
 		assert.Contains(t, string(raw), `"unpriced_interaction_count":0`)
 		assert.Contains(t, string(raw), `"unpriced_token_count":0`)
+		assert.Contains(t, string(raw), `"cache_read_tokens":0`)
+		assert.Contains(t, string(raw), `"cache_creation_tokens":0`)
+	})
+
+	t.Run("cache tokens are omitted outside totals and by_model", func(t *testing.T) {
+		alertRaw, err := json.Marshal(UsageAlertBreakdown{AlertType: "oom", TotalTokens: 10})
+		require.NoError(t, err)
+		assert.NotContains(t, string(alertRaw), "cache_read")
+		assert.NotContains(t, string(alertRaw), "cache_creation")
+
+		chainRaw, err := json.Marshal(UsageChainBreakdown{ChainID: "c", TotalTokens: 10})
+		require.NoError(t, err)
+		assert.NotContains(t, string(chainRaw), "cache_read")
+		assert.NotContains(t, string(chainRaw), "cache_creation")
+
+		topRaw, err := json.Marshal(UsageTopSession{SessionID: "s1", TotalTokens: 10})
+		require.NoError(t, err)
+		assert.NotContains(t, string(topRaw), "cache_read")
+		assert.NotContains(t, string(topRaw), "cache_creation")
+
+		listRaw, err := json.Marshal(DashboardSessionItem{ID: "s1", InputTokens: 10})
+		require.NoError(t, err)
+		assert.NotContains(t, string(listRaw), "cache_read")
+		assert.NotContains(t, string(listRaw), "cache_creation")
+
+		detailRaw, err := json.Marshal(SessionDetailResponse{ID: "s1", InputTokens: 10})
+		require.NoError(t, err)
+		assert.NotContains(t, string(detailRaw), "cache_read")
+		assert.NotContains(t, string(detailRaw), "cache_creation")
+
+		eoRaw, err := json.Marshal(ExecutionOverview{ExecutionID: "e1", InputTokens: 10})
+		require.NoError(t, err)
+		assert.NotContains(t, string(eoRaw), "cache_read")
+		assert.NotContains(t, string(eoRaw), "cache_creation")
 	})
 
 	t.Run("nil cost fields omitted when estimation disabled shape", func(t *testing.T) {

@@ -174,7 +174,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 | Provider | Default Model | Context Window |
 |----------|--------------|----------------|
 | Google (default) | gemini-3.7-flash | 1M tokens |
-| OpenAI | gpt-5.2 | 400K tokens |
+| OpenAI | gpt-5.6 | 1.05M tokens |
 | Anthropic | claude-sonnet-5 | 1M tokens |
 | xAI | grok-4.6 | 500K tokens |
 | VertexAI | claude-sonnet-5 | 1M tokens |

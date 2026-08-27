@@ -381,12 +381,14 @@ type UsageTotals struct {
 	SessionCount             int64            `json:"session_count"`
 	InputTokens              int64            `json:"input_tokens"`
 	OutputTokens             int64            `json:"output_tokens"`
+	CacheReadTokens          int64            `json:"cache_read_tokens"`
+	CacheCreationTokens      int64            `json:"cache_creation_tokens"`
 	TotalTokens              int64            `json:"total_tokens"`
 	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
 	AverageCostUsd           *float64         `json:"average_cost_usd,omitempty"` // estimated_cost_usd / session_count
 	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
 	UnpricedInteractionCount *int             `json:"unpriced_interaction_count,omitempty"`
-	UnpricedTokenCount       *int64           `json:"unpriced_token_count,omitempty"` // SUM(total_tokens) of token-bearing unpriced rows
+	UnpricedTokenCount       *int64           `json:"unpriced_token_count,omitempty"` // SUM(total_tokens + cache_read + cache_creation) of token-bearing unpriced rows
 }
 
 // UsageModelBreakdown is a per-model rollup within the window.
@@ -395,6 +397,8 @@ type UsageModelBreakdown struct {
 	SessionCount             int64    `json:"session_count"`
 	InputTokens              int64    `json:"input_tokens"`
 	OutputTokens             int64    `json:"output_tokens"`
+	CacheReadTokens          int64    `json:"cache_read_tokens"`
+	CacheCreationTokens      int64    `json:"cache_creation_tokens"`
 	TotalTokens              int64    `json:"total_tokens"`
 	EstimatedCostUsd         *float64 `json:"estimated_cost_usd,omitempty"`
 	AverageCostUsd           *float64 `json:"average_cost_usd,omitempty"`           // estimated_cost_usd / session_count

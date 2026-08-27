@@ -54,28 +54,28 @@ llm_providers:
 # OPENAI PROVIDERS
 # =============================================================================
 
-  # GPT-5.2 for advanced reasoning (default)
+  # GPT-5.6 Sol — current flagship (openai-default; alias of gpt-5.6-sol)
+  gpt-5.6:
+    type: openai
+    model: gpt-5.6
+    api_key_env: OPENAI_API_KEY
+
+  # GPT-5.6 Terra — balanced mid tier
+  gpt-5.6-terra:
+    type: openai
+    model: gpt-5.6-terra
+    api_key_env: OPENAI_API_KEY
+
+  # GPT-5.6 Luna — faster / cheaper
+  gpt-5.6-luna:
+    type: openai
+    model: gpt-5.6-luna
+    api_key_env: OPENAI_API_KEY
+
+  # Previous generation (still available; OpenAI recommends GPT-5.6)
   gpt-5.2:
     type: openai
     model: gpt-5.2
-    api_key_env: OPENAI_API_KEY
-
-  # o4-mini for fast reasoning
-  o4-mini:
-    type: openai
-    model: o4-mini
-    api_key_env: OPENAI_API_KEY
-
-  # GPT-5 for general use
-  gpt-5:
-    type: openai
-    model: gpt-5
-    api_key_env: OPENAI_API_KEY
-
-  # o3 for reasoning (legacy)
-  o3:
-    type: openai
-    model: o3
     api_key_env: OPENAI_API_KEY
 
 # =============================================================================
@@ -159,8 +159,8 @@ llm_providers:
     base_url: https://llm.company.com/v1
 
   # Example: Azure OpenAI
-  azure-o4-mini:
+  azure-gpt-5.6:
     type: openai
-    model: o4-mini
+    model: gpt-5.6
     api_key_env: AZURE_OPENAI_KEY
     base_url: https://your-resource.openai.azure.com/openai/deployments/your-deployment

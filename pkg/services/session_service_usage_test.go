@@ -173,6 +173,136 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, int64(300), *summary.Totals.UnpricedTokenCount)
 	})
 
+	t.Run("sums cache tokens on totals and by_model only", func(t *testing.T) {
+		uc := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, uc.Client)
+		ctx := t.Context()
+
+		sid, stageID, execID := seedUsageSession(t, uc.Client, usageSeed{
+			AlertData: "cache-sum",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow,
+		})
+		uc.Client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sid).
+			SetStageID(stageID).
+			SetExecutionID(execID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("gemini-flash").
+			SetLlmRequest(map[string]any{}).
+			SetLlmResponse(map[string]any{}).
+			SetInputTokens(60).
+			SetOutputTokens(20).
+			SetTotalTokens(80).
+			SetCacheReadTokens(40).
+			SetCacheCreationTokens(10).
+			SetEstimatedCostUsd(0.01).
+			SaveX(ctx)
+		seedLLMInteraction(t, uc.Client, sid, stageID, execID, "gemini-flash", 10, 5, 15, floatPtr(0.001), 0)
+
+		summary, err := svc.GetUsageSummary(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, int64(70), summary.Totals.InputTokens)
+		assert.Equal(t, int64(25), summary.Totals.OutputTokens)
+		assert.Equal(t, int64(40), summary.Totals.CacheReadTokens)
+		assert.Equal(t, int64(10), summary.Totals.CacheCreationTokens)
+		assert.Equal(t, int64(95), summary.Totals.TotalTokens)
+
+		require.Len(t, summary.ByModel, 1)
+		assert.Equal(t, int64(70), summary.ByModel[0].InputTokens)
+		assert.Equal(t, int64(25), summary.ByModel[0].OutputTokens)
+		assert.Equal(t, int64(40), summary.ByModel[0].CacheReadTokens)
+		assert.Equal(t, int64(10), summary.ByModel[0].CacheCreationTokens)
+		require.Len(t, summary.ByAlertType, 1)
+		assert.Equal(t, "pod-crash", summary.ByAlertType[0].AlertType)
+		assert.Equal(t, int64(95), summary.ByAlertType[0].TotalTokens)
+	})
+
+	t.Run("cache-only rows count as token-bearing", func(t *testing.T) {
+		uc := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, uc.Client)
+		ctx := t.Context()
+
+		unpricedID, uStage, uExec := seedUsageSession(t, uc.Client, usageSeed{
+			AlertData: "cache-only-unpriced",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow,
+		})
+		uc.Client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(unpricedID).
+			SetStageID(uStage).
+			SetExecutionID(uExec).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("cache-unpriced").
+			SetLlmRequest(map[string]any{}).
+			SetLlmResponse(map[string]any{}).
+			SetInputTokens(0).
+			SetOutputTokens(0).
+			SetTotalTokens(0).
+			SetCacheReadTokens(40).
+			SaveX(ctx)
+
+		pricedID, pStage, pExec := seedUsageSession(t, uc.Client, usageSeed{
+			AlertData: "cache-only-priced",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: inWindow.Add(time.Minute),
+		})
+		uc.Client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(pricedID).
+			SetStageID(pStage).
+			SetExecutionID(pExec).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("cache-priced").
+			SetLlmRequest(map[string]any{}).
+			SetLlmResponse(map[string]any{}).
+			SetInputTokens(0).
+			SetOutputTokens(0).
+			SetTotalTokens(0).
+			SetCacheCreationTokens(10).
+			SetEstimatedCostUsd(0.01).
+			SaveX(ctx)
+
+		summary, err := svc.GetUsageSummary(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), summary.Totals.InputTokens)
+		assert.Equal(t, int64(40), summary.Totals.CacheReadTokens)
+		assert.Equal(t, int64(10), summary.Totals.CacheCreationTokens)
+		assert.Equal(t, int64(0), summary.Totals.TotalTokens)
+		assert.Equal(t, models.CostCompletenessPartial, summary.Totals.CostCompleteness)
+		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
+		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
+		require.NotNil(t, summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(40), *summary.Totals.UnpricedTokenCount)
+
+		byModel := map[string]models.UsageModelBreakdown{}
+		for _, m := range summary.ByModel {
+			byModel[m.ModelName] = m
+		}
+		require.Contains(t, byModel, "cache-unpriced")
+		require.Contains(t, byModel, "cache-priced")
+		require.NotNil(t, byModel["cache-unpriced"].Priced)
+		assert.False(t, *byModel["cache-unpriced"].Priced)
+		assert.Equal(t, int64(40), byModel["cache-unpriced"].CacheReadTokens)
+		require.NotNil(t, byModel["cache-priced"].Priced)
+		assert.True(t, *byModel["cache-priced"].Priced)
+		assert.Equal(t, int64(10), byModel["cache-priced"].CacheCreationTokens)
+
+		topByID := map[string]models.UsageTopSession{}
+		for _, row := range summary.TopSessions {
+			topByID[row.SessionID] = row
+		}
+		require.Contains(t, topByID, unpricedID)
+		require.Contains(t, topByID, pricedID)
+		assert.Equal(t, models.CostCompletenessNone, topByID[unpricedID].CostCompleteness)
+		assert.Equal(t, models.CostCompletenessComplete, topByID[pricedID].CostCompleteness)
+	})
+
 	t.Run("model average counts distinct sessions that used that model", func(t *testing.T) {
 		oc := testdb.NewTestClient(t)
 		svc := setupTestSessionService(t, oc.Client)
@@ -242,6 +372,11 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
 		require.NotNil(t, summary.Totals.UnpricedTokenCount)
 		assert.Equal(t, int64(15), *summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(0), summary.Totals.CacheReadTokens)
+		assert.Equal(t, int64(0), summary.Totals.CacheCreationTokens)
+		require.Len(t, summary.ByModel, 1)
+		assert.Equal(t, int64(0), summary.ByModel[0].CacheReadTokens)
+		assert.Equal(t, int64(0), summary.ByModel[0].CacheCreationTokens)
 	})
 
 	t.Run("rank_by cost vs tokens", func(t *testing.T) {

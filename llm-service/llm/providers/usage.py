@@ -1,8 +1,11 @@
-"""Extract provider cache token counts from LangChain usage payloads.
+"""Extract cache token counts and normalize proto input_tokens to uncached input.
 
-Does not change input_tokens. Callers last-win cache fields only when this
-returns a tuple (keys were present). A later output-only chunk with no cache
-keys returns None so an earlier cache read is not wiped.
+Callers last-win cache fields only when extract_cache_tokens returns a tuple
+(keys were present). A later output-only chunk with no cache keys returns None
+so an earlier cache read is not wiped.
+
+Anthropic raw usage.input_tokens is already uncached. LangChain unified
+usage_metadata.input_tokens, OpenAI, and Google prompt counts include cache.
 """
 
 from typing import Any, Mapping, Optional, Tuple
@@ -12,6 +15,7 @@ _CACHE_CREATE_KEYS = ("cache_creation_input_tokens", "cache_write_tokens", "cach
 _EPHEMERAL_KEYS = ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
 _DETAILS_KEYS = ("input_token_details", "prompt_tokens_details", "input_tokens_details")
 _RAW_USAGE_KEYS = ("usage", "token_usage")
+_ANTHROPIC_RAW_CACHE_KEYS = ("cache_read_input_tokens", "cache_creation_input_tokens")
 
 
 def extract_cache_tokens(
@@ -29,6 +33,32 @@ def extract_cache_tokens(
     if usage_metadata is not None and _has_cache_keys(usage_metadata):
         return _extract_from_usage(usage_metadata)
     return None
+
+
+def extract_anthropic_raw_input(response_metadata: Any = None) -> Optional[int]:
+    """Return already-uncached Anthropic raw ``usage.input_tokens``, else None.
+
+    Only treats the blob as Anthropic when native cache keys are present so
+    OpenAI inclusive ``input_tokens`` is not mistaken for uncached.
+    """
+    raw = _first_attr(response_metadata, _RAW_USAGE_KEYS)
+    if raw is None or not _any_key(raw, _ANTHROPIC_RAW_CACHE_KEYS):
+        return None
+    if not _has(raw, "input_tokens"):
+        return None
+    return _int(_get(raw, "input_tokens"))
+
+
+def uncached_input_tokens(
+    inclusive_input: int,
+    cache_read: int,
+    cache_creation: int,
+    anthropic_raw_input: Optional[int] = None,
+) -> int:
+    """Return billed uncached input for proto UsageInfo.input_tokens."""
+    if anthropic_raw_input is not None:
+        return max(anthropic_raw_input, 0)
+    return max(inclusive_input - cache_read - cache_creation, 0)
 
 
 def _extract_from_usage(usage: Any) -> Tuple[int, int]:

@@ -69,6 +69,8 @@ function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummar
       session_count: 2,
       input_tokens: 100,
       output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_creation_tokens: 0,
       total_tokens: 150,
       estimated_cost_usd: 1.23,
       average_cost_usd: 0.615,
@@ -82,6 +84,8 @@ function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummar
         session_count: 2,
         input_tokens: 100,
         output_tokens: 50,
+        cache_read_tokens: 0,
+        cache_creation_tokens: 0,
         total_tokens: 150,
         estimated_cost_usd: 1.23,
         average_cost_usd: 0.615,
@@ -165,6 +169,8 @@ describe('UsagePage', () => {
     expect(await screen.findByText('Totals')).toBeInTheDocument();
     expect(screen.getByText('Sessions')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getAllByText('Cache read').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Cache create').length).toBeGreaterThan(0);
     expect(screen.getByText('Avg. cost / session')).toBeInTheDocument();
     expect(screen.getAllByText('Avg. / session').length).toBe(3);
     expect(screen.getAllByText('$0.615').length).toBeGreaterThan(0);
@@ -366,6 +372,8 @@ describe('UsagePage', () => {
           session_count: 2,
           input_tokens: 100,
           output_tokens: 50,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
           total_tokens: 1_200_150,
           estimated_cost_usd: 1.23,
           average_cost_usd: 0.615,
@@ -399,6 +407,8 @@ describe('UsagePage', () => {
             session_count: 2,
             input_tokens: 100,
             output_tokens: 50,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
             total_tokens: 150,
             estimated_cost_usd: 1.23,
             priced: false,
@@ -427,6 +437,8 @@ describe('UsagePage', () => {
           session_count: 1,
           input_tokens: 100,
           output_tokens: 50,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
           total_tokens: 150,
         },
         by_model: [
@@ -435,6 +447,8 @@ describe('UsagePage', () => {
             session_count: 1,
             input_tokens: 100,
             output_tokens: 50,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
             total_tokens: 150,
           },
         ],
@@ -466,5 +480,52 @@ describe('UsagePage', () => {
     expect(within(modelSection as HTMLElement).queryByText('Est. cost')).not.toBeInTheDocument();
     expect(within(modelSection as HTMLElement).queryByText('Avg. / session')).not.toBeInTheDocument();
     expect(within(modelSection as HTMLElement).getByText('Tokens')).toBeInTheDocument();
+    expect(within(modelSection as HTMLElement).getByText('Cache read')).toBeInTheDocument();
+    expect(within(modelSection as HTMLElement).getByText('Cache create')).toBeInTheDocument();
+  });
+
+  it('renders cache token totals and by-model columns', async () => {
+    mockGetUsageSummary.mockResolvedValue(
+      makeSummary({
+        totals: {
+          session_count: 2,
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_tokens: 40,
+          cache_creation_tokens: 10,
+          total_tokens: 150,
+          estimated_cost_usd: 1.23,
+          average_cost_usd: 0.615,
+          cost_completeness: 'complete',
+          unpriced_interaction_count: 0,
+          unpriced_token_count: 0,
+        },
+        by_model: [
+          {
+            model_name: 'gemini-flash',
+            session_count: 2,
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_tokens: 40,
+            cache_creation_tokens: 10,
+            total_tokens: 150,
+            estimated_cost_usd: 1.23,
+            average_cost_usd: 0.615,
+            priced: true,
+          },
+        ],
+      }),
+    );
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+
+    expect(screen.getAllByText('40').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('10').length).toBeGreaterThan(0);
+
+    const modelSection = screen.getByText('By model').closest('.MuiPaper-root');
+    expect(modelSection).toBeInstanceOf(HTMLElement);
+    expect(within(modelSection as HTMLElement).getByText('Cache read')).toBeInTheDocument();
+    expect(within(modelSection as HTMLElement).getByText('Cache create')).toBeInTheDocument();
   });
 });

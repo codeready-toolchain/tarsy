@@ -95,6 +95,8 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 	var results []struct {
 		InputSum       stdsql.NullInt64   `json:"input_sum"`
 		OutputSum      stdsql.NullInt64   `json:"output_sum"`
+		CacheReadSum   stdsql.NullInt64   `json:"cache_read_sum"`
+		CacheCreateSum stdsql.NullInt64   `json:"cache_create_sum"`
 		TotalSum       stdsql.NullInt64   `json:"total_sum"`
 		CostSum        stdsql.NullFloat64 `json:"cost_sum"`
 		TokenBearing   int                `json:"token_bearing"`
@@ -105,6 +107,8 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 	aggs := []ent.AggregateFunc{
 		ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
 		ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
+		ent.As(ent.Sum(llminteraction.FieldCacheReadTokens), "cache_read_sum"),
+		ent.As(ent.Sum(llminteraction.FieldCacheCreationTokens), "cache_create_sum"),
 		ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
 		ent.As(func(_ *sql.Selector) string {
 			return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + ")"
@@ -117,7 +121,9 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + " AND estimated_cost_usd IS NOT NULL)"
 			}, "priced"),
 			ent.As(func(_ *sql.Selector) string {
-				return "COALESCE(SUM(COALESCE(" + llminteraction.FieldTotalTokens + ", 0)) FILTER (WHERE " +
+				return "COALESCE(SUM(COALESCE(" + llminteraction.FieldTotalTokens + ", 0) + COALESCE(" +
+					llminteraction.FieldCacheReadTokens + ", 0) + COALESCE(" +
+					llminteraction.FieldCacheCreationTokens + ", 0)) FILTER (WHERE " +
 					tokenBearingPredicateSQL + " AND estimated_cost_usd IS NULL), 0)"
 			}, "unpriced_tokens"),
 		)
@@ -138,6 +144,8 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 	r := results[0]
 	totals.InputTokens = r.InputSum.Int64
 	totals.OutputTokens = r.OutputSum.Int64
+	totals.CacheReadTokens = r.CacheReadSum.Int64
+	totals.CacheCreationTokens = r.CacheCreateSum.Int64
 	totals.TotalTokens = r.TotalSum.Int64
 	if s.costEstimationEnabled {
 		cost := r.CostSum.Float64
@@ -153,14 +161,16 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 
 func (s *SessionService) usageByModel(ctx context.Context, interactionPred predicate.LLMInteraction) ([]models.UsageModelBreakdown, error) {
 	var rows []struct {
-		ModelName    string             `json:"model_name"`
-		SessionCount stdsql.NullInt64   `json:"session_count"`
-		InputSum     stdsql.NullInt64   `json:"input_sum"`
-		OutputSum    stdsql.NullInt64   `json:"output_sum"`
-		TotalSum     stdsql.NullInt64   `json:"total_sum"`
-		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
-		TokenBearing int                `json:"token_bearing"`
-		Priced       int                `json:"priced"`
+		ModelName      string             `json:"model_name"`
+		SessionCount   stdsql.NullInt64   `json:"session_count"`
+		InputSum       stdsql.NullInt64   `json:"input_sum"`
+		OutputSum      stdsql.NullInt64   `json:"output_sum"`
+		CacheReadSum   stdsql.NullInt64   `json:"cache_read_sum"`
+		CacheCreateSum stdsql.NullInt64   `json:"cache_create_sum"`
+		TotalSum       stdsql.NullInt64   `json:"total_sum"`
+		CostSum        stdsql.NullFloat64 `json:"cost_sum"`
+		TokenBearing   int                `json:"token_bearing"`
+		Priced         int                `json:"priced"`
 	}
 
 	aggs := []ent.AggregateFunc{
@@ -169,6 +179,8 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 		}, "session_count"),
 		ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
 		ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
+		ent.As(ent.Sum(llminteraction.FieldCacheReadTokens), "cache_read_sum"),
+		ent.As(ent.Sum(llminteraction.FieldCacheCreationTokens), "cache_create_sum"),
 		ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
 		ent.As(func(_ *sql.Selector) string {
 			return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + ")"
@@ -195,11 +207,13 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 	out := make([]models.UsageModelBreakdown, 0, len(rows))
 	for _, row := range rows {
 		item := models.UsageModelBreakdown{
-			ModelName:    row.ModelName,
-			SessionCount: row.SessionCount.Int64,
-			InputTokens:  row.InputSum.Int64,
-			OutputTokens: row.OutputSum.Int64,
-			TotalTokens:  row.TotalSum.Int64,
+			ModelName:           row.ModelName,
+			SessionCount:        row.SessionCount.Int64,
+			InputTokens:         row.InputSum.Int64,
+			OutputTokens:        row.OutputSum.Int64,
+			CacheReadTokens:     row.CacheReadSum.Int64,
+			CacheCreationTokens: row.CacheCreateSum.Int64,
+			TotalTokens:         row.TotalSum.Int64,
 		}
 		if s.costEstimationEnabled {
 			cost := row.CostSum.Float64

@@ -1936,6 +1936,71 @@ func TestSessionService_CostAggregation(t *testing.T) {
 		t.Fatal("session not found in list")
 	})
 
+	t.Run("cache-tokens-only row counts as token-bearing", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			read   int
+			create int
+		}{
+			{name: "cache read", read: 40},
+			{name: "cache create", create: 25},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-cache-"+tc.name)
+				create := client.Client.LLMInteraction.Create().
+					SetID(uuid.New().String()).
+					SetSessionID(sessionID).
+					SetStageID(stageID).
+					SetExecutionID(execID).
+					SetInteractionType(llminteraction.InteractionTypeIteration).
+					SetModelName("cache-model").
+					SetLlmRequest(map[string]any{}).
+					SetLlmResponse(map[string]any{}).
+					SetInputTokens(0).
+					SetOutputTokens(0).
+					SetTotalTokens(0)
+				if tc.read > 0 {
+					create = create.SetCacheReadTokens(tc.read)
+				}
+				if tc.create > 0 {
+					create = create.SetCacheCreationTokens(tc.create)
+				}
+				create.SaveX(ctx)
+
+				detail, err := service.GetSessionDetail(ctx, sessionID)
+				require.NoError(t, err)
+				assert.Equal(t, int64(0), detail.InputTokens)
+				assert.Equal(t, int64(0), detail.OutputTokens)
+				assert.Equal(t, int64(0), detail.TotalTokens)
+				assert.Equal(t, models.CostCompletenessNone, detail.CostCompleteness)
+				require.NotNil(t, detail.UnpricedInteractionCount)
+				assert.Equal(t, 1, *detail.UnpricedInteractionCount)
+				require.Len(t, detail.Stages, 1)
+				require.Len(t, detail.Stages[0].Executions, 1)
+				eo := detail.Stages[0].Executions[0]
+				assert.Equal(t, int64(0), eo.InputTokens)
+				assert.Equal(t, int64(0), eo.TotalTokens)
+				assert.Equal(t, models.CostCompletenessNone, eo.CostCompleteness)
+
+				list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+					Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+				})
+				require.NoError(t, err)
+				for _, s := range list.Sessions {
+					if s.ID == sessionID {
+						assert.Equal(t, int64(0), s.InputTokens)
+						assert.Equal(t, int64(0), s.TotalTokens)
+						assert.Equal(t, models.CostCompletenessNone, s.CostCompleteness)
+						require.NotNil(t, s.EstimatedCostUsd)
+						assert.Equal(t, 0.0, *s.EstimatedCostUsd)
+						return
+					}
+				}
+				t.Fatal("session not found in list")
+			})
+		}
+	})
+
 	t.Run("list shows partial when some rows unpriced", func(t *testing.T) {
 		sessionID, stageID, execID := seedSessionSkeleton(t, client.Client, "cost-list-partial")
 		seedLLMInteraction(t, client.Client, sessionID, stageID, execID, "priced", 100, 50, 150, floatPtr(0.04), 0)
