@@ -82,9 +82,11 @@ func TestBuildTraceListResponse_GroupingAndSorting(t *testing.T) {
 	}
 
 	inputTokens := 100
+	cacheRead := 40
+	cacheCreate := 10
 	exec1, exec2, exec3 := "exec-1", "exec-2", "exec-3"
 	llmInteractions := []*ent.LLMInteraction{
-		{ID: "llm-1", ExecutionID: &exec1, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", InputTokens: &inputTokens, CreatedAt: now},
+		{ID: "llm-1", ExecutionID: &exec1, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", InputTokens: &inputTokens, CacheReadTokens: &cacheRead, CacheCreationTokens: &cacheCreate, CreatedAt: now},
 		{ID: "llm-2", ExecutionID: &exec2, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
 		{ID: "llm-3", ExecutionID: &exec3, InteractionType: llminteraction.InteractionTypeIteration, ModelName: "m", CreatedAt: now},
 	}
@@ -106,6 +108,8 @@ func TestBuildTraceListResponse_GroupingAndSorting(t *testing.T) {
 	assert.Equal(t, "exec-1", resp.Stages[0].Executions[0].ExecutionID)
 	require.Len(t, resp.Stages[0].Executions[0].LLMInteractions, 1)
 	assert.Equal(t, "llm-1", resp.Stages[0].Executions[0].LLMInteractions[0].ID)
+	assert.Equal(t, &cacheRead, resp.Stages[0].Executions[0].LLMInteractions[0].CacheReadTokens)
+	assert.Equal(t, &cacheCreate, resp.Stages[0].Executions[0].LLMInteractions[0].CacheCreationTokens)
 	require.Len(t, resp.Stages[0].Executions[0].MCPInteractions, 1)
 	assert.Equal(t, "mcp-1", resp.Stages[0].Executions[0].MCPInteractions[0].ID)
 
@@ -249,18 +253,22 @@ func TestToLLMListItem(t *testing.T) {
 	inputTokens := 100
 	outputTokens := 30
 	totalTokens := 130
+	cacheRead := 40
+	cacheCreate := 10
 	durationMs := 42
 	now := time.Now()
 
 	li := &ent.LLMInteraction{
-		ID:              "int-1",
-		InteractionType: llminteraction.InteractionTypeIteration,
-		ModelName:       "gemini-2.0-flash",
-		InputTokens:     &inputTokens,
-		OutputTokens:    &outputTokens,
-		TotalTokens:     &totalTokens,
-		DurationMs:      &durationMs,
-		CreatedAt:       now,
+		ID:                  "int-1",
+		InteractionType:     llminteraction.InteractionTypeIteration,
+		ModelName:           "gemini-2.0-flash",
+		InputTokens:         &inputTokens,
+		OutputTokens:        &outputTokens,
+		TotalTokens:         &totalTokens,
+		CacheReadTokens:     &cacheRead,
+		CacheCreationTokens: &cacheCreate,
+		DurationMs:          &durationMs,
+		CreatedAt:           now,
 	}
 
 	item := toLLMListItem(li)
@@ -270,9 +278,47 @@ func TestToLLMListItem(t *testing.T) {
 	assert.Equal(t, &inputTokens, item.InputTokens)
 	assert.Equal(t, &outputTokens, item.OutputTokens)
 	assert.Equal(t, &totalTokens, item.TotalTokens)
+	assert.Equal(t, &cacheRead, item.CacheReadTokens)
+	assert.Equal(t, &cacheCreate, item.CacheCreationTokens)
 	assert.Equal(t, &durationMs, item.DurationMs)
 	assert.Nil(t, item.ErrorMessage)
 	assert.Equal(t, now.Format(time.RFC3339Nano), item.CreatedAt)
+}
+
+func TestLLMTraceCacheTokenMapping(t *testing.T) {
+	read := 40
+	create := 10
+	tests := []struct {
+		name   string
+		read   *int
+		create *int
+	}{
+		{name: "omitted when unset"},
+		{name: "read only", read: &read},
+		{name: "create only", create: &create},
+		{name: "read and create", read: &read, create: &create},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			li := &ent.LLMInteraction{
+				ID:                  "int-1",
+				InteractionType:     llminteraction.InteractionTypeIteration,
+				ModelName:           "test-model",
+				CacheReadTokens:     tt.read,
+				CacheCreationTokens: tt.create,
+				CreatedAt:           time.Now(),
+			}
+
+			item := toLLMListItem(li)
+			assert.Equal(t, tt.read, item.CacheReadTokens)
+			assert.Equal(t, tt.create, item.CacheCreationTokens)
+
+			detail := toLLMDetailResponse(li, nil)
+			assert.Equal(t, tt.read, detail.CacheReadTokens)
+			assert.Equal(t, tt.create, detail.CacheCreationTokens)
+		})
+	}
 }
 
 func TestToLLMListItem_ErrorMessage(t *testing.T) {
@@ -288,6 +334,8 @@ func TestToLLMListItem_ErrorMessage(t *testing.T) {
 	item := toLLMListItem(li)
 	require.NotNil(t, item.ErrorMessage)
 	assert.Equal(t, "rate limited", *item.ErrorMessage)
+	assert.Nil(t, item.CacheReadTokens)
+	assert.Nil(t, item.CacheCreationTokens)
 }
 
 // ============================================================================
@@ -348,18 +396,24 @@ func TestToLLMDetailResponse_EmptyConversation(t *testing.T) {
 	resp := toLLMDetailResponse(li, nil)
 	assert.Equal(t, "int-1", resp.ID)
 	assert.Empty(t, resp.Conversation)
+	assert.Nil(t, resp.CacheReadTokens)
+	assert.Nil(t, resp.CacheCreationTokens)
 }
 
 func TestToLLMDetailResponse_WithConversation(t *testing.T) {
 	thinking := "Let me check pods."
+	cacheRead := 40
+	cacheCreate := 10
 	li := &ent.LLMInteraction{
-		ID:              "int-2",
-		InteractionType: llminteraction.InteractionTypeIteration,
-		ModelName:       "gemini-2.0-flash",
-		ThinkingContent: &thinking,
-		LlmRequest:      map[string]any{},
-		LlmResponse:     map[string]any{},
-		CreatedAt:       time.Now(),
+		ID:                  "int-2",
+		InteractionType:     llminteraction.InteractionTypeIteration,
+		ModelName:           "gemini-2.0-flash",
+		ThinkingContent:     &thinking,
+		CacheReadTokens:     &cacheRead,
+		CacheCreationTokens: &cacheCreate,
+		LlmRequest:          map[string]any{},
+		LlmResponse:         map[string]any{},
+		CreatedAt:           time.Now(),
 	}
 
 	toolCallID := "call-1"
@@ -422,6 +476,10 @@ func TestToLLMDetailResponse_WithConversation(t *testing.T) {
 	// Thinking content
 	require.NotNil(t, resp.ThinkingContent)
 	assert.Equal(t, "Let me check pods.", *resp.ThinkingContent)
+	require.NotNil(t, resp.CacheReadTokens)
+	assert.Equal(t, cacheRead, *resp.CacheReadTokens)
+	require.NotNil(t, resp.CacheCreationTokens)
+	assert.Equal(t, cacheCreate, *resp.CacheCreationTokens)
 }
 
 func TestToLLMDetailResponse_InlineConversationFallback(t *testing.T) {

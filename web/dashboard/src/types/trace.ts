@@ -34,6 +34,8 @@ export interface LLMInteractionListItem {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
   duration_ms?: number;
   error_message?: string;
   created_at: string;
@@ -59,6 +61,8 @@ export interface LLMInteractionDetailResponse {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
   duration_ms?: number;
   error_message?: string;
   llm_request: Record<string, unknown>;

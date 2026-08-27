@@ -35,12 +35,16 @@ export default function LLMInteractionPreview({ interaction }: LLMInteractionPre
       {/* Token usage */}
       {(interaction.total_tokens != null ||
         interaction.input_tokens != null ||
-        interaction.output_tokens != null) && (
+        interaction.output_tokens != null ||
+        interaction.cache_read_tokens != null ||
+        interaction.cache_creation_tokens != null) && (
         <TokenUsageDisplay
           tokenData={{
             input_tokens: interaction.input_tokens,
             output_tokens: interaction.output_tokens,
             total_tokens: interaction.total_tokens,
+            cache_read_tokens: interaction.cache_read_tokens,
+            cache_creation_tokens: interaction.cache_creation_tokens,
           }}
           variant="compact"
           size="small"

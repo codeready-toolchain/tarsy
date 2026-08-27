@@ -302,7 +302,7 @@ No live-provider e2e in this repo (`ScriptedLLMClient`). Cover extraction, cost,
 
 **Done when:** looping Claude (and GPT-5.6+ if used) persist create on turn 1 and read on turn 2+; kill switch off sends `prompt_cache=false`.
 
-### PR4 — Trace per-call cache tokens
+### PR4 — Trace per-call cache tokens - DONE
 
 **Lands:** `cache_read_tokens` / `cache_creation_tokens` on `LLMInteractionListItem` + `LLMInteractionDetailResponse` (`pkg/models/interaction.go`, `pkg/api/handler_trace.go`, `web/dashboard/src/types/trace.ts`). `TokenUsageDisplay` optional fields; wire preview + detail only (session list / header / `ExecutionOverview` DTOs stay without the fields).
 

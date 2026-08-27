@@ -71,15 +71,17 @@ type TraceExecutionGroup struct {
 
 // LLMInteractionListItem contains metadata for collapsed list view.
 type LLMInteractionListItem struct {
-	ID              string  `json:"id"`
-	InteractionType string  `json:"interaction_type"`
-	ModelName       string  `json:"model_name"`
-	InputTokens     *int    `json:"input_tokens,omitempty"`
-	OutputTokens    *int    `json:"output_tokens,omitempty"`
-	TotalTokens     *int    `json:"total_tokens,omitempty"`
-	DurationMs      *int    `json:"duration_ms,omitempty"`
-	ErrorMessage    *string `json:"error_message,omitempty"`
-	CreatedAt       string  `json:"created_at"`
+	ID                  string  `json:"id"`
+	InteractionType     string  `json:"interaction_type"`
+	ModelName           string  `json:"model_name"`
+	InputTokens         *int    `json:"input_tokens,omitempty"`
+	OutputTokens        *int    `json:"output_tokens,omitempty"`
+	TotalTokens         *int    `json:"total_tokens,omitempty"`
+	CacheReadTokens     *int    `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens *int    `json:"cache_creation_tokens,omitempty"`
+	DurationMs          *int    `json:"duration_ms,omitempty"`
+	ErrorMessage        *string `json:"error_message,omitempty"`
+	CreatedAt           string  `json:"created_at"`
 }
 
 // MCPInteractionListItem contains metadata for collapsed list view.
@@ -99,20 +101,22 @@ type MCPInteractionListItem struct {
 
 // LLMInteractionDetailResponse is returned by GET /trace/llm/:interaction_id.
 type LLMInteractionDetailResponse struct {
-	ID               string                `json:"id"`
-	InteractionType  string                `json:"interaction_type"`
-	ModelName        string                `json:"model_name"`
-	ThinkingContent  *string               `json:"thinking_content,omitempty"`
-	InputTokens      *int                  `json:"input_tokens,omitempty"`
-	OutputTokens     *int                  `json:"output_tokens,omitempty"`
-	TotalTokens      *int                  `json:"total_tokens,omitempty"`
-	DurationMs       *int                  `json:"duration_ms,omitempty"`
-	ErrorMessage     *string               `json:"error_message,omitempty"`
-	LLMRequest       map[string]any        `json:"llm_request"`
-	LLMResponse      map[string]any        `json:"llm_response"`
-	ResponseMetadata map[string]any        `json:"response_metadata,omitempty"`
-	CreatedAt        string                `json:"created_at"`
-	Conversation     []ConversationMessage `json:"conversation"`
+	ID                  string                `json:"id"`
+	InteractionType     string                `json:"interaction_type"`
+	ModelName           string                `json:"model_name"`
+	ThinkingContent     *string               `json:"thinking_content,omitempty"`
+	InputTokens         *int                  `json:"input_tokens,omitempty"`
+	OutputTokens        *int                  `json:"output_tokens,omitempty"`
+	TotalTokens         *int                  `json:"total_tokens,omitempty"`
+	CacheReadTokens     *int                  `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens *int                  `json:"cache_creation_tokens,omitempty"`
+	DurationMs          *int                  `json:"duration_ms,omitempty"`
+	ErrorMessage        *string               `json:"error_message,omitempty"`
+	LLMRequest          map[string]any        `json:"llm_request"`
+	LLMResponse         map[string]any        `json:"llm_response"`
+	ResponseMetadata    map[string]any        `json:"response_metadata,omitempty"`
+	CreatedAt           string                `json:"created_at"`
+	Conversation        []ConversationMessage `json:"conversation"`
 }
 
 // ConversationMessage is a single message in the reconstructed conversation.

@@ -111,6 +111,8 @@ export default function TraceTimeline({ traceData, session }: TraceTimelineProps
         input_tokens: i.input_tokens,
         output_tokens: i.output_tokens,
         total_tokens: i.total_tokens,
+        cache_read_tokens: i.cache_read_tokens,
+        cache_creation_tokens: i.cache_creation_tokens,
       })),
     [traceData.session_interactions],
   );

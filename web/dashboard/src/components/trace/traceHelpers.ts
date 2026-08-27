@@ -220,6 +220,8 @@ export interface UnifiedInteraction {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
   // MCP-specific
   server_name?: string;
   tool_name?: string;
@@ -238,6 +240,8 @@ export function mergeAndSortInteractions(execution: TraceExecutionGroup): Unifie
     input_tokens: i.input_tokens,
     output_tokens: i.output_tokens,
     total_tokens: i.total_tokens,
+    cache_read_tokens: i.cache_read_tokens,
+    cache_creation_tokens: i.cache_creation_tokens,
   }));
 
   const mcp: UnifiedInteraction[] = execution.mcp_interactions.map((i) => ({
@@ -541,6 +545,8 @@ export function formatLLMDetailForCopy(detail: LLMInteractionDetailResponse): st
   content += `Model: ${detail.model_name}\n`;
   content += `Type: ${getInteractionTypeLabel(detail.interaction_type)}\n`;
   if (detail.total_tokens != null) content += `Tokens: ${detail.total_tokens.toLocaleString()}\n`;
+  if (detail.cache_read_tokens != null) content += `Cache read: ${detail.cache_read_tokens.toLocaleString()}\n`;
+  if (detail.cache_creation_tokens != null) content += `Cache create: ${detail.cache_creation_tokens.toLocaleString()}\n`;
   if (detail.duration_ms != null) content += `Duration: ${formatDurationMs(detail.duration_ms)}\n`;
 
   return content;

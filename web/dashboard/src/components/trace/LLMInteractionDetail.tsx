@@ -279,13 +279,19 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
             </Typography>
           </Stack>
 
-          {(detail.total_tokens != null || detail.input_tokens != null || detail.output_tokens != null) && (
+          {(detail.total_tokens != null ||
+            detail.input_tokens != null ||
+            detail.output_tokens != null ||
+            detail.cache_read_tokens != null ||
+            detail.cache_creation_tokens != null) && (
             <Box sx={{ mt: 1.5 }}>
               <TokenUsageDisplay
                 tokenData={{
                   input_tokens: detail.input_tokens,
                   output_tokens: detail.output_tokens,
                   total_tokens: detail.total_tokens,
+                  cache_read_tokens: detail.cache_read_tokens,
+                  cache_creation_tokens: detail.cache_creation_tokens,
                 }}
                 variant="compact"
                 size="small"

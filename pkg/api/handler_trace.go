@@ -217,15 +217,17 @@ func buildTraceExecutionGroup(
 
 func toLLMListItem(li *ent.LLMInteraction) models.LLMInteractionListItem {
 	return models.LLMInteractionListItem{
-		ID:              li.ID,
-		InteractionType: string(li.InteractionType),
-		ModelName:       li.ModelName,
-		InputTokens:     li.InputTokens,
-		OutputTokens:    li.OutputTokens,
-		TotalTokens:     li.TotalTokens,
-		DurationMs:      li.DurationMs,
-		ErrorMessage:    li.ErrorMessage,
-		CreatedAt:       li.CreatedAt.Format(time.RFC3339Nano),
+		ID:                  li.ID,
+		InteractionType:     string(li.InteractionType),
+		ModelName:           li.ModelName,
+		InputTokens:         li.InputTokens,
+		OutputTokens:        li.OutputTokens,
+		TotalTokens:         li.TotalTokens,
+		CacheReadTokens:     li.CacheReadTokens,
+		CacheCreationTokens: li.CacheCreationTokens,
+		DurationMs:          li.DurationMs,
+		ErrorMessage:        li.ErrorMessage,
+		CreatedAt:           li.CreatedAt.Format(time.RFC3339Nano),
 	}
 }
 
@@ -279,20 +281,22 @@ func toLLMDetailResponse(li *ent.LLMInteraction, messages []*ent.Message) *model
 	}
 
 	return &models.LLMInteractionDetailResponse{
-		ID:               li.ID,
-		InteractionType:  string(li.InteractionType),
-		ModelName:        li.ModelName,
-		ThinkingContent:  li.ThinkingContent,
-		InputTokens:      li.InputTokens,
-		OutputTokens:     li.OutputTokens,
-		TotalTokens:      li.TotalTokens,
-		DurationMs:       li.DurationMs,
-		ErrorMessage:     li.ErrorMessage,
-		LLMRequest:       llmRequest,
-		LLMResponse:      li.LlmResponse,
-		ResponseMetadata: li.ResponseMetadata,
-		CreatedAt:        li.CreatedAt.Format(time.RFC3339Nano),
-		Conversation:     conversation,
+		ID:                  li.ID,
+		InteractionType:     string(li.InteractionType),
+		ModelName:           li.ModelName,
+		ThinkingContent:     li.ThinkingContent,
+		InputTokens:         li.InputTokens,
+		OutputTokens:        li.OutputTokens,
+		TotalTokens:         li.TotalTokens,
+		CacheReadTokens:     li.CacheReadTokens,
+		CacheCreationTokens: li.CacheCreationTokens,
+		DurationMs:          li.DurationMs,
+		ErrorMessage:        li.ErrorMessage,
+		LLMRequest:          llmRequest,
+		LLMResponse:         li.LlmResponse,
+		ResponseMetadata:    li.ResponseMetadata,
+		CreatedAt:           li.CreatedAt.Format(time.RFC3339Nano),
+		Conversation:        conversation,
 	}
 }
 

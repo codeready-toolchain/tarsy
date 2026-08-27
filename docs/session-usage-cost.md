@@ -164,7 +164,7 @@ Window edge case: a long-running session started before the window is excluded e
 - Gemini implicit cache reads are extracted from `cached_content_token_count` (no creation surcharge).
 - Looping Claude / GPT-5.6+ breakpoints honor `system.prompt_caching.enabled` (default on). That kill switch does not disable Gemini implicit caching.
 - Priced at write time using catalog cache rates or derived multipliers (see [How estimates are computed](#how-estimates-are-computed)).
-- Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do.
+- Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do. Trace LLM list and detail show per-call cache read/create counts.
 
 ## Known gaps
 
