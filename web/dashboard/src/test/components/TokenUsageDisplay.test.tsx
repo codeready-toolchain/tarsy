@@ -17,6 +17,7 @@ describe('TokenUsageDisplay', () => {
     expect(screen.getByText('130')).toBeInTheDocument();
     expect(screen.queryByText('cache read')).not.toBeInTheDocument();
     expect(screen.queryByText('cache create')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Cache tokens')).not.toBeInTheDocument();
   });
 
   it('shows cache read and cache create when fields are present', () => {
@@ -39,6 +40,8 @@ describe('TokenUsageDisplay', () => {
     expect(screen.getByText('cache create')).toBeInTheDocument();
     expect(screen.getByText('40')).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
+    const group = screen.getByLabelText('Cache tokens');
+    expect(group).toHaveTextContent('|');
   });
 
   it('renders cache-only usage when in/out/total are absent', () => {
@@ -55,6 +58,7 @@ describe('TokenUsageDisplay', () => {
     expect(screen.getByText('cache create')).toBeInTheDocument();
     expect(screen.getByText('40')).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cache tokens')).not.toHaveTextContent('|');
   });
 
   it('renders nothing when all token fields are absent', () => {

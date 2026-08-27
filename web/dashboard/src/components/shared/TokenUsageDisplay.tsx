@@ -32,17 +32,19 @@ function formatCacheCompactLabel(
   if (cacheCreationTokens != null) {
     parts.push(`${formatTokensCompact(cacheCreationTokens)} cache create`);
   }
-  return parts.join(' ');
+  return parts.join(' · ');
 }
 
 function CacheTokenSegments({
   cacheReadTokens,
   cacheCreationTokens,
   size,
+  separated,
 }: {
   cacheReadTokens: number | null;
   cacheCreationTokens: number | null;
   size: 'small' | 'medium' | 'large';
+  separated?: boolean;
 }) {
   const fs = size === 'small' ? '0.7rem' : '0.75rem';
   const labelFs = size === 'small' ? '0.65rem' : '0.7rem';
@@ -50,28 +52,47 @@ function CacheTokenSegments({
     return null;
   }
   return (
-    <>
+    <Box
+      component="span"
+      aria-label="Cache tokens"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'baseline',
+        gap: 0.5,
+        flexWrap: 'wrap',
+      }}
+    >
+      {separated && (
+        <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs, mx: 0.25 }}>
+          |
+        </Typography>
+      )}
       {cacheReadTokens != null && (
-        <>
-          <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 600 }}>
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.25 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: fs, fontWeight: 600 }}>
             {formatTokensCompact(cacheReadTokens)}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
             cache read
           </Typography>
-        </>
+        </Box>
+      )}
+      {cacheReadTokens != null && cacheCreationTokens != null && (
+        <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+          ·
+        </Typography>
       )}
       {cacheCreationTokens != null && (
-        <>
-          <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 600 }}>
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.25 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: fs, fontWeight: 600 }}>
             {formatTokensCompact(cacheCreationTokens)}
           </Typography>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
             cache create
           </Typography>
-        </>
+        </Box>
       )}
-    </>
+    </Box>
   );
 }
 
@@ -94,6 +115,7 @@ function TokenUsageDisplay({
   const cacheReadTokens = tokenData.cache_read_tokens ?? null;
   const cacheCreationTokens = tokenData.cache_creation_tokens ?? null;
   const hasCache = cacheReadTokens != null || cacheCreationTokens != null;
+  const hasMain = inputTokens != null || outputTokens != null || totalTokens != null;
 
   if ([totalTokens, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens].every(v => v == null)) {
     return null;
@@ -112,6 +134,7 @@ function TokenUsageDisplay({
       cacheReadTokens={cacheReadTokens}
       cacheCreationTokens={cacheCreationTokens}
       size={size}
+      separated={hasMain}
     />
   );
 
@@ -124,7 +147,8 @@ function TokenUsageDisplay({
       : totalTokens != null
         ? formatTokensCompact(totalTokens)
         : '';
-    const chipLabel = [baseLabel, cacheLabel].filter(Boolean).join(' ');
+    const chipLabel =
+      baseLabel && cacheLabel ? `${baseLabel} (${cacheLabel})` : [baseLabel, cacheLabel].filter(Boolean).join(' ');
     return (
       <Chip
         size={size === 'large' ? 'medium' : size}
