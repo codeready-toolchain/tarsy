@@ -121,7 +121,9 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + " AND estimated_cost_usd IS NOT NULL)"
 			}, "priced"),
 			ent.As(func(_ *sql.Selector) string {
-				return "COALESCE(SUM(COALESCE(" + llminteraction.FieldTotalTokens + ", 0)) FILTER (WHERE " +
+				return "COALESCE(SUM(COALESCE(" + llminteraction.FieldTotalTokens + ", 0) + COALESCE(" +
+					llminteraction.FieldCacheReadTokens + ", 0) + COALESCE(" +
+					llminteraction.FieldCacheCreationTokens + ", 0)) FILTER (WHERE " +
 					tokenBearingPredicateSQL + " AND estimated_cost_usd IS NULL), 0)"
 			}, "unpriced_tokens"),
 		)

@@ -278,7 +278,7 @@ func TestSessionService_GetUsageSummary(t *testing.T) {
 		require.NotNil(t, summary.Totals.UnpricedInteractionCount)
 		assert.Equal(t, 1, *summary.Totals.UnpricedInteractionCount)
 		require.NotNil(t, summary.Totals.UnpricedTokenCount)
-		assert.Equal(t, int64(0), *summary.Totals.UnpricedTokenCount)
+		assert.Equal(t, int64(40), *summary.Totals.UnpricedTokenCount)
 
 		byModel := map[string]models.UsageModelBreakdown{}
 		for _, m := range summary.ByModel {

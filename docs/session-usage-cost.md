@@ -70,7 +70,7 @@ Resolve order:
 1. **Active promotion** — exact `model_name`, half-open `[start, end)` at write / `Estimate` time (UTC)
 2. **YAML overrides** (`model_rates`) — exact `model_name`
 3. **Remote LiteLLM catalog** — fetched asynchronously at startup, refreshed every 24h
-4. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure
+4. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure. Snapshot entries may set `tarsy_rates_valid_until` (YYYY-MM-DD or RFC3339, exclusive UTC bound). After that instant the entry is not used as fallback (the model is unpriced unless a promotion, override, or remote catalog still matches). Used for time-bounded list prices such as GPT-5.6 Sol promotional $4/$20 (valid through 2026-11-21 UTC).
 
 Catalog URL:
 
@@ -144,7 +144,7 @@ Rules:
 - `by_model[]`, `by_alert_type[]`, and `by_chain[]` rows include `session_count` and (when estimation is enabled) `average_cost_usd`. For models, `session_count` is distinct sessions that used that model — a session that hits two models counts toward both.
 - `by_model[]` rows carry `priced` (bool: all token-bearing rows for that model are priced) and `unpriced_interaction_count` (count of token-bearing rows for that model with no resolved rate); the dashboard surfaces the count in the "Incomplete" chip's tooltip.
 - `totals` and `by_model[]` include `cache_read_tokens` and `cache_creation_tokens` SUMs. The Usage page shows these as StatCards (keep the **Input tokens** label = uncached) and by-model columns. Session list, by-alert-type, by-chain, top-sessions, and Usage charts do **not** SUM cache in v1.
-- `totals.unpriced_interaction_count` is that same row count across the window. `totals.unpriced_token_count` is `SUM(total_tokens)` of those unpriced rows; the Usage Est. cost caption shows it compactly (e.g. `1.2M unpriced`), with a tooltip of the form `1.2M tokens from 838 LLM interactions had no resolved rate`.
+- `totals.unpriced_interaction_count` is that same row count across the window. `totals.unpriced_token_count` is `SUM(total_tokens + cache_read_tokens + cache_creation_tokens)` of those unpriced rows (so cache-only interactions still count); the Usage Est. cost caption shows it compactly (e.g. `1.2M unpriced`), with a tooltip of the form `1.2M tokens from 838 LLM interactions had no resolved rate`.
 - Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
 

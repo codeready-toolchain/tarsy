@@ -727,6 +727,9 @@ func TestEstimate_GeminiCacheReadPricedNotFullInput(t *testing.T) {
 func TestEstimate_GPT56SnapshotRates(t *testing.T) {
 	book, err := NewBook(&Config{Enabled: true})
 	require.NoError(t, err)
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	})
 
 	below, prov := book.Estimate("gpt-5.6", Tokens{Input: 100_000, Output: 1000})
 	require.NotNil(t, below)
@@ -740,6 +743,38 @@ func TestEstimate_GPT56SnapshotRates(t *testing.T) {
 	create, _ := book.Estimate("gpt-5.6", Tokens{CacheCreation: 1_000_000})
 	require.NotNil(t, create)
 	assert.InDelta(t, 5.0, *create, 1e-9)
+
+	sol, solProv := book.Estimate("gpt-5.6-sol", Tokens{Input: 100_000, Output: 1000})
+	require.NotNil(t, sol)
+	assert.Equal(t, Provenance("snapshot:gpt-5.6-sol"), solProv)
+	assert.InDelta(t, *below, *sol, 1e-9)
+}
+
+func TestEstimate_GPT56SolSnapshotPromoExpires(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 11, 21, 23, 59, 59, 0, time.UTC)
+	})
+	before, prov := book.Estimate("gpt-5.6-sol", Tokens{Input: 100_000})
+	require.NotNil(t, before)
+	assert.Equal(t, Provenance("snapshot:gpt-5.6-sol"), prov)
+	assert.InDelta(t, 100_000*4e-6, *before, 1e-9)
+
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)
+	})
+	after, afterProv := book.Estimate("gpt-5.6-sol", Tokens{Input: 100_000})
+	assert.Nil(t, after)
+	assert.Equal(t, ProvenanceUnpriced, afterProv)
+
+	alias, aliasProv := book.Estimate("gpt-5.6", Tokens{Input: 100_000})
+	assert.Nil(t, alias)
+	assert.Equal(t, ProvenanceUnpriced, aliasProv)
+
+	terra, _ := book.Estimate("gpt-5.6-terra", Tokens{Input: 100_000})
+	require.NotNil(t, terra)
 }
 
 func TestEstimate_PromotionDerivesCacheRates(t *testing.T) {

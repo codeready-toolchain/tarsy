@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,16 @@ func TestParseCatalogJSON(t *testing.T) {
 			"input_cost_per_token": 1e-6,
 			"output_cost_per_token": 0
 		},
+		"promo-until": {
+			"input_cost_per_token": 1e-6,
+			"output_cost_per_token": 2e-6,
+			"tarsy_rates_valid_until": "2026-11-22"
+		},
+		"bad-expiry": {
+			"input_cost_per_token": 1e-6,
+			"output_cost_per_token": 2e-6,
+			"tarsy_rates_valid_until": "not-a-date"
+		},
 		"sample_spec": {"max_tokens": 100},
 		"no-prices": {"litellm_provider": "x"}
 	}`
@@ -45,7 +56,9 @@ func TestParseCatalogJSON(t *testing.T) {
 	require.Contains(t, entries, "tiered-model")
 	require.Contains(t, entries, "input-only")
 	require.Contains(t, entries, "explicit-zero-output")
+	require.Contains(t, entries, "promo-until")
 	assert.NotContains(t, entries, "no-prices")
+	assert.NotContains(t, entries, "bad-expiry")
 
 	flat := entries["flat-model"]
 	assert.True(t, flat.HasInput)
@@ -75,6 +88,13 @@ func TestParseCatalogJSON(t *testing.T) {
 	zeroOut := entries["explicit-zero-output"]
 	assert.True(t, zeroOut.HasOutput)
 	assert.Equal(t, 0.0, zeroOut.OutputCostPerToken)
+
+	promo := entries["promo-until"]
+	require.NotNil(t, promo.RatesValidUntil)
+	assert.True(t, promo.RatesValidUntil.Equal(time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)))
+	assert.True(t, promo.ratesValidAt(time.Date(2026, 11, 21, 23, 59, 59, 0, time.UTC)))
+	assert.False(t, promo.ratesValidAt(time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)))
+	assert.True(t, flat.ratesValidAt(time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)))
 }
 
 func TestRatesForInput(t *testing.T) {
@@ -224,6 +244,13 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.InDelta(t, 5e-06, gpt56.CacheCreateCost, 1e-15)
 	assert.InDelta(t, 8e-06, gpt56.InputCostAbove[272_000], 1e-15)
 	assert.InDelta(t, 3e-05, gpt56.OutputCostAbove[272_000], 1e-15)
+	wantUntil := time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)
+	require.NotNil(t, gpt56.RatesValidUntil)
+	assert.True(t, gpt56.RatesValidUntil.Equal(wantUntil))
+	sol := entries["gpt-5.6-sol"]
+	require.NotNil(t, sol.RatesValidUntil)
+	assert.True(t, sol.RatesValidUntil.Equal(wantUntil))
+	assert.Nil(t, entries["gpt-5.6-terra"].RatesValidUntil)
 
 	flash := entries["gemini-3.7-flash"]
 	assert.InDelta(t, 7.5e-07, flash.InputCostPerToken, 1e-15)

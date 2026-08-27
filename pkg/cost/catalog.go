@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 )
 
 // rawCatalogEntry is a flexible parse of LiteLLM catalog entries.
@@ -32,7 +33,13 @@ type catalogEntry struct {
 	InputCostAbove              map[int]float64 // threshold tokens → rate
 	OutputCostAbove             map[int]float64
 	TieredPricing               []tierRange
+	// RatesValidUntil is an exclusive UTC bound (now < until). Nil means no expiry.
+	// Snapshot-only TARSy field; LiteLLM catalog entries omit it.
+	RatesValidUntil *time.Time
 }
+
+// snapshotRatesValidUntilKey is a TARSy-only snapshot field (not in LiteLLM).
+const snapshotRatesValidUntilKey = "tarsy_rates_valid_until"
 
 type tierRange struct {
 	InputCostPerToken  float64
@@ -98,6 +105,14 @@ func parseEntry(raw rawCatalogEntry) (catalogEntry, bool) {
 	if r, ok := asFloat(raw["cache_creation_input_token_cost_above_1hr"]); ok {
 		e.HasCacheCreateAbove1hr = true
 		e.CacheCreateAbove1hr = r
+	}
+	if rawUntil, exists := raw[snapshotRatesValidUntilKey]; exists {
+		until, ok := parseRatesValidUntil(rawUntil)
+		if !ok {
+			// Fail closed: do not keep promo rates that cannot expire.
+			return catalogEntry{}, false
+		}
+		e.RatesValidUntil = &until
 	}
 
 	for k, v := range raw {
@@ -243,4 +258,23 @@ func (e catalogEntry) ratesForInput(inputTokens int) (Rates, bool) {
 		rates.Reasoning = &r
 	}
 	return rates, true
+}
+
+func (e catalogEntry) ratesValidAt(now time.Time) bool {
+	return e.RatesValidUntil == nil || now.Before(*e.RatesValidUntil)
+}
+
+func parseRatesValidUntil(v any) (time.Time, bool) {
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC(), true
+	}
+	t, err := time.ParseInLocation("2006-01-02", s, time.UTC)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }

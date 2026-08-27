@@ -274,7 +274,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (
 	}
 
 	// 3. Remote catalog.
-	if e, key, ok := findInCatalog(b.catalog, modelName); ok {
+	if e, key, ok := findInCatalog(b.catalog, modelName); ok && e.ratesValidAt(now) {
 		if rates, ok := e.ratesForInput(inputTokens); ok {
 			return resolved{
 				rates:      applyCacheRates(rates, modelName, &e),
@@ -285,7 +285,7 @@ func (b *Book) resolveLocked(modelName string, inputTokens int, now time.Time) (
 	}
 
 	// 4. Bundled snapshot.
-	if e, key, ok := findInCatalog(b.snapshot, modelName); ok {
+	if e, key, ok := findInCatalog(b.snapshot, modelName); ok && e.ratesValidAt(now) {
 		if rates, ok := e.ratesForInput(inputTokens); ok {
 			return resolved{
 				rates:      applyCacheRates(rates, modelName, &e),
