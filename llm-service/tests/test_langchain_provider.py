@@ -529,6 +529,36 @@ class TestLangChainProviderStreaming:
         assert usage[0].usage.cache_creation_tokens == 1
 
     @pytest.mark.asyncio
+    async def test_stream_emits_usage_from_response_metadata_cache_only(self, provider):
+        """Cache fields in response_metadata still yield UsageInfo when usage_metadata is None."""
+        chunk = AIMessageChunk(content="Response text")
+        chunk.usage_metadata = None
+        chunk.response_metadata = {
+            "usage": {
+                "cache_read_input_tokens": 40,
+                "cache_creation_input_tokens": 10,
+            }
+        }
+
+        async def mock_astream(messages):
+            yield chunk
+
+        class MockModel:
+            def astream(self, messages):
+                return mock_astream(messages)
+
+        responses = []
+        async for resp in provider._stream_response(MockModel(), [], "test-req"):
+            responses.append(resp)
+
+        usage_responses = [r for r in responses if r.HasField("usage")]
+        assert len(usage_responses) == 1
+        assert usage_responses[0].usage.input_tokens == 0
+        assert usage_responses[0].usage.output_tokens == 0
+        assert usage_responses[0].usage.cache_read_tokens == 40
+        assert usage_responses[0].usage.cache_creation_tokens == 10
+
+    @pytest.mark.asyncio
     async def test_stream_usage_metadata(self, provider):
         """Test that usage metadata is buffered and yielded after content."""
         chunk = AIMessageChunk(content="Response text")

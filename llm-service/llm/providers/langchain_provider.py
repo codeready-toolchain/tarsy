@@ -399,6 +399,7 @@ class LangChainProvider(LLMProvider):
         accumulated_total_tokens = 0
         cache_read_tokens = 0
         cache_creation_tokens = 0
+        has_cache_usage = False
 
         # Accumulate tool call chunks by index.
         # LangChain may split tool calls across multiple chunks.
@@ -537,6 +538,7 @@ class LangChainProvider(LLMProvider):
                     )
                     if extracted is not None:
                         cache_read_tokens, cache_creation_tokens = extracted
+                        has_cache_usage = True
 
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
@@ -556,8 +558,9 @@ class LangChainProvider(LLMProvider):
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
 
-        # Yield accumulated usage info after confirming content was produced
-        if accumulated_input_tokens or accumulated_output_tokens:
+        # Yield accumulated usage info after confirming content was produced.
+        # Cache may arrive only in response_metadata with usage_metadata unset.
+        if accumulated_input_tokens or accumulated_output_tokens or has_cache_usage:
             yield pb.GenerateResponse(
                 usage=pb.UsageInfo(
                     input_tokens=accumulated_input_tokens,

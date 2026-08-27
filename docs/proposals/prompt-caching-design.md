@@ -174,8 +174,8 @@ Provider raw usage differs; LangChain’s unified `usage_metadata.input_tokens` 
 | Google native | `prompt_token_count` **includes** cached | `cached_content_token_count` | `input -= cache_read`; create = 0 |
 | LangChain Google | inclusive `input_tokens` | `input_token_details.cache_read` (or equivalent) | same |
 | Anthropic **raw** `usage` | uncached only | `cache_read_input_tokens`, `cache_creation_input_tokens` | do **not** subtract |
-| LangChain Anthropic `usage_metadata` | inclusive | `cache_read`; `cache_creation` **or** `ephemeral_5m_input_tokens` + `ephemeral_1h_input_tokens` (LangChain has reported `cache_creation: 0` while raw create > 0) | `input -= read - create`; create = raw or sum of ephemeral |
-| OpenAI | `input_tokens` / `prompt_tokens` **includes** cached **and** cache writes | `cached_tokens`, `cache_write_tokens` (see OpenAI: `ordinary = input - cached - cache_write`) | `input -= cache_read - cache_creation` |
+| LangChain Anthropic `usage_metadata` | inclusive | `cache_read`; `cache_creation` **or** `ephemeral_5m_input_tokens` + `ephemeral_1h_input_tokens` (LangChain has reported `cache_creation: 0` while raw create > 0) | `uncached = inclusive - cache_read - cache_creation`; create = raw or sum of ephemeral |
+| OpenAI | `input_tokens` / `prompt_tokens` **includes** cached **and** cache writes | `cached_tokens`, `cache_write_tokens` (see OpenAI: `ordinary = input - cached - cache_write`) | `uncached = inclusive - cache_read - cache_creation` |
 
 v1 convention:
 
