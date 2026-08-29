@@ -26,6 +26,7 @@ from langchain_core.messages import (
 from llm_proto import llm_service_pb2 as pb
 from llm.providers import prompt_cache
 from llm.providers.base import LLMProvider
+from llm.providers.http_status import is_retryable_http
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 from llm.providers.usage import (
     extract_anthropic_raw_input,
@@ -480,6 +481,17 @@ class LangChainProvider(LLMProvider):
                         )
                         last_error = e
                         break
+                    if chunks_yielded == 0 and is_retryable_http(e):
+                        last_error = _RetryableError(
+                            f"[{request_id}] Transient HTTP error: {e}",
+                        )
+                        delay = RETRY_BACKOFF_BASE ** attempt
+                        logger.warning(
+                            "[%s] Retryable error (attempt %d/%d), retrying in %ds: %s",
+                            request_id, attempt + 1, MAX_RETRIES, delay, last_error,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
                     logger.exception("[%s] Non-retryable error", request_id)
                     yield pb.GenerateResponse(
                         error=pb.ErrorInfo(

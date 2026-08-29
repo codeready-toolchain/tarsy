@@ -942,6 +942,193 @@ class TestLangChainProviderGenerate:
             assert "Something unexpected" in responses[0].error.message
             assert responses[0].is_final
 
+    @staticmethod
+    def _http_exc(*, status_code=None, code=None, status=None, message="not found"):
+        exc = Exception(message)
+        if status_code is not None:
+            exc.status_code = status_code
+        if code is not None:
+            exc.code = code
+        if status is not None:
+            exc.status = status
+        return exc
+
+    @staticmethod
+    def _fail_then_ok_model(exc, fail_times=1):
+        call_count = {"n": 0}
+        chunk = AIMessageChunk(content="Success after retry")
+        chunk.usage_metadata = None
+
+        class MockModel:
+            def astream(self, messages):
+                call_count["n"] += 1
+                if call_count["n"] <= fail_times:
+                    async def boom(_messages=messages):
+                        raise exc
+                        yield
+                    return boom()
+
+                async def good(_messages=messages):
+                    yield chunk
+                return good()
+
+        return MockModel(), call_count
+
+    @staticmethod
+    def _openai_request(**kwargs):
+        return pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="langchain",
+                provider="openai",
+                model="o4-mini",
+                api_key_env="TEST_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Hi")],
+            **kwargs,
+        )
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    @pytest.mark.parametrize(
+        "exc_kwargs",
+        [
+            {"status_code": 404},
+            {"code": 404, "status": "NOT_FOUND"},
+            {"message": "Error code: 404 - [{'error': {'message': 'Publisher model not found'}}]"},
+        ],
+        ids=["status_code", "code_attr", "message_only"],
+    )
+    async def test_generate_retries_on_404_then_succeeds(self, mock_sleep, exc_kwargs, provider):
+        model, call_count = self._fail_then_ok_model(self._http_exc(**exc_kwargs))
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 2
+        text_responses = [r for r in responses if r.HasField("text")]
+        assert len(text_responses) == 1
+        assert text_responses[0].text.content == "Success after retry"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_retries_on_429_then_succeeds(self, mock_sleep, provider):
+        model, call_count = self._fail_then_ok_model(self._http_exc(status_code=429, message="rate limited"))
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 2
+        text_responses = [r for r in responses if r.HasField("text")]
+        assert text_responses[0].text.content == "Success after retry"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_exhausted_404_yields_max_retries(self, mock_sleep, provider):
+        model, call_count = self._fail_then_ok_model(
+            self._http_exc(status_code=404), fail_times=3,
+        )
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 3
+        assert len(responses) == 1
+        assert responses[0].HasField("error")
+        assert responses[0].error.code == "max_retries"
+        assert responses[0].is_final
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_generate_401_403_does_not_retry(self, status, provider):
+        model, call_count = self._fail_then_ok_model(self._http_exc(status_code=status))
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert responses[0].HasField("error")
+        assert responses[0].error.code == "provider_error"
+        assert responses[0].is_final
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    async def test_generate_no_retry_on_404_after_partial_output(self, provider):
+        call_count = {"n": 0}
+        exc = self._http_exc(status_code=404)
+
+        class MockModel:
+            def astream(self, messages):
+                call_count["n"] += 1
+
+                async def gen():
+                    yield AIMessageChunk(content="Partial data")
+                    raise exc
+                return gen()
+
+        with patch.object(provider, "_get_or_create_model", return_value=MockModel()):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert responses[0].HasField("text")
+        assert responses[0].text.content == "Partial data"
+        assert responses[1].HasField("error")
+        assert responses[1].error.code == "provider_error"
+        assert responses[1].is_final
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_404_does_not_degrade_cache_markers(self, mock_sleep, provider):
+        kinds = []
+        attempt = {"n": 0}
+        exc = self._http_exc(status_code=404, message="Publisher model not found")
+
+        def fake_get(config, tools, cache_kind=prompt_cache.NONE, strip_ttl=False, execution_id=""):
+            kinds.append((cache_kind, strip_ttl))
+
+            class Model:
+                def astream(self, messages):
+                    async def gen():
+                        attempt["n"] += 1
+                        if attempt["n"] == 1:
+                            raise exc
+                        chunk = AIMessageChunk(content="ok after 404")
+                        chunk.usage_metadata = None
+                        yield chunk
+                    return gen()
+            return Model()
+
+        with patch.object(provider, "_get_or_create_model", side_effect=fake_get):
+            request = pb.GenerateRequest(
+                session_id="sess-1",
+                execution_id="exec-1",
+                prompt_cache=True,
+                llm_config=pb.LLMConfig(
+                    provider="anthropic", model="claude-sonnet-4-5", api_key_env="TEST_KEY",
+                ),
+                messages=[pb.ConversationMessage(role="user", content="hi")],
+            )
+            texts = []
+            async for resp in provider.generate(request):
+                if resp.HasField("text"):
+                    texts.append(resp.text.content)
+
+        assert kinds == [(prompt_cache.ANTHROPIC, False)]
+        assert attempt["n"] == 2
+        assert texts == ["ok after 404"]
+
 
 def _looping_tool_history():
     return [

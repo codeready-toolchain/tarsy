@@ -1126,13 +1126,15 @@ func TestIteratingController_NilCollectorSkipsDrainWait(t *testing.T) {
 }
 
 func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
-	// First call: max_retries error → immediate fallback
-	// Second call (with fallback provider): success
+	// Exhausted Python HTTP retries (429/404/5xx) arrive as max_retries.
+	// Immediate fallback; the publisher-model error must not be injected into
+	// the next Generate (tryFallback continue skips buildRetryMessage).
+	const vertex404 = "Error code: 404 - [{'error': {'message': 'Publisher Model `foo` not found.'}}]"
 	llm := &mockLLMClient{
 		capture: true,
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
-				&agent.ErrorChunk{Message: "all retries exhausted", Code: "max_retries", Retryable: false},
+				&agent.ErrorChunk{Message: vertex404, Code: "max_retries", Retryable: false},
 			}},
 			{chunks: []agent.Chunk{
 				&agent.TextChunk{Content: "Analysis complete with fallback provider."},
@@ -1159,6 +1161,11 @@ func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
 	require.Len(t, llm.capturedInputs, 2)
 	require.Equal(t, "fallback-model", llm.capturedInputs[1].Config.Model)
 	require.True(t, llm.capturedInputs[1].ClearCache, "second call should have ClearCache set")
+
+	for _, msg := range llm.capturedInputs[1].Messages {
+		assert.NotContains(t, msg.Content, "Publisher Model")
+		assert.NotContains(t, msg.Content, "Error from previous attempt")
+	}
 
 	// Verify provider was swapped in execCtx
 	require.Equal(t, "fallback-provider", execCtx.Config.LLMProviderName)
