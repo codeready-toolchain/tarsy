@@ -2,7 +2,8 @@
 
 **Status:** Implemented  
 **Date:** 2026-05-27  
-**Supersedes:** Extends ADR-0003 (LLM Provider Fallback)
+**Supersedes:** Extends ADR-0003 (LLM Provider Fallback)  
+**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — attempted-name skip only; native-tool skip unchanged
 
 ## Overview
 
@@ -25,13 +26,15 @@ Previously, the fallback mechanism would switch these agents to incompatible pro
 tryFallback() called
   → shouldFallback() returns true (error threshold met)
   → Loop over ResolvedFallbackProviders from current index:
-      → Skip if same provider name as current
+      → Skip if same provider name as current          # original
       → Skip if entry would drop required native tools (log at Info)
   → If no compatible entries remain → return false (no fallback available)
   → Switch to first compatible entry
 ```
 
 Both skip conditions (same-provider and incompatible-backend) are checked in the same loop. Skipped-incompatible entries are NOT added to `FallbackState.AttemptedProviders` since they were never actually attempted.
+
+**Amendment (ADR-0027):** the first skip is no longer “same name as the *current* provider.” It is “name already on the attempted list for this execution” (the primary starts on that list). That stops ping-pong back to a provider this execution already left. The native-tool skip and the rule that skipped-incompatible names stay off `AttemptedProviders` are unchanged.
 
 The skip is unconditional (hard guard). An agent without its native tools is broken, not degraded. No config option to override.
 
@@ -87,3 +90,7 @@ Agents whose **definition** includes `NativeTools` with at least one enabled too
 | Q3 | Per-tool check within google-native | Backend-level only. | Most Gemini providers support all tools. Agent native-tool overrides are merged onto fallback configs. Edge cases (image models) are handled naturally by error→fallback flow. |
 | Q4 | Startup validation severity | Warning only. | Runtime guard is the real safety net. Non-breaking for existing deployments. Can be promoted to error later. |
 | Q5 | Resolution-time vs. runtime filtering | Runtime-only in `tryFallback()`. | Single location for the logic. Faithful config representation. Easier to debug (all entries visible, skips logged). |
+
+## Amendments ([ADR-0027](0027-llm-transient-outage.md), 2026-08-29)
+
+ADR-0027 did **not** change native-tool compatibility, `RequiresNativeTools`, startup warnings, or the hard skip. It only replaced the sibling “skip current provider name” check in the same candidate loop with skip-already-attempted. Summarization-local failover still does **not** apply this native-tool skip ([ADR-0024](0024-tool-summarization-provider.md)).

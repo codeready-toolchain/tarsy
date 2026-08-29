@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -111,7 +112,9 @@ func (s *FallbackState) shouldFallback(err error, fallbackProviders []agent.Reso
 	}
 }
 
-// resetCounters resets consecutive error counters after a successful fallback switch.
+// resetCounters resets consecutive error counters after a successful LLM call
+// or a successful fallback switch, so a later isolated error does not inherit
+// the previous streak.
 func (s *FallbackState) resetCounters() {
 	s.ConsecutiveProviderErrors = 0
 	s.ConsecutivePartialErrors = 0
@@ -146,16 +149,14 @@ func tryFallback(
 		return false
 	}
 
-	// Find the next fallback entry whose provider name differs from the
-	// currently active one. An entry with the same provider name would just
-	// repeat the same failure, so skip it. Also skip entries that are
-	// incompatible with the agent's required native tools.
+	// Walk forward only: skip names this execution already used (including the
+	// primary), and skip entries incompatible with required native tools.
 	nextIdx := state.CurrentProviderIndex + 1
 	var skippedIncompatible []string
 	for nextIdx < len(execCtx.Config.ResolvedFallbackProviders) {
 		candidate := execCtx.Config.ResolvedFallbackProviders[nextIdx]
-		if candidate.ProviderName == execCtx.Config.LLMProviderName {
-			slog.Info("Skipping fallback entry identical to current provider",
+		if slices.Contains(state.AttemptedProviders, candidate.ProviderName) {
+			slog.Info("Skipping fallback entry already attempted this execution",
 				"session_id", execCtx.SessionID,
 				"execution_id", execCtx.ExecutionID,
 				"skipped_provider", candidate.ProviderName,

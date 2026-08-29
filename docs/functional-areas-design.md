@@ -600,14 +600,16 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 
 All LLM call sites (iterating loop, forced conclusion, single-shot) support automatic fallback to alternative providers when the primary fails. A shared `callLLMWithFallback` helper wraps the streaming LLM call with error-code-aware trigger logic:
 
-- **Immediate triggers**: `max_retries` (Python exhausted 3 retries), `credentials` (guaranteed failure)
-- **Consecutive failure triggers**: `provider_error`, `invalid_request`, `partial_stream_error` (after 2 consecutive failures)
+- **Immediate triggers**: `max_retries` (Python exhausted 3 retries, including 429/404/5xx with no chunks yet), `credentials` (guaranteed failure)
+- **Consecutive failure triggers**: `provider_error`, `invalid_request`, `partial_stream_error` (after 2 consecutive failures). Consecutive counters reset after a successful iterating LLM call.
 
-`FallbackState` tracks the original provider, current fallback index, attempted providers, and consecutive error counters. When fallback triggers, the controller selects the next untried provider from the configured fallback list, records a `provider_fallback` timeline event, updates execution metadata (`original_llm_provider`, `original_llm_backend`), and continues with the new provider. Fallback sticks for the rest of the execution; new executions reset to the primary.
+`FallbackState` tracks the original provider, current fallback index, attempted providers, and consecutive error counters. The primary starts on the attempted list. When fallback triggers, the controller selects the next list entry whose name is not already on that list (native-tool incompatible entries are skipped and never added), records a `provider_fallback` timeline event, updates execution metadata (`original_llm_provider`, `original_llm_backend`), and continues with the new provider. Fallback sticks for the rest of the execution; new executions reset to the primary.
+
+No-partial provider errors emit a timeline `error` event and are not appended to the model conversation. Mid-stream partial text is still offered to the next prompt without the provider-error JSON. Loop-detection and empty-response nudges are unchanged.
 
 **Adaptive timeouts** reduce time wasted on unresponsive providers. Implemented in `collectStreamWithCallback`: initial response timeout (120s default), stall timeout (60s default), and max call timeout (5m). Configurable per agent through the config hierarchy.
 
-**For detailed design**: See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md)
+**For detailed design**: See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md) and [ADR-0027: Transient LLM Outage Handling](adr/0027-llm-transient-outage.md)
 
 **Key Implementation Files**:
 - `pkg/agent/agent.go` -- Agent interface
@@ -818,6 +820,8 @@ Chunk types: `TextChunk`, `ThinkingChunk`, `ToolCallChunk`, `CodeExecutionChunk`
 Generate(request) -> backend = request.llm_config.backend || "google-native"
   -> registry.get(backend) -> provider.generate(request) -> stream chunks
 ```
+
+Each provider retries the same Generate up to 3 times with exponential backoff on timeout, empty response, and HTTP 429/404/5xx when no chunks have been yielded. Cache `400` strips cache markers on a dedicated retry instead of repeating the same cached request. Exhaustion yields `max_retries` to Go. See [ADR-0027](adr/0027-llm-transient-outage.md).
 
 **GoogleNativeProvider** (`llm/providers/google_native.py`):
 - `google-genai` SDK with `generate_content_stream()`

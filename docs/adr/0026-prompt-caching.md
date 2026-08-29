@@ -1,7 +1,8 @@
 # ADR-0026: Prompt Caching
 
 **Status:** Implemented  
-**Date:** 2026-08-26
+**Date:** 2026-08-26  
+**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — 429/404/5xx identical retry vs cache-400 degrade
 
 ## Overview
 
@@ -129,6 +130,8 @@ Do **not** pass `cache_control` as an invoke/astream kwarg — Vertex Claude 400
 Writes cost 1.25× (5m TTL) or 2× (1h TTL) of input; reads cost 0.1×. Subsequent identical prefixes refresh TTL.
 
 **400 retry (same Generate, before any chunks are yielded):** a dedicated strip path, not the existing retryable-error loop (that retries the *same* request and would 400 three times).
+
+**Amendment (ADR-0027):** 429 / 404 / 5xx with zero chunks now *do* use that identical-retry loop, including when cache markers are on. Cache **400** stays this dedicated strip path so a cache-reject is not retried three times as the same cached request.
 
 1. If Vertex/Anthropic returns 400 on `ttl: 1h` (old Claude 3.x), retry once without `ttl` (5m default).
 2. If that still 400s (project has prompt caching disabled, or other extra-input rejection), retry once stripping `cache_control` entirely.
@@ -275,9 +278,14 @@ Setting `enabled: false` is a GitOps kill switch for Claude `cache_control` and 
 - xAI if they add a comparable API.
 - Relabel Usage “Input tokens” to “Uncached input” if operators find the StatCard confusing next to cache cards.
 
+## Amendments ([ADR-0027](0027-llm-transient-outage.md), 2026-08-29)
+
+When this ADR shipped, the Python retryable-error loop was timeout / empty response / google-native 5xx, and cache 400 used a dedicated degrade path so it would not sit in that loop. ADR-0027 expanded the identical-retry loop to **429 / 404 / 5xx** (no chunks yet). Prompt cache does **not** disable that loop: a 404 with `cache_control` / OpenAI cache options still retries with the same markers. Q2’s 400-retry strip path is unchanged.
+
 ## References
 
 - [ADR-0020: Session Usage Cost](0020-session-usage-cost.md) — write-time estimates; this ADR closes the cache-token persistence/pricing gap left out of scope there
 - [ADR-0023: Cost Promotions](0023-cost-promotions.md) — overlay still beats catalog; cache rates derive from the resolved (possibly intro-priced) input rate
 - [ADR-0010: Prometheus Metrics](0010-prometheus-metrics.md) — `tarsy_llm_tokens_total` `direction` extended with `cache_read` / `cache_creation`
+- [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) — 429/404/5xx identical retry; cache 400 degrade unchanged
 - [Session Usage Cost Estimation](../session-usage-cost.md) — operator-facing formula and surfaces

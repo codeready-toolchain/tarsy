@@ -479,6 +479,7 @@ func TestIteratingController_ForcedConclusionWithFailedToolCall(t *testing.T) {
 func TestIteratingController_LLMErrorRecovery(t *testing.T) {
 	// First call errors, second succeeds with a final answer
 	llm := &mockLLMClient{
+		capture: true,
 		responses: []mockLLMResponse{
 			{err: fmt.Errorf("temporary failure")},
 			{chunks: []agent.Chunk{
@@ -496,6 +497,24 @@ func TestIteratingController_LLMErrorRecovery(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Equal(t, "All systems operational.", result.FinalAnalysis)
+
+	require.Len(t, llm.capturedInputs, 2)
+	for _, msg := range llm.capturedInputs[1].Messages {
+		assert.NotContains(t, msg.Content, "temporary failure")
+		assert.NotContains(t, msg.Content, "Error from previous attempt")
+	}
+
+	events, listErr := execCtx.Services.Timeline.GetSessionTimeline(
+		context.Background(), execCtx.SessionID)
+	require.NoError(t, listErr)
+	var foundError bool
+	for _, evt := range events {
+		if evt.EventType == timelineevent.EventTypeError {
+			foundError = true
+			break
+		}
+	}
+	require.True(t, foundError, "transport error should emit EventTypeError")
 }
 
 func TestIteratingController_RecoversFromPartialStreamError(t *testing.T) {
@@ -544,11 +563,52 @@ func TestIteratingController_RecoversFromPartialStreamError(t *testing.T) {
 		}
 	}
 	require.True(t, foundRetryWithPartial, "follow-up LLM call should include partial output retry context")
+	for _, msg := range llm.capturedInputs[1].Messages {
+		assert.NotContains(t, msg.Content, "Google API server error")
+		assert.NotContains(t, msg.Content, "Error from previous attempt")
+	}
 
 	// Verify the second call used the regular iteration path (with tools), not forceConclusion (no tools).
 	require.NotNil(t, llm.capturedInputs[1].Tools, "second call should carry iteration tools")
 	require.Len(t, llm.capturedInputs[1].Tools, 1, "second call should be regular iteration, not forceConclusion")
 	require.Equal(t, "k8s.get_pods", llm.capturedInputs[1].Tools[0].Name)
+}
+
+func TestIteratingController_LoopErrorInjectsNudgeNotCause(t *testing.T) {
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{err: &PartialOutputError{
+				Cause:       fmt.Errorf("LLM output stuck in repetitive loop"),
+				IsLoop:      true,
+				PartialText: "Here is a valid investigation summary.",
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Direct answer after loop."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+	ctrl := NewIteratingController()
+
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Direct answer after loop.", result.FinalAnalysis)
+	require.Len(t, llm.capturedInputs, 2)
+
+	foundNudge := false
+	for _, msg := range llm.capturedInputs[1].Messages {
+		assert.NotContains(t, msg.Content, "Error from previous attempt")
+		assert.NotContains(t, msg.Content, "LLM output stuck in repetitive loop")
+		if strings.Contains(msg.Content, "repetitive output loop") {
+			foundNudge = true
+		}
+	}
+	require.True(t, foundNudge, "loop retry should inject the instructional nudge")
 }
 
 func TestIteratingController_TextAlongsideToolCalls(t *testing.T) {
@@ -1240,6 +1300,73 @@ func TestIteratingController_FallbackProviderError_RequiresOneRetry(t *testing.T
 	require.Equal(t, "test-model", llm.capturedInputs[0].Config.Model)
 	require.Equal(t, "test-model", llm.capturedInputs[1].Config.Model)
 	require.Equal(t, "fallback-model", llm.capturedInputs[2].Config.Model)
+
+	for _, msg := range llm.capturedInputs[1].Messages {
+		assert.NotContains(t, msg.Content, "Error from previous attempt")
+		assert.NotContains(t, msg.Content, "provider down")
+	}
+
+	events, listErr := execCtx.Services.Timeline.GetSessionTimeline(
+		context.Background(), execCtx.SessionID)
+	require.NoError(t, listErr)
+	var errorCount, fallbackCount int
+	for _, evt := range events {
+		switch evt.EventType {
+		case timelineevent.EventTypeError:
+			errorCount++
+		case timelineevent.EventTypeProviderFallback:
+			fallbackCount++
+		}
+	}
+	assert.Equal(t, 1, errorCount, "first miss should emit EventTypeError; fallback switch should not")
+	assert.Equal(t, 1, fallbackCount)
+}
+
+func TestIteratingController_SuccessResetsProviderErrorStreak(t *testing.T) {
+	// Isolated provider_errors with a success in between must not trigger fallback.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "provider down", Code: "provider_error", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: "call-1", Name: "test.tool", Arguments: "{}"},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "provider blip", Code: "provider_error", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Finished on primary."},
+			}},
+		},
+	}
+
+	tools := []agent.ToolDefinition{{Name: "test.tool", Description: "A test tool"}}
+	executor := &mockToolExecutor{
+		tools: tools,
+		results: map[string]*agent.ToolResult{
+			"test.tool": {Content: "tool result"},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("fallback", config.LLMBackendLangChain, "fallback-model"),
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(context.Background(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Finished on primary.", result.FinalAnalysis)
+	require.Equal(t, 4, llm.callCount)
+
+	for i, in := range llm.capturedInputs {
+		assert.Equal(t, "test-model", in.Config.Model, "call %d should stay on primary", i)
+	}
+	require.Equal(t, "primary", execCtx.Config.LLMProviderName)
 }
 
 func TestIteratingController_FallbackInForcedConclusion(t *testing.T) {
@@ -1351,6 +1478,7 @@ func TestIteratingController_ForcedConclusionEmptyRetry(t *testing.T) {
 func TestIteratingController_NoFallbackWithEmptyList(t *testing.T) {
 	// When no fallback providers are configured, errors go through normal retry path
 	llm := &mockLLMClient{
+		capture: true,
 		responses: []mockLLMResponse{
 			{chunks: []agent.Chunk{
 				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
@@ -1371,6 +1499,12 @@ func TestIteratingController_NoFallbackWithEmptyList(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Equal(t, 2, llm.callCount, "should have retried with same provider")
+
+	require.Len(t, llm.capturedInputs, 2)
+	for _, msg := range llm.capturedInputs[1].Messages {
+		assert.NotContains(t, msg.Content, "retries exhausted")
+		assert.NotContains(t, msg.Content, "Error from previous attempt")
+	}
 }
 
 func TestIteratingController_FallbackSetsTimelineEvent(t *testing.T) {

@@ -118,6 +118,14 @@ func TestE2E_FallbackOnMaxRetries(t *testing.T) {
 	// ── LLM call count: 1 error + 1 tool call + 1 final + 1 exec summary = 4 ──
 	assert.Equal(t, 4, llm.CallCount())
 
+	require.GreaterOrEqual(t, len(inputs), 3)
+	for _, in := range inputs[1:3] {
+		for _, msg := range in.Messages {
+			assert.NotContains(t, msg.Content, "rate limit exceeded after 3 retries",
+				"investigator retry must not include the provider error in the prompt")
+		}
+	}
+
 	// ── WS: provider_fallback event delivered (use WaitForEvent to avoid race) ──
 	ws.WaitForEvent(t, func(e WSEvent) bool {
 		if e.Type != "timeline_event.created" {
@@ -227,6 +235,7 @@ func TestE2E_FallbackCascade(t *testing.T) {
 // Verifies:
 //   - Session/stage/execution all marked as failed
 //   - Two provider_fallback events recorded
+//   - Fallback does not walk back to the already-attempted primary
 //   - Error timeline events present
 // ────────────────────────────────────────────────────────────
 
@@ -245,7 +254,7 @@ func TestE2E_FallbackAllExhausted(t *testing.T) {
 			&agent.ErrorChunk{Message: "service unavailable", Code: "max_retries", Retryable: true},
 		},
 	})
-	// iter 2: fb-2 fails → all exhausted, treated as recoverable partial
+	// iter 2: fb-2 fails → remaining list entry is the already-attempted primary, skipped
 	llm.AddRouted("LimitedAgent", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ErrorChunk{Message: "service unavailable", Code: "max_retries", Retryable: true},
@@ -282,6 +291,10 @@ func TestE2E_FallbackAllExhausted(t *testing.T) {
 	timeline := app.QueryTimeline(t, sessionID)
 	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
 	assert.Len(t, fallbackEvents, 2, "should have two fallback events before exhaustion")
+	for _, evt := range fallbackEvents {
+		assert.NotEqual(t, "primary-provider", evt.Metadata["fallback_provider"],
+			"fallback must not walk back to an already-attempted provider")
+	}
 
 	// ── Error events present ──
 	errorEvents := filterTimelineByType(timeline, timelineevent.EventTypeError)

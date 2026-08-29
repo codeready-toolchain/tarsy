@@ -159,7 +159,11 @@ func callSummarizationLLM(
 		}
 	}
 
-	fbState := &FallbackState{SingleShot: true, CurrentProviderIndex: -1}
+	fbState := &FallbackState{
+		SingleShot:           true,
+		CurrentProviderIndex: -1,
+		AttemptedProviders:   []string{resolved.ProviderName},
+	}
 	if appliedSticky {
 		if idx := summarizationFallbackIndex(summarizationFallbackList(execCtx), resolved.ProviderName); idx >= 0 {
 			fbState.CurrentProviderIndex = idx
@@ -176,10 +180,6 @@ func callSummarizationLLM(
 	if resolveErr != nil {
 		lastErr = resolveErr
 	}
-	// Skip-same-name uses the provider this call started on (primary or sticky)
-	// until a fallback succeeds. Updating it after each failed retry would
-	// re-try the downed primary later in the list (Sandbox: skip google-default).
-	inUseName := resolved.ProviderName
 
 	for {
 		if lastErr == nil {
@@ -223,7 +223,7 @@ func callSummarizationLLM(
 
 		fromProvider := resolved.ProviderName
 		fromBackend := resolved.Backend
-		next, ok := nextSummarizationFallback(execCtx, fbState, inUseName, lastErr)
+		next, ok := nextSummarizationFallback(execCtx, fbState, lastErr)
 		if !ok {
 			return "", nil, fmt.Errorf("summarization LLM call failed: %w", lastErr)
 		}
@@ -311,7 +311,6 @@ func summarizationAnswererMetadata(execCtx *agent.ExecutionContext, server *conf
 func nextSummarizationFallback(
 	execCtx *agent.ExecutionContext,
 	state *FallbackState,
-	currentName string,
 	err error,
 ) (agent.ResolvedSummarizationLLM, bool) {
 	list := summarizationFallbackList(execCtx)
@@ -321,8 +320,8 @@ func nextSummarizationFallback(
 
 	nextIdx := state.CurrentProviderIndex + 1
 	for nextIdx < len(list) {
-		if list[nextIdx].ProviderName == currentName {
-			slog.Info("Skipping summarization fallback entry identical to current provider",
+		if slices.Contains(state.AttemptedProviders, list[nextIdx].ProviderName) {
+			slog.Info("Skipping summarization fallback entry already attempted this call",
 				"session_id", execCtx.SessionID,
 				"execution_id", execCtx.ExecutionID,
 				"skipped_provider", list[nextIdx].ProviderName,
@@ -338,6 +337,7 @@ func nextSummarizationFallback(
 	}
 
 	state.CurrentProviderIndex = nextIdx
+	state.AttemptedProviders = append(state.AttemptedProviders, list[nextIdx].ProviderName)
 	state.resetCounters()
 	return agent.SummarizationLLMFromFallback(list[nextIdx]), true
 }
