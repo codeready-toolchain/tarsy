@@ -26,15 +26,15 @@ Previously, the fallback mechanism would switch these agents to incompatible pro
 tryFallback() called
   → shouldFallback() returns true (error threshold met)
   → Loop over ResolvedFallbackProviders from current index:
-      → Skip if same provider name as current          # original
+      → Skip if name is already in AttemptedProviders (primary starts on that list)
       → Skip if entry would drop required native tools (log at Info)
   → If no compatible entries remain → return false (no fallback available)
   → Switch to first compatible entry
 ```
 
-Both skip conditions (same-provider and incompatible-backend) are checked in the same loop. Skipped-incompatible entries are NOT added to `FallbackState.AttemptedProviders` since they were never actually attempted.
+Both skip conditions (already-attempted name and incompatible-backend) are checked in the same loop. Skipped-incompatible entries are NOT added to `FallbackState.AttemptedProviders` since they were never actually attempted.
 
-**Amendment (ADR-0027):** the first skip is no longer “same name as the *current* provider.” It is “name already on the attempted list for this execution” (the primary starts on that list). That stops ping-pong back to a provider this execution already left. The native-tool skip and the rule that skipped-incompatible names stay off `AttemptedProviders` are unchanged.
+**Amendment (ADR-0027):** this first skip used to be “same name as the *current* provider.” It now skips any name already on the attempted list for this execution. That stops ping-pong back to a provider this execution already left. The native-tool skip and the rule that skipped-incompatible names stay off `AttemptedProviders` are unchanged.
 
 The skip is unconditional (hard guard). An agent without its native tools is broken, not degraded. No config option to override.
 
