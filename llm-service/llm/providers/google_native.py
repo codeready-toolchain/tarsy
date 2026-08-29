@@ -13,6 +13,7 @@ from google.genai import types as genai_types
 
 from llm_proto import llm_service_pb2 as pb
 from llm.providers.base import LLMProvider
+from llm.providers.http_status import is_retryable_http
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 
 logger = logging.getLogger(__name__)
@@ -567,6 +568,13 @@ class GoogleNativeProvider(LLMProvider):
         except genai_errors.ServerError as exc:
             # 5xx errors from Google API are transient and should be retried
             raise _RetryableError(f"[{request_id}] Google API server error: {exc}") from exc
+
+        except genai_errors.ClientError as exc:
+            if is_retryable_http(exc):
+                raise _RetryableError(
+                    f"[{request_id}] Google API client error: {exc}",
+                ) from exc
+            raise
 
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc

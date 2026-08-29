@@ -3,6 +3,7 @@ import json
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from llm_proto import llm_service_pb2 as pb
@@ -866,6 +867,109 @@ class TestGoogleNativeProvider:
         assert responses[1].HasField("error")
         assert responses[1].error.code == "partial_stream_error"
         assert responses[1].is_final
+
+    @staticmethod
+    def _client_error(code, message="not found"):
+        status = {
+            400: "INVALID_ARGUMENT",
+            401: "UNAUTHENTICATED",
+            403: "PERMISSION_DENIED",
+            404: "NOT_FOUND",
+            429: "RESOURCE_EXHAUSTED",
+        }.get(code, "UNKNOWN")
+        return genai_errors.ClientError(
+            code, {"message": message, "status": status, "code": code},
+        )
+
+    @staticmethod
+    def _text_chunk(text):
+        mock_part = MagicMock()
+        mock_part.thought = False
+        mock_part.text = text
+        mock_part.function_call = None
+        mock_part.executable_code = None
+        mock_part.code_execution_result = None
+        mock_candidate = MagicMock()
+        mock_candidate.content = MagicMock()
+        mock_candidate.content.parts = [mock_part]
+        mock_candidate.grounding_metadata = None
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
+        mock_chunk.usage_metadata = None
+        return mock_chunk
+
+    @staticmethod
+    def _generate_request():
+        return pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Hi")],
+        )
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    @pytest.mark.parametrize("code", [404, 429])
+    async def test_generate_retries_on_client_error_then_succeeds(
+        self, mock_sleep, mock_client_class, code, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = {"n": 0}
+        good = self._text_chunk("Success after retry")
+
+        async def good_stream():
+            yield good
+
+        async def side_effect(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise self._client_error(code)
+            return good_stream()
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=side_effect)
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 2
+        text_responses = [r for r in responses if r.HasField("text")]
+        assert len(text_responses) == 1
+        assert text_responses[0].text.content == "Success after retry"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    @pytest.mark.parametrize("code", [400, 401, 403])
+    async def test_generate_client_error_4xx_does_not_retry(
+        self, mock_client_class, code, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = {"n": 0}
+
+        async def side_effect(*args, **kwargs):
+            call_count["n"] += 1
+            raise self._client_error(code, message="client failure")
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=side_effect)
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert len(responses) == 1
+        assert responses[0].HasField("error")
+        assert responses[0].error.code == "provider_error"
+        assert responses[0].is_final
 
 
 class TestStreamPartTypes:
