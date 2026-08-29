@@ -156,26 +156,26 @@ func (c *IteratingController) Run(
 			}
 
 			var poe *PartialOutputError
-			isRecoverablePartial := errors.As(err, &poe) && !poe.IsLoop
+			isRecoverablePartial := errors.As(err, &poe) && !poe.IsLoop && poe.PartialText != ""
 			if isRecoverablePartial {
-				// Google can fail mid-stream after emitting partial output.
-				// Treat as recoverable: continue with retry context without
-				// marking this iteration as a hard failure.
+				// Mid-stream failure after partial output: continue from the
+				// truncated text without marking this iteration as a hard failure.
 			} else {
 				createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, &eventSeq)
 				state.RecordFailure(err.Error(), isTimeoutError(err))
 			}
 
-			// Build retry message based on error type
-			errMsg := buildRetryMessage(err)
-			messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: errMsg})
-			storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
+			if errMsg := buildRetryMessage(err); errMsg != "" {
+				messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: errMsg})
+				storeObservationMessage(ctx, execCtx, errMsg, &msgSeq)
+			}
 			continue
 		}
 		resp := streamed.LLMResponse
 
 		accumulateUsage(&totalUsage, resp)
 		state.RecordSuccess()
+		fbState.resetCounters()
 
 		// Record thinking content (only if not already created by streaming)
 		if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
@@ -418,12 +418,12 @@ func (c *IteratingController) forceConclusion(
 }
 
 // buildRetryMessage crafts an error context message for the LLM based on the
-// error type. For loop errors it instructs directness; for partial stream
-// errors it includes the partial output for continuity.
+// error type. Returns empty when the model should retry with unchanged messages
+// (no-partial provider errors stay off the prompt; operators still see EventTypeError).
 func buildRetryMessage(err error) string {
 	var poe *PartialOutputError
 	if !errors.As(err, &poe) {
-		return fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
+		return ""
 	}
 
 	if poe.IsLoop {
@@ -438,11 +438,11 @@ func buildRetryMessage(err error) string {
 			partial = partial[:maxPartialLen] + "..."
 		}
 		return fmt.Sprintf(
-			"Error from previous attempt: %s\n\nYour partial response before the error:\n---\n%s\n---\n\n"+
+			"Your partial response before the error:\n---\n%s\n---\n\n"+
 				"Please continue from where you left off or provide a complete response.",
-			poe.Cause.Error(), partial,
+			partial,
 		)
 	}
 
-	return fmt.Sprintf("Error from previous attempt: %s. Please try again.", err.Error())
+	return ""
 }

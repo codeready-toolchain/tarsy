@@ -7,6 +7,9 @@ defaults:
       backend: "google-native"
     - provider: "fallback-2"
       backend: "google-native"
+    # Re-list the primary so a later hop cannot walk back to a name already used.
+    - provider: "primary-provider"
+      backend: "google-native"
 
 mcp_servers:
   test-mcp:

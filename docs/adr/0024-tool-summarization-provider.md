@@ -1,7 +1,8 @@
 # ADR-0024: Tool Summarization LLM Provider
 
-**Status:** Implemented
-**Date:** 2026-08-21
+**Status:** Implemented  
+**Date:** 2026-08-21  
+**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — summarization-local skip uses the attempted set, not current-name-only
 
 ## Overview
 
@@ -59,6 +60,8 @@ MCP / built-in tool
   → model_name, metrics, timeline metadata use the model that actually answered
 ```
 
+**Amendment (ADR-0027):** the skip is no longer “name equals the provider currently in use.” Each summarization call seeds an attempted list with the start name and appends each hop; later candidates whose names are already on that list are skipped. Native-tool skip still does not apply. The investigator’s attempted list is still not shared.
+
 ```mermaid
 flowchart TD
     tool[Tool result] --> decide{MCP over threshold<br/>or required summarization?}
@@ -77,6 +80,8 @@ flowchart TD
     next -->|no, MCP| failOpen[Use raw result]
     next -->|no, session search| failClosed[Error string to agent]
 ```
+
+The mermaid above is the original skip (“differs from current”). [ADR-0027](0027-llm-transient-outage.md) changed that diamond to “not already attempted this summarization call” (start name is seeded; hops are appended). Sticky-per-primary and fail-open / fail-closed are unchanged.
 
 On a later tool result with the same primary, start at the sticky provider (do not retry the failed primary). If the sticky provider then fails, continue **forward** in the list from there — do not walk back to the primary.
 
@@ -156,6 +161,8 @@ Instead, a summarization-local walk of the agent's resolved fallback list:
 1. Own state, not the investigator's fallback index. Start at list index 0 on the first failure of a primary (the investigator may already have advanced its own index).
 2. Reuse the same error classification as investigation fallback, with SingleShot thresholds (trip on the first error), like scoring. Empty summary counts as an error. If the call context is already cancelled, do not walk; return the error (MCP fail-open / session-search fail-closed as today).
 3. Skip entries whose provider name equals the summarization provider **currently in use** (same skip-same-name rule as investigation fallback).
+
+   **Amendment (ADR-0027):** skip names already attempted **this summarization call** (seed the start name, append each hop). Investigation fallback made the same change. Re-listing the primary still skips; earlier hops cannot be selected again. Still do not share the investigator’s attempted list.
 4. Do **not** skip Claude entries for `RequiresNativeTools` ([ADR-0017](0017-native-tool-fallback-safety.md)). Summarization never needs Gemini native tools.
 5. Use each entry's backend and a **fresh clone** of the entry config with native tools cleared.
 6. Stick per **resolved primary name** for the rest of this execution: if `google-default` failed over to Sonnet, later calls whose primary is still `google-default` start on Sonnet. A later call whose primary is `vertexai-claude-opus` (per-server overlay) is independent and tries Opus first. If the sticky provider then fails, continue forward from the next list index; do not retry the original primary.
@@ -167,6 +174,8 @@ Instead, a summarization-local walk of the agent's resolved fallback list:
 This applies even when summarization is still on the agent model (unset config): an Opus summary that fails walks the same list before dumping raw logs.
 
 Example with `defaults.summarization.llm_provider: google-default` and a fallback list of Sonnet, Opus, `google-default`, Gemini Pro, Gemini Flash: Flash fails then **Sonnet → Opus → (skip google-default) → Gemini Pro → Gemini Flash**.
+
+Originally `google-default` was skipped because it matched the name currently in use. After ADR-0027 it is skipped because the call seeded it on the attempted list (and would also skip any earlier hop if the list walked back).
 
 ### Google-native content cache
 
@@ -270,6 +279,10 @@ No schema migration.
 - No sentinel to pin one MCP server back to “whoever is investigating.”
 - A partial-then-failed MCP summary may leave an extra failed `mcp_tool_summary` row.
 
+## Amendments ([ADR-0027](0027-llm-transient-outage.md), 2026-08-29)
+
+Q4 originally reused investigation’s skip-current-name rule for the summarization-local walk. ADR-0027 changed that sibling skip to **already-attempted this call** (seed start name, append hops). Unchanged: own state vs investigator; SingleShot thresholds; no native-tool skip; sticky per primary; no `provider_fallback` event; fail-open / fail-closed after the list is exhausted.
+
 ## References
 
 - [ADR-0003: LLM Provider Fallback](0003-llm-provider-fallback.md)
@@ -277,5 +290,6 @@ No schema migration.
 - [ADR-0017: Native Tool Fallback Safety](0017-native-tool-fallback-safety.md)
 - [ADR-0019: Read-Only Configuration Viewer](0019-config-viewer.md)
 - [ADR-0020: Session Usage Cost](0020-session-usage-cost.md)
+- [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) — summarization-local skip is attempted-set, not current-name-only
 - [Architecture overview](../architecture-overview.md)
 - [Config README](../../deploy/config/README.md)

@@ -435,6 +435,37 @@ func TestTryFallback_SkipsSameProviderEntries(t *testing.T) {
 		"index should point to the entry that was actually used")
 }
 
+func TestTryFallback_SkipsAlreadyAttemptedNames(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "hello"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	execCtx.Config.LLMProviderName = "primary"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("fallback-1", config.LLMBackendNativeGemini, "fb-1"),
+		makeFallbackEntry("primary", config.LLMBackendLangChain, "primary-again"),
+		makeFallbackEntry("fallback-2", config.LLMBackendLangChain, "fb-2"),
+	}
+
+	state := NewFallbackState(execCtx)
+	eventSeq := 0
+
+	result := tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	require.True(t, result)
+	assert.Equal(t, "fallback-1", execCtx.Config.LLMProviderName)
+	assert.Equal(t, []string{"primary", "fallback-1"}, state.AttemptedProviders)
+
+	result = tryFallback(context.Background(), execCtx, state,
+		makePartialError(LLMErrorMaxRetries), &eventSeq)
+	require.True(t, result)
+	assert.Equal(t, "fallback-2", execCtx.Config.LLMProviderName,
+		"should skip primary already attempted this execution, not ping-pong back")
+	assert.Equal(t, []string{"primary", "fallback-1", "fallback-2"}, state.AttemptedProviders)
+}
+
 func TestTryFallback_AllFallbacksSameAsCurrentProvider(t *testing.T) {
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{

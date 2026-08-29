@@ -1,7 +1,8 @@
 # ADR-0003: LLM Provider Fallback
 
 **Status:** Implemented  
-**Date:** 2026-03-03
+**Date:** 2026-03-03  
+**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29)
 
 ## Overview
 
@@ -59,6 +60,8 @@ Iteration N: LLM call fails (after Python retries exhausted)
               │
               └─ NO trigger → Retry iteration with same provider
 ```
+
+This is the original Go-side flow. Later tightening of Python retries, consecutive counters, candidate skip, and same-provider retry is in the Amendments section below.
 
 **Fallback scope:** Fallback sticks for the rest of the execution. Each new execution (stage, sub-agent) starts fresh with the primary provider via config resolution.
 
@@ -141,7 +144,9 @@ Each fallback entry specifies both a provider and a backend. When fallback trigg
 
 ### Same-Provider Skip
 
-When selecting the next fallback entry, the logic skips entries whose provider name matches the currently active provider (regardless of backend). This prevents wasting iterations by "falling back" to the same model that is already failing.
+When selecting the next fallback entry, the original logic skipped entries whose provider name matches the currently active provider (regardless of backend). This prevented wasting iterations by "falling back" to the same model that is already failing.
+
+**Amendment (ADR-0027):** skip is now any name already on the **attempted** list for this execution (the primary starts on that list), not only the current name. Walking back to a provider this execution already left is no longer allowed. Native-tool incompatible skip is unchanged — see [ADR-0017](0017-native-tool-fallback-safety.md).
 
 ### Fallback Trigger Conditions
 
@@ -186,3 +191,13 @@ Startup fails if any check fails — a fallback list with broken entries gives a
 | Q6 | Fallback scope across controllers | All controllers get fallback (iterating, forced conclusion, single-shot) | Whole session should survive an outage, not just the iteration loop. Scoring/synthesis would otherwise hit the same broken primary. |
 | Q7 | Failure threshold | Error-code-aware: immediate for `max_retries`/`credentials`, 2 consecutive for `provider_error`/`invalid_request`/`partial_stream_error` | Respects Python's retry history per error type. `max_retries` already exhausted 3 attempts; `credentials` is guaranteed failure; others get one Go retry since Python didn't retry. |
 | Q8 | Adaptive timeout defaults | 120s initial, 60s stall, 5m max | Conservative to avoid false-positives with thinking models on heavy context. 120s initial still saves time vs a single flat long timeout on dead providers. |
+
+## Amendments ([ADR-0027](0027-llm-transient-outage.md), 2026-08-29)
+
+These original decisions still stand. ADR-0027 changed *how* they behave under short provider blips:
+
+- **Python retry coverage (principle 1 / Q7).** The 3-attempt Python loop originally treated as retryable only timeout, empty response, and google-native 5xx. Intermittent Vertex `404` arrived as `provider_error` with no identical HTTP retry. ADR-0027 retries **429 / 404 / 5xx** (no chunks yet) in Python; exhaustion yields `max_retries` so Go still falls back immediately per Q7. Cache `400` degrade is unchanged ([ADR-0026](0026-prompt-caching.md)).
+- **Consecutive counters (Q7).** “2 consecutive” originally counted toward fallback without resetting on a successful Generate (only after a provider *switch*). ADR-0027 resets those counters after a successful iterating LLM call.
+- **Candidate skip (Same-Provider Skip).** Originally current-name only, so a later list entry with the primary’s name could be selected again. ADR-0027 skips any already-attempted name.
+- **Same-provider Go retry.** Originally appended the full provider-error text into the next model prompt. ADR-0027 keeps `error` / `provider_fallback` timeline events and stops injecting no-partial error JSON into the conversation.
+- **Q1 (sticky for the rest of the execution) is not changed.** Probe/unstick remains out of scope.

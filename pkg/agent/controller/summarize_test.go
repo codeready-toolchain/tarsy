@@ -922,3 +922,34 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 		assert.False(t, mockLLM.capturedInputs[1].ClearCache)
 	})
 }
+
+func TestNextSummarizationFallback_SkipsAlreadyAttemptedNames(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "unused"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, agent.NewStubToolExecutor(nil))
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("fb1", config.LLMBackendLangChain, "fb1-model"),
+		makeFallbackEntry("start", config.LLMBackendNativeGemini, "start-model"),
+		makeFallbackEntry("fb2", config.LLMBackendLangChain, "fb2-model"),
+	}
+
+	state := &FallbackState{
+		SingleShot:           true,
+		CurrentProviderIndex: -1,
+		AttemptedProviders:   []string{"start"},
+	}
+
+	next, ok := nextSummarizationFallback(execCtx, state, makePartialError(LLMErrorMaxRetries))
+	require.True(t, ok)
+	assert.Equal(t, "fb1", next.ProviderName)
+	assert.Equal(t, []string{"start", "fb1"}, state.AttemptedProviders)
+
+	next, ok = nextSummarizationFallback(execCtx, state, makePartialError(LLMErrorMaxRetries))
+	require.True(t, ok)
+	assert.Equal(t, "fb2", next.ProviderName,
+		"should skip start already attempted this call, not walk back")
+	assert.Equal(t, []string{"start", "fb1", "fb2"}, state.AttemptedProviders)
+}

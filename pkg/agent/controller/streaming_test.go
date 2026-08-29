@@ -595,8 +595,7 @@ func TestCollectStreamWithCallback_ErrorPreservesPartialOutput(t *testing.T) {
 func TestBuildRetryMessage(t *testing.T) {
 	t.Run("plain error", func(t *testing.T) {
 		msg := buildRetryMessage(fmt.Errorf("connection reset"))
-		assert.Contains(t, msg, "Error from previous attempt")
-		assert.Contains(t, msg, "connection reset")
+		assert.Empty(t, msg, "no-partial errors must not be injected into the prompt")
 	})
 
 	t.Run("loop error", func(t *testing.T) {
@@ -613,7 +612,8 @@ func TestBuildRetryMessage(t *testing.T) {
 			Cause:       fmt.Errorf("Google API 500"),
 			PartialText: "Here is my analysis of the issue...",
 		})
-		assert.Contains(t, msg, "Google API 500")
+		assert.NotContains(t, msg, "Google API 500")
+		assert.NotContains(t, msg, "Error from previous attempt")
 		assert.Contains(t, msg, "Here is my analysis")
 		assert.Contains(t, msg, "continue from where you left off")
 	})
@@ -626,6 +626,14 @@ func TestBuildRetryMessage(t *testing.T) {
 		})
 		assert.Less(t, len(msg), 3000, "message should be truncated")
 		assert.Contains(t, msg, "...")
+	})
+
+	t.Run("no-partial provider error", func(t *testing.T) {
+		msg := buildRetryMessage(&PartialOutputError{
+			Cause: fmt.Errorf("Publisher Model not found"),
+			Code:  LLMErrorProviderError,
+		})
+		assert.Empty(t, msg)
 	})
 }
 
