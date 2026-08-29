@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import deque
 from typing import Optional
 
 _HTTP_MIN = 100
@@ -20,8 +21,11 @@ def _http_status(value: object) -> Optional[int]:
 def extract_http_status(err: BaseException) -> Optional[int]:
     """First HTTP status found on err or its cause/context chain."""
     seen: set[int] = set()
-    current: Optional[BaseException] = err
-    while current is not None and id(current) not in seen:
+    pending: deque[BaseException] = deque([err])
+    while pending:
+        current = pending.popleft()
+        if id(current) in seen:
+            continue
         seen.add(id(current))
         for attr in ("status_code", "code", "status"):
             status = _http_status(getattr(current, attr, None))
@@ -37,7 +41,10 @@ def extract_http_status(err: BaseException) -> Optional[int]:
             status = _http_status(int(match.group(1)))
             if status is not None:
                 return status
-        current = current.__cause__ or current.__context__
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        if current.__context__ is not None:
+            pending.append(current.__context__)
     return None
 
 

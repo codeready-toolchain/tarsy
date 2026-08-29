@@ -61,6 +61,14 @@ class TestExtractHttpStatus:
         wrapped.__cause__ = inner
         assert http_status.extract_http_status(wrapped) == 404
 
+    @pytest.mark.parametrize("status", [404, 429, 503])
+    def test_walks_context_when_cause_has_no_status(self, status):
+        wrapped = RuntimeError("outer")
+        wrapped.__cause__ = RuntimeError("unclassified")
+        wrapped.__context__ = _exc(status_code=status)
+        assert http_status.extract_http_status(wrapped) == status
+        assert http_status.is_retryable_http(wrapped)
+
 
 class TestIsRetryableHttp:
     @pytest.mark.parametrize(
