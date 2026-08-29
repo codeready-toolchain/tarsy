@@ -601,7 +601,7 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 All LLM call sites (iterating loop, forced conclusion, single-shot) support automatic fallback to alternative providers when the primary fails. A shared `callLLMWithFallback` helper wraps the streaming LLM call with error-code-aware trigger logic:
 
 - **Immediate triggers**: `max_retries` (Python exhausted 3 retries, including 429/404/5xx with no chunks yet), `credentials` (guaranteed failure)
-- **Consecutive failure triggers**: `provider_error`, `invalid_request`, `transport`, `initial_timeout`, `partial_stream_error` (after 2 consecutive failures). Consecutive counters reset after a successful iterating LLM call.
+- **Consecutive failure triggers**: provider-class (`provider_error`, `invalid_request`, `transport`, `initial_timeout`) and partial-class (`partial_stream_error`, `stall_timeout`). Iterating and forced conclusion require 2 consecutive failures; SingleShot paths (single-shot controllers, scoring, summarization) trip after 1. Consecutive counters reset after a successful iterating LLM call.
 
 `FallbackState` tracks the original provider, current fallback index, attempted providers, and consecutive error counters. The primary starts on the attempted list. When fallback triggers, the controller selects the next list entry whose name is not already on that list (native-tool incompatible entries are skipped and never added), records a `provider_fallback` timeline event, updates execution metadata (`original_llm_provider`, `original_llm_backend`), and continues with the new provider. Fallback sticks for the rest of the execution; new executions reset to the primary.
 
