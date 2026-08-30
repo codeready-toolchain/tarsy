@@ -167,6 +167,7 @@ class TestGoogleNativeProvider:
         assert contents[0].parts[0].text == "Let me call a tool"
         assert contents[0].parts[1].function_call.name == "server__tool"
         assert contents[0].parts[1].function_call.args["arg"] == "value"
+        assert contents[0].parts[1].thought_signature == _SKIP_THOUGHT_SIGNATURE
 
     def test_convert_messages_tool_result(self, provider):
         """Test conversion of tool result messages."""
@@ -601,6 +602,99 @@ class TestGoogleNativeProvider:
                     for part in content_obj.parts:
                         assert getattr(part, "text", None) != "cached", \
                             "old cached content should have been cleared before generate"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_generate_clear_cache_stamps_dummy_thought_signature(
+        self, mock_client_class, provider
+    ):
+        """clear_cache + prior tool calls reconstruct functionCall parts with the skip sentinel."""
+        execution_id = "exec-cross-provider"
+        provider._cache_model_turn(
+            execution_id,
+            [genai_types.Content(
+                role="model",
+                parts=[genai_types.Part(text="stale-anthropic-turn")],
+            )],
+        )
+
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_candidate = MagicMock()
+        mock_candidate.content = genai_types.Content(
+            role="model", parts=[genai_types.Part(text="ok")]
+        )
+        mock_candidate.grounding_metadata = None
+        mock_chunk = MagicMock()
+        mock_chunk.candidates = [mock_candidate]
+        mock_chunk.usage_metadata = None
+
+        captured = {}
+
+        async def fake_stream(**kwargs):
+            captured["contents"] = kwargs["contents"]
+
+            async def gen():
+                yield mock_chunk
+
+            return gen()
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=fake_stream)
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id=execution_id,
+            clear_cache=True,
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-3.7-flash",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[
+                pb.ConversationMessage(role="user", content="Investigate."),
+                pb.ConversationMessage(
+                    role="assistant",
+                    content="",
+                    tool_calls=[
+                        pb.ToolCall(
+                            id="tc1",
+                            name="kubernetes-server.pods_log",
+                            arguments='{"name":"app"}',
+                        ),
+                    ],
+                ),
+                pb.ConversationMessage(
+                    role="tool",
+                    tool_name="kubernetes-server.pods_log",
+                    tool_call_id="tc1",
+                    content='{"text":"log lines"}',
+                ),
+            ],
+        )
+
+        async for _ in provider.generate(request):
+            pass
+
+        contents = captured["contents"]
+        fc_parts = [
+            p
+            for c in contents
+            for p in (c.parts or [])
+            if getattr(p, "function_call", None)
+        ]
+        assert len(fc_parts) == 1
+        assert fc_parts[0].function_call.name == "kubernetes-server__pods_log"
+        assert fc_parts[0].thought_signature == _SKIP_THOUGHT_SIGNATURE
+        assert isinstance(fc_parts[0].thought_signature, str)
+        texts = [
+            p.text
+            for c in contents
+            for p in (c.parts or [])
+            if getattr(p, "text", None)
+        ]
+        assert "stale-anthropic-turn" not in texts
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})

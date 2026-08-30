@@ -137,6 +137,89 @@ func TestE2E_FallbackOnMaxRetries(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// TestE2E_FallbackAfterToolCall — Primary completes a tool turn, then fails.
+// Fallback continues with that tool history (the Gemini 3 thought-signature case).
+//
+// Verifies:
+//   - Session completes after mid-investigation fallback
+//   - Post-fallback Generate has ClearCache and replays the tool call + result
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_FallbackAfterToolCall(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	llm.AddRouted("Investigator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ThinkingChunk{Content: "Checking system status."},
+			&agent.ToolCallChunk{CallID: "call-1", Name: "test-mcp__check_status", Arguments: `{"component":"api"}`},
+			&agent.UsageChunk{InputTokens: 40, OutputTokens: 15, TotalTokens: 55},
+		},
+	})
+	llm.AddRouted("Investigator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ErrorChunk{
+				Message:   "rate limit exceeded after 3 retries",
+				Code:      "max_retries",
+				Retryable: true,
+			},
+		},
+	})
+	llm.AddRouted("Investigator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "API server is healthy. Investigation complete after fallback."},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 30, TotalTokens: 110},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{Text: "Investigation completed after fallback with prior tool results."})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "fallback")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"check_status": StaticToolHandler(`{"status":"healthy","uptime":"72h"}`),
+			},
+		}),
+	)
+
+	_, sessionID := submitAndSubscribe(t, app, "test-fallback", "API server alert triggered")
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+
+	execs := app.QueryExecutions(t, sessionID)
+	investigator := findExecution(execs, "Investigator")
+	require.NotNil(t, investigator)
+	require.NotNil(t, investigator.OriginalLlmProvider)
+	assert.Equal(t, "primary-provider", *investigator.OriginalLlmProvider)
+	require.NotNil(t, investigator.LlmProvider)
+	assert.Equal(t, "fallback-1", *investigator.LlmProvider)
+
+	inputs := llm.CapturedInputs()
+	require.GreaterOrEqual(t, len(inputs), 3)
+	assert.False(t, inputs[0].ClearCache)
+	assert.False(t, inputs[1].ClearCache)
+	assert.True(t, inputs[2].ClearCache, "first Generate after fallback must clear cache")
+
+	var hasToolCall, hasToolResult bool
+	for _, msg := range inputs[2].Messages {
+		if msg.Role == agent.RoleAssistant {
+			for _, tc := range msg.ToolCalls {
+				if tc.ID == "call-1" && tc.Name == "test-mcp__check_status" {
+					hasToolCall = true
+				}
+			}
+		}
+		if msg.Role == agent.RoleTool && msg.ToolCallID == "call-1" {
+			hasToolResult = true
+		}
+	}
+	assert.True(t, hasToolCall, "fallback Generate must include the prior assistant tool call")
+	assert.True(t, hasToolResult, "fallback Generate must include the prior tool result")
+}
+
+// ────────────────────────────────────────────────────────────
 // TestE2E_FallbackCascade — Primary provider and first fallback both fail
 // with credentials errors; second fallback succeeds.
 //

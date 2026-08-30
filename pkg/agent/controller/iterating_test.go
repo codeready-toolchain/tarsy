@@ -1232,6 +1232,50 @@ func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
 	require.Equal(t, config.LLMBackendNativeGemini, execCtx.Config.LLMBackend)
 }
 
+func TestIteratingController_FallbackReplaysToolHistory(t *testing.T) {
+	// Primary completes a tool turn, then fails. The fallback Generate must
+	// replay those tool calls with ClearCache so the next provider can continue.
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.ToolCallChunk{CallID: "call-1", Name: "test.tool", Arguments: `{"component":"api"}`},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.ErrorChunk{Message: "retries exhausted", Code: "max_retries", Retryable: false},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Healthy after fallback."},
+			}},
+		},
+	}
+
+	executor := &mockToolExecutor{
+		tools: []agent.ToolDefinition{{Name: "test.tool", Description: "A test tool"}},
+		results: map[string]*agent.ToolResult{
+			"test.tool": {Content: `{"status":"ok"}`},
+		},
+	}
+
+	execCtx := newTestExecCtx(t, llm, executor)
+	execCtx.Config.LLMProviderName = "primary-provider"
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("fallback-provider", config.LLMBackendNativeGemini, "fallback-model"),
+	}
+
+	ctrl := NewIteratingController()
+	result, err := ctrl.Run(t.Context(), execCtx, "")
+	require.NoError(t, err)
+	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	require.Equal(t, "Healthy after fallback.", result.FinalAnalysis)
+	require.Len(t, llm.capturedInputs, 3)
+
+	fallback := llm.capturedInputs[2]
+	assert.Equal(t, "fallback-model", fallback.Config.Model)
+	assert.True(t, fallback.ClearCache)
+	requireAssistantToolHistory(t, fallback.Messages, "test.tool", "call-1")
+}
+
 func TestIteratingController_FallbackOnCredentials_Immediate(t *testing.T) {
 	// credentials errors trigger immediate fallback (no Go retry needed)
 	llm := &mockLLMClient{
@@ -1606,4 +1650,24 @@ func TestIteratingController_PromptCache(t *testing.T) {
 		require.Len(t, llm.capturedInputs, 1)
 		assert.False(t, llm.capturedInputs[0].PromptCache)
 	})
+}
+
+func requireAssistantToolHistory(t *testing.T, msgs []agent.ConversationMessage, toolName, callID string) {
+	t.Helper()
+	var assistant, tool *agent.ConversationMessage
+	for i := range msgs {
+		m := &msgs[i]
+		if m.Role == agent.RoleAssistant && len(m.ToolCalls) > 0 {
+			assistant = m
+		}
+		if m.Role == agent.RoleTool && m.ToolCallID == callID {
+			tool = m
+		}
+	}
+	require.NotNil(t, assistant, "fallback Generate must replay assistant tool calls")
+	require.Len(t, assistant.ToolCalls, 1)
+	assert.Equal(t, toolName, assistant.ToolCalls[0].Name)
+	assert.Equal(t, callID, assistant.ToolCalls[0].ID)
+	require.NotNil(t, tool, "fallback Generate must replay tool results")
+	assert.Equal(t, toolName, tool.ToolName)
 }
