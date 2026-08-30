@@ -7,7 +7,10 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from llm_proto import llm_service_pb2 as pb
-from llm.providers.google_native import GoogleNativeProvider
+from llm.providers.google_native import (
+    GoogleNativeProvider,
+    _SKIP_THOUGHT_SIGNATURE,
+)
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 
 pytestmark = pytest.mark.unit
@@ -451,12 +454,46 @@ class TestGoogleNativeProvider:
 
         _, contents = provider._convert_messages(messages, "no-cache-exec")
 
-        # Fallback reconstruction: text Part + function_call Part (no thought_signature)
+        # Fallback reconstruction: text Part + function_call Part with dummy signature
         assert len(contents) == 1
         assert contents[0].role == "model"
         assert len(contents[0].parts) == 2
         assert contents[0].parts[0].text == "response text"
         assert contents[0].parts[1].function_call.name == "server__tool"
+        assert contents[0].parts[1].thought_signature == _SKIP_THOUGHT_SIGNATURE
+        assert isinstance(contents[0].parts[1].thought_signature, str)
+
+    def test_convert_messages_fallback_dummy_signature_on_each_function_call(self, provider):
+        """Cross-provider fallback reconstructs every functionCall with the skip sentinel."""
+        messages = [
+            pb.ConversationMessage(role="user", content="Investigate."),
+            pb.ConversationMessage(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    pb.ToolCall(
+                        id="tc1",
+                        name="kubernetes-server.pods_log",
+                        arguments='{"name": "app"}',
+                    ),
+                    pb.ToolCall(
+                        id="tc2",
+                        name="kubernetes-server.pods_list",
+                        arguments='{"namespace": "ns"}',
+                    ),
+                ],
+            ),
+        ]
+
+        _, contents = provider._convert_messages(messages, "fallback-exec")
+
+        assert contents[1].role == "model"
+        assert len(contents[1].parts) == 2
+        assert contents[1].parts[0].function_call.name == "kubernetes-server__pods_log"
+        assert contents[1].parts[1].function_call.name == "kubernetes-server__pods_list"
+        for part in contents[1].parts:
+            assert part.thought_signature == _SKIP_THOUGHT_SIGNATURE
+            assert isinstance(part.thought_signature, str)
 
     def test_convert_messages_unknown_role_raises(self, provider):
         """Test that unknown message role raises ValueError."""

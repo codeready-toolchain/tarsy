@@ -27,6 +27,22 @@ EMPTY_RESPONSE_RETRY_DELAY = 3  # seconds
 # Executions typically complete in minutes; 1 hour is generous headroom.
 MODEL_CONTENT_CACHE_TTL = 3600  # 1 hour
 
+# Gemini 3 requires a thought_signature on reconstructed functionCall parts
+# that were not produced by Gemini (cross-provider fallback, cache miss).
+# Must be assigned as a str after Part construction: constructor bytes are
+# base64-encoded on the wire, and a constructor str is treated as base64.
+# https://ai.google.dev/gemini-api/docs/thought-signatures
+_SKIP_THOUGHT_SIGNATURE = "skip_thought_signature_validator"
+
+
+def _reconstructed_function_call_part(name: str, args: Dict[str, Any]) -> genai_types.Part:
+    """Build a functionCall Part with Google's dummy thought signature."""
+    part = genai_types.Part(
+        function_call=genai_types.FunctionCall(name=name, args=args),
+    )
+    part.thought_signature = _SKIP_THOUGHT_SIGNATURE
+    return part
+
 
 def _token_count(value) -> int:
     if not value:
@@ -163,9 +179,8 @@ class GoogleNativeProvider(LLMProvider):
                     # and thinking Parts exactly as Gemini returned them.
                     contents.extend(cached_turns[model_turn_idx])
                 else:
-                    # Cache miss fallback: reconstruct from proto fields.
-                    # This path is hit on first call (no history) or if the
-                    # Python service restarted mid-execution.
+                    # Cache miss: reconstruct from proto. Hit on provider
+                    # fallback (clear_cache), Python restart, or first call.
                     parts: List[genai_types.Part] = []
                     if msg.content:
                         parts.append(genai_types.Part(text=msg.content))
@@ -179,11 +194,8 @@ class GoogleNativeProvider(LLMProvider):
                             )
                             args = {}
                         parts.append(
-                            genai_types.Part(
-                                function_call=genai_types.FunctionCall(
-                                    name=tool_name_to_api(tc.name),
-                                    args=args,
-                                )
+                            _reconstructed_function_call_part(
+                                tool_name_to_api(tc.name), args
                             )
                         )
                     contents.append(
