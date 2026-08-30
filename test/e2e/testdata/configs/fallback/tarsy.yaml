@@ -36,7 +36,7 @@ agents:
     custom_instructions: "You are BetaChecker, analyzing logs."
 
 agent_chains:
-  # Used by: TestE2E_FallbackOnMaxRetries, TestE2E_FallbackCascade
+  # Used by: TestE2E_FallbackOnMaxRetries, TestE2E_FallbackAfterToolCall, TestE2E_FallbackCascade
   single-fallback:
     alert_types: [test-fallback, test-cascade]
     executive_summary_provider: "primary-provider"

@@ -581,9 +581,9 @@ langchain-anthropic==1.6.0 \
     --hash=sha256:0307ec98b24566c747e91bac4158bc4f1510bae4b45f0d25107636cc1b616328 \
     --hash=sha256:a85df4aa8f91a201703a4276e599ff3bcc498ade64294a85f79a96d6991f3154
     # via tarsy-llm
-langchain-core==1.6.0 \
-    --hash=sha256:d8bb924cd413955d9d3192ccced140407427c3ff51e50ffb941222648da92cb2 \
-    --hash=sha256:dc72e36678ed26683ec0ad8829b44011fba461d10f9b31dbd9110215e5ec2333
+langchain-core==1.6.1 \
+    --hash=sha256:1b156cb395aac4f009a8a1b38a574c7d948fe2d5f74c96e0d8a5017b4149e04f \
+    --hash=sha256:954a84132a5cb0435d27b910e336347b6744ecc18fbeef1e2de7029a0959841a
     # via
     #   langchain-anthropic
     #   langchain-google-genai
@@ -591,9 +591,9 @@ langchain-core==1.6.0 \
     #   langchain-openai
     #   langchain-xai
     #   tarsy-llm
-langchain-google-genai==4.3.4 \
-    --hash=sha256:265655baad05f799fa7b83a030eaca7cee0e32c9ab7de846b80ea7f59c26134e \
-    --hash=sha256:618fb0da1b9ba9def5569a8b05cb87e1389de41b8731c802958d09499490d2a5
+langchain-google-genai==4.3.7 \
+    --hash=sha256:8a57f936b1fbde52776fdde6673fdabd99cfa5cbbb122a926f1cff0ba00f6bc6 \
+    --hash=sha256:8d4b1aa8f2c2e17b8e790d34a7e9a7b8e7d13e9a00175679d17647c235104bf9
     # via tarsy-llm
 langchain-google-vertexai==3.2.4 \
     --hash=sha256:65b5615e596fdabc2e149f0160fded88bebef2bbc1ea70095ff81714f7570183 \
