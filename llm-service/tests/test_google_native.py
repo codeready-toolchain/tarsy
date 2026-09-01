@@ -1,8 +1,10 @@
 """Tests for GoogleNativeProvider."""
+import asyncio
 import json
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+import httpx
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
@@ -63,7 +65,9 @@ class TestGoogleNativeProvider:
         result = provider._get_client("TEST_API_KEY")
         
         assert result is mock_instance
-        mock_client_class.assert_called_once_with(api_key="test-key-123")
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["api_key"] == "test-key-123"
+        assert kwargs["http_options"].retry_options.attempts == 1
 
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
@@ -1000,17 +1004,24 @@ class TestGoogleNativeProvider:
         assert responses[1].is_final
 
     @staticmethod
-    def _client_error(code, message="not found"):
+    def _client_error(code, message="not found", *, details=None, headers=None):
         status = {
             400: "INVALID_ARGUMENT",
             401: "UNAUTHENTICATED",
             403: "PERMISSION_DENIED",
             404: "NOT_FOUND",
+            408: "DEADLINE_EXCEEDED",
             429: "RESOURCE_EXHAUSTED",
         }.get(code, "UNKNOWN")
-        return genai_errors.ClientError(
-            code, {"message": message, "status": status, "code": code},
-        )
+        payload = {"message": message, "status": status, "code": code}
+        if details is not None:
+            payload["details"] = details
+        response = None
+        if headers is not None:
+            response = MagicMock()
+            response.headers = headers
+            response.status_code = code
+        return genai_errors.ClientError(code, payload, response)
 
     @staticmethod
     def _text_chunk(text):
@@ -1046,7 +1057,7 @@ class TestGoogleNativeProvider:
     @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
     @patch("llm.providers.google_native.genai.Client")
     @patch("asyncio.sleep", new_callable=AsyncMock)
-    @pytest.mark.parametrize("code", [404, 429])
+    @pytest.mark.parametrize("code", [404, 408, 429])
     async def test_generate_retries_on_client_error_then_succeeds(
         self, mock_sleep, mock_client_class, code, provider,
     ):
@@ -1071,6 +1082,8 @@ class TestGoogleNativeProvider:
             responses.append(resp)
 
         assert call_count["n"] == 2
+        assert mock_sleep.call_count == 1
+        assert 0 <= mock_sleep.call_args[0][0] <= 1
         text_responses = [r for r in responses if r.HasField("text")]
         assert len(text_responses) == 1
         assert text_responses[0].text.content == "Success after retry"
@@ -1101,6 +1114,171 @@ class TestGoogleNativeProvider:
         assert responses[0].HasField("error")
         assert responses[0].error.code == "provider_error"
         assert responses[0].is_final
+
+    def _failing_stream_side_effect(self, mock_client, exc, fail_times=1, success_text="ok"):
+        call_count = {"n": 0}
+        good = self._text_chunk(success_text)
+
+        async def good_stream():
+            yield good
+
+        async def side_effect(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] <= fail_times:
+                raise exc
+            return good_stream()
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(side_effect=side_effect)
+        return call_count
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_exhausted_404_yields_max_retries(
+        self, mock_sleep, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = self._failing_stream_side_effect(
+            mock_client, self._client_error(404), fail_times=3,
+        )
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 3
+        assert mock_sleep.call_count == 2
+        assert len(responses) == 1
+        assert responses[0].error.code == "max_retries"
+        assert responses[0].is_final
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_honors_retry_info_delay(
+        self, mock_sleep, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = self._failing_stream_side_effect(
+            mock_client,
+            self._client_error(
+                429,
+                message="resource exhausted",
+                details=[{
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": "53s",
+                }],
+            ),
+        )
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 2
+        mock_sleep.assert_called_once_with(53.0)
+        assert any(r.HasField("text") for r in responses)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_generate_spend_cap_429_does_not_retry(
+        self, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = self._failing_stream_side_effect(
+            mock_client,
+            self._client_error(
+                429,
+                message="usage_limit_reached",
+                headers={"x-should-retry": "false"},
+            ),
+        )
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert responses[0].error.code == "provider_error"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_generate_retry_after_over_cap_does_not_retry(
+        self, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = self._failing_stream_side_effect(
+            mock_client,
+            self._client_error(429, headers={"Retry-After": "3600"}),
+        )
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert responses[0].error.code == "provider_error"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_retries_on_connection_error(
+        self, mock_sleep, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = self._failing_stream_side_effect(
+            mock_client, httpx.ConnectError("connection failed"),
+        )
+
+        responses = []
+        async for resp in provider.generate(self._generate_request()):
+            responses.append(resp)
+
+        assert call_count["n"] == 2
+        assert mock_sleep.call_count == 1
+        assert any(r.HasField("text") for r in responses)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_generate_cancel_during_retry_sleep(
+        self, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        call_count = self._failing_stream_side_effect(
+            mock_client, self._client_error(429, headers={"Retry-After": "53"}),
+        )
+        started = asyncio.Event()
+
+        async def block_sleep(*_args, **_kwargs):
+            started.set()
+            await asyncio.Event().wait()
+
+        with patch("llm.providers.retry.asyncio.sleep", side_effect=block_sleep):
+            async def consume():
+                responses = []
+                async for resp in provider.generate(self._generate_request()):
+                    responses.append(resp)
+                return responses
+
+            task = asyncio.create_task(consume())
+            await asyncio.wait_for(started.wait(), timeout=2)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert call_count["n"] == 1
 
 
 class TestStreamPartTypes:

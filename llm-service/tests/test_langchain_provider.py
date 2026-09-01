@@ -1,7 +1,9 @@
 """Tests for LangChainProvider."""
+import asyncio
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+import httpx
 
 from langchain_core.messages import (
     AIMessage,
@@ -943,7 +945,8 @@ class TestLangChainProviderGenerate:
             assert responses[0].is_final
 
     @staticmethod
-    def _http_exc(*, status_code=None, code=None, status=None, message="not found"):
+    @staticmethod
+    def _http_exc(*, status_code=None, code=None, status=None, message="not found", headers=None):
         exc = Exception(message)
         if status_code is not None:
             exc.status_code = status_code
@@ -951,6 +954,11 @@ class TestLangChainProviderGenerate:
             exc.code = code
         if status is not None:
             exc.status = status
+        if headers is not None:
+            exc.response = type("Resp", (), {
+                "headers": headers,
+                "status_code": status_code,
+            })()
         return exc
 
     @staticmethod
@@ -1009,6 +1017,8 @@ class TestLangChainProviderGenerate:
                 responses.append(resp)
 
         assert call_count["n"] == 2
+        assert mock_sleep.call_count == 1
+        assert 0 <= mock_sleep.call_args[0][0] <= 1
         text_responses = [r for r in responses if r.HasField("text")]
         assert len(text_responses) == 1
         assert text_responses[0].text.content == "Success after retry"
@@ -1040,6 +1050,7 @@ class TestLangChainProviderGenerate:
                 responses.append(resp)
 
         assert call_count["n"] == 3
+        assert mock_sleep.call_count == 2
         assert len(responses) == 1
         assert responses[0].HasField("error")
         assert responses[0].error.code == "max_retries"
@@ -1084,7 +1095,7 @@ class TestLangChainProviderGenerate:
         assert responses[0].HasField("text")
         assert responses[0].text.content == "Partial data"
         assert responses[1].HasField("error")
-        assert responses[1].error.code == "provider_error"
+        assert responses[1].error.code == "partial_stream_error"
         assert responses[1].is_final
 
     @pytest.mark.asyncio
@@ -1128,6 +1139,98 @@ class TestLangChainProviderGenerate:
         assert kinds == [(prompt_cache.ANTHROPIC, False)]
         assert attempt["n"] == 2
         assert texts == ["ok after 404"]
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_honors_retry_after(self, mock_sleep, provider):
+        model, call_count = self._fail_then_ok_model(
+            self._http_exc(status_code=429, headers={"Retry-After": "53"}),
+        )
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 2
+        mock_sleep.assert_called_once_with(53.0)
+        assert any(r.HasField("text") for r in responses)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    async def test_generate_spend_cap_429_does_not_retry(self, provider):
+        model, call_count = self._fail_then_ok_model(
+            self._http_exc(
+                status_code=429,
+                message="usage_limit_reached",
+                headers={"x-should-retry": "false"},
+            ),
+        )
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert responses[0].error.code == "provider_error"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    async def test_generate_retry_after_over_cap_does_not_retry(self, provider):
+        model, call_count = self._fail_then_ok_model(
+            self._http_exc(status_code=429, headers={"Retry-After": "3600"}),
+        )
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 1
+        assert responses[0].error.code == "provider_error"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    @patch("asyncio.sleep", new_callable=AsyncMock)
+    async def test_generate_retries_on_connection_error(self, mock_sleep, provider):
+        model, call_count = self._fail_then_ok_model(httpx.ConnectError("connection failed"))
+        with patch.object(provider, "_get_or_create_model", return_value=model):
+            responses = []
+            async for resp in provider.generate(self._openai_request()):
+                responses.append(resp)
+
+        assert call_count["n"] == 2
+        assert mock_sleep.call_count == 1
+        assert any(r.HasField("text") for r in responses)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_KEY": "test-value"})
+    async def test_generate_cancel_during_retry_sleep(self, provider):
+        started = asyncio.Event()
+        model, call_count = self._fail_then_ok_model(
+            self._http_exc(status_code=429, headers={"Retry-After": "53"}),
+        )
+
+        async def block_sleep(*_args, **_kwargs):
+            started.set()
+            await asyncio.Event().wait()
+
+        with (
+            patch.object(provider, "_get_or_create_model", return_value=model),
+            patch("llm.providers.retry.asyncio.sleep", side_effect=block_sleep),
+        ):
+            async def consume():
+                responses = []
+                async for resp in provider.generate(self._openai_request()):
+                    responses.append(resp)
+                return responses
+
+            task = asyncio.create_task(consume())
+            await asyncio.wait_for(started.wait(), timeout=2)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert call_count["n"] == 1
 
 
 def _looping_tool_history():
@@ -1322,6 +1425,71 @@ class TestLangChainPromptCacheBreakpoints:
 
         assert captured["ctor"]["max_retries"] == 0
         assert "bind" not in captured
+
+    @patch.dict(os.environ, {"XAI_API_KEY": "test-key"})
+    def test_xai_max_retries_on_constructor(self, provider):
+        captured = {}
+
+        class FakeChatXAI:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                return self
+
+        with patch("langchain_xai.ChatXAI", FakeChatXAI):
+            config = pb.LLMConfig(
+                provider="xai", model="grok-4", api_key_env="XAI_API_KEY",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.NONE, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
+
+    @patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"})
+    def test_google_max_retries_on_constructor(self, provider):
+        captured = {}
+
+        class FakeChatGoogle:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                return self
+
+        with patch("langchain_google_genai.ChatGoogleGenerativeAI", FakeChatGoogle):
+            config = pb.LLMConfig(
+                provider="google", model="gemini-2.5-pro", api_key_env="GOOGLE_API_KEY",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.NONE, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
+
+    def test_vertex_gemini_max_retries_on_constructor(self, provider):
+        captured = {}
+
+        class FakeChatGoogle:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools):
+                return self
+
+        with patch("langchain_google_genai.ChatGoogleGenerativeAI", FakeChatGoogle):
+            config = pb.LLMConfig(
+                provider="vertexai",
+                model="gemini-2.5-pro",
+                project="p",
+                location="us-central1",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.NONE, False, "exec-1",
+            )
+
+        assert captured["ctor"]["max_retries"] == 0
 
     @pytest.mark.parametrize("model", ["gpt-5.5", "gpt-5.2", "gpt-5", "gpt-5-mini"])
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})

@@ -26,7 +26,8 @@ from langchain_core.messages import (
 from llm_proto import llm_service_pb2 as pb
 from llm.providers import prompt_cache
 from llm.providers.base import LLMProvider
-from llm.providers.http_status import is_retryable_http
+from llm.providers.http_status import extract_retry_hint, is_retryable
+from llm.providers.retry import MAX_RETRIES, retry_delay, sleep_before_retry
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 from llm.providers.usage import (
     extract_anthropic_raw_input,
@@ -35,10 +36,6 @@ from llm.providers.usage import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Retry configuration (matches GoogleNativeProvider pattern)
-MAX_RETRIES = 3
-RETRY_BACKOFF_BASE = 2  # seconds
 
 
 class ProviderType(str, enum.Enum):
@@ -220,6 +217,7 @@ class LangChainProvider(LLMProvider):
                 model=config.model,
                 api_key=_require_api_key(),
                 streaming=True,
+                max_retries=0,
             )
 
         elif provider is ProviderType.GOOGLE:
@@ -229,6 +227,7 @@ class LangChainProvider(LLMProvider):
                 model=config.model,
                 google_api_key=_require_api_key(),
                 streaming=True,
+                max_retries=0,
                 **thinking_kwargs,
             )
 
@@ -255,6 +254,7 @@ class LangChainProvider(LLMProvider):
                     project=config.project,
                     location=config.location,
                     streaming=True,
+                    max_retries=0,
                     **thinking_kwargs,
                 )
 
@@ -446,6 +446,8 @@ class LangChainProvider(LLMProvider):
                         yield chunk
                         chunks_yielded += 1
                     return  # Success
+                except asyncio.CancelledError:
+                    raise
                 except _RetryableError as e:
                     if chunks_yielded > 0:
                         logger.exception(
@@ -463,12 +465,13 @@ class LangChainProvider(LLMProvider):
                         )
                         return
                     last_error = e
-                    delay = RETRY_BACKOFF_BASE ** attempt
-                    logger.warning(
-                        "[%s] Retryable error (attempt %d/%d), retrying in %ds: %s",
-                        request_id, attempt + 1, MAX_RETRIES, delay, e,
-                    )
-                    await asyncio.sleep(delay)
+                    if attempt < MAX_RETRIES - 1:
+                        delay = retry_delay(attempt, extract_retry_hint(e))
+                        logger.warning(
+                            "[%s] Retryable error (attempt %d/%d), retrying in %.1fs: %s",
+                            request_id, attempt + 1, MAX_RETRIES, delay, e,
+                        )
+                    await sleep_before_retry(attempt, e)
                 except Exception as e:
                     if (
                         prompt_cache.is_bad_request(e)
@@ -481,17 +484,6 @@ class LangChainProvider(LLMProvider):
                         )
                         last_error = e
                         break
-                    if chunks_yielded == 0 and is_retryable_http(e):
-                        last_error = _RetryableError(
-                            f"[{request_id}] Transient HTTP error: {e}",
-                        )
-                        delay = RETRY_BACKOFF_BASE ** attempt
-                        logger.warning(
-                            "[%s] Retryable error (attempt %d/%d), retrying in %ds: %s",
-                            request_id, attempt + 1, MAX_RETRIES, delay, last_error,
-                        )
-                        await asyncio.sleep(delay)
-                        continue
                     logger.exception("[%s] Non-retryable error", request_id)
                     yield pb.GenerateResponse(
                         error=pb.ErrorInfo(
@@ -690,6 +682,12 @@ class LangChainProvider(LLMProvider):
 
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
+        except Exception as exc:
+            if is_retryable(exc):
+                raise _RetryableError(
+                    f"[{request_id}] Transient HTTP error: {exc}",
+                ) from exc
+            raise
 
         # Emit accumulated tool calls as complete ToolCallDelta messages
         for _idx, tc_data in sorted(pending_tool_calls.items()):
