@@ -1520,6 +1520,32 @@ func TestResolvedFallbackProviders(t *testing.T) {
 		assert.Equal(t, "gpt-fallback-2", resolved.ResolvedFallbackProviders[1].Config.Model)
 	})
 
+	t.Run("omitted fallback backend resolves to langchain", func(t *testing.T) {
+		cfgOmit := *cfg
+		cfgOmit.Defaults = &config.Defaults{
+			LLMProvider: "primary",
+			LLMBackend:  config.LLMBackendNativeGemini,
+			FallbackProviders: []config.FallbackProviderEntry{
+				{Provider: "fb-2"},
+				{Provider: "fb-1", Backend: config.LLMBackendNativeGemini},
+			},
+		}
+		resolved, err := ResolveAgentConfig(&cfgOmit,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 2)
+		assert.Equal(t, "fb-2", resolved.ResolvedFallbackProviders[0].ProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.ResolvedFallbackProviders[0].Backend,
+			"omitted backend must be langchain, not defaults.llm_backend")
+		assert.Equal(t, "fb-1", resolved.ResolvedFallbackProviders[1].ProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.ResolvedFallbackProviders[1].Backend)
+		assert.Empty(t, resolved.FallbackProviders[0].Backend,
+			"raw fallback list keeps omitted backend empty")
+	})
+
 	t.Run("ResolveChatAgentConfig populates ResolvedFallbackProviders", func(t *testing.T) {
 		resolved, err := ResolveChatAgentConfig(cfg, &config.ChainConfig{}, nil)
 		require.NoError(t, err)

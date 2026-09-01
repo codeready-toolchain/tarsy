@@ -605,6 +605,24 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.NotContains(t, string(raw), "E2E_SENTINEL_BASE_URL")
 		assert.NotContains(t, string(raw), "E2E_SENTINEL_QUERY")
 	})
+
+	t.Run("omitted fallback backend is langchain in the config view", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			Defaults: &config.Defaults{
+				LLMBackend: config.LLMBackendNativeGemini,
+				FallbackProviders: []config.FallbackProviderEntry{
+					{Provider: "claude-fb"},
+					{Provider: "gemini-fb", Backend: config.LLMBackendNativeGemini},
+				},
+			},
+		}, nil)
+		require.NotNil(t, resp.Defaults)
+		require.Len(t, resp.Defaults.FallbackProviders, 2)
+		assert.Equal(t, FallbackProviderView{Provider: "claude-fb", Backend: "langchain"},
+			resp.Defaults.FallbackProviders[0])
+		assert.Equal(t, FallbackProviderView{Provider: "gemini-fb", Backend: "google-native"},
+			resp.Defaults.FallbackProviders[1])
+	})
 }
 
 func TestSanitizeURL(t *testing.T) {

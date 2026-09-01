@@ -14,7 +14,7 @@ const DefaultMaxIterations = 20
 // DefaultLLMBackend is the fallback when no level in the config hierarchy
 // specifies an LLM backend. LangChain is the general-purpose multi-provider
 // backend and matches the typical production default.
-const DefaultLLMBackend = config.LLMBackendLangChain
+const DefaultLLMBackend = config.DefaultLLMBackend
 
 // DefaultIterationTimeout is the overall per-iteration timeout.
 // Each iteration (LLM call + tool execution) gets its own context.WithTimeout
@@ -634,7 +634,7 @@ func resolveFullFallbackEntries(cfg *config.Config, entries []config.FallbackPro
 		}
 		resolved = append(resolved, ResolvedFallbackEntry{
 			ProviderName: entry.Provider,
-			Backend:      entry.Backend,
+			Backend:      entry.ResolvedBackend(),
 			Config:       applyAgentNativeTools(provider, agentNativeTools),
 		})
 	}

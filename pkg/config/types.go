@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 
 	"gopkg.in/yaml.v3"
@@ -172,10 +173,15 @@ func (r SubAgentRefs) Names() []string {
 }
 
 // FallbackProviderEntry is a single entry in the fallback provider list.
-// Each entry explicitly specifies both provider and backend.
+// Provider is required. Omitted backend defaults to langchain (see ResolvedBackend).
 type FallbackProviderEntry struct {
 	Provider string     `yaml:"provider" validate:"required"`
-	Backend  LLMBackend `yaml:"backend" validate:"required"`
+	Backend  LLMBackend `yaml:"backend,omitempty"`
+}
+
+// ResolvedBackend returns the entry's backend, or DefaultLLMBackend when omitted.
+func (e FallbackProviderEntry) ResolvedBackend() LLMBackend {
+	return cmp.Or(e.Backend, DefaultLLMBackend)
 }
 
 // SynthesisConfig defines synthesis agent configuration

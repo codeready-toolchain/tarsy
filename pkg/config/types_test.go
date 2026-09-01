@@ -144,6 +144,37 @@ func TestSubAgentRefs_Names(t *testing.T) {
 	})
 }
 
+func TestFallbackProviderEntry_ResolvedBackend(t *testing.T) {
+	tests := []struct {
+		name    string
+		yamlSrc string
+		want    LLMBackend
+	}{
+		{
+			name:    "omitted backend defaults to langchain",
+			yamlSrc: "provider: foo\n",
+			want:    DefaultLLMBackend,
+		},
+		{
+			name:    "explicit langchain preserved",
+			yamlSrc: "provider: foo\nbackend: langchain\n",
+			want:    LLMBackendLangChain,
+		},
+		{
+			name:    "invalid backend is not replaced",
+			yamlSrc: "provider: foo\nbackend: bogus\n",
+			want:    LLMBackend("bogus"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var entry FallbackProviderEntry
+			require.NoError(t, yaml.Unmarshal([]byte(tt.yamlSrc), &entry))
+			assert.Equal(t, tt.want, entry.ResolvedBackend())
+		})
+	}
+}
+
 func TestEmbeddingProviderType_IsValid(t *testing.T) {
 	tests := []struct {
 		provider EmbeddingProviderType

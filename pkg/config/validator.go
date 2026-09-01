@@ -913,8 +913,8 @@ func (v *Validator) validateFallbackProviders(entries []FallbackProviderEntry, s
 				fmt.Errorf("LLM provider '%s' not found", entry.Provider))
 		}
 
-		// Backend must be valid
-		if !entry.Backend.IsValid() {
+		// Backend must be valid (omitted defaults to langchain)
+		if !entry.ResolvedBackend().IsValid() {
 			return NewValidationError(section, name, entryRef,
 				fmt.Errorf("invalid LLM backend: %s", entry.Backend))
 		}
@@ -1186,7 +1186,7 @@ func (v *Validator) warnIfNativeAgentLacksFallback(
 	}
 
 	for _, entry := range effective {
-		if entry.Backend == LLMBackendNativeGemini {
+		if entry.ResolvedBackend() == LLMBackendNativeGemini {
 			return
 		}
 	}
