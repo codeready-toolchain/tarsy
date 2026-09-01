@@ -13,7 +13,7 @@ This feature adds **automatic fallback to alternative LLM providers** when the c
 ## Design Principles
 
 1. **Existing retry logic remains the first line of defense.** Python-level retries (3 attempts with exponential backoff) handle transient errors. Fallback only triggers after those retries are exhausted and the Go-level error propagates.
-2. **Each fallback entry is self-contained.** Provider is required. Omitted backend defaults to langchain (not inferred from provider type, not inherited from `defaults.llm_backend`). The system uses the resolved pair as-is — no runtime compatibility filtering. Invalid combinations are caught at startup.
+2. **Each fallback entry is self-contained.** Provider is required. Omitted backend defaults to langchain (not inferred from provider type, not inherited from `defaults.llm_backend`). The resolved pair is used as-is for general compatibility — there is no mapping from provider type. Native-tool-incompatible entries are still skipped at runtime ([ADR-0017](0017-native-tool-fallback-safety.md)); startup warns when a native-tool agent has no `google-native` fallback.
 3. **Operator preference is respected.** The fallback list order represents cost/quality preference. The system does not re-rank providers automatically.
 4. **Minimal blast radius.** The fallback mechanism integrates at the iteration level in the Go controller, not in the Python LLM service. This keeps the Python service stateless and provider-agnostic.
 5. **Observable by default.** Every fallback event is recorded in the timeline, on the execution record, and surfaced in the dashboard without additional configuration.
@@ -139,7 +139,7 @@ An entry in the fallback list: required provider name plus optional backend. The
 
 ### Backend Switching
 
-Each fallback entry specifies a provider and optionally a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., native vs LangChain). If a provider/backend combination doesn't work, that's a configuration error caught at startup.
+Each fallback entry specifies a provider and optionally a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., native vs LangChain). Startup does not verify that the provider works with that backend (Claude on `google-native` is not rejected). Native-tool agents skip non-`google-native` entries at runtime and get a startup warning if the list has none ([ADR-0017](0017-native-tool-fallback-safety.md)).
 
 ### Same-Provider Skip
 
@@ -173,10 +173,10 @@ Fallback is NOT triggered when:
 At startup, the system validates each fallback provider entry:
 
 1. **Provider exists** — the referenced provider name is registered
-2. **Backend is valid** — the backend value is a known enum
+2. **Backend is valid** — the backend value is a known enum (omitted defaults to langchain)
 3. **Credentials are set** — the required environment variable for that provider is present and non-empty
 
-Startup fails if any check fails — a fallback list with broken entries gives a false sense of safety.
+Startup fails if any of those checks fail — a fallback list with broken entries gives a false sense of safety. Provider/backend pairing is not validated. Native-tool agents with no `google-native` entry in the effective list get a warning only ([ADR-0017](0017-native-tool-fallback-safety.md)).
 
 ## Decisions Summary
 
