@@ -38,7 +38,12 @@ const (
 	LLMBackendLangChain LLMBackend = "langchain"
 )
 
-// IsValid checks if the LLM backend is valid (empty string is NOT valid — must be explicit).
+// DefaultLLMBackend is used when a named provider is set but backend is omitted.
+// LangChain is the general-purpose multi-provider path; google-native must be explicit.
+const DefaultLLMBackend = LLMBackendLangChain
+
+// IsValid checks if the LLM backend is a known value. Empty is not valid;
+// callers should apply DefaultLLMBackend before checking omitted config fields.
 func (b LLMBackend) IsValid() bool {
 	return b == LLMBackendNativeGemini || b == LLMBackendLangChain
 }

@@ -78,7 +78,7 @@ defaults:
   max_iterations: 20
   fallback_providers:
     - provider: "gemini-3.1-pro"
-      backend: "google-native"
+      backend: "google-native"  # omit backend to default to langchain
   # Optional: summarize large MCP results (and search_past_sessions) with a
   # cheaper named provider. Unset keeps the calling agent's model.
   # Omit llm_backend to use langchain. On summarization LLM error, TARSy

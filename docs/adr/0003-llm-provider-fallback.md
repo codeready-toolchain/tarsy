@@ -13,7 +13,7 @@ This feature adds **automatic fallback to alternative LLM providers** when the c
 ## Design Principles
 
 1. **Existing retry logic remains the first line of defense.** Python-level retries (3 attempts with exponential backoff) handle transient errors. Fallback only triggers after those retries are exhausted and the Go-level error propagates.
-2. **Each fallback entry is self-contained.** Each entry specifies both provider and backend explicitly. The system uses them as-is — no runtime compatibility filtering. Invalid combinations are caught at startup.
+2. **Each fallback entry is self-contained.** Provider is required. Omitted backend defaults to langchain (not inferred from provider type, not inherited from `defaults.llm_backend`). The resolved pair is used as-is for general compatibility — there is no mapping from provider type. Native-tool-incompatible entries are still skipped at runtime ([ADR-0017](0017-native-tool-fallback-safety.md)); startup warns when a native-tool agent has no `google-native` fallback.
 3. **Operator preference is respected.** The fallback list order represents cost/quality preference. The system does not re-rank providers automatically.
 4. **Minimal blast radius.** The fallback mechanism integrates at the iteration level in the Go controller, not in the Python LLM service. This keeps the Python service stateless and provider-agnostic.
 5. **Observable by default.** Every fallback event is recorded in the timeline, on the execution record, and surfaced in the dashboard without additional configuration.
@@ -97,8 +97,7 @@ defaults:
   fallback_providers:
     - provider: "gemini-2.5-pro"
       backend: "google-native"
-    - provider: "anthropic-vertex"
-      backend: "langchain"
+    - provider: "anthropic-vertex"  # omitted backend → langchain
 
 chains:
   my-chain:
@@ -107,7 +106,7 @@ chains:
         backend: "google-native"
 ```
 
-Each fallback entry explicitly specifies its backend. No implicit mapping — future-proof as new backends are added.
+Omitted `backend` defaults to langchain. `google-native` must be written explicitly. There is no mapping from provider type.
 
 ### Fallback State Tracking
 
@@ -136,11 +135,11 @@ Two new nullable columns on agent executions: `original_llm_provider` and `origi
 
 ### Fallback Provider Entry
 
-An entry in the fallback list: provider name plus backend. The provider name references a registered LLM provider config. The backend specifies which SDK path to use when this provider is active.
+An entry in the fallback list: required provider name plus optional backend. The provider name references a registered LLM provider config. The backend specifies which SDK path to use when this provider is active; omitted backend is langchain.
 
 ### Backend Switching
 
-Each fallback entry specifies both a provider and a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., native vs LangChain). If a provider/backend combination doesn't work, that's a configuration error caught at startup.
+Each fallback entry specifies a provider and optionally a backend. When fallback triggers, the system switches to both — including changing the backend if the fallback entry uses a different one (e.g., native vs LangChain). Startup does not verify that the provider works with that backend (Claude on `google-native` is not rejected). Native-tool agents skip non-`google-native` entries at runtime and get a startup warning if the list has none ([ADR-0017](0017-native-tool-fallback-safety.md)).
 
 ### Same-Provider Skip
 
@@ -174,10 +173,10 @@ Fallback is NOT triggered when:
 At startup, the system validates each fallback provider entry:
 
 1. **Provider exists** — the referenced provider name is registered
-2. **Backend is valid** — the backend value is a known enum
+2. **Backend is valid** — the backend value is a known enum (omitted defaults to langchain)
 3. **Credentials are set** — the required environment variable for that provider is present and non-empty
 
-Startup fails if any check fails — a fallback list with broken entries gives a false sense of safety.
+Startup fails if any of those checks fail — a fallback list with broken entries gives a false sense of safety. Provider/backend pairing is not validated. Native-tool agents with no `google-native` entry in the effective list get a warning only ([ADR-0017](0017-native-tool-fallback-safety.md)).
 
 ## Decisions Summary
 
@@ -185,7 +184,7 @@ Startup fails if any check fails — a fallback list with broken entries gives a
 |---|---|---|---|
 | Q1 | Fallback scope | Stick with fallback for rest of execution; new executions reset to primary | Provider outages last longer than a single execution. New executions naturally reset via config resolution. Avoids oscillation. |
 | Q2 | Where adaptive timeouts live | Go streaming path; Python's long timeout stays as safety net | Go already processes every chunk in real-time. Single implementation for tiered behavior. |
-| Q3 | Backend specification | Explicit backend per fallback entry; no implicit mapping | Avoids hidden compatibility mappings. Future-proof as backends evolve. Minimal config verbosity. |
+| Q3 | Backend specification | Omitted backend defaults to langchain; google-native must be explicit. No mapping from provider type | Same default as named-provider `llm_backend` layers. Inferring google-native from Gemini providers would silently break Claude/Vertex fallbacks. |
 | Q4 | Credential validation timing | Validate at startup; fail if any fallback provider has missing credentials | A broken fallback is worse than no fallback — false sense of security. Catch misconfigs at deploy time. |
 | Q5 | Fallback metadata storage | Two new nullable columns: `original_llm_provider`, `original_llm_backend` | Directly queryable (`WHERE original_llm_provider IS NOT NULL`). Timeline events provide full audit trail. |
 | Q6 | Fallback scope across controllers | All controllers get fallback (iterating, forced conclusion, single-shot) | Whole session should survive an outage, not just the iteration loop. Scoring/synthesis would otherwise hit the same broken primary. |
@@ -201,3 +200,7 @@ These original decisions still stand. ADR-0027 changed *how* they behave under s
 - **Candidate skip (Same-Provider Skip).** Originally current-name only, so a later list entry with the primary’s name could be selected again. ADR-0027 skips any already-attempted name.
 - **Same-provider Go retry.** Originally appended the full provider-error text into the next model prompt. ADR-0027 keeps `error` / `provider_fallback` timeline events and stops injecting no-partial error JSON into the conversation.
 - **Q1 (sticky for the rest of the execution) is not changed.** Probe/unstick remains out of scope.
+
+## Amendment (2026-09-01)
+
+**Q3 / backend specification.** Omitted `fallback_providers[].backend` defaults to `langchain`. `google-native` remains explicit. Backend is still not inferred from provider type and does not inherit `defaults.llm_backend`.

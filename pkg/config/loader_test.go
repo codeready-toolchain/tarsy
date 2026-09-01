@@ -1336,6 +1336,7 @@ defaults:
   fallback_providers:
     - provider: "fb-defaults"
       backend: "google-native"
+    - provider: "fb-defaults-omit"
 
 agents:
   test-agent:
@@ -1371,11 +1372,13 @@ agent_chains:
 	cfg, err := loader.loadTarsyYAML()
 	require.NoError(t, err)
 
-	// Defaults-level: single entry
+	// Defaults-level: explicit backend and omitted backend (stays empty until resolve)
 	require.NotNil(t, cfg.Defaults)
-	require.Len(t, cfg.Defaults.FallbackProviders, 1)
+	require.Len(t, cfg.Defaults.FallbackProviders, 2)
 	assert.Equal(t, "fb-defaults", cfg.Defaults.FallbackProviders[0].Provider)
 	assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.FallbackProviders[0].Backend)
+	assert.Equal(t, "fb-defaults-omit", cfg.Defaults.FallbackProviders[1].Provider)
+	assert.Empty(t, cfg.Defaults.FallbackProviders[1].Backend)
 
 	chain := cfg.AgentChains["test-chain"]
 

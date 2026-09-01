@@ -781,7 +781,7 @@ func buildFallbackProviders(entries []config.FallbackProviderEntry) []FallbackPr
 	for _, e := range entries {
 		out = append(out, FallbackProviderView{
 			Provider: e.Provider,
-			Backend:  string(e.Backend),
+			Backend:  string(e.ResolvedBackend()),
 		})
 	}
 	return out

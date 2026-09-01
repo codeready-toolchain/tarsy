@@ -3668,6 +3668,19 @@ func TestValidateFallbackProviders(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "defaults-level fallback with omitted backend",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "fallback-1"},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"fallback-1": {Type: LLMProviderTypeGoogle, Model: "gemini-2.5-pro", APIKeyEnv: "FB_KEY"},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: false,
+		},
+		{
 			name: "defaults-level fallback with missing provider",
 			defaults: &Defaults{
 				FallbackProviders: []FallbackProviderEntry{
@@ -4440,6 +4453,37 @@ func TestWarnNativeToolAgentsWithoutCompatibleFallback(t *testing.T) {
 
 		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
 		assert.Contains(t, buf.String(), "WebResearcher")
+	})
+
+	t.Run("warns when native-tool agent has fallback with omitted backend", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "openai-fb"},
+				},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
 	})
 
 	t.Run("no warning when fallback includes google-native entry", func(t *testing.T) {
