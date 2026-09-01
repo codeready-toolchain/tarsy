@@ -600,7 +600,7 @@ At max iterations, `forceConclusion()` makes one extra LLM call without tools, a
 
 All LLM call sites (iterating loop, forced conclusion, single-shot) support automatic fallback to alternative providers when the primary fails. A shared `callLLMWithFallback` helper wraps the streaming LLM call with error-code-aware trigger logic:
 
-- **Immediate triggers**: `max_retries` (Python exhausted 3 retries, including connection errors / 408 / throttle 429 / 404 / 5xx with no chunks yet), `credentials` (guaranteed failure)
+- **Immediate triggers**: `max_retries` (Python exhausted 3 total attempts, including connection errors / 408 / throttle 429 / 404 / 5xx with no chunks yet), `credentials` (guaranteed failure)
 - **Consecutive failure triggers**: provider-class (`provider_error`, `invalid_request`, `transport`, `initial_timeout`) and partial-class (`partial_stream_error`, `stall_timeout`). Iterating and forced conclusion require 2 consecutive failures; SingleShot paths (single-shot controllers, scoring, summarization) trip after 1. Consecutive counters reset after a successful iterating LLM call.
 
 `FallbackState` tracks the original provider, current fallback index, attempted providers, and consecutive error counters. The primary starts on the attempted list. When fallback triggers, the controller selects the next list entry whose name is not already on that list (native-tool incompatible entries are skipped and never added), records a `provider_fallback` timeline event, updates execution metadata (`original_llm_provider`, `original_llm_backend`), and continues with the new provider. Fallback sticks for the rest of the execution; new executions reset to the primary.
@@ -821,7 +821,7 @@ Generate(request) -> backend = request.llm_config.backend || "google-native"
   -> registry.get(backend) -> provider.generate(request) -> stream chunks
 ```
 
-Each provider retries the same Generate up to 3 times when no chunks have been yielded: timeout, empty response, connection/protocol errors, HTTP 408, throttle 429, 404, and 5xx. Waits honor Retry-After / RetryInfo (capped at 60s) or full jitter; there is no sleep after the last failed attempt. Spend-cap 429s and hints above 60s are `provider_error` (Go consecutive-failure threshold, not immediate fallback). Nested SDK retries are pinned off so TARSy’s loop is the retry owner. Cache `400` strips cache markers on a dedicated retry instead of repeating the same cached request. Exhaustion yields `max_retries` to Go. Retry constants are hardcoded (no YAML). See [ADR-0027](adr/0027-llm-transient-outage.md) and [ADR-0028](adr/0028-llm-retry-resilience.md).
+Each provider uses up to 3 total attempts for the same Generate when no chunks have been yielded: timeout, empty response, connection/protocol errors, HTTP 408, throttle 429, 404, and 5xx. Waits honor Retry-After / RetryInfo (capped at 60s) or full jitter; there is no sleep after the last failed attempt. Spend-cap 429s and hints above 60s are `provider_error` (Go consecutive-failure threshold, not immediate fallback). Nested SDK retries are pinned off so TARSy’s loop is the retry owner. Cache `400` strips cache markers on a dedicated retry instead of repeating the same cached request. Exhaustion yields `max_retries` to Go. Retry constants are hardcoded (no YAML). See [ADR-0027](adr/0027-llm-transient-outage.md) and [ADR-0028](adr/0028-llm-retry-resilience.md).
 
 **GoogleNativeProvider** (`llm/providers/google_native.py`):
 - `google-genai` SDK with `generate_content_stream()`

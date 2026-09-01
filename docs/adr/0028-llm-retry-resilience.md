@@ -38,7 +38,7 @@ This decision tightens the Python retry loop. It does **not** replace [ADR-0003]
 | Q6 | Stickiness | Unchanged. All `max_retries` still stick the current execution. | Right for a sustained outage. Unsticking 404 amends ADR-0003 Q1 and needs its own design. Revisit if traces show long executions stuck on a weaker fallback after a short publisher-model blip. |
 | Q7 | Probe | Not in this design. | Easy to oscillate. Per-call reset to primary fights ADR-0003 sticky-for-execution. |
 | Q8 | Mid-stream / stall | Unchanged from ADR-0027. | Stall timeout + continue-from-partial already covers mid-stream. SSE reconnect and replay after a tool/text block would duplicate MCP side effects. |
-| Q9 | Attempt count | Keep 3 identical retries. | The first identical retry is the 404 absorber. Extra attempts delay fallback to the next list entry. Claude Code needs 10 because it has no ordered provider list. |
+| Q9 | Attempt count | Keep 3 total attempts (original plus 2 retries). | The first identical retry is the 404 absorber. Extra attempts delay fallback to the next list entry. Claude Code needs 10 because it has no ordered provider list. |
 | Q10 | Config | Hardcoded constants. No `defaults.llm_retry` YAML, no env-var override. | Fallback *list* is already YAML; retry *policy* is not. A 3-hour Retry-After must not be configurable by accident. A lab that needs a different cap is a later discussion with evidence. |
 | Q11 | Cancel | Honor RPC abort in the retry loop. Cancel means **stop**, not fail: no error chunk, no fallback. | A 60s Retry-After must not outlive session/iteration cancel or Go’s first-byte timeout. grpc.aio already injects `CancelledError`; it is a `BaseException` in Python 3.13, so it must not be mapped onto `max_retries` / `provider_error` / `internal`. |
 | Q12 | Observability | Existing Go metrics and timeline. Successful Python retries stay log-only. | Matches ADR-0027. No proto, no new counter. Exhausted retries remain `max_retries`. |
@@ -104,7 +104,7 @@ ADR-0027 said SDK constructors keep inner retries at zero. That was true for Ope
 
 ### Sticky fallback
 
-Unchanged. Exhausted 404/429/5xx still arrive as `max_retries`, fallback immediately, then stick for the rest of the execution.
+Unchanged. Exhausted 404, throttle 429, and 5xx still arrive as `max_retries`, fallback immediately, then stick for the rest of the execution. Spend-cap 429 and Retry-After / RetryInfo above 60s are `provider_error` (not retried), so Go uses consecutive-failure handling.
 
 ### Constants (hardcoded)
 
