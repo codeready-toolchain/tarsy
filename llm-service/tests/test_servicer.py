@@ -1,4 +1,5 @@
 """Tests for LLMServicer."""
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -164,6 +165,32 @@ class TestLLMServicer:
         assert responses[0].error.code == "internal"
         assert responses[0].error.message == "Internal error during generation"
         assert responses[0].is_final
+
+    async def test_generate_cancelled_does_not_yield_internal(
+        self, servicer_with_mock_provider,
+    ):
+        servicer, _mock_registry, mock_provider = servicer_with_mock_provider
+
+        async def mock_generate(request):
+            raise asyncio.CancelledError()
+            yield
+
+        mock_provider.generate = mock_generate
+
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(model="gemini-2.5-pro"),
+            messages=[],
+        )
+        context = MagicMock()
+
+        responses = []
+        with pytest.raises(asyncio.CancelledError):
+            async for resp in servicer.Generate(request, context):
+                responses.append(resp)
+
+        assert responses == []
 
     async def test_generate_passes_request_to_provider(self, servicer_with_mock_provider):
         """Test that Generate passes the full request to the provider."""

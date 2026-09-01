@@ -8,20 +8,15 @@ import uuid
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from google import genai
-from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from llm_proto import llm_service_pb2 as pb
 from llm.providers.base import LLMProvider
-from llm.providers.http_status import is_retryable_http
+from llm.providers.http_status import extract_retry_hint, is_retryable
+from llm.providers.retry import MAX_RETRIES, retry_delay, sleep_before_retry
 from llm.providers.tool_names import tool_name_to_api, tool_name_from_api
 
 logger = logging.getLogger(__name__)
-
-# Retry configuration
-MAX_RETRIES = 3
-RETRY_BACKOFF_BASE = 2  # seconds
-EMPTY_RESPONSE_RETRY_DELAY = 3  # seconds
 
 # Model Content cache TTL — entries expire after this period.
 # Executions typically complete in minutes; 1 hour is generous headroom.
@@ -112,7 +107,12 @@ class GoogleNativeProvider(LLMProvider):
                 f"Environment variable '{api_key_env}' is not set"
             )
 
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(
+            api_key=api_key,
+            http_options=genai_types.HttpOptions(
+                retry_options=genai_types.HttpRetryOptions(attempts=1),
+            ),
+        )
         self._clients[api_key_env] = client
         logger.info("Created genai client for %s", api_key_env)
         return client
@@ -400,6 +400,8 @@ class GoogleNativeProvider(LLMProvider):
                     yield chunk
                     chunks_yielded += 1
                 return  # Success
+            except asyncio.CancelledError:
+                raise
             except _RetryableError as e:
                 if chunks_yielded > 0:
                     # Partial output already sent — retrying would duplicate data
@@ -418,12 +420,13 @@ class GoogleNativeProvider(LLMProvider):
                     )
                     return
                 last_error = e
-                delay = RETRY_BACKOFF_BASE ** attempt
-                logger.warning(
-                    "[%s] Retryable error (attempt %d/%d), retrying in %ds: %s",
-                    request_id, attempt + 1, MAX_RETRIES, delay, e,
-                )
-                await asyncio.sleep(delay)
+                delay = retry_delay(attempt, extract_retry_hint(e))
+                if attempt < MAX_RETRIES - 1:
+                    logger.warning(
+                        "[%s] Retryable error (attempt %d/%d), retrying in %.1fs: %s",
+                        request_id, attempt + 1, MAX_RETRIES, delay, e,
+                    )
+                await sleep_before_retry(attempt, delay)
             except Exception as e:
                 content_summary = []
                 for c in contents:
@@ -577,19 +580,14 @@ class GoogleNativeProvider(LLMProvider):
                     if chunk.usage_metadata:
                         last_usage = _usage_from_google(chunk.usage_metadata)
 
-        except genai_errors.ServerError as exc:
-            # 5xx errors from Google API are transient and should be retried
-            raise _RetryableError(f"[{request_id}] Google API server error: {exc}") from exc
-
-        except genai_errors.ClientError as exc:
-            if is_retryable_http(exc):
-                raise _RetryableError(
-                    f"[{request_id}] Google API client error: {exc}",
-                ) from exc
-            raise
-
         except asyncio.TimeoutError as exc:
             raise _RetryableError(f"[{request_id}] Generation timed out after {timeout_seconds}s") from exc
+        except Exception as exc:
+            if is_retryable(exc):
+                raise _RetryableError(
+                    f"[{request_id}] Transient provider error: {exc}",
+                ) from exc
+            raise
 
         if not has_content:
             raise _RetryableError(f"[{request_id}] Empty response from LLM (no content generated)")
