@@ -1289,7 +1289,34 @@ class TestLangChainPromptCacheBreakpoints:
         last = converted[-1]
         assert isinstance(last, ToolMessage)
         assert last.additional_kwargs["cache_control"]["ttl"] == "1h"
-        assert last.content[0]["cache_control"]["ttl"] == "1h"
+        result = last.content[0]
+        assert result["type"] == "tool_result"
+        assert result["tool_use_id"] == "tc1"
+        assert result["content"] == "pod-1 Running"
+        assert result["cache_control"]["ttl"] == "1h"
+
+    def test_vertex_tool_result_cache_control_not_nested(self, provider):
+        from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic
+
+        converted = provider._convert_messages(
+            _looping_tool_history(), prompt_cache.ANTHROPIC,
+        )
+        _, formatted = _format_messages_anthropic(converted, project=None)
+        tool_results = [
+            block
+            for msg in formatted
+            for block in (msg["content"] if isinstance(msg["content"], list) else [])
+            if isinstance(block, dict) and block.get("type") == "tool_result"
+        ]
+        assert tool_results
+        for block in tool_results:
+            assert block["cache_control"]["ttl"] == "1h"
+            inner = block["content"]
+            assert isinstance(inner, str) or isinstance(inner, list)
+            if isinstance(inner, list):
+                for part in inner:
+                    if isinstance(part, dict):
+                        assert "cache_control" not in part
 
     def test_anthropic_skips_tool_breakpoint_when_no_tools(self, provider):
         mock_model = MagicMock()

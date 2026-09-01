@@ -325,6 +325,21 @@ class LangChainProvider(LLMProvider):
                 additional_kwargs=extra,
             )
         if isinstance(msg, ToolMessage):
+            # Anthropic rejects cache_control inside tool_result.content.
+            # Vertex copies ToolMessage content as-is (no hoist); native
+            # ChatAnthropic accepts a pre-formatted tool_result block.
+            if key == "cache_control":
+                return ToolMessage(
+                    content=[{
+                        "type": "tool_result",
+                        "tool_use_id": msg.tool_call_id,
+                        "content": text,
+                        key: value,
+                    }],
+                    tool_call_id=msg.tool_call_id,
+                    name=msg.name,
+                    additional_kwargs=extra,
+                )
             return ToolMessage(
                 content=[block],
                 tool_call_id=msg.tool_call_id,
