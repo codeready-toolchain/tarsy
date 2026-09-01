@@ -420,13 +420,13 @@ class GoogleNativeProvider(LLMProvider):
                     )
                     return
                 last_error = e
+                delay = retry_delay(attempt, extract_retry_hint(e))
                 if attempt < MAX_RETRIES - 1:
-                    delay = retry_delay(attempt, extract_retry_hint(e))
                     logger.warning(
                         "[%s] Retryable error (attempt %d/%d), retrying in %.1fs: %s",
                         request_id, attempt + 1, MAX_RETRIES, delay, e,
                     )
-                await sleep_before_retry(attempt, e)
+                await sleep_before_retry(attempt, delay)
             except Exception as e:
                 content_summary = []
                 for c in contents:

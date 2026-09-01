@@ -41,12 +41,11 @@ class TestSleepBeforeRetry:
     @pytest.mark.asyncio
     async def test_skips_sleep_on_last_attempt(self):
         with patch("llm.providers.retry.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            await sleep_before_retry(MAX_RETRIES - 1, RuntimeError("exhausted"))
+            await sleep_before_retry(MAX_RETRIES - 1, 0.5)
             mock_sleep.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sleeps_on_earlier_attempt(self):
+    async def test_sleeps_given_delay(self):
         with patch("llm.providers.retry.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            await sleep_before_retry(0, RuntimeError("blip"))
-            mock_sleep.assert_called_once()
-            assert 0 <= mock_sleep.call_args[0][0] <= 1
+            await sleep_before_retry(0, 0.37)
+            mock_sleep.assert_called_once_with(0.37)
