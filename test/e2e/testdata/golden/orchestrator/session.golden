@@ -109,7 +109,7 @@
           "estimated_cost_usd": 0,
           "execution_id": "{UUID}",
           "input_tokens": 10,
-          "llm_backend": "google-native",
+          "llm_backend": "langchain",
           "llm_provider": "test-provider",
           "model_name": "test-model",
           "output_tokens": 5,
