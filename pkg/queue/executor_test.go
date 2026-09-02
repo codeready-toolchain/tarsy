@@ -683,8 +683,20 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			agentDef: &config.AgentConfig{},
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 5,
-				AgentTimeout:        420 * time.Second,
-				MaxBudget:           900 * time.Second,
+			},
+		},
+		{
+			name: "defaults without agent_timeout leave timeout zero",
+			cfg: &config.Config{
+				Defaults: &config.Defaults{
+					Orchestrator: &config.OrchestratorConfig{
+						MaxConcurrentAgents: intPtr(10),
+					},
+				},
+			},
+			agentDef: &config.AgentConfig{},
+			want: &orchestrator.OrchestratorGuardrails{
+				MaxConcurrentAgents: 10,
 			},
 		},
 		{
@@ -701,7 +713,6 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 10,
 				AgentTimeout:        60 * time.Second,
-				MaxBudget:           900 * time.Second,
 			},
 		},
 		{
@@ -711,7 +722,6 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 					Orchestrator: &config.OrchestratorConfig{
 						MaxConcurrentAgents: intPtr(10),
 						AgentTimeout:        dur(60 * time.Second),
-						MaxBudget:           dur(120 * time.Second),
 					},
 				},
 			},
@@ -723,7 +733,6 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 3,
 				AgentTimeout:        60 * time.Second,
-				MaxBudget:           120 * time.Second,
 			},
 		},
 		{
@@ -731,29 +740,24 @@ func TestResolveOrchestratorGuardrails(t *testing.T) {
 			cfg:  &config.Config{},
 			agentDef: &config.AgentConfig{
 				Orchestrator: &config.OrchestratorConfig{
-					MaxBudget: dur(30 * time.Second),
+					AgentTimeout: dur(30 * time.Second),
 				},
 			},
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 5,
-				AgentTimeout:        420 * time.Second,
-				MaxBudget:           30 * time.Second,
+				AgentTimeout:        30 * time.Second,
 			},
 		},
 		{
-			name: "zero or negative values are clamped to defaults",
+			name: "zero max_concurrent_agents is clamped; omitted agent_timeout stays zero",
 			cfg:  &config.Config{},
 			agentDef: &config.AgentConfig{
 				Orchestrator: &config.OrchestratorConfig{
 					MaxConcurrentAgents: intPtr(0),
-					AgentTimeout:        dur(-1 * time.Second),
-					MaxBudget:           dur(0),
 				},
 			},
 			want: &orchestrator.OrchestratorGuardrails{
 				MaxConcurrentAgents: 5,
-				AgentTimeout:        420 * time.Second,
-				MaxBudget:           900 * time.Second,
 			},
 		},
 	}

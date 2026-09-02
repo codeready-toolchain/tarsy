@@ -187,17 +187,6 @@ func TestValidateAgents(t *testing.T) {
 			errMsg:  "must be positive",
 		},
 		{
-			name: "orchestrator config with zero max_budget",
-			agents: map[string]*AgentConfig{
-				"orch": {
-					Orchestrator: &OrchestratorConfig{MaxBudget: durPtr(0)},
-				},
-			},
-			servers: map[string]*MCPServerConfig{},
-			wantErr: true,
-			errMsg:  "must be positive",
-		},
-		{
 			name: "action agent type is valid",
 			agents: map[string]*AgentConfig{
 				"remediation": {Type: AgentTypeAction},
@@ -3356,6 +3345,11 @@ func TestValidateOrchestratorDefaults(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "omitted agent_timeout is valid",
+			orch:    &OrchestratorConfig{MaxConcurrentAgents: intPtr(5)},
+			wantErr: false,
+		},
+		{
 			name:    "zero max_concurrent_agents",
 			orch:    &OrchestratorConfig{MaxConcurrentAgents: intPtr(0)},
 			wantErr: true,
@@ -3364,12 +3358,6 @@ func TestValidateOrchestratorDefaults(t *testing.T) {
 		{
 			name:    "negative agent_timeout",
 			orch:    &OrchestratorConfig{AgentTimeout: durPtr(-5 * time.Second)},
-			wantErr: true,
-			errMsg:  "must be positive",
-		},
-		{
-			name:    "zero max_budget",
-			orch:    &OrchestratorConfig{MaxBudget: durPtr(0)},
 			wantErr: true,
 			errMsg:  "must be positive",
 		},

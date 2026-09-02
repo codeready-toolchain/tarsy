@@ -73,7 +73,6 @@ type AgentView struct {
 type OrchestratorView struct {
 	MaxConcurrentAgents *int    `json:"max_concurrent_agents,omitempty"`
 	AgentTimeout        *string `json:"agent_timeout,omitempty"`
-	MaxBudget           *string `json:"max_budget,omitempty"`
 }
 
 // ChainView is the chain config view.
@@ -632,10 +631,6 @@ func buildOrchestratorView(o *config.OrchestratorConfig) *OrchestratorView {
 	if o.AgentTimeout != nil {
 		s := durationString(*o.AgentTimeout)
 		view.AgentTimeout = &s
-	}
-	if o.MaxBudget != nil {
-		s := durationString(*o.MaxBudget)
-		view.MaxBudget = &s
 	}
 	return view
 }

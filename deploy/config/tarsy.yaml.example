@@ -153,7 +153,7 @@ defaults:
   compose_provider: "google-default"
   
   # Default max iterations (forces conclusion when reached, no pause/resume)
-  max_iterations: 20
+  max_iterations: 40
   
   # Default LLM backend
   llm_backend: "langchain"
@@ -166,8 +166,8 @@ defaults:
   # Ignored when an agent has no resolved sub_agents.
   # orchestrator:
   #   max_concurrent_agents: 5
-  #   agent_timeout: 600s
-  #   max_budget: 30m
+  #   # agent_timeout omitted → remaining parent (session/chat) time
+  #   # agent_timeout: 20m     # optional dedicated cap, still clamped to parent
 
   # LLM provider fallback — ordered list of alternative providers to try when
   # the primary provider fails (after Python-level retries are exhausted).
@@ -639,11 +639,10 @@ agent_chains:
           - name: "KubernetesAgent"
             llm_provider: "gemini-3.1-pro"
             llm_backend: "google-native"
-            # Dispatch limits for sub-agents (optional — defaults applied if omitted)
+            # Dispatch limits for sub-agents (optional — omit agent_timeout to use remaining parent time)
             orchestrator:
               max_concurrent_agents: 5
-              agent_timeout: 420s
-              max_budget: 900s
+              # agent_timeout: 20m     # optional dedicated cap, still clamped to parent
             # Per-sub_agent ref: optional required_skills / skills merge with that agent definition for dispatch only
             # (parent stage required_skills do not apply to sub-agents).
             sub_agents:

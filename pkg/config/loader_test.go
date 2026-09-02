@@ -168,7 +168,7 @@ defaults:
   orchestrator:
     max_concurrent_agents: 5
     agent_timeout: 5m
-    max_budget: 30m
+    max_budget: 30m  # unknown field; ignored by yaml.Unmarshal
 
 agents:
   worker-agent:
@@ -214,7 +214,6 @@ agent_chains:
 	require.NotNil(t, cfg.Defaults.Orchestrator)
 	assert.Equal(t, 5, *cfg.Defaults.Orchestrator.MaxConcurrentAgents)
 	assert.Equal(t, 5*time.Minute, *cfg.Defaults.Orchestrator.AgentTimeout)
-	assert.Equal(t, 30*time.Minute, *cfg.Defaults.Orchestrator.MaxBudget)
 
 	// Agent orchestrator config (orchestrator block is valid on any agent type)
 	orch := cfg.Agents["orch-agent"]
@@ -222,7 +221,6 @@ agent_chains:
 	require.NotNil(t, orch.Orchestrator)
 	assert.Equal(t, 3, *orch.Orchestrator.MaxConcurrentAgents)
 	assert.Equal(t, 2*time.Minute, *orch.Orchestrator.AgentTimeout)
-	assert.Nil(t, orch.Orchestrator.MaxBudget)
 
 	// Chain-level sub_agents
 	chain := cfg.AgentChains["test-chain"]
