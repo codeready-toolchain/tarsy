@@ -680,6 +680,27 @@ func TestValidateMCPServersSummarizationProvider(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "google-native overlay with openai provider fails",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						LLMProvider:         "openai-default",
+						LLMBackend:          LLMBackendNativeGemini,
+					},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
+		{
 			name: "invalid backend fails",
 			servers: map[string]*MCPServerConfig{
 				"test-server": {
@@ -1392,6 +1413,73 @@ func TestValidateStageComprehensive(t *testing.T) {
 			errMsg:  "LLM provider 'nonexistent-provider' which is not found",
 		},
 		{
+			name: "stage agent google-native with openai provider fails",
+			stage: StageConfig{
+				Name: "stage1",
+				Agents: []StageAgentConfig{
+					{
+						Name:        "test-agent",
+						LLMProvider: "openai-default",
+						LLMBackend:  LLMBackendNativeGemini,
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
+		{
+			name: "stage agent google-native with google provider passes",
+			stage: StageConfig{
+				Name: "stage1",
+				Agents: []StageAgentConfig{
+					{
+						Name:        "test-agent",
+						LLMProvider: "google-default",
+						LLMBackend:  LLMBackendNativeGemini,
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"google-default": {Type: LLMProviderTypeGoogle, Model: "gemini"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "stage agent backend-only google-native passes",
+			stage: StageConfig{
+				Name: "stage1",
+				Agents: []StageAgentConfig{
+					{
+						Name:       "test-agent",
+						LLMBackend: LLMBackendNativeGemini,
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
+		},
+		{
 			name: "stage with agent-level invalid max iterations",
 			stage: StageConfig{
 				Name: "stage1",
@@ -1544,6 +1632,50 @@ func TestValidateStageComprehensive(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "LLM provider 'nonexistent-provider' which is not found",
+		},
+		{
+			name: "synthesis google-native with openai provider fails",
+			stage: StageConfig{
+				Name:   "stage1",
+				Agents: []StageAgentConfig{{Name: "test-agent"}},
+				Synthesis: &SynthesisConfig{
+					LLMProvider: "openai-default",
+					LLMBackend:  LLMBackendNativeGemini,
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
+		{
+			name: "synthesis google-native with anthropic provider fails",
+			stage: StageConfig{
+				Name:   "stage1",
+				Agents: []StageAgentConfig{{Name: "test-agent"}},
+				Synthesis: &SynthesisConfig{
+					LLMProvider: "anthropic-default",
+					LLMBackend:  LLMBackendNativeGemini,
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"anthropic-default": {Type: LLMProviderTypeAnthropic, Model: "claude-sonnet"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
 		},
 		{
 			name: "stage with action agent type is valid",
@@ -1866,7 +1998,64 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		// Scoring validation tests
+		{
+			name: "chain google-native with openai provider fails",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:  []string{"test"},
+					LLMProvider: "openai-default",
+					LLMBackend:  LLMBackendNativeGemini,
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
+		{
+			name: "chat google-native with openai provider fails",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Chat: &ChatConfig{
+						Enabled:     true,
+						Agent:       "test-agent",
+						LLMProvider: "openai-default",
+						LLMBackend:  LLMBackendNativeGemini,
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
 		{
 			name: "scoring enabled uses built-in agent by default",
 			chains: map[string]*ChainConfig{
@@ -2202,10 +2391,11 @@ func TestValidateMCPServersSSETransport(t *testing.T) {
 
 func TestValidateDefaults(t *testing.T) {
 	tests := []struct {
-		name     string
-		defaults *Defaults
-		wantErr  bool
-		errMsg   string
+		name      string
+		defaults  *Defaults
+		providers map[string]*LLMProviderConfig
+		wantErr   bool
+		errMsg    string
 	}{
 		{
 			name:     "nil defaults passes",
@@ -2277,12 +2467,25 @@ func TestValidateDefaults(t *testing.T) {
 			wantErr: true,
 			errMsg:  "compose_provider",
 		},
+		{
+			name: "google-native with openai defaults provider fails",
+			defaults: &Defaults{
+				LLMProvider: "openai-default",
+				LLMBackend:  LLMBackendNativeGemini,
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
-				Defaults: tt.defaults,
+				Defaults:            tt.defaults,
+				LLMProviderRegistry: NewLLMProviderRegistry(tt.providers),
 			}
 
 			validator := NewValidator(cfg)
@@ -2379,6 +2582,21 @@ func TestValidateDefaultsScoring(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "google-native with openai scoring provider fails",
+			defaults: &Defaults{
+				Scoring: &ScoringConfig{
+					LLMProvider: "openai-default",
+					LLMBackend:  LLMBackendNativeGemini,
+				},
+			},
+			agents: map[string]*AgentConfig{},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
+		},
+		{
 			name: "invalid scoring max_iterations fails",
 			defaults: &Defaults{
 				Scoring: &ScoringConfig{MaxIterations: intPtr(0)},
@@ -2451,6 +2669,20 @@ func TestValidateDefaultsSummarization(t *testing.T) {
 				"test-provider": {Type: LLMProviderTypeGoogle, Model: "test"},
 			},
 			wantErr: false,
+		},
+		{
+			name: "google-native with openai summarization provider fails",
+			defaults: &Defaults{
+				Summarization: &SummarizationConfig{
+					LLMProvider: "openai-default",
+					LLMBackend:  LLMBackendNativeGemini,
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			wantErr: true,
+			errMsg:  "requires a google provider",
 		},
 		{
 			name: "unknown provider fails",
@@ -3356,7 +3588,32 @@ func TestValidateSubAgents(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("sub_agent ref unknown required_skill", func(t *testing.T) {
+	t.Run("sub_agent google-native with openai provider fails", func(t *testing.T) {
+		cfg := &Config{
+			AgentRegistry:     NewAgentRegistry(baseAgents),
+			MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
+				"openai-default": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					SubAgents: SubAgentRefs{
+						{Name: "LogAnalyzer", LLMProvider: "openai-default", LLMBackend: LLMBackendNativeGemini},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "MetricChecker"}}},
+					},
+				},
+			}),
+		}
+		validator := NewValidator(cfg)
+		err := validator.validateChains()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires a google provider")
+	})
+
+	t.Run("sub_agent ref with unknown required_skill fails", func(t *testing.T) {
 		reg := NewSkillRegistry(map[string]*SkillConfig{
 			"known-skill": {Name: "known-skill", Description: "d", Body: "b"},
 		})
@@ -3866,6 +4123,20 @@ func TestValidateFallbackProviders(t *testing.T) {
 			env:     map[string]string{"GOOD_KEY": "secret"},
 			wantErr: true,
 			errMsg:  "LLM provider 'bad-provider' not found",
+		},
+		{
+			name: "fallback google-native with openai provider fails",
+			defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{
+					{Provider: "openai-fb", Backend: LLMBackendNativeGemini},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"openai-fb": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "FB_KEY"},
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: true,
+			errMsg:  "requires a google provider",
 		},
 		{
 			name: "empty fallback list is valid",

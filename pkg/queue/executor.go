@@ -575,28 +575,20 @@ func (e *RealSessionExecutor) executeAgent(
 	)
 
 	// Best-effort provider/backend for the error path (before ResolveAgentConfig
-	// succeeds). The happy path uses resolvedConfig instead, keeping
-	// ResolveAgentConfig as the single source of truth.
-	var fallbackProviderName string
-	fallbackBackend := agent.DefaultLLMBackend
+	// succeeds). Same pairing as ResolveAgentConfig, minus agent-def (lookup
+	// may be what failed). Lookup errors are ignored; name/backend still apply.
+	var layers []agent.LLMLayer
 	if e.cfg.Defaults != nil {
-		fallbackProviderName = e.cfg.Defaults.LLMProvider
-		if e.cfg.Defaults.LLMBackend != "" {
-			fallbackBackend = e.cfg.Defaults.LLMBackend
-		}
+		layers = append(layers, agent.LLMLayer{
+			Provider: e.cfg.Defaults.LLMProvider,
+			Backend:  e.cfg.Defaults.LLMBackend,
+		})
 	}
-	if input.chain.LLMProvider != "" {
-		fallbackProviderName = input.chain.LLMProvider
-	}
-	if agentConfig.LLMProvider != "" {
-		fallbackProviderName = agentConfig.LLMProvider
-	}
-	if input.chain.LLMBackend != "" {
-		fallbackBackend = input.chain.LLMBackend
-	}
-	if agentConfig.LLMBackend != "" {
-		fallbackBackend = agentConfig.LLMBackend
-	}
+	layers = append(layers,
+		agent.LLMLayer{Provider: input.chain.LLMProvider, Backend: input.chain.LLMBackend},
+		agent.LLMLayer{Provider: agentConfig.LLMProvider, Backend: agentConfig.LLMBackend},
+	)
+	_, fallbackProviderName, fallbackBackend, _ := agent.ResolveLLMPair(e.cfg, layers...)
 
 	// Resolve agent config from hierarchy (before creating execution record
 	// so the DB record captures the correctly resolved iteration strategy).

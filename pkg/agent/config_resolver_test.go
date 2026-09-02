@@ -2415,3 +2415,295 @@ func TestResolvedAgentConfig_OnDemandSkillNameSet(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyLLMLayers(t *testing.T) {
+	tests := []struct {
+		name         string
+		layers       []LLMLayer
+		wantProvider string
+		wantBackend  config.LLMBackend
+	}{
+		{
+			name:         "empty layers default to langchain",
+			wantBackend:  DefaultLLMBackend,
+			wantProvider: "",
+		},
+		{
+			name: "defaults pair is kept",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+			},
+			wantProvider: "google-default",
+			wantBackend:  config.LLMBackendNativeGemini,
+		},
+		{
+			name: "named provider without sibling backend resets to langchain",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+				{Provider: "openai-default"},
+			},
+			wantProvider: "openai-default",
+			wantBackend:  config.LLMBackendLangChain,
+		},
+		{
+			name: "explicit sibling backend is kept",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+				{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+			},
+			wantProvider: "google-default",
+			wantBackend:  config.LLMBackendNativeGemini,
+		},
+		{
+			name: "backend-only override keeps provider",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+				{Backend: config.LLMBackendLangChain},
+			},
+			wantProvider: "google-default",
+			wantBackend:  config.LLMBackendLangChain,
+		},
+		{
+			name: "agent-def backend-only after defaults",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendLangChain},
+				{Backend: config.LLMBackendNativeGemini},
+			},
+			wantProvider: "google-default",
+			wantBackend:  config.LLMBackendNativeGemini,
+		},
+		{
+			name: "provider-only after agent-def native backend resets to langchain",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendLangChain},
+				{Backend: config.LLMBackendNativeGemini},
+				{Provider: "google-default"},
+			},
+			wantProvider: "google-default",
+			wantBackend:  config.LLMBackendLangChain,
+		},
+		{
+			name: "empty layer does not change the pair",
+			layers: []LLMLayer{
+				{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+				{},
+			},
+			wantProvider: "google-default",
+			wantBackend:  config.LLMBackendNativeGemini,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotProvider, gotBackend := applyLLMLayers(tt.layers...)
+			assert.Equal(t, tt.wantProvider, gotProvider)
+			assert.Equal(t, tt.wantBackend, gotBackend)
+		})
+	}
+}
+
+func TestLLMProviderBackendPairing(t *testing.T) {
+	google := &config.LLMProviderConfig{
+		Type: config.LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	openai := &config.LLMProviderConfig{
+		Type: config.LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "OPENAI_API_KEY",
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider: "google-default",
+			LLMBackend:  config.LLMBackendNativeGemini,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"PlainAgent":                {},
+			"WebResearcher":             {LLMBackend: config.LLMBackendNativeGemini},
+			config.AgentNameChat:        {},
+			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
+			config.AgentNameCompose:     {Type: config.AgentTypeCompose},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": google,
+			"openai-default": openai,
+		}),
+	}
+
+	t.Run("stage provider without sibling backend uses langchain", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{Name: "PlainAgent", LLMProvider: "openai-default"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("stage google pair with explicit google-native is kept", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{
+				Name:        "PlainAgent",
+				LLMProvider: "google-default",
+				LLMBackend:  config.LLMBackendNativeGemini,
+			})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("backend-only override keeps inherited provider", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{Name: "PlainAgent", LLMBackend: config.LLMBackendLangChain})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("agent-def google-native is kept when stage does not name a provider", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{Name: "WebResearcher"})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("agent-def google-native resets when stage names a provider without backend", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{Name: "WebResearcher", LLMProvider: "openai-default"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("chain provider without chain backend uses langchain", func(t *testing.T) {
+		resolved, err := ResolveAgentConfig(cfg, &config.ChainConfig{LLMProvider: "openai-default"},
+			config.StageConfig{}, config.StageAgentConfig{Name: "PlainAgent"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("chat provider without sibling backend uses langchain", func(t *testing.T) {
+		resolved, err := ResolveChatAgentConfig(cfg, &config.ChainConfig{},
+			&config.ChatConfig{LLMProvider: "openai-default"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("chat without provider keeps chain google-native pair", func(t *testing.T) {
+		resolved, err := ResolveChatAgentConfig(cfg, &config.ChainConfig{
+			LLMProvider: "google-default",
+			LLMBackend:  config.LLMBackendNativeGemini,
+		}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("scoring named provider without scoring backend uses langchain", func(t *testing.T) {
+		cfgScoring := *cfg
+		cfgScoring.Defaults = &config.Defaults{
+			LLMProvider: "google-default",
+			LLMBackend:  config.LLMBackendNativeGemini,
+			Scoring:     &config.ScoringConfig{LLMProvider: "openai-default"},
+		}
+		resolved, err := ResolveScoringConfig(&cfgScoring, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("chain scoring provider without scoring backend uses langchain", func(t *testing.T) {
+		resolved, err := ResolveScoringConfig(cfg, &config.ChainConfig{},
+			&config.ScoringConfig{LLMProvider: "openai-default"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("scoring chain provider without scoring backend uses langchain", func(t *testing.T) {
+		resolved, err := ResolveScoringConfig(cfg, &config.ChainConfig{
+			LLMProvider: "openai-default",
+			LLMBackend:  config.LLMBackendNativeGemini,
+		}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("scoring ignores chain llm_backend", func(t *testing.T) {
+		resolved, err := ResolveScoringConfig(cfg, &config.ChainConfig{
+			LLMBackend: config.LLMBackendLangChain,
+		}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("executive_summary_provider without sibling uses langchain", func(t *testing.T) {
+		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{
+			LLMBackend:               config.LLMBackendNativeGemini,
+			ExecutiveSummaryProvider: "openai-default",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("compose_provider without sibling uses langchain", func(t *testing.T) {
+		cfgCompose := *cfg
+		cfgCompose.Defaults = &config.Defaults{
+			LLMProvider:     "google-default",
+			LLMBackend:      config.LLMBackendNativeGemini,
+			ComposeProvider: "openai-default",
+		}
+		resolved, err := ResolveComposeConfig(&cfgCompose, &config.ChainConfig{
+			LLMBackend: config.LLMBackendNativeGemini,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("chain compose_provider without sibling uses langchain", func(t *testing.T) {
+		resolved, err := ResolveComposeConfig(cfg, &config.ChainConfig{
+			LLMBackend:      config.LLMBackendNativeGemini,
+			ComposeProvider: "openai-default",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+}
+
+func TestResolveLLMPair(t *testing.T) {
+	google := &config.LLMProviderConfig{
+		Type: config.LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	cfg := &config.Config{
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": google,
+		}),
+	}
+
+	t.Run("lookup success returns provider and pair", func(t *testing.T) {
+		provider, name, backend, err := ResolveLLMPair(cfg,
+			LLMLayer{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, google, provider)
+		assert.Equal(t, "google-default", name)
+		assert.Equal(t, config.LLMBackendNativeGemini, backend)
+	})
+
+	t.Run("unknown provider still returns paired name and langchain", func(t *testing.T) {
+		provider, name, backend, err := ResolveLLMPair(cfg,
+			LLMLayer{Provider: "google-default", Backend: config.LLMBackendNativeGemini},
+			LLMLayer{Provider: "missing-provider"},
+		)
+		require.Error(t, err)
+		assert.Nil(t, provider)
+		assert.Equal(t, "missing-provider", name)
+		assert.Equal(t, config.LLMBackendLangChain, backend)
+		assert.Contains(t, err.Error(), `LLM provider "missing-provider" not found`)
+	})
+}

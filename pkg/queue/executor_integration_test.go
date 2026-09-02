@@ -2326,6 +2326,70 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 	assert.Equal(t, 1, failedEvents[0].AgentIndex, "single agent should have agent_index=1")
 }
 
+func TestExecutor_ResolveFailureStoresPairedBackend(t *testing.T) {
+	// Stage names a provider without a sibling backend. ResolveAgentConfig
+	// fails (unknown provider), but the failed execution record must still
+	// store langchain — not defaults.llm_backend google-native.
+	entClient, _ := util.SetupTestDatabase(t)
+
+	maxIter := 1
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent", LLMProvider: "missing-provider"},
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider:   "test-provider",
+			LLMBackend:    config.LLMBackendNativeGemini,
+			MaxIterations: &maxIter,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent": {
+				MaxIterations: &maxIter,
+			},
+			config.AgentNameExecSummary: {
+				Type: config.AgentTypeExecSummary,
+			},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"test-provider": {
+				Type:  config.LLMProviderTypeGoogle,
+				Model: "test-model",
+			},
+		}),
+		ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+			"test-chain": chain,
+		}),
+		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+	}
+
+	publisher := &testEventPublisher{}
+	executor := NewRealSessionExecutor(cfg, entClient, &mockLLMClient{}, publisher, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(context.Background(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusFailed, result.Status)
+	require.NotNil(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "failed to resolve agent config")
+
+	execs, err := entClient.AgentExecution.Query().All(context.Background())
+	require.NoError(t, err)
+	require.Len(t, execs, 1)
+	assert.Equal(t, agentexecution.StatusFailed, execs[0].Status)
+	require.NotNil(t, execs[0].LlmProvider)
+	assert.Equal(t, "missing-provider", *execs[0].LlmProvider)
+	assert.Equal(t, string(config.LLMBackendLangChain), execs[0].LlmBackend)
+}
+
 // ────────────────────────────────────────────────────────────
 // Orchestrator integration tests
 // ────────────────────────────────────────────────────────────

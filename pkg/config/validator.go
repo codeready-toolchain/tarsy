@@ -138,6 +138,9 @@ func (v *Validator) validateDefaults() error {
 			return NewValidationError("defaults", "", "scoring.llm_provider",
 				fmt.Errorf("LLM provider '%s' not found", defaults.Scoring.LLMProvider))
 		}
+		if err := v.googleNativeRequiresGoogleProvider(defaults.Scoring.LLMProvider, defaults.Scoring.LLMBackend); err != nil {
+			return NewValidationError("defaults", "", "scoring.llm_backend", err)
+		}
 		if defaults.Scoring.MaxIterations != nil && *defaults.Scoring.MaxIterations < 1 {
 			return NewValidationError("defaults", "", "scoring.max_iterations",
 				fmt.Errorf("must be at least 1"))
@@ -146,6 +149,10 @@ func (v *Validator) validateDefaults() error {
 
 	if err := v.validateDefaultsSummarization(defaults.Summarization); err != nil {
 		return err
+	}
+
+	if err := v.googleNativeRequiresGoogleProvider(defaults.LLMProvider, defaults.LLMBackend); err != nil {
+		return NewValidationError("defaults", "", "llm_backend", err)
 	}
 
 	if defaults.ComposeProvider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(defaults.ComposeProvider)) {
@@ -224,6 +231,29 @@ func (v *Validator) validateSummarizationLLM(sum *SummarizationConfig, component
 	if sum.LLMProvider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(sum.LLMProvider)) {
 		return NewValidationError(component, id, fieldPrefix+".llm_provider",
 			fmt.Errorf("LLM provider '%s' not found", sum.LLMProvider))
+	}
+	if err := v.googleNativeRequiresGoogleProvider(sum.LLMProvider, sum.LLMBackend); err != nil {
+		return NewValidationError(component, id, fieldPrefix+".llm_backend", err)
+	}
+	return nil
+}
+
+// googleNativeRequiresGoogleProvider rejects an explicit google-native backend
+// paired with a non-google provider at the same YAML node. Unknown providers
+// are reported elsewhere. Backend-only overrides (no sibling provider) pass.
+func (v *Validator) googleNativeRequiresGoogleProvider(providerName string, backend LLMBackend) error {
+	if backend != LLMBackendNativeGemini || providerName == "" {
+		return nil
+	}
+	if v.cfg.LLMProviderRegistry == nil {
+		return nil
+	}
+	provider, err := v.cfg.LLMProviderRegistry.Get(providerName)
+	if err != nil {
+		return nil
+	}
+	if provider.Type != LLMProviderTypeGoogle {
+		return fmt.Errorf("llm_backend %q requires a google provider, got type %q for %q", backend, provider.Type, providerName)
 	}
 	return nil
 }
@@ -377,6 +407,9 @@ func (v *Validator) validateChains() error {
 			if chain.Chat.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Chat.LLMProvider) {
 				return NewValidationError("chain", chainID, "chat.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Chat.LLMProvider))
 			}
+			if err := v.googleNativeRequiresGoogleProvider(chain.Chat.LLMProvider, chain.Chat.LLMBackend); err != nil {
+				return NewValidationError("chain", chainID, "chat.llm_backend", err)
+			}
 
 			// Validate chat max iterations if specified
 			if chain.Chat.MaxIterations != nil && *chain.Chat.MaxIterations < 1 {
@@ -410,6 +443,9 @@ func (v *Validator) validateChains() error {
 			if chain.Scoring.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.Scoring.LLMProvider) {
 				return NewValidationError("chain", chainID, "scoring.llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.Scoring.LLMProvider))
 			}
+			if err := v.googleNativeRequiresGoogleProvider(chain.Scoring.LLMProvider, chain.Scoring.LLMBackend); err != nil {
+				return NewValidationError("chain", chainID, "scoring.llm_backend", err)
+			}
 
 			// Validate scoring max iterations if specified
 			if chain.Scoring.MaxIterations != nil && *chain.Scoring.MaxIterations < 1 {
@@ -427,6 +463,9 @@ func (v *Validator) validateChains() error {
 		// Validate chain-level LLM provider if specified
 		if chain.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.LLMProvider) {
 			return NewValidationError("chain", chainID, "llm_provider", fmt.Errorf("LLM provider '%s' not found", chain.LLMProvider))
+		}
+		if err := v.googleNativeRequiresGoogleProvider(chain.LLMProvider, chain.LLMBackend); err != nil {
+			return NewValidationError("chain", chainID, "llm_backend", err)
 		}
 
 		if chain.ComposeProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.ComposeProvider) {
@@ -494,6 +533,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		// Validate agent-level LLM provider if specified
 		if agentConfig.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(agentConfig.LLMProvider) {
 			return fmt.Errorf("%s: agent '%s' specifies LLM provider '%s' which is not found", stageRef, agentConfig.Name, agentConfig.LLMProvider)
+		}
+		if err := v.googleNativeRequiresGoogleProvider(agentConfig.LLMProvider, agentConfig.LLMBackend); err != nil {
+			return fmt.Errorf("%s: agent '%s': %w", stageRef, agentConfig.Name, err)
 		}
 
 		// Validate agent-level max iterations if specified
@@ -571,6 +613,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		// Validate synthesis LLM provider if specified
 		if stage.Synthesis.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(stage.Synthesis.LLMProvider) {
 			return fmt.Errorf("%s: synthesis specifies LLM provider '%s' which is not found", stageRef, stage.Synthesis.LLMProvider)
+		}
+		if err := v.googleNativeRequiresGoogleProvider(stage.Synthesis.LLMProvider, stage.Synthesis.LLMBackend); err != nil {
+			return fmt.Errorf("%s: synthesis: %w", stageRef, err)
 		}
 	}
 
@@ -861,6 +906,9 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 		if ref.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(ref.LLMProvider) {
 			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' specifies LLM provider '%s' which is not found", ref.Name, ref.LLMProvider))
 		}
+		if err := v.googleNativeRequiresGoogleProvider(ref.LLMProvider, ref.LLMBackend); err != nil {
+			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s': %w", ref.Name, err))
+		}
 		if ref.MaxIterations != nil && *ref.MaxIterations < 1 {
 			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' max_iterations must be at least 1", ref.Name))
 		}
@@ -917,6 +965,9 @@ func (v *Validator) validateFallbackProviders(entries []FallbackProviderEntry, s
 		if !entry.ResolvedBackend().IsValid() {
 			return NewValidationError(section, name, entryRef,
 				fmt.Errorf("invalid LLM backend: %s", entry.Backend))
+		}
+		if err := v.googleNativeRequiresGoogleProvider(entry.Provider, entry.Backend); err != nil {
+			return NewValidationError(section, name, entryRef, err)
 		}
 
 		// Credentials must be set

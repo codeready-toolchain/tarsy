@@ -204,3 +204,5 @@ These original decisions still stand. ADR-0027 changed *how* they behave under s
 ## Amendment (2026-09-01)
 
 **Q3 / backend specification.** Omitted `fallback_providers[].backend` defaults to `langchain`. `google-native` remains explicit. Backend is still not inferred from provider type and does not inherit `defaults.llm_backend`.
+
+The same pairing applies to investigation, chat, scoring, compose, and executive-summary named-provider layers: a YAML node that sets `llm_provider` (or `compose_provider` / `executive_summary_provider`) without a sibling backend resolves backend to `langchain` and does not keep a parent `llm_backend`. `google-native` paired with a non-google provider at the same node is a load-time error.

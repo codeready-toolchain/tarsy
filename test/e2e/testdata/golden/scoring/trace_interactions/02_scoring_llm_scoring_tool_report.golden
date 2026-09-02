@@ -189,7 +189,7 @@ Restarted pod-1. Recommend increasing memory limit to 1Gi.
 
 ## Stage 3: Executive Summary
 
-**Agent:** ExecSummaryAgent (google-native, test-model)
+**Agent:** ExecSummaryAgent (langchain, test-model)
 **Status**: completed
 
 **Agent Response:**

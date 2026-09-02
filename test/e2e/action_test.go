@@ -103,9 +103,11 @@ func TestE2E_ActionChain(t *testing.T) {
 				"restart_service":    StaticToolHandler(restartResult),
 			},
 		}),
+		WithDeferredWorkerStart(),
 	)
 
-	// Connect WS and subscribe.
+	// Connect WS and subscribe before workers start so transient
+	// execution.progress events are not lost (they are not in catchup).
 	ctx := context.Background()
 	ws, err := WSConnect(ctx, app.WSURL)
 	require.NoError(t, err)
@@ -116,6 +118,7 @@ func TestE2E_ActionChain(t *testing.T) {
 	require.NotEmpty(t, sessionID)
 
 	require.NoError(t, ws.Subscribe("session:"+sessionID))
+	app.StartWorkers()
 
 	app.WaitForSessionStatus(t, sessionID, "completed")
 

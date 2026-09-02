@@ -134,7 +134,7 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
 ## Stage 2: Executive Summary
 
-**Agent:** ExecSummaryAgent (google-native, test-model)
+**Agent:** ExecSummaryAgent (langchain, test-model)
 **Status**: completed
 
 **Agent Response:**

@@ -70,6 +70,7 @@ type testAppConfig struct {
 	slackService          *tarsyslack.Service // optional Slack service (for Slack notification tests)
 	memoryService         *memory.Service     // optional memory service (for memory injection tests)
 	memoryConfig          *config.MemoryConfig
+	deferWorkerStart      bool // leave the pool stopped until StartWorkers (for transient WS events)
 }
 
 // TestAppOption configures the test app.
@@ -144,6 +145,14 @@ func WithMemoryService(svc *memory.Service, cfg *config.MemoryConfig) TestAppOpt
 		c.memoryService = svc
 		c.memoryConfig = cfg
 	}
+}
+
+// WithDeferredWorkerStart leaves the worker pool stopped until the test calls
+// StartWorkers. Use this when the test must subscribe to a session channel
+// before execution.progress events fire — those events are transient and are
+// not included in subscribe catchup.
+func WithDeferredWorkerStart() TestAppOption {
+	return func(c *testAppConfig) { c.deferWorkerStart = true }
 }
 
 // NewTestApp creates and starts a full TARSy test instance.
@@ -259,7 +268,9 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		podID = fmt.Sprintf("e2e-test-%s", t.Name())
 	}
 	workerPool := queue.NewWorkerPool(podID, entClient, tc.cfg.Queue, sessionExecutor, scoringExecutor, eventPublisher, tc.slackService)
-	require.NoError(t, workerPool.Start(ctx))
+	if !tc.deferWorkerStart {
+		require.NoError(t, workerPool.Start(ctx))
+	}
 
 	// 11. Chat executor.
 	chatExecutor := queue.NewChatMessageExecutor(
@@ -341,6 +352,12 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	})
 
 	return app
+}
+
+// StartWorkers starts the worker pool. Only needed after WithDeferredWorkerStart.
+func (app *TestApp) StartWorkers() {
+	app.t.Helper()
+	require.NoError(app.t, app.WorkerPool.Start(context.Background()))
 }
 
 // defaultTestConfig creates a minimal config suitable for tests that don't
