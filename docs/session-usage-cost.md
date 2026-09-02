@@ -70,7 +70,7 @@ Resolve order:
 1. **Active promotion** — exact `model_name`, half-open `[start, end)` at write / `Estimate` time (UTC)
 2. **YAML overrides** (`model_rates`) — exact `model_name`
 3. **Remote LiteLLM catalog** — fetched asynchronously at startup, refreshed every 24h
-4. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure. Snapshot entries may set `tarsy_rates_valid_until` (YYYY-MM-DD or RFC3339, exclusive UTC bound). After that instant the entry is not used as fallback (the model is unpriced unless a promotion, override, or remote catalog still matches). Used for time-bounded list prices such as GPT-5.6 Sol promotional $4/$20 (valid through 2026-11-21 UTC).
+4. **Bundled snapshot** — curated JSON in `pkg/cost/snapshot.json` for airgap / fetch failure. Snapshot entries may set `tarsy_rates_valid_until` (YYYY-MM-DD or RFC3339, exclusive UTC bound). After that instant the entry is not used as fallback (the model is unpriced unless a promotion, override, or remote catalog still matches). Used for time-bounded list prices such as GPT-5.6 Sol promotional $4/$20 (valid through 2026-11-21 UTC) and Gemini 3.7/3.8 Flash intro $0.75/$3.75 (valid through 2026-12-31 UTC). Gemini 3.6 Flash snapshot rates are durable GA ($1.50/$7.50) and have no expiry.
 
 Catalog URL:
 
