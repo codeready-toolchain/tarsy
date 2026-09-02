@@ -187,6 +187,10 @@ SLO is being violated.
 
 Metrics confirm SLO violation for pod-1 availability.
 
+**Final Analysis (forced conclusion — max iterations):**
+
+Metrics confirm SLO violation for pod-1 availability.
+
 <!-- PARALLEL_RESULTS_END -->
 ### Synthesis Result
 

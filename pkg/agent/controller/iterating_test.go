@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -48,6 +49,7 @@ func TestIteratingController_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Equal(t, "The pods are all running. Everything is healthy.", result.FinalAnalysis)
+	require.Equal(t, agent.WrapUpReason(""), result.WrapUpReason)
 	require.Equal(t, 70, result.TokensUsed.TotalTokens)
 	require.Equal(t, 20, result.TokensUsed.CacheReadTokens)
 	require.Equal(t, 2, result.TokensUsed.CacheCreationTokens)
@@ -255,6 +257,7 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Contains(t, result.FinalAnalysis, "system is healthy")
+	require.Equal(t, agent.WrapUpReasonMaxIterations, result.WrapUpReason)
 
 	// Verify forced conclusion metadata on final_analysis timeline event
 	events, qErr := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
@@ -264,6 +267,7 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
 			found = true
 			require.Equal(t, true, ev.Metadata["forced_conclusion"], "final_analysis should have forced_conclusion=true")
+			require.Equal(t, string(agent.WrapUpReasonMaxIterations), ev.Metadata["reason"])
 			require.EqualValues(t, 3, ev.Metadata["iterations_used"], "should report 3 iterations used")
 			require.EqualValues(t, 3, ev.Metadata["max_iterations"], "should report max_iterations=3")
 			break
@@ -1236,13 +1240,14 @@ func TestIteratingController_WaitTimeoutReturnsTimedOut(t *testing.T) {
 func TestIteratingController_LLMErrorWithCancelledContextReturnsCancelled(t *testing.T) {
 	// When the parent context is cancelled during an LLM call, the controller
 	// should return cancelled immediately instead of retrying through max iterations.
-	ctx, cancel := context.WithCancel(context.Background())
+	cause := fmt.Errorf("operator cancelled session")
+	ctx, cancel := context.WithCancelCause(t.Context())
 
 	llm := &mockLLMClient{
 		responses: []mockLLMResponse{
 			{err: fmt.Errorf("gRPC Generate call failed: %w", context.Canceled)},
 		},
-		onGenerate: func(_ int) { cancel() },
+		onGenerate: func(_ int) { cancel(cause) },
 	}
 
 	executor := &mockToolExecutor{tools: []agent.ToolDefinition{}}
@@ -1255,6 +1260,7 @@ func TestIteratingController_LLMErrorWithCancelledContextReturnsCancelled(t *tes
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCancelled, result.Status)
 	require.Contains(t, result.Error.Error(), "execution interrupted")
+	require.ErrorIs(t, result.Error, cause)
 	require.Equal(t, 1, llm.callCount)
 }
 
@@ -1771,4 +1777,243 @@ func requireAssistantToolHistory(t *testing.T, msgs []agent.ConversationMessage,
 	assert.Equal(t, callID, assistant.ToolCalls[0].ID)
 	require.NotNil(t, tool, "fallback Generate must replay tool results")
 	assert.Equal(t, toolName, tool.ToolName)
+}
+
+func requireFinalAnalysisReason(t *testing.T, execCtx *agent.ExecutionContext, reason agent.WrapUpReason) {
+	t.Helper()
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(context.Background(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
+			require.Equal(t, true, ev.Metadata["forced_conclusion"])
+			require.Equal(t, string(reason), ev.Metadata["reason"])
+			return
+		}
+	}
+	t.Fatal("expected final_analysis timeline event")
+}
+
+func TestIteratingController_TimeBudgetWrapUp(t *testing.T) {
+	t.Run("no deadline does not wrap up on time", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Done."}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+		result, err := NewIteratingController().Run(t.Context(), execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Equal(t, 1, llm.callCount)
+		assert.False(t, llm.capturedInputs[0].DisableToolCalls)
+	})
+
+	t.Run("remaining at or below reserve wraps up immediately", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Rushed but complete."}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+		execCtx.Config.LLMCallTimeout = 5 * time.Second
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Equal(t, agent.WrapUpReasonTimeBudget, result.WrapUpReason)
+		require.Equal(t, "Rushed but complete.", result.FinalAnalysis)
+		require.Equal(t, 1, llm.callCount)
+		assert.True(t, llm.capturedInputs[0].DisableToolCalls)
+		requireFinalAnalysisReason(t, execCtx, agent.WrapUpReasonTimeBudget)
+	})
+
+	t.Run("already expired context does not call the LLM", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "should not run"}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusTimedOut, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Equal(t, 0, llm.callCount)
+		require.ErrorIs(t, result.Error, context.DeadlineExceeded)
+	})
+
+	t.Run("cancel does not wrap up", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "should not run"}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCancelled, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Equal(t, 0, llm.callCount)
+		require.ErrorIs(t, result.Error, context.Canceled)
+	})
+
+	t.Run("iteration clamp leaves wrap-up reserve", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Finished in time."}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+		execCtx.Config.LLMCallTimeout = 5 * time.Minute
+		execCtx.Config.IterationTimeout = 6 * time.Minute
+
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute+5*time.Second)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Len(t, llm.capturedCtxs, 1)
+		deadline, ok := llm.capturedCtxs[0].Deadline()
+		require.True(t, ok)
+		left := time.Until(deadline)
+		assert.Greater(t, left, time.Duration(0))
+		assert.Less(t, left, 30*time.Second, "Generate ctx should be clamped to remaining-reserve, not LLMCallTimeout")
+	})
+
+	t.Run("WaitForResult cannot eat the reserve", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Waiting for workers..."}}},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Wrapping up without them."}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+		execCtx.Config.LLMCallTimeout = 2 * time.Second
+		execCtx.SubAgentCollector = &mockSubAgentCollector{pending: true}
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status, "clamped wait must leave time for wrap-up; waiting on parent would overrun")
+		require.Equal(t, agent.WrapUpReasonTimeBudget, result.WrapUpReason)
+		require.Equal(t, 2, llm.callCount)
+		assert.True(t, llm.capturedInputs[1].DisableToolCalls)
+		requireFinalAnalysisReason(t, execCtx, agent.WrapUpReasonTimeBudget)
+	})
+
+	t.Run("wrap-up overrun returns timed_out with cause", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{blockUntilCancelled: true},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+		cause := fmt.Errorf("session timed out after 500ms")
+		ctx, cancel := context.WithTimeoutCause(t.Context(), 500*time.Millisecond, cause)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusTimedOut, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Equal(t, 1, llm.callCount)
+		require.ErrorIs(t, result.Error, cause)
+	})
+
+	t.Run("consecutive child timeouts near reserve wrap up", func(t *testing.T) {
+		llm := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: context.DeadlineExceeded},
+				{err: context.DeadlineExceeded},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Best effort after timeouts."}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+		execCtx.Config.LLMCallTimeout = 200 * time.Millisecond
+
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+		require.Equal(t, agent.WrapUpReasonTimeBudget, result.WrapUpReason)
+		require.Equal(t, 3, llm.callCount)
+		assert.True(t, llm.capturedInputs[2].DisableToolCalls)
+		require.Nil(t, result.Error)
+	})
+
+	t.Run("consecutive child timeouts with plenty of time still fail", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{err: context.DeadlineExceeded},
+				{err: context.DeadlineExceeded},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "should not wrap up"}}},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+
+		// 10m remaining - 3m reserve = 7m, which is still >= IterationTimeout (6m).
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusFailed, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Equal(t, 2, llm.callCount)
+		require.Contains(t, result.Error.Error(), "consecutive timeouts")
+	})
+
+	t.Run("wrap-up LLM error stays failed", func(t *testing.T) {
+		llm := &mockLLMClient{
+			responses: []mockLLMResponse{
+				{err: fmt.Errorf("connection reset")},
+			},
+		}
+		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
+		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
+		execCtx.Config.LLMCallTimeout = 5 * time.Second
+
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+
+		result, err := NewIteratingController().Run(ctx, execCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, agent.ExecutionStatusFailed, result.Status)
+		require.Empty(t, result.WrapUpReason)
+		require.Equal(t, 1, llm.callCount)
+		require.ErrorContains(t, result.Error, "forced conclusion LLM call failed")
+		require.NotErrorIs(t, result.Error, context.DeadlineExceeded)
+	})
 }

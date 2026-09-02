@@ -5,6 +5,19 @@ export interface FinalAnalysisPresentation {
   label: string;
   emoji: string;
   color: string;
+  /** Wrap-up reason shown next to the stage label; omitted on a normal finish. */
+  wrapUpBadge?: string;
+}
+
+/** Human-readable wrap-up reasons; matches backend WrapUpReason.Display(). */
+const WRAP_UP_REASON_LABEL = new Map<string, string>([
+  ['max_iterations', 'max iterations'],
+  ['time_budget', 'time budget'],
+]);
+
+function wrapUpBadgeLabel(metadata: Record<string, unknown> | undefined): string {
+  const raw = typeof metadata?.reason === 'string' ? metadata.reason : '';
+  return WRAP_UP_REASON_LABEL.get(raw) ?? 'forced conclusion';
 }
 
 /**
@@ -22,15 +35,15 @@ export function getFinalAnalysisPresentation(
     return { label: 'SYNTHESIS', emoji: '🔀', color: 'success.main' };
   }
 
-  const suffix = isForcedConclusion ? ' (⚠️Max Iterations)' : '';
+  const wrapUpBadge = isForcedConclusion ? wrapUpBadgeLabel(metadata) : undefined;
   switch (stageType) {
     case STAGE_TYPE.CHAT:
-      return { label: `ANSWER${suffix}`, emoji: '🎯', color: 'success.main' };
+      return { label: 'ANSWER', emoji: '🎯', color: 'success.main', wrapUpBadge };
     case STAGE_TYPE.ACTION:
-      return { label: `RESULT${suffix}`, emoji: '🎯', color: 'success.main' };
+      return { label: 'RESULT', emoji: '🎯', color: 'success.main', wrapUpBadge };
     case STAGE_TYPE.COMPOSE:
-      return { label: `AMENDED REPORT${suffix}`, emoji: '🎯', color: 'success.main' };
+      return { label: 'AMENDED REPORT', emoji: '🎯', color: 'success.main', wrapUpBadge };
     default:
-      return { label: `CONCLUSION${suffix}`, emoji: '🎯', color: 'success.main' };
+      return { label: 'CONCLUSION', emoji: '🎯', color: 'success.main', wrapUpBadge };
   }
 }

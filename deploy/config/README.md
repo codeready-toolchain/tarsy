@@ -80,7 +80,7 @@ defaults:
   # chain.llm_provider does not override defaults.compose_provider.
   # compose_provider has no sibling backend field; omit → langchain.
   compose_provider: "google-default"
-  max_iterations: 20
+  max_iterations: 40
   fallback_providers:
     - provider: "gemini-3.1-pro"
       backend: "google-native"  # omit backend to default to langchain
@@ -287,7 +287,7 @@ Configuration values are resolved in this order (highest priority first):
 
 Example:
 ```yaml
-# Built-in: max_iterations = 20 (Go code)
+# Built-in: max_iterations = 40 (Go code)
 defaults:
   max_iterations: 25  # Override to 25
 
@@ -307,6 +307,8 @@ Effective max_iterations for this agent: **10** (agent-level wins)
 Provider and backend are a pair at each YAML node. Setting `llm_provider` without a sibling `llm_backend` uses `langchain` (not `defaults.llm_backend`). Write `llm_backend: google-native` on the same node when you want the Gemini native SDK.
 
 When `sub_agents` are configured at the stage-agent level (or inherited from stage/chain), the agent automatically gains orchestration tools (`dispatch_agent`, `cancel_agent`, `list_agents`) and orchestrator prompt sections. No special agent type is needed. Stage-level `required_skills` and `skills` can also be set — they are **additive** (merged with agent-definition skills).
+
+`defaults.orchestrator.agent_timeout` is optional. Omit it so each sub-agent uses remaining session/chat time. If set, the cap is `min(configured, remaining parent)`. There is no built-in 7-minute (or 300s) agent timeout; unused `max_budget` is not a config key. See [ADR-0029](../../docs/adr/0029-sub-agent-execution-limits.md).
 
 ## Deployment
 

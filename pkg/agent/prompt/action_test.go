@@ -90,6 +90,38 @@ func TestBuildActionMessages_UserMessageHasContext(t *testing.T) {
 	assert.Contains(t, user, "YES or NO on the very last line")
 }
 
+func TestBuildActionMessages_InjectsOrchestratorWhenCatalogSet(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeAction
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "GeneralWorker", Description: "Pure reasoning"},
+	}
+
+	messages := builder.buildActionMessages(execCtx, "")
+	system := messages[0].Content
+
+	assert.Contains(t, system, "Action Agent Safety Guidelines")
+	assert.Contains(t, system, "Orchestrator Strategy")
+	assert.Contains(t, system, "Available Sub-Agents")
+	assert.Contains(t, system, "GeneralWorker")
+	assert.Contains(t, system, "Result Delivery")
+	assert.Contains(t, system, "evaluating the upstream investigation findings")
+}
+
+func TestBuildActionMessages_NoOrchestratorWithoutCatalog(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeAction
+	execCtx.SubAgentCatalog = nil
+
+	messages := builder.buildActionMessages(execCtx, "")
+	system := messages[0].Content
+
+	assert.NotContains(t, system, "Orchestrator Strategy")
+	assert.NotContains(t, system, "Available Sub-Agents")
+}
+
 func TestBuildActionMessages_OmitsCopyPreserveLanguage(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()

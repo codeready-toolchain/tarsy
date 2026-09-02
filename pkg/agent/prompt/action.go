@@ -25,14 +25,19 @@ Principles:
 const actionTaskFocus = "Focus on evaluating the upstream investigation findings and executing justified remediation actions via your available tools. When no action is warranted, explain why. Your final text is a short action memo, not a copy of the investigation."
 
 // buildActionMessages builds the initial conversation for an action agent.
-// System prompt: Tier 1-3 instructions + safety preamble + task focus.
+// System prompt: Tier 1-3 instructions + safety preamble + optional
+// orchestrator sections (when SubAgentCatalog is non-empty) + action task focus.
 // User message: alert + runbook + chain context + action-specific task.
 func (b *PromptBuilder) buildActionMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
 	composed := b.ComposeInstructions(execCtx)
-	systemContent := composed + "\n\n" + actionBehavioralInstructions + "\n\n" + actionTaskFocus
+	composed = composed + "\n\n" + actionBehavioralInstructions
+	if len(execCtx.SubAgentCatalog) > 0 {
+		composed = InjectOrchestratorSections(composed, execCtx.SubAgentCatalog)
+	}
+	systemContent := composed + "\n\n" + actionTaskFocus
 
 	messages := []agent.ConversationMessage{
 		{Role: agent.RoleSystem, Content: systemContent},

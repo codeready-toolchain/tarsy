@@ -57,6 +57,9 @@ func (c *IteratingController) Run(
 	if execCtx.PromptBuilder == nil {
 		return nil, fmt.Errorf("PromptBuilder is nil: cannot call BuildFunctionCallingMessages")
 	}
+	if term := contextTerminalResult(ctx, totalUsage, interruptExecution); term != nil {
+		return term, nil
+	}
 	messages := execCtx.PromptBuilder.BuildFunctionCallingMessages(execCtx, prevStageContext)
 
 	// 2. Store initial messages in DB
@@ -75,6 +78,10 @@ func (c *IteratingController) Run(
 
 	// 2.6. Emit a single memory_injected event for all pre-loaded memories
 	emitMemoryInjectedEvent(ctx, execCtx, &eventSeq)
+
+	if term := contextTerminalResult(ctx, totalUsage, interruptExecution); term != nil {
+		return term, nil
+	}
 
 	// 3. Get available tools
 	tools, err := execCtx.ToolExecutor.ListTools(ctx)
@@ -99,24 +106,33 @@ func (c *IteratingController) Run(
 		publishExecutionProgress(ctx, execCtx, phase,
 			fmt.Sprintf("Iteration %d/%d", iteration+1, maxIter))
 
-		if state.ShouldAbortOnTimeouts() {
-			return failedResult(state, totalUsage), nil
+		if term := contextTerminalResult(ctx, totalUsage, interruptExecution); term != nil {
+			return term, nil
 		}
+
+		remaining, hasDeadline := remainingTime(ctx)
+		reserve := wrapUpReserve(execCtx.Config.LLMCallTimeout)
 
 		// Drain any sub-agent results that arrived while tools were executing
 		// or the LLM was being called. Non-blocking — skipped when nil.
-		if collector := execCtx.SubAgentCollector; collector != nil {
-			for {
-				msg, ok := collector.TryDrainResult()
-				if !ok {
-					break
-				}
-				messages = append(messages, msg)
-				storeObservationMessage(ctx, execCtx, msg.Content, &msgSeq)
-			}
+		messages = drainSubAgentResults(ctx, execCtx, messages, &msgSeq)
+
+		if hasDeadline && remaining <= reserve {
+			return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq, agent.WrapUpReasonTimeBudget)
 		}
 
-		iterCtx, iterCancel := context.WithTimeout(ctx, execCtx.Config.IterationTimeout)
+		if state.ShouldAbortOnTimeouts() {
+			if hasDeadline && shouldWrapUpOnTimeouts(remaining, reserve, execCtx.Config.IterationTimeout) {
+				return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq, agent.WrapUpReasonTimeBudget)
+			}
+			return failedResult(state, totalUsage), nil
+		}
+
+		iterTimeout := execCtx.Config.IterationTimeout
+		if hasDeadline {
+			iterTimeout = min(iterTimeout, remaining-reserve)
+		}
+		iterCtx, iterCancel := context.WithTimeout(ctx, iterTimeout)
 		startTime := time.Now()
 
 		// Call LLM WITH tools and streaming (native function calling).
@@ -142,12 +158,8 @@ func (c *IteratingController) Run(
 
 			// If the parent context is cancelled/expired, return immediately
 			// instead of burning through retry iterations with the same error.
-			if status, done := agent.StatusFromContextErr(ctx); done {
-				return &agent.ExecutionResult{
-					Status:     status,
-					Error:      fmt.Errorf("execution interrupted: %w", err),
-					TokensUsed: totalUsage,
-				}, nil
+			if term := contextTerminalResult(ctx, totalUsage, interruptExecution); term != nil {
+				return term, nil
 			}
 
 			// Try fallback to a different provider before exhausting retries
@@ -247,12 +259,26 @@ func (c *IteratingController) Run(
 					})
 				}
 
-				msg, waitErr := collector.WaitForResult(ctx)
+				budget, hasBudget := remainingWorkBudget(ctx, execCtx.Config)
+				if hasBudget && budget <= 0 {
+					iterCancel()
+					messages = drainSubAgentResults(ctx, execCtx, messages, &msgSeq)
+					return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq, agent.WrapUpReasonTimeBudget)
+				}
+				msg, waitErr := waitForSubAgentResult(ctx, execCtx.SubAgentCollector, budget, hasBudget)
 				if waitErr != nil {
 					iterCancel()
+					wrap, term := waitErrorAction(ctx, waitErr, totalUsage)
+					if wrap {
+						messages = drainSubAgentResults(ctx, execCtx, messages, &msgSeq)
+						return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq, agent.WrapUpReasonTimeBudget)
+					}
+					if term != nil {
+						return term, nil
+					}
 					return &agent.ExecutionResult{
 						Status:     agent.StatusFromErr(waitErr),
-						Error:      fmt.Errorf("sub-agent wait interrupted: %w", waitErr),
+						Error:      fmt.Errorf("%s: %w", interruptSubAgentWait, waitErr),
 						TokensUsed: totalUsage,
 					}, nil
 				}
@@ -299,7 +325,7 @@ func (c *IteratingController) Run(
 	}
 
 	// Max iterations — force conclusion (same tools, calling disabled)
-	return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq)
+	return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq, agent.WrapUpReasonMaxIterations)
 }
 
 // forceConclusion forces a text-only final answer while keeping the looping tool
@@ -314,38 +340,33 @@ func (c *IteratingController) forceConclusion(
 	fbState *FallbackState,
 	msgSeq *int,
 	eventSeq *int,
+	reason agent.WrapUpReason,
 ) (*agent.ExecutionResult, error) {
-	// Publish execution progress: concluding
-	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseConcluding,
-		fmt.Sprintf("Forcing conclusion after %d iterations", state.CurrentIteration))
+	progressMsg := fmt.Sprintf("Forcing conclusion after %d iterations", state.CurrentIteration)
+	if reason == agent.WrapUpReasonTimeBudget {
+		progressMsg = fmt.Sprintf("Forcing conclusion (time budget) after %d iterations", state.CurrentIteration)
+	}
+	publishExecutionProgress(ctx, execCtx, events.ProgressPhaseConcluding, progressMsg)
 
-	// Append forced conclusion prompt
-	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration)
+	conclusionPrompt := execCtx.PromptBuilder.BuildForcedConclusionPrompt(state.CurrentIteration, reason)
 	messages = append(messages, agent.ConversationMessage{Role: agent.RoleUser, Content: conclusionPrompt})
 	storeObservationMessage(ctx, execCtx, conclusionPrompt, msgSeq)
 
 	startTime := time.Now()
 
-	// Metadata for forced conclusion — carried by all streaming events + final_analysis.
-	forcedMeta := map[string]interface{}{
+	forcedMeta := map[string]any{
 		"forced_conclusion": true,
 		"iterations_used":   state.CurrentIteration,
 		"max_iterations":    state.MaxIterations,
+		"reason":            string(reason),
 	}
 
-	// Keep the same tools bound and disable calling so the looping prefix can
-	// still cache-hit. Apply LLM call timeout (parent ctx is the session).
-	// On failure, attempt fallback to another provider before giving up.
 	var streamed *StreamedResponse
 	var err error
 	emptyRetries := 0
 	for {
-		if status, done := agent.StatusFromContextErr(ctx); done {
-			return &agent.ExecutionResult{
-				Status:     status,
-				Error:      fmt.Errorf("forced conclusion interrupted: %w", ctx.Err()),
-				TokensUsed: *totalUsage,
-			}, nil
+		if term := contextTerminalResult(ctx, *totalUsage, interruptForcedConclusion); term != nil {
+			return term, nil
 		}
 		llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
 		llmStart := time.Now()
@@ -365,7 +386,13 @@ func (c *IteratingController) forceConclusion(
 			time.Since(llmStart), metricsTokens(streamed, err), err)
 		if err == nil {
 			accumulateUsage(totalUsage, streamed.LLMResponse)
-			if strings.TrimSpace(streamed.LLMResponse.Text) != "" || emptyRetries >= maxEmptyResponseRetries || ctx.Err() != nil {
+			if strings.TrimSpace(streamed.LLMResponse.Text) != "" {
+				break
+			}
+			if term := contextTerminalResult(ctx, *totalUsage, interruptForcedConclusion); term != nil {
+				return term, nil
+			}
+			if emptyRetries >= maxEmptyResponseRetries {
 				break
 			}
 			emptyRetries++
@@ -377,6 +404,9 @@ func (c *IteratingController) forceConclusion(
 			storeObservationMessage(ctx, execCtx, retryMsg, msgSeq)
 			startTime = time.Now()
 			continue
+		}
+		if term := contextTerminalResult(ctx, *totalUsage, interruptForcedConclusion); term != nil {
+			return term, nil
 		}
 		if !tryFallback(ctx, execCtx, fbState, err, eventSeq) {
 			createTimelineEvent(ctx, execCtx, timelineevent.EventTypeError, err.Error(), nil, eventSeq)
@@ -404,10 +434,9 @@ func (c *IteratingController) forceConclusion(
 
 	if !streamed.ThinkingEventCreated && resp.ThinkingText != "" {
 		createTimelineEvent(ctx, execCtx, timelineevent.EventTypeLlmThinking, resp.ThinkingText,
-			mergeMetadata(map[string]interface{}{"source": "native"}, forcedMeta), eventSeq)
+			mergeMetadata(map[string]any{"source": "native"}, forcedMeta), eventSeq)
 	}
 
-	// Create native tool events (can occur during forced conclusion too)
 	createCodeExecutionEvents(ctx, execCtx, resp.CodeExecutions, eventSeq)
 	createGroundingEvents(ctx, execCtx, resp.Groundings, eventSeq)
 
@@ -417,7 +446,65 @@ func (c *IteratingController) forceConclusion(
 		Status:        agent.ExecutionStatusCompleted,
 		FinalAnalysis: resp.Text,
 		TokensUsed:    *totalUsage,
+		WrapUpReason:  reason,
 	}, nil
+}
+
+func drainSubAgentResults(
+	ctx context.Context,
+	execCtx *agent.ExecutionContext,
+	messages []agent.ConversationMessage,
+	msgSeq *int,
+) []agent.ConversationMessage {
+	collector := execCtx.SubAgentCollector
+	if collector == nil {
+		return messages
+	}
+	for {
+		msg, ok := collector.TryDrainResult()
+		if !ok {
+			break
+		}
+		messages = append(messages, msg)
+		storeObservationMessage(ctx, execCtx, msg.Content, msgSeq)
+	}
+	return messages
+}
+
+func remainingWorkBudget(ctx context.Context, cfg *agent.ResolvedAgentConfig) (time.Duration, bool) {
+	remaining, ok := remainingTime(ctx)
+	if !ok {
+		return 0, false
+	}
+	return remaining - wrapUpReserve(cfg.LLMCallTimeout), true
+}
+
+func waitForSubAgentResult(
+	ctx context.Context,
+	collector agent.SubAgentResultCollector,
+	budget time.Duration,
+	hasBudget bool,
+) (agent.ConversationMessage, error) {
+	waitCtx := ctx
+	waitCancel := func() {}
+	if hasBudget {
+		waitCtx, waitCancel = context.WithTimeout(ctx, budget)
+	}
+	defer waitCancel()
+	return collector.WaitForResult(waitCtx)
+}
+
+// waitErrorAction classifies a WaitForResult error.
+// wrap=true means the wait clamp fired while the parent still has time.
+func waitErrorAction(ctx context.Context, waitErr error, usage agent.TokenUsage) (wrap bool, term *agent.ExecutionResult) {
+	if term := contextTerminalResult(ctx, usage, interruptSubAgentWait); term != nil {
+		return false, term
+	}
+	remaining, hasDeadline := remainingTime(ctx)
+	if hasDeadline && remaining > 0 && errors.Is(waitErr, context.DeadlineExceeded) {
+		return true, nil
+	}
+	return false, nil
 }
 
 // buildRetryMessage crafts an error context message for the LLM based on the

@@ -162,9 +162,11 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 
 	// Apply options.
 	tc := &testAppConfig{
-		workerCount:    1,
-		sessionTimeout: 30 * time.Second,
-		chatTimeout:    30 * time.Second,
+		workerCount: 1,
+		// Must exceed wrap-up reserve (min(LLMCallTimeout, 3m)) so iterating
+		// agents can run real iterations instead of wrapping up immediately.
+		sessionTimeout: 10 * time.Minute,
+		chatTimeout:    10 * time.Minute,
 	}
 	for _, opt := range opts {
 		opt(tc)

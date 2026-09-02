@@ -70,7 +70,8 @@ func TestE2E_OrchestratorCancellation(t *testing.T) {
 	app := NewTestApp(t,
 		WithConfig(configs.Load(t, "orchestrator-cancel")),
 		WithLLMClient(llm),
-		WithSessionTimeout(2*time.Minute),
+		// Must exceed wrap-up reserve (3m) so agents enter Generate instead of wrapping up.
+		WithSessionTimeout(10*time.Minute),
 	)
 
 	// Connect WS.

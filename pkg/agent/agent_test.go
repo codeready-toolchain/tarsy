@@ -32,6 +32,49 @@ func TestStatusFromErr(t *testing.T) {
 	}
 }
 
+func TestWrapUpReasonDisplay(t *testing.T) {
+	assert.Equal(t, "time budget", WrapUpReasonTimeBudget.Display())
+	assert.Equal(t, "max iterations", WrapUpReasonMaxIterations.Display())
+	assert.Equal(t, "", WrapUpReason("").Display())
+	assert.Equal(t, "", WrapUpReason("unknown").Display())
+}
+
+func TestKeepCompletedWrapUp(t *testing.T) {
+	completed := &ExecutionResult{
+		Status:        ExecutionStatusCompleted,
+		FinalAnalysis: "report",
+		WrapUpReason:  WrapUpReasonTimeBudget,
+	}
+	tests := []struct {
+		name   string
+		result *ExecutionResult
+		ctxErr error
+		want   bool
+	}{
+		{name: "deadline after successful wrap-up", result: completed, ctxErr: context.DeadlineExceeded, want: true},
+		{name: "wrapped deadline after successful wrap-up", result: completed, ctxErr: fmt.Errorf("session: %w", context.DeadlineExceeded), want: true},
+		{name: "max-iterations wrap-up", result: &ExecutionResult{
+			Status: ExecutionStatusCompleted, FinalAnalysis: "report", WrapUpReason: WrapUpReasonMaxIterations,
+		}, ctxErr: context.DeadlineExceeded, want: true},
+		{name: "cancel does not preserve wrap-up", result: completed, ctxErr: context.Canceled, want: false},
+		{name: "empty analysis", result: &ExecutionResult{
+			Status: ExecutionStatusCompleted, WrapUpReason: WrapUpReasonTimeBudget,
+		}, ctxErr: context.DeadlineExceeded, want: false},
+		{name: "normal completed has no wrap-up reason", result: &ExecutionResult{
+			Status: ExecutionStatusCompleted, FinalAnalysis: "report",
+		}, ctxErr: context.DeadlineExceeded, want: false},
+		{name: "failed wrap-up", result: &ExecutionResult{
+			Status: ExecutionStatusFailed, FinalAnalysis: "report", WrapUpReason: WrapUpReasonTimeBudget,
+		}, ctxErr: context.DeadlineExceeded, want: false},
+		{name: "nil result", result: nil, ctxErr: context.DeadlineExceeded, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.result.KeepCompletedWrapUp(tt.ctxErr))
+		})
+	}
+}
+
 func TestStatusFromContextErr(t *testing.T) {
 	t.Run("active context", func(t *testing.T) {
 		status, done := StatusFromContextErr(context.Background())

@@ -361,6 +361,7 @@
       "forced_conclusion": true,
       "iterations_used": 1,
       "max_iterations": 1,
+      "reason": "max_iterations",
       "source": "native"
     },
     "sequence": 4,
@@ -373,7 +374,8 @@
     "metadata": {
       "forced_conclusion": true,
       "iterations_used": 1,
-      "max_iterations": 1
+      "max_iterations": 1,
+      "reason": "max_iterations"
     },
     "sequence": 5,
     "status": "completed"
@@ -385,7 +387,8 @@
     "metadata": {
       "forced_conclusion": true,
       "iterations_used": 1,
-      "max_iterations": 1
+      "max_iterations": 1,
+      "reason": "max_iterations"
     },
     "sequence": 6,
     "status": "completed"

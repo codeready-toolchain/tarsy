@@ -85,9 +85,10 @@ func TestE2E_Cancellation(t *testing.T) {
 	app := NewTestApp(t,
 		WithConfig(configs.Load(t, "cancellation")),
 		WithLLMClient(llm),
-		// Long timeout so BlockUntilCancelled agents aren't killed by the session deadline.
-		WithSessionTimeout(2*time.Minute),
-		WithChatTimeout(2*time.Minute),
+		// Long timeout so BlockUntilCancelled agents aren't killed by the
+		// session deadline. Must exceed wrap-up reserve (3m).
+		WithSessionTimeout(10*time.Minute),
+		WithChatTimeout(10*time.Minute),
 	)
 
 	// ═══════════════════════════════════════════════════════

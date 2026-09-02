@@ -56,6 +56,27 @@ func StatusFromErr(err error) ExecutionStatus {
 	return ExecutionStatusFailed
 }
 
+// WrapUpReason explains why an iterating agent force-concluded.
+// Empty when the agent finished normally (text with no tool calls).
+type WrapUpReason string
+
+const (
+	WrapUpReasonMaxIterations WrapUpReason = "max_iterations"
+	WrapUpReasonTimeBudget    WrapUpReason = "time_budget"
+)
+
+// Display returns the human-readable phrase for formatters, or "".
+func (r WrapUpReason) Display() string {
+	switch r {
+	case WrapUpReasonTimeBudget:
+		return "time budget"
+	case WrapUpReasonMaxIterations:
+		return "max iterations"
+	default:
+		return ""
+	}
+}
+
 // ExecutionResult is returned by Agent.Execute().
 // Lightweight — all intermediate state was already written to DB during execution.
 type ExecutionResult struct {
@@ -63,6 +84,19 @@ type ExecutionResult struct {
 	FinalAnalysis string
 	Error         error
 	TokensUsed    TokenUsage
+	WrapUpReason  WrapUpReason // set when force-concluding; empty on a normal finish
+}
+
+// KeepCompletedWrapUp reports whether a successful wrap-up should keep status
+// completed when the parent context has since hit its deadline (not cancel).
+func (r *ExecutionResult) KeepCompletedWrapUp(ctxErr error) bool {
+	if r == nil {
+		return false
+	}
+	return r.Status == ExecutionStatusCompleted &&
+		r.WrapUpReason != "" &&
+		r.FinalAnalysis != "" &&
+		errors.Is(ctxErr, context.DeadlineExceeded)
 }
 
 // TokenUsage aggregates token consumption across multiple LLM calls.

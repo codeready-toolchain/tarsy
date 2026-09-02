@@ -112,10 +112,31 @@ func TestBuildSynthesisMessages_UserContent(t *testing.T) {
 
 func TestBuildForcedConclusionPrompt(t *testing.T) {
 	builder := newBuilderForTest()
-	result := builder.BuildForcedConclusionPrompt(3)
+	tests := []struct {
+		name   string
+		reason agent.WrapUpReason
+	}{
+		{name: "max_iterations", reason: agent.WrapUpReasonMaxIterations},
+		{name: "empty reason uses iteration wording", reason: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := builder.BuildForcedConclusionPrompt(3, tt.reason)
+			assert.Contains(t, result, "3 iterations")
+			assert.Contains(t, result, "structured conclusion")
+			assert.NotContains(t, result, "Final Answer:")
+			assert.NotContains(t, result, "time budget")
+		})
+	}
+}
 
-	assert.Contains(t, result, "3 iterations")
+func TestBuildForcedConclusionPrompt_TimeBudget(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildForcedConclusionPrompt(3, agent.WrapUpReasonTimeBudget)
+
+	assert.Contains(t, result, "time budget")
 	assert.Contains(t, result, "structured conclusion")
+	assert.NotContains(t, result, "iteration limit")
 	assert.NotContains(t, result, "Final Answer:")
 }
 
@@ -224,6 +245,26 @@ func TestBuildFunctionCallingMessages_ActionMode(t *testing.T) {
 	assert.Contains(t, messages[1].Content, "Investigation found malicious activity.")
 	assert.Contains(t, messages[1].Content, "short action memo covering")
 	assert.NotContains(t, messages[1].Content, "amended report that preserves")
+}
+
+func TestBuildFunctionCallingMessages_ActionModeWithCatalog(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeAction
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "GeneralWorker", Description: "Pure reasoning"},
+	}
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "Investigation found malicious activity.")
+	require.Len(t, messages, 2)
+
+	assert.Contains(t, messages[0].Content, "Action Agent Safety Guidelines")
+	assert.Contains(t, messages[0].Content, "Prefer inaction over incorrect action")
+	assert.Contains(t, messages[0].Content, "Orchestrator Strategy")
+	assert.Contains(t, messages[0].Content, "Available Sub-Agents")
+	assert.Contains(t, messages[0].Content, "GeneralWorker")
+	assert.Contains(t, messages[0].Content, "short action memo, not a copy of the investigation")
+	assert.NotContains(t, messages[0].Content, "Prefer sub-agents when parallel or specialized work")
 }
 
 func TestBuildFunctionCallingMessages_SubAgentMode(t *testing.T) {

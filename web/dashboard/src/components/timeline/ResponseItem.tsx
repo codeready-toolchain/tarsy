@@ -14,6 +14,7 @@ import { highlightSearchTermNodes } from '../../utils/search';
 import { LLM_INTERACTION_TYPE } from '../../constants/interactionTypes';
 import { MemoryCardList, type ParsedMemory } from './MemoryCardList';
 import { getFinalAnalysisPresentation } from './finalAnalysisPresentation';
+import ForcedConclusionBadge from './ForcedConclusionBadge';
 
 interface ReflectorResult {
   create: Array<{ content: string; category: string; valence: string }>;
@@ -229,6 +230,11 @@ function ResponseItem({
             shouldShowCollapsed={shouldShowCollapsed}
             collapsedHeaderOpacity={collapsedHeaderOpacity}
             onToggle={isCollapsible && onToggleAutoCollapse ? onToggleAutoCollapse : undefined}
+            caption={
+              presentation.wrapUpBadge ? (
+                <ForcedConclusionBadge label={presentation.wrapUpBadge} />
+              ) : undefined
+            }
           />
           <Collapse in={!shouldShowCollapsed} timeout={300}>
                         <Box sx={{ mt: 0.5, pb: 3 }}>

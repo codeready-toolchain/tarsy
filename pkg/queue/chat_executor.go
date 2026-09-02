@@ -469,7 +469,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 			agentStatus = agent.StatusFromErr(execCtx.Err())
 		}
 	} else if result != nil {
-		if execCtx.Err() != nil {
+		if execCtx.Err() != nil && !result.KeepCompletedWrapUp(execCtx.Err()) {
 			agentStatus = agent.StatusFromErr(execCtx.Err())
 		} else {
 			agentStatus = result.Status

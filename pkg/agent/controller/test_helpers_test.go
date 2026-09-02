@@ -22,8 +22,9 @@ import (
 )
 
 type mockLLMResponse struct {
-	chunks []agent.Chunk
-	err    error
+	chunks              []agent.Chunk
+	err                 error
+	blockUntilCancelled bool
 }
 
 // mockLLMClient is a test mock for agent.LLMClient.
@@ -38,16 +39,18 @@ type mockLLMClient struct {
 	// capture enables recording all inputs across calls (not just the last one).
 	capture        bool
 	capturedInputs []*agent.GenerateInput
+	capturedCtxs   []context.Context
 
 	// onGenerate is called before processing the response, allowing tests to
 	// perform side-effects (e.g. cancel a context) at call time.
 	onGenerate func(callIndex int)
 }
 
-func (m *mockLLMClient) Generate(_ context.Context, input *agent.GenerateInput) (<-chan agent.Chunk, error) {
+func (m *mockLLMClient) Generate(ctx context.Context, input *agent.GenerateInput) (<-chan agent.Chunk, error) {
 	idx := m.callCount
 	m.callCount++
 	m.lastInput = input
+	m.capturedCtxs = append(m.capturedCtxs, ctx)
 	if m.capture {
 		m.capturedInputs = append(m.capturedInputs, input)
 	}
@@ -60,6 +63,14 @@ func (m *mockLLMClient) Generate(_ context.Context, input *agent.GenerateInput) 
 	}
 
 	r := m.responses[idx]
+	if r.blockUntilCancelled {
+		ch := make(chan agent.Chunk)
+		go func() {
+			<-ctx.Done()
+			close(ch)
+		}()
+		return ch, nil
+	}
 	if r.err != nil {
 		return nil, r.err
 	}

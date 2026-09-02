@@ -246,7 +246,29 @@ func TestSubAgentRunner_Dispatch_Success(t *testing.T) {
 	assert.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	assert.Equal(t, "investigation complete", result.Result)
 	assert.Empty(t, result.Error)
+	assert.Empty(t, result.WrapUpReason)
 	assert.False(t, runner.HasPending())
+}
+
+func TestSubAgentRunner_Dispatch_CopiesWrapUpReason(t *testing.T) {
+	ctx := t.Context()
+	runner, cleanup := setupIntegrationRunner(t, func(_ context.Context) (*agent.ExecutionResult, error) {
+		return &agent.ExecutionResult{
+			Status:        agent.ExecutionStatusCompleted,
+			FinalAnalysis: "rushed report",
+			WrapUpReason:  agent.WrapUpReasonTimeBudget,
+		}, nil
+	})
+	defer cleanup()
+
+	_, err := runner.Dispatch(ctx, "TestAgent", "analyze logs")
+	require.NoError(t, err)
+
+	result, err := runner.WaitForNext(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	assert.Equal(t, "rushed report", result.Result)
+	assert.Equal(t, agent.WrapUpReasonTimeBudget, result.WrapUpReason)
 }
 
 func TestSubAgentRunner_Dispatch_AgentFailure(t *testing.T) {
@@ -882,8 +904,33 @@ func TestFormatSubAgentResult_Completed(t *testing.T) {
 	})
 	assert.Equal(t, agent.RoleUser, msg.Role)
 	assert.Contains(t, msg.Content, "[Sub-agent completed]")
+	assert.NotContains(t, msg.Content, "forced conclusion")
 	assert.Contains(t, msg.Content, "LogAnalyzer")
 	assert.Contains(t, msg.Content, "Found 42 errors")
+}
+
+func TestFormatSubAgentResult_CompletedWrapUp(t *testing.T) {
+	msg := FormatSubAgentResult(&SubAgentResult{
+		ExecutionID:  "exec-1",
+		AgentName:    "LogAnalyzer",
+		Status:       agent.ExecutionStatusCompleted,
+		Result:       "Partial findings.",
+		WrapUpReason: agent.WrapUpReasonTimeBudget,
+	})
+	assert.Equal(t, agent.RoleUser, msg.Role)
+	assert.Contains(t, msg.Content, "[Sub-agent completed — forced conclusion (time budget)]")
+	assert.Contains(t, msg.Content, "Partial findings.")
+}
+
+func TestFormatSubAgentResult_CompletedMaxIterations(t *testing.T) {
+	msg := FormatSubAgentResult(&SubAgentResult{
+		ExecutionID:  "exec-1",
+		AgentName:    "LogAnalyzer",
+		Status:       agent.ExecutionStatusCompleted,
+		Result:       "Used all turns.",
+		WrapUpReason: agent.WrapUpReasonMaxIterations,
+	})
+	assert.Contains(t, msg.Content, "[Sub-agent completed — forced conclusion (max iterations)]")
 }
 
 func TestFormatSubAgentResult_Failed(t *testing.T) {
