@@ -130,7 +130,7 @@ func TestE2E_Pipeline(t *testing.T) {
 			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
 		},
 	})
-	// Forced conclusion: called WITHOUT tools after max_iterations exhausted.
+	// Forced conclusion: same tools, calling disabled, after max_iterations exhausted.
 	llm.AddRouted("MetricsValidator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ThinkingChunk{Content: "SLO is being violated."},

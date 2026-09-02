@@ -20,14 +20,15 @@ type LLMClient interface {
 
 // GenerateInput is the Go-side representation of a Generate request.
 type GenerateInput struct {
-	SessionID   string
-	ExecutionID string
-	Messages    []ConversationMessage
-	Config      *config.LLMProviderConfig
-	Tools       []ToolDefinition  // nil = no tools
-	Backend     config.LLMBackend // see config.LLMBackendNativeGemini, config.LLMBackendLangChain
-	ClearCache  bool              // signal to clear provider content cache (e.g. on fallback provider switch)
-	PromptCache bool              // apply Claude cache_control / OpenAI 5.6+ breakpoints (AND-ed with cluster toggle before gRPC)
+	SessionID        string
+	ExecutionID      string
+	Messages         []ConversationMessage
+	Config           *config.LLMProviderConfig
+	Tools            []ToolDefinition  // nil = no tools
+	Backend          config.LLMBackend // see config.LLMBackendNativeGemini, config.LLMBackendLangChain
+	ClearCache       bool              // signal to clear provider content cache (e.g. on fallback provider switch)
+	PromptCache      bool              // apply Claude cache_control / OpenAI 5.6+ breakpoints (AND-ed with cluster toggle before gRPC)
+	DisableToolCalls bool              // keep tool schemas but forbid calling (forced conclusion)
 }
 
 // Conversation message roles.

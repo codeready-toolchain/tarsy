@@ -80,12 +80,13 @@ func (c *GRPCLLMClient) Close() error {
 
 func toProtoRequest(input *GenerateInput) *llmv1.GenerateRequest {
 	req := &llmv1.GenerateRequest{
-		SessionId:   input.SessionID,
-		ExecutionId: input.ExecutionID,
-		Messages:    toProtoMessages(input.Messages),
-		Tools:       toProtoTools(input.Tools),
-		ClearCache:  input.ClearCache,
-		PromptCache: input.PromptCache,
+		SessionId:        input.SessionID,
+		ExecutionId:      input.ExecutionID,
+		Messages:         toProtoMessages(input.Messages),
+		Tools:            toProtoTools(input.Tools),
+		ClearCache:       input.ClearCache,
+		PromptCache:      input.PromptCache,
+		DisableToolCalls: input.DisableToolCalls,
 	}
 	if input.Config != nil {
 		req.LlmConfig = toProtoLLMConfig(input.Config)

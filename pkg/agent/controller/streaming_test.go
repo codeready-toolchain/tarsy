@@ -1112,14 +1112,21 @@ func TestCallLLMWithStreaming_PromptCacheAND(t *testing.T) {
 			if !tt.nilCfg {
 				execCtx.Config = &agent.ResolvedAgentConfig{PromptCachingEnabled: tt.enabled}
 			}
-			input := &agent.GenerateInput{PromptCache: tt.eligible}
+			input := &agent.GenerateInput{
+				PromptCache:      tt.eligible,
+				DisableToolCalls: true,
+				Tools:            []agent.ToolDefinition{{Name: "k8s.get_pods"}},
+			}
 			eventSeq := 0
 
 			_, err := callLLMWithStreaming(t.Context(), execCtx, llm, input, &eventSeq)
 			require.NoError(t, err)
 			require.Len(t, llm.capturedInputs, 1)
 			assert.Equal(t, tt.want, llm.capturedInputs[0].PromptCache)
+			assert.True(t, llm.capturedInputs[0].DisableToolCalls)
+			require.Equal(t, input.Tools, llm.capturedInputs[0].Tools)
 			assert.Equal(t, tt.eligible, input.PromptCache, "caller GenerateInput must not be mutated")
+			assert.True(t, input.DisableToolCalls, "caller GenerateInput must not be mutated")
 		})
 	}
 }

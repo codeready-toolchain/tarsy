@@ -333,6 +333,55 @@ func TestToProtoRequest_PromptCache(t *testing.T) {
 	})
 }
 
+func TestToProtoRequest_DisableToolCalls(t *testing.T) {
+	t.Run("DisableToolCalls false by default", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:   "session-1",
+			ExecutionID: "exec-1",
+			Messages:    []ConversationMessage{{Role: "user", Content: "hello"}},
+			Config:      &config.LLMProviderConfig{Model: "test-model", Type: config.LLMProviderTypeGoogle},
+			Backend:     config.LLMBackendNativeGemini,
+			Tools:       []ToolDefinition{{Name: "k8s.get_pods"}},
+		}
+		req := toProtoRequest(input)
+		assert.False(t, req.DisableToolCalls)
+	})
+
+	t.Run("DisableToolCalls propagated when true", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:        "session-1",
+			ExecutionID:      "exec-1",
+			Messages:         []ConversationMessage{{Role: "user", Content: "hello"}},
+			Config:           &config.LLMProviderConfig{Model: "test-model", Type: config.LLMProviderTypeGoogle},
+			Backend:          config.LLMBackendNativeGemini,
+			Tools:            []ToolDefinition{{Name: "k8s.get_pods"}},
+			DisableToolCalls: true,
+		}
+		req := toProtoRequest(input)
+		assert.True(t, req.DisableToolCalls)
+		require.Len(t, req.Tools, 1)
+		assert.Equal(t, "k8s.get_pods", req.Tools[0].Name)
+	})
+
+	t.Run("forced conclusion wire shape keeps tools and cache flag", func(t *testing.T) {
+		input := &GenerateInput{
+			SessionID:        "session-1",
+			ExecutionID:      "exec-1",
+			Messages:         []ConversationMessage{{Role: "user", Content: "conclude"}},
+			Config:           &config.LLMProviderConfig{Model: "gpt-5.6", Type: config.LLMProviderTypeOpenAI},
+			Backend:          config.LLMBackendLangChain,
+			Tools:            []ToolDefinition{{Name: "k8s.get_pods"}},
+			PromptCache:      true,
+			DisableToolCalls: true,
+		}
+		req := toProtoRequest(input)
+		assert.True(t, req.PromptCache)
+		assert.True(t, req.DisableToolCalls)
+		require.Len(t, req.Tools, 1)
+		assert.Equal(t, "k8s.get_pods", req.Tools[0].Name)
+	})
+}
+
 func TestToProtoTools(t *testing.T) {
 	t.Run("nil tools returns nil", func(t *testing.T) {
 		assert.Nil(t, toProtoTools(nil))
