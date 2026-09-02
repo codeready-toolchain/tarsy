@@ -857,9 +857,7 @@ Shared convention between Go and Python:
 
 | Name | Type | Model | Context |
 |------|------|-------|---------|
-| `google-default` | google | gemini-3.7-flash | 1M |
-| `gemini-2.5-flash` | google | gemini-2.5-flash | 1M |
-| `gemini-2.5-pro` | google | gemini-2.5-pro | 1M |
+| `google-default` | google | gemini-3.8-flash | 1M |
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
 | `openai-default` | openai | gpt-5.6 | 1.05M |
 | `gpt-5.6` | openai | gpt-5.6 | 1.05M |

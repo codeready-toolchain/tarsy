@@ -181,7 +181,7 @@ TARSy includes built-in configurations that work out-of-the-box:
 
 ### Built-in LLM Providers
 
-- **google-default** - Gemini 3.7 Flash
+- **google-default** - Gemini 3.8 Flash
 - **openai-default** - GPT-5.6 (Sol)
 - **gpt-5.6**, **gpt-5.6-sol**, **gpt-5.6-terra**, **gpt-5.6-luna** - GPT-5.6 family
 - **gpt-5.2** - previous generation (OpenAI recommends GPT-5.6)

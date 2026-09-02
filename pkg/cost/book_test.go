@@ -750,6 +750,54 @@ func TestEstimate_GPT56SnapshotRates(t *testing.T) {
 	assert.InDelta(t, *below, *sol, 1e-9)
 }
 
+func TestEstimate_GeminiFlashSnapshotIntroExpiresWhenCatalogUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+	book.OverrideHTTPClientForTest(srv.Client())
+	book.SetCatalogURLForTest(srv.URL)
+	book.refreshOnce(t.Context())
+
+	st := book.Status()
+	require.Equal(t, "snapshot", st.Catalog.Source)
+	require.NotEmpty(t, st.Catalog.LastError)
+
+	introModels := []string{"gemini-3.8-flash", "gemini-3.7-flash"}
+
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
+	})
+	for _, model := range introModels {
+		before, prov := book.Estimate(model, Tokens{Input: 1_000_000, Output: 1_000_000})
+		require.NotNil(t, before, model)
+		assert.Equal(t, Provenance("snapshot:"+model), prov, model)
+		assert.InDelta(t, 4.5, *before, 1e-9, model)
+	}
+
+	book.SetNowForTest(func() time.Time {
+		return time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	})
+	for _, model := range introModels {
+		after, afterProv := book.Estimate(model, Tokens{Input: 1_000_000, Output: 1_000_000})
+		assert.Nil(t, after, model)
+		assert.Equal(t, ProvenanceUnpriced, afterProv, model)
+
+		alias, aliasProv := book.Estimate("gemini/"+model, Tokens{Input: 1_000_000})
+		assert.Nil(t, alias, model)
+		assert.Equal(t, ProvenanceUnpriced, aliasProv, model)
+	}
+
+	// 3.6 snapshot is durable GA ($1.50/$7.50), not intro.
+	flash36, flash36Prov := book.Estimate("gemini-3.6-flash", Tokens{Input: 1_000_000})
+	require.NotNil(t, flash36)
+	assert.Equal(t, Provenance("snapshot:gemini-3.6-flash"), flash36Prov)
+	assert.InDelta(t, 1.50, *flash36, 1e-9)
+}
+
 func TestEstimate_GPT56SolSnapshotPromoExpires(t *testing.T) {
 	book, err := NewBook(&Config{Enabled: true})
 	require.NoError(t, err)
