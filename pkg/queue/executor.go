@@ -851,7 +851,8 @@ func (e *RealSessionExecutor) executeAgent(
 	// agent already reported the right cancellation/timeout status.
 	if result != nil && ctx.Err() != nil &&
 		result.Status != agent.ExecutionStatusCancelled &&
-		result.Status != agent.ExecutionStatusTimedOut {
+		result.Status != agent.ExecutionStatusTimedOut &&
+		!result.KeepCompletedWrapUp(ctx.Err()) {
 		result.Status = agent.StatusFromErr(ctx.Err())
 		result.Error = ctx.Err()
 	}

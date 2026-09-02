@@ -295,7 +295,7 @@ func (r *SubAgentRunner) runSubAgent(
 	agentInstance, err := r.deps.AgentFactory.CreateAgent(execCtx)
 	if err != nil {
 		logger.Error("Failed to create sub-agent", "error", err)
-		r.completeSubAgent(exec, agent.ExecutionStatusFailed, "", err.Error())
+		r.completeSubAgent(exec, agent.ExecutionStatusFailed, "", err.Error(), "")
 		return
 	}
 
@@ -303,7 +303,7 @@ func (r *SubAgentRunner) runSubAgent(
 	if err != nil {
 		status := agent.StatusFromErr(ctx.Err())
 		logger.Error("Sub-agent execution error", "error", err, "resolved_status", status)
-		r.completeSubAgent(exec, status, "", err.Error())
+		r.completeSubAgent(exec, status, "", err.Error(), "")
 		return
 	}
 
@@ -312,7 +312,7 @@ func (r *SubAgentRunner) runSubAgent(
 	if result.Error != nil {
 		errMsg = result.Error.Error()
 	}
-	r.completeSubAgent(exec, result.Status, result.FinalAnalysis, errMsg)
+	r.completeSubAgent(exec, result.Status, result.FinalAnalysis, errMsg, result.WrapUpReason)
 }
 
 // completeSubAgent updates the execution record and delivers the result.
@@ -321,6 +321,7 @@ func (r *SubAgentRunner) completeSubAgent(
 	status agent.ExecutionStatus,
 	finalAnalysis string,
 	errMsg string,
+	wrapUpReason agent.WrapUpReason,
 ) {
 	r.mu.Lock()
 	exec.status = status
@@ -343,12 +344,13 @@ func (r *SubAgentRunner) completeSubAgent(
 	r.publishSubAgentStatus(cleanupCtx, exec.executionID, exec.agentIndex, string(entStatus), errMsg)
 
 	result := &SubAgentResult{
-		ExecutionID: exec.executionID,
-		AgentName:   exec.agentName,
-		Task:        exec.task,
-		Status:      status,
-		Result:      finalAnalysis,
-		Error:       errMsg,
+		ExecutionID:  exec.executionID,
+		AgentName:    exec.agentName,
+		Task:         exec.task,
+		Status:       status,
+		Result:       finalAnalysis,
+		Error:        errMsg,
+		WrapUpReason: wrapUpReason,
 	}
 
 	// Non-blocking on shutdown: if closeCh is closed (CancelAll during cleanup),

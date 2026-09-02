@@ -204,6 +204,7 @@ var PipelineExpectedEvents = []ExpectedEvent{
 			"forced_conclusion": "true",
 			"iterations_used":   "1",
 			"max_iterations":    "1",
+			"reason":            "max_iterations",
 		}},
 
 	{Type: "stage.status", StageName: "validation", Status: "completed"},
@@ -552,7 +553,9 @@ var CancellationChatExpectedEvents = []ExpectedEvent{
 // ────────────────────────────────────────────────────────────
 // Scenario: Timeout — Session 1 (Investigation timeout)
 // Single stage with 1 agent that blocks via BlockUntilCancelled.
-// Session timeout (2s) fires → context.DeadlineExceeded → timed_out.
+// Session timeout (2s) is below the wrap-up reserve, so the iterating
+// controller force-concludes immediately. TimeoutAgent still blocks via
+// BlockUntilCancelled until the deadline fires → wrap-up overruns → timed_out.
 //   1. investigation (TimeoutAgent, google-native)
 //      Agent blocks on BlockUntilCancelled → no streaming events created.
 //      Deadline fires → agent + stage + session timed_out.

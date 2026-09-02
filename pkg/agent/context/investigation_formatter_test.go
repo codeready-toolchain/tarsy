@@ -46,6 +46,47 @@ func TestFormatTimelineEvents(t *testing.T) {
 			expected: "**Agent Response:**\n\nThe pods are healthy.\n\n",
 		},
 		{
+			name: "final analysis forced conclusion time budget",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeFinalAnalysis,
+					Content:   "Root cause: OOM.",
+					Metadata: map[string]interface{}{
+						"forced_conclusion": true,
+						"reason":            "time_budget",
+					},
+				},
+			},
+			expected: "**Final Analysis (forced conclusion — time budget):**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "final analysis forced conclusion max iterations",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeFinalAnalysis,
+					Content:   "Root cause: OOM.",
+					Metadata: map[string]interface{}{
+						"forced_conclusion": true,
+						"reason":            "max_iterations",
+					},
+				},
+			},
+			expected: "**Final Analysis (forced conclusion — max iterations):**\n\nRoot cause: OOM.\n\n",
+		},
+		{
+			name: "final analysis forced conclusion without reason",
+			events: []*ent.TimelineEvent{
+				{
+					EventType: timelineevent.EventTypeFinalAnalysis,
+					Content:   "Root cause: OOM.",
+					Metadata: map[string]interface{}{
+						"forced_conclusion": true,
+					},
+				},
+			},
+			expected: "**Final Analysis (forced conclusion):**\n\nRoot cause: OOM.\n\n",
+		},
+		{
 			name: "final analysis",
 			events: []*ent.TimelineEvent{
 				{EventType: timelineevent.EventTypeFinalAnalysis, Content: "Root cause: OOM."},

@@ -445,7 +445,8 @@ func TestE2E_ReviewWorkflow_CancelledAutoReviewed(t *testing.T) {
 	app := NewTestApp(t,
 		WithConfig(configs.Load(t, "review-workflow")),
 		WithLLMClient(llm),
-		WithSessionTimeout(2*time.Minute),
+		// Must exceed wrap-up reserve (3m) so the agent enters Generate instead of wrapping up.
+		WithSessionTimeout(10*time.Minute),
 	)
 
 	ctx := context.Background()

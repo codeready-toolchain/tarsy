@@ -59,12 +59,13 @@ type OrchestratorGuardrails struct {
 // SubAgentResult is the outcome of a completed sub-agent execution.
 // Delivered to the orchestrator via the results channel.
 type SubAgentResult struct {
-	ExecutionID string
-	AgentName   string
-	Task        string
-	Status      agent.ExecutionStatus
-	Result      string // FinalAnalysis text on success
-	Error       string // Error message on failure
+	ExecutionID  string
+	AgentName    string
+	Task         string
+	Status       agent.ExecutionStatus
+	Result       string             // FinalAnalysis text on success
+	Error        string             // Error message on failure
+	WrapUpReason agent.WrapUpReason // copied from ExecutionResult; empty on a normal finish
 }
 
 // SubAgentStatus is a snapshot of a dispatched sub-agent's state.
@@ -155,10 +156,17 @@ func init() {
 func FormatSubAgentResult(result *SubAgentResult) agent.ConversationMessage {
 	var content string
 	if result.Status == agent.ExecutionStatusCompleted {
-		content = fmt.Sprintf(
-			"[Sub-agent completed] %s (exec %s):\n%s",
-			result.AgentName, result.ExecutionID, result.Result,
-		)
+		if phrase := result.WrapUpReason.Display(); phrase != "" {
+			content = fmt.Sprintf(
+				"[Sub-agent completed — forced conclusion (%s)] %s (exec %s):\n%s",
+				phrase, result.AgentName, result.ExecutionID, result.Result,
+			)
+		} else {
+			content = fmt.Sprintf(
+				"[Sub-agent completed] %s (exec %s):\n%s",
+				result.AgentName, result.ExecutionID, result.Result,
+			)
+		}
 	} else {
 		content = fmt.Sprintf(
 			"[Sub-agent %s] %s (exec %s): %s",

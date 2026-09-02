@@ -127,8 +127,11 @@ func (b *PromptBuilder) BuildSynthesisMessages(
 }
 
 // BuildForcedConclusionPrompt returns a prompt to force an LLM conclusion
-// at the iteration limit.
-func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int) string {
+// at the iteration limit or when the time budget is exhausted.
+func (b *PromptBuilder) BuildForcedConclusionPrompt(iteration int, reason agent.WrapUpReason) string {
+	if reason == agent.WrapUpReasonTimeBudget {
+		return fmt.Sprintf(forcedConclusionTimeBudgetTemplate, forcedConclusionFormat)
+	}
 	return fmt.Sprintf(forcedConclusionTemplate, iteration, forcedConclusionFormat)
 }
 

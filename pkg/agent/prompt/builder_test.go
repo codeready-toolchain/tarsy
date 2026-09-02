@@ -112,10 +112,31 @@ func TestBuildSynthesisMessages_UserContent(t *testing.T) {
 
 func TestBuildForcedConclusionPrompt(t *testing.T) {
 	builder := newBuilderForTest()
-	result := builder.BuildForcedConclusionPrompt(3)
+	tests := []struct {
+		name   string
+		reason agent.WrapUpReason
+	}{
+		{name: "max_iterations", reason: agent.WrapUpReasonMaxIterations},
+		{name: "empty reason uses iteration wording", reason: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := builder.BuildForcedConclusionPrompt(3, tt.reason)
+			assert.Contains(t, result, "3 iterations")
+			assert.Contains(t, result, "structured conclusion")
+			assert.NotContains(t, result, "Final Answer:")
+			assert.NotContains(t, result, "time budget")
+		})
+	}
+}
 
-	assert.Contains(t, result, "3 iterations")
+func TestBuildForcedConclusionPrompt_TimeBudget(t *testing.T) {
+	builder := newBuilderForTest()
+	result := builder.BuildForcedConclusionPrompt(3, agent.WrapUpReasonTimeBudget)
+
+	assert.Contains(t, result, "time budget")
 	assert.Contains(t, result, "structured conclusion")
+	assert.NotContains(t, result, "iteration limit")
 	assert.NotContains(t, result, "Final Answer:")
 }
 

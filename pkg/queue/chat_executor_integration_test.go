@@ -99,7 +99,7 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, publisher,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,
@@ -287,7 +287,7 @@ func TestChatExecutor_MemoryEnabled_RecallToolPresent_NoAutoInjection(t *testing
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, publisher,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, memSvc, memCfg,
@@ -401,7 +401,7 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, publisher,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,
@@ -583,7 +583,7 @@ func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, slowLLM, nil, publisher,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,
@@ -697,7 +697,7 @@ func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, slowLLM, nil, publisher,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,
@@ -813,7 +813,7 @@ func TestChatExecutor_AcceptsInProgressSession(t *testing.T) {
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, nil,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,
@@ -890,7 +890,7 @@ func TestChatExecutor_CancelBySessionID(t *testing.T) {
 
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, slowLLM, nil, nil,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,
@@ -1045,7 +1045,7 @@ func TestChatExecutor_ChatSubAgents_DispatchesSubAgent(t *testing.T) {
 	publisher := &testEventPublisher{}
 	chatExecutor := NewChatMessageExecutor(cfg, entClient, llm, nil, publisher,
 		ChatMessageExecutorConfig{
-			SessionTimeout:    30 * time.Second,
+			SessionTimeout:    10 * time.Minute, // must exceed wrap-up reserve (3m) so iterations can run
 			HeartbeatInterval: 5 * time.Second,
 		},
 		nil, nil, nil,

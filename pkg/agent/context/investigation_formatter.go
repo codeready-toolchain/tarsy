@@ -7,6 +7,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 )
 
 const investigationSeparator = "═══════════════════════════════════════════════════════════════════════════════"
@@ -201,7 +202,7 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 
 		case timelineevent.EventTypeFinalAnalysis:
 			if !(prevWasLlmResponse && event.Content == lastResponseContent) {
-				sb.WriteString("**Final Analysis:**\n\n")
+				sb.WriteString(finalAnalysisHeader(event.Metadata))
 				sb.WriteString(event.Content)
 				sb.WriteString("\n\n")
 			}
@@ -236,6 +237,20 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 			sb.WriteString("\n\n")
 		}
 	}
+}
+
+// finalAnalysisHeader labels a wrap-up report so later LLMs (synthesis,
+// scoring, exec summary) can discount a rushed conclusion.
+func finalAnalysisHeader(metadata map[string]any) string {
+	forced, _ := metadata["forced_conclusion"].(bool)
+	if !forced {
+		return "**Final Analysis:**\n\n"
+	}
+	reason, _ := metadata["reason"].(string)
+	if phrase := agent.WrapUpReason(reason).Display(); phrase != "" {
+		return fmt.Sprintf("**Final Analysis (forced conclusion — %s):**\n\n", phrase)
+	}
+	return "**Final Analysis (forced conclusion):**\n\n"
 }
 
 // formatToolCallHeader extracts tool name and arguments from metadata to build

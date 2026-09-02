@@ -24,7 +24,7 @@ func (m *mockScoringPromptBuilder) BuildSynthesisMessages(_ *agent.ExecutionCont
 	panic("unexpected call")
 }
 
-func (m *mockScoringPromptBuilder) BuildForcedConclusionPrompt(_ int) string {
+func (m *mockScoringPromptBuilder) BuildForcedConclusionPrompt(_ int, _ agent.WrapUpReason) string {
 	panic("unexpected call")
 }
 

@@ -378,9 +378,16 @@ func TestIntegration_FunctionCallingInvestigationWithFailedServers(t *testing.T)
 
 func TestIntegration_ForcedConclusion(t *testing.T) {
 	builder := newIntegrationBuilder()
-	result := builder.BuildForcedConclusionPrompt(3)
+	result := builder.BuildForcedConclusionPrompt(3, agent.WrapUpReasonMaxIterations)
 
 	assertGolden(t, "forced_conclusion", result)
+}
+
+func TestIntegration_ForcedConclusionTimeBudget(t *testing.T) {
+	builder := newIntegrationBuilder()
+	result := builder.BuildForcedConclusionPrompt(3, agent.WrapUpReasonTimeBudget)
+
+	assertGolden(t, "forced_conclusion_time_budget", result)
 }
 
 // ===========================================================================

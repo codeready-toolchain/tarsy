@@ -19,7 +19,9 @@ import (
 //
 // Session 1 — Investigation timeout:
 //   timeout-investigation chain, single stage "investigation" with TimeoutAgent
-//   using BlockUntilCancelled. Session timeout (2s) fires → DeadlineExceeded
+//   using BlockUntilCancelled. Session timeout (2s) is below the 3m wrap-up
+//   reserve, so the first iteration takes the wrap-up path. The wrap-up LLM
+//   still blocks until cancel, so wrap-up overruns → DeadlineExceeded
 //   propagates → agent, stage, and session all become timed_out.
 //
 // Session 2 — Chat timeout:

@@ -201,7 +201,7 @@ func (r *ResolvedAgentConfig) OnDemandSkillNameSet() map[string]struct{} {
 type PromptBuilder interface {
 	BuildFunctionCallingMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
 	BuildSynthesisMessages(execCtx *ExecutionContext, prevStageContext string) []ConversationMessage
-	BuildForcedConclusionPrompt(iteration int) string
+	BuildForcedConclusionPrompt(iteration int, reason WrapUpReason) string
 	BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string
 	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
 	BuildExecutiveSummarySystemPrompt() string

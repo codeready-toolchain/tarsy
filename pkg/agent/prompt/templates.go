@@ -41,19 +41,32 @@ When you are done, write a short action memo covering: the decision, the evidenc
 // synthesisTask is the synthesis task instruction for combining parallel results.
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
 
+// forcedConclusionGuidance is shared by iteration-limit and time-budget wrap-up prompts.
+const forcedConclusionGuidance = `**Conclusion guidance:**
+- Use the data and observations you've already gathered
+- Perfect information is not required - provide actionable insights from available findings
+- If gaps remain, clearly state what you couldn't determine and why
+- Clearly distinguish between conclusions supported by tool-gathered evidence and those based only on the original alert data
+- If most tool calls failed, returned errors, or produced no meaningful data, explicitly state that your analysis is limited and primarily based on alert data
+- Focus on practical next steps based on current knowledge`
+
 // forcedConclusionTemplate is the base template for forced conclusion prompts.
 // %d = iteration count, %s = format instructions.
 const forcedConclusionTemplate = `You have reached the investigation iteration limit (%d iterations).
 
 Please conclude your investigation by answering the original question based on what you've discovered.
 
-**Conclusion guidance:**
-- Use the data and observations you've already gathered
-- Perfect information is not required - provide actionable insights from available findings
-- If gaps remain, clearly state what you couldn't determine and why
-- Clearly distinguish between conclusions supported by tool-gathered evidence and those based only on the original alert data
-- If most tool calls failed, returned errors, or produced no meaningful data, explicitly state that your analysis is limited and primarily based on alert data
-- Focus on practical next steps based on current knowledge
+` + forcedConclusionGuidance + `
+
+%s`
+
+// forcedConclusionTimeBudgetTemplate is used when wrap-up is triggered by the
+// time budget rather than the iteration limit. %s = format instructions.
+const forcedConclusionTimeBudgetTemplate = `You are approaching the time budget for this investigation.
+
+Please conclude your investigation by answering the original question based on what you've discovered.
+
+` + forcedConclusionGuidance + `
 
 %s`
 
