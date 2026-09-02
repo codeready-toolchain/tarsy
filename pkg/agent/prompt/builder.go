@@ -49,7 +49,8 @@ const (
 //
 // Dispatches to specialized builders for action and sub-agent modes,
 // then falls through to chat / investigation paths. Orchestrator sections
-// are injected additively when SubAgentCatalog is non-empty.
+// are injected additively when SubAgentCatalog is non-empty, including
+// action agents (the executor already attaches dispatch tools in that case).
 func (b *PromptBuilder) BuildFunctionCallingMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,

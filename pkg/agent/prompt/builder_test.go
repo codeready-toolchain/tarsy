@@ -247,6 +247,26 @@ func TestBuildFunctionCallingMessages_ActionMode(t *testing.T) {
 	assert.NotContains(t, messages[1].Content, "amended report that preserves")
 }
 
+func TestBuildFunctionCallingMessages_ActionModeWithCatalog(t *testing.T) {
+	builder := newBuilderForTest()
+	execCtx := newFullExecCtx()
+	execCtx.Config.Type = config.AgentTypeAction
+	execCtx.SubAgentCatalog = []config.SubAgentEntry{
+		{Name: "GeneralWorker", Description: "Pure reasoning"},
+	}
+
+	messages := builder.BuildFunctionCallingMessages(execCtx, "Investigation found malicious activity.")
+	require.Len(t, messages, 2)
+
+	assert.Contains(t, messages[0].Content, "Action Agent Safety Guidelines")
+	assert.Contains(t, messages[0].Content, "Prefer inaction over incorrect action")
+	assert.Contains(t, messages[0].Content, "Orchestrator Strategy")
+	assert.Contains(t, messages[0].Content, "Available Sub-Agents")
+	assert.Contains(t, messages[0].Content, "GeneralWorker")
+	assert.Contains(t, messages[0].Content, "short action memo, not a copy of the investigation")
+	assert.NotContains(t, messages[0].Content, "Prefer sub-agents when parallel or specialized work")
+}
+
 func TestBuildFunctionCallingMessages_SubAgentMode(t *testing.T) {
 	builder := newBuilderForTest()
 	execCtx := newFullExecCtx()

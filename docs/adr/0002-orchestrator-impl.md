@@ -2,6 +2,7 @@
 
 **Status:** Implemented  
 **Date:** 2026-02-26  
+**Superseded in part by:** [ADR-0015: Implicit Orchestrator](0015-implicit-orchestrator.md) — trigger and identity (`type: orchestrator`, `AgentTypeOrchestrator`, built-in `Orchestrator` agent are removed; any agent with a non-empty sub-agent catalog orchestrates)  
 **Amended by:** [ADR-0029: Sub-Agent Execution Limits](0029-sub-agent-execution-limits.md) (2026-09-02) — `agent_timeout` optional (remaining parent); `max_budget` removed; iterating wrap-up on deadline
 
 ## Overview
@@ -87,7 +88,7 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 │  executeStage → executeAgent → AgentFactory.CreateAgent               │
 │                                      │                                │
 │                             ┌────────┴────────────────────┐           │
-│                             │  Agent (type=orchestrator)  │           │
+│                             │  Agent (sub-agents)         │           │
 │                             └────────┬────────────────────┘           │
 │                                      │                                │
 │                             ┌────────┴───────────────────┐            │
@@ -111,6 +112,8 @@ The orchestrator is a standard TARSy agent with three additional tools (`dispatc
 │                             └────────────────────────────┘            │
 └───────────────────────────────────────────────────────────────────────┘
 ```
+
+**Amendment (ADR-0015):** this diagram originally labeled the box `type=orchestrator`. Wiring is gated on a non-empty catalog, not an agent type.
 
 **CompositeToolExecutor** wraps the existing MCP `ToolExecutor` and adds orchestration tools. Implements the same `ToolExecutor` interface. On execute, routes by name: orchestration tools go to the `SubAgentRunner`, everything else delegates to MCP. On close, cancels all running sub-agents and waits for them to finish (with a timeout using a background context when the parent context may already be cancelled).
 
@@ -204,7 +207,9 @@ Alert data + prior agent results
 
 Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tarsy.yaml) and built-in agents (KubernetesAgent, ChatAgent, etc.). No new concept needed.
 
-**Discovery:** Agents with a `description` field form the global sub-agent registry (built at config load time). Agents without `description` are excluded. Orchestrator agents themselves are also excluded. The registry can be further restricted via `sub_agents` override at chain/stage/agent level.
+**Discovery:** Agents with a `description` field form the global sub-agent registry (built at config load time). Agents without `description` are excluded. The registry can be further restricted via `sub_agents` override at chain/stage/agent level. Depth 1 is enforced at runtime (a dispatched worker does not receive orchestrator tools), not by excluding an orchestrator agent type.
+
+**Amendment (ADR-0015):** originally also excluded “orchestrator agents themselves.” There is no `type: orchestrator`; identity/trigger is owned by [ADR-0015](0015-implicit-orchestrator.md).
 
 **Execution model:**
 - **Dispatch and forget:** `dispatch_agent` returns immediately. Results are pushed back automatically.
@@ -218,7 +223,7 @@ Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tar
 
 ### Orchestrator Config
 
-Per [ADR-0001](0001-agent-type-refactor.md), `AgentConfig` already has `Type`, `Description`, and `LLMBackend` fields. The orchestrator adds `orchestrator` as an agent type and a nested `orchestrator` section for guardrails:
+Per [ADR-0001](0001-agent-type-refactor.md), `AgentConfig` already has `Type`, `Description`, and `LLMBackend` fields. Guardrails live in a nested `orchestrator` section (defaults + per-agent). Trigger and identity are **not** an agent type — see [ADR-0015](0015-implicit-orchestrator.md).
 
 ```yaml
 defaults:
@@ -228,14 +233,15 @@ defaults:
     # agent_timeout: 20m     # optional dedicated cap, still clamped to parent
 
 agents:
-  MyOrchestrator:
-    type: orchestrator
-    description: "Dynamic SRE investigation orchestrator"
+  KubernetesAgent:
+    description: "Kubernetes troubleshooting agent"
     custom_instructions: |
       You investigate alerts by dispatching specialized sub-agents...
     orchestrator:
       max_concurrent_agents: 3
 ```
+
+**Amendment (ADR-0015):** this example originally used `type: orchestrator` and a dedicated `MyOrchestrator` identity. Operators must not configure that type or the removed built-in `Orchestrator` agent.
 
 **Amendment (ADR-0029):** this example originally advertised `agent_timeout: 300s` and unused `max_budget: 600s` as required-looking defaults. `max_budget` is removed. Omitted `agent_timeout` uses remaining parent time.
 
@@ -257,14 +263,15 @@ Supports both short-form (list of strings) and long-form (list of objects with p
 
 ### New Built-In Agents
 
-Four new built-in agents ship with the orchestrator feature:
+Three built-in worker agents ship with the orchestrator feature (the dedicated `Orchestrator` built-in was removed by [ADR-0015](0015-implicit-orchestrator.md)):
 
 | Agent | Type | Native Tools | MCP | Purpose |
 |-------|------|-------------|-----|---------|
-| Orchestrator | orchestrator | none | none | Dispatches and coordinates sub-agents |
 | WebResearcher | default | google_search, url_context | none | Web research and URL analysis |
 | CodeExecutor | default | code_execution | none | Python computation and analysis |
 | GeneralWorker | default | none | none | Reasoning, summarization, drafting |
+
+**Amendment (ADR-0015):** originally listed a fourth built-in, `Orchestrator` with `type: orchestrator`. Do not configure that agent. Any agent with `sub_agents` gains dispatch tools.
 
 These complement existing built-in agents (KubernetesAgent, etc.) which already have descriptions and are orchestrator-visible. Built-in agent definitions were extended with backend and native-tools fields where needed for WebResearcher and CodeExecutor.
 
@@ -272,7 +279,7 @@ A `native_tools` field on `AgentConfig` enables per-agent override of provider-l
 
 ### Usage Examples
 
-**Minimal** — reference the built-in Orchestrator by name:
+**Minimal** — any agent with `sub_agents` (no dedicated orchestrator type; [ADR-0015](0015-implicit-orchestrator.md)):
 
 ```yaml
 defaults:
@@ -290,7 +297,7 @@ agent_chains:
     stages:
       - name: orchestrate
         agents:
-          - name: Orchestrator
+          - name: KubernetesAgent
             sub_agents: [LogAnalyzer, GeneralWorker]
 ```
 
@@ -302,7 +309,7 @@ agent_chains:
     stages:
       - name: orchestrate
         agents:
-          - name: Orchestrator
+          - name: KubernetesAgent
             llm_provider: "openai-prod"
             llm_backend: "langchain"
             sub_agents:
@@ -415,7 +422,7 @@ When the orchestrator is cancelled (session cancel via API):
 4. Sub-agent runner waits for all goroutines to exit
 5. Orchestrator returns `ExecutionStatusCancelled`
 
-Sub-agent goroutines derive their contexts from the parent session context, **not** from the per-iteration context — this is critical so sub-agents survive across orchestrator iterations and are only cancelled when the session itself is cancelled. An optional YAML `agent_timeout` adds a shorter cap from dispatch start (`min(configured, remaining parent)`); omitted means remaining parent time.
+Sub-agent goroutines derive their contexts from the parent session context, **not** from the per-iteration context. Ending an orchestrator iteration therefore does not cancel in-flight workers. Workers **are** cancelled when the parent session (or chat) context is cancelled, or when a configured `agent_timeout` fires. That extra cap is applied at dispatch start as `min(configured, remaining parent)`; omitted `agent_timeout` means remaining parent time only.
 
 **Amendment (ADR-0029):** originally every dispatch also applied a hardcoded `agent_timeout` deadline (documented here as 300s; the resolver filled 420s). That extra clock is gone unless YAML sets `agent_timeout`.
 
@@ -506,7 +513,7 @@ Execution: exec-001 (Orchestrator)
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| I1 | Orchestrator identification in config? | Existing `type` field — orchestrator type ([ADR-0001](0001-agent-type-refactor.md)) | Resolved by ADR-0001 |
+| I1 | Orchestrator identification in config? | **Superseded by [ADR-0015](0015-implicit-orchestrator.md) D1** — non-empty sub-agent catalog, not `type: orchestrator` | Originally: existing `type` field. ADR-0015 removed `AgentTypeOrchestrator` and the built-in `Orchestrator` agent. |
 | I2 | Tool combination approach? | CompositeToolExecutor (wrapper pattern) | Clean separation; controller/tool boundary preserved |
 | I3 | Orchestration tool naming? | Plain names (`dispatch_agent`, etc.) | MCP uses dots — natural namespace separation |
 | I4 | Controller approach? | Reuse IteratingController + push-based injection | Small, localized change; loop structure intact |
@@ -532,6 +539,7 @@ Execution: exec-001 (Orchestrator)
 
 The orchestrator runtime (composite executor, sub-agent runner, push-based results, DB schema, dashboard) still stands. ADR-0029 changes how long a sub-agent is allowed to run, and what happens when time runs out:
 
-- **`agent_timeout` (guardrails / I5).** Originally documented as a 300s per-sub-agent default (code filled 420s when YAML omitted the field). Omitted now means remaining parent (session/chat) time. If set, `min(configured, remaining parent)` with `WithTimeoutCause`. Never extend past the parent.
+- **`agent_timeout` (guardrails / I5).** Originally documented as a 300s per-sub-agent default (code filled 420s when YAML omitted the field). Omitted now means remaining parent (session/chat) time. If set, `min(configured, remaining parent)` with `WithTimeoutCause`. Never extend past the parent. Per-iteration cancel still does not cancel workers; session/chat cancel and a configured `agent_timeout` do.
 - **`max_budget`.** Originally listed as “total orchestrator budget” (600s here; 900s in the later resolver). It was never applied. Removed from config, API, and this table.
 - **Forced conclusion.** Originally only `max_iterations`. Approaching a real deadline now wraps up with reason `time_budget` (all iterating agents). Operator cancel stays fail-fast. See ADR-0029.
+- **Identity / trigger (not owned here).** This ADR originally specified `type: orchestrator`, `AgentTypeOrchestrator`, and a built-in `Orchestrator` agent. Those are removed. [ADR-0015](0015-implicit-orchestrator.md) owns trigger and identity: operators set `sub_agents` on any agent (including `type: action`). Do not configure the removed type or built-in. Runtime mechanics in this ADR remain valid.

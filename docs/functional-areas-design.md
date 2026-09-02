@@ -573,10 +573,11 @@ System prompt = Tier 1-3 (above)
               + Task focus
 ```
 
-For **action agents** (`type: action`), the prompt builder auto-injects a safety-focused behavioral layer:
+For **action agents** (`type: action`), the prompt builder auto-injects a safety-focused behavioral layer. If the executor attached a sub-agent catalog (same trigger as investigation/chat), orchestrator sections are additive — tools are the contract:
 ```text
 System prompt = Tier 1-3 (above)
               + Action behavioral instructions (auto-injected safety preamble)
+              + Orchestrator strategy / catalog / result delivery (when SubAgentCatalog is non-empty)
               + Action task focus
 ```
 
