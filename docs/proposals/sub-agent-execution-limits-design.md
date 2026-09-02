@@ -284,20 +284,20 @@ Split so each PR leaves the product working.
 - Forced-conclusion prompt distinguishes time budget from iteration limit (`PromptBuilder` interface + mocks).
 - Timeline metadata includes `reason`.
 - Investigation formatter labels forced conclusions from event metadata.
-- Dashboard: generic “forced conclusion” (not hardcoded “Max Iterations”).
+- Dashboard: “forced conclusion” plus wrap-up reason when metadata has one (not hardcoded “Max Iterations”).
 - Mid-call **parent** timeout errors prefer `context.Cause`.
 
-**Where:** Iterating controller, prompt builder, investigation formatter, orchestrator result types/formatting, dashboard `finalAnalysisPresentation` (no test file today — add one).
+**Where:** Iterating controller, prompt builder, investigation formatter, orchestrator result types/formatting, dashboard `finalAnalysisPresentation` and `web/dashboard/src/test/utils/finalAnalysisPresentation.test.ts`.
 
 **Tests in this PR:**
 
 - Unit tests: no deadline → no time wrap-up; remaining ≤ reserve invokes wrap-up; remaining ≤ 0 does not call the LLM; iteration clamp leaves reserve; `WaitForResult` cannot eat the reserve; cancel does not wrap up; wrap-up overrun → `timed_out`; consecutive child timeouts near the reserve wrap up instead of `failed`.
 - Existing max-iterations forced-conclusion tests still pass and gain `reason: max_iterations`.
 - Formatter / `FormatSubAgentResult` tests for wrap-up labels.
-- Dashboard presentation unit tests for generic copy.
-- E2E: `test/e2e/timeout_test.go` uses a 2s session and `BlockUntilCancelled`. First iteration will take the wrap-up path (2s ≤ 3m). If the LLM still blocks until cancel, terminal status can remain `timed_out` (overrun); update assertions if they require an iteration-path event. Other short-timeout e2e/chat tests similarly. Prefer extending that scenario over a new harness. If a dedicated “wrap-up succeeded” e2e is awkward (needs parent > 3m plus a forced squeeze), say so in the PR and rely on unit tests.
+- Dashboard presentation unit tests for wrap-up reason labels and the unknown-reason fallback.
+- E2E: `test/e2e/timeout_test.go` uses a 2s session and `BlockUntilCancelled`. First iteration will take the wrap-up path (2s ≤ 3m). If the LLM still blocks until cancel, terminal status can remain `timed_out` (overrun); update assertions if they require an iteration-path event. Other short-timeout e2e/chat tests similarly. Prefer extending that scenario over a new harness. A dedicated “wrap-up succeeded” e2e was not added (needs parent > 3m plus a forced squeeze); unit tests cover that path.
 
-**Gap:** None vs the decided contract if the unit tests above land. If a success-path e2e is deferred, unit tests still lock the controller behavior.
+**Gap:** None vs the decided contract. Unit tests lock the controller behavior. The deferred success-path wrap-up e2e does not reopen this PR.
 
 ### PR 3 — Docs
 
