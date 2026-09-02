@@ -281,6 +281,30 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 	assert.True(t, conclusion.DisableToolCalls)
 	require.NotEmpty(t, conclusion.Tools)
 	assert.Equal(t, "k8s.get_pods", conclusion.Tools[0].Name)
+
+	require.GreaterOrEqual(t, len(llm.capturedInputs[0].Messages), 2)
+	require.Equal(t, agent.RoleSystem, llm.capturedInputs[0].Messages[0].Role)
+	require.Equal(t, agent.RoleUser, llm.capturedInputs[0].Messages[1].Role)
+	system := llm.capturedInputs[0].Messages[0].Content
+	user := llm.capturedInputs[0].Messages[1].Content
+	require.NotEmpty(t, system)
+	require.NotEmpty(t, user)
+	for i, in := range llm.capturedInputs {
+		require.GreaterOrEqual(t, len(in.Messages), 2, "call %d", i)
+		assert.Equal(t, system, in.Messages[0].Content, "call %d system prefix changed", i)
+		assert.Equal(t, user, in.Messages[1].Content, "call %d first user changed", i)
+	}
+	last := conclusion.Messages[len(conclusion.Messages)-1]
+	require.Equal(t, agent.RoleUser, last.Role)
+	assert.NotEqual(t, user, last.Content)
+	sawTool := false
+	for _, msg := range conclusion.Messages {
+		if msg.Role == agent.RoleTool {
+			sawTool = true
+			break
+		}
+	}
+	require.True(t, sawTool, "forced conclusion should keep looping tool results")
 }
 
 func TestIteratingController_ForcedConclusion_Eligibility(t *testing.T) {

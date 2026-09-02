@@ -1276,6 +1276,16 @@ def _has_openai_breakpoint(msg) -> bool:
     return False
 
 
+def _has_anthropic_cache(msg) -> bool:
+    extra = getattr(msg, "additional_kwargs", None) or {}
+    if extra.get("cache_control") == {"type": "ephemeral", "ttl": "1h"}:
+        return True
+    content = getattr(msg, "content", None)
+    if isinstance(content, list) and content and isinstance(content[0], dict):
+        return content[0].get("cache_control") == {"type": "ephemeral", "ttl": "1h"}
+    return False
+
+
 class TestLangChainPromptCacheBreakpoints:
     def test_anthropic_tools_and_messages(self, provider):
         mock_model = MagicMock()
@@ -1293,29 +1303,48 @@ class TestLangChainPromptCacheBreakpoints:
         converted = provider._convert_messages(
             _looping_tool_history(), prompt_cache.ANTHROPIC,
         )
-        system = converted[0]
-        assert isinstance(system.content, list)
-        assert system.content[0]["cache_control"]["ttl"] == "1h"
+        assert _has_anthropic_cache(converted[0])  # system
+        assert _has_anthropic_cache(converted[1])  # first user
+        assert not _has_anthropic_cache(converted[2])  # assistant
         last = converted[-1]
         assert isinstance(last, ToolMessage)
-        assert last.additional_kwargs["cache_control"]["ttl"] == "1h"
+        assert _has_anthropic_cache(last)
         result = last.content[0]
         assert result["type"] == "tool_result"
         assert result["tool_use_id"] == "tc1"
         assert result["content"] == "pod-1 Running"
         assert result["cache_control"]["ttl"] == "1h"
 
+    def test_anthropic_sticky_breakpoints_not_assistant(self, provider):
+        converted = provider._convert_messages(
+            _looping_tool_history(), prompt_cache.ANTHROPIC,
+        )
+        assert _has_anthropic_cache(converted[0])
+        assert _has_anthropic_cache(converted[1])
+        assert not _has_anthropic_cache(converted[2])
+        assert _has_anthropic_cache(converted[3])
+        assert isinstance(converted[3], ToolMessage)
+
+        turn1 = provider._convert_messages(
+            _looping_tool_history()[:-1], prompt_cache.ANTHROPIC,
+        )
+        assert _has_anthropic_cache(turn1[0])
+        assert _has_anthropic_cache(turn1[1])
+        assert not _has_anthropic_cache(turn1[2])
+
     def test_anthropic_forced_conclusion_marks_last_tool_not_user(self, provider):
         history = _looping_tool_history() + [
             pb.ConversationMessage(role="user", content="Conclude now."),
         ]
         converted = provider._convert_messages(history, prompt_cache.ANTHROPIC)
+        assert _has_anthropic_cache(converted[0])
+        assert _has_anthropic_cache(converted[1])
+        assert not _has_anthropic_cache(converted[2])
+        assert _has_anthropic_cache(converted[3])
         last_user = converted[-1]
-        tool = converted[3]
         assert isinstance(last_user, HumanMessage)
         assert isinstance(last_user.content, str)
-        assert last_user.additional_kwargs.get("cache_control") in (None, {})
-        assert tool.additional_kwargs["cache_control"]["ttl"] == "1h"
+        assert not _has_anthropic_cache(last_user)
 
     def test_vertex_tool_result_cache_control_not_nested(self, provider):
         from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic
@@ -1323,7 +1352,11 @@ class TestLangChainPromptCacheBreakpoints:
         converted = provider._convert_messages(
             _looping_tool_history(), prompt_cache.ANTHROPIC,
         )
-        _, formatted = _format_messages_anthropic(converted, project=None)
+        system, formatted = _format_messages_anthropic(converted, project=None)
+        assert system[0]["cache_control"]["ttl"] == "1h"
+        first_user = formatted[0]["content"][0]
+        assert first_user["type"] == "text"
+        assert first_user["cache_control"]["ttl"] == "1h"
         tool_results = [
             block
             for msg in formatted
