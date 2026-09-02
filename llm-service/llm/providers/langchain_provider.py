@@ -271,14 +271,11 @@ class LangChainProvider(LLMProvider):
         self,
         messages: List[pb.ConversationMessage],
         cache_kind: str = prompt_cache.NONE,
-        strip_ttl: bool = False,
     ) -> List[BaseMessage]:
         """Convert proto messages to LangChain message objects."""
         result: List[BaseMessage] = []
         for idx, msg in enumerate(messages):
             result.append(self._convert_one_message(idx, msg))
-        if cache_kind == prompt_cache.ANTHROPIC:
-            return self._mark_anthropic_cache(result, messages, prompt_cache.cache_control(strip_ttl))
         if cache_kind == prompt_cache.OPENAI_EXPLICIT:
             return self._mark_openai_cache(result, messages)
         return result
@@ -334,21 +331,6 @@ class LangChainProvider(LLMProvider):
                 additional_kwargs=extra,
             )
         if isinstance(msg, ToolMessage):
-            # Anthropic rejects cache_control inside tool_result.content.
-            # Vertex copies ToolMessage content as-is (no hoist); native
-            # ChatAnthropic accepts a pre-formatted tool_result block.
-            if key == "cache_control":
-                return ToolMessage(
-                    content=[{
-                        "type": "tool_result",
-                        "tool_use_id": msg.tool_call_id,
-                        "content": text,
-                        key: value,
-                    }],
-                    tool_call_id=msg.tool_call_id,
-                    name=msg.name,
-                    additional_kwargs=extra,
-                )
             return ToolMessage(
                 content=[block],
                 tool_call_id=msg.tool_call_id,
@@ -356,31 +338,6 @@ class LangChainProvider(LLMProvider):
                 additional_kwargs=extra,
             )
         return msg
-
-    def _mark_anthropic_cache(
-        self,
-        converted: List[BaseMessage],
-        proto_messages: List[pb.ConversationMessage],
-        control: dict,
-    ) -> List[BaseMessage]:
-        out = list(converted)
-        for i, proto in enumerate(proto_messages):
-            if proto.role == "system":
-                out[i] = self._with_cache_marker(out[i], "cache_control", control)
-        if not proto_messages or proto_messages[-1].role == "system":
-            return out
-        # Forced conclusion appends a user prompt after tool results. Mark the
-        # last tool so Claude can read the looping prefix without a 2× write of
-        # the conclusion text. Loop turns already end on a tool result.
-        if proto_messages[-1].role == "user":
-            tool_idx = prompt_cache.last_tool_index(proto_messages)
-            if tool_idx >= 0:
-                out[tool_idx] = self._with_cache_marker(
-                    out[tool_idx], "cache_control", control,
-                )
-                return out
-        out[-1] = self._with_cache_marker(out[-1], "cache_control", control)
-        return out
 
     def _mark_openai_cache(
         self,
@@ -473,7 +430,7 @@ class LangChainProvider(LLMProvider):
                     config, list(request.tools), kind, strip_ttl, request.execution_id,
                     disable_tool_calls=request.disable_tool_calls,
                 )
-                messages = self._convert_messages(list(request.messages), kind, strip_ttl)
+                messages = self._convert_messages(list(request.messages), kind)
             except (ValueError, ImportError) as e:
                 code = "credentials" if "not set" in str(e) else "invalid_request"
                 yield pb.GenerateResponse(
