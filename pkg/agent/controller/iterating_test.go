@@ -291,6 +291,8 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 	require.NotEmpty(t, user)
 	for i, in := range llm.capturedInputs {
 		require.GreaterOrEqual(t, len(in.Messages), 2, "call %d", i)
+		assert.Equal(t, agent.RoleSystem, in.Messages[0].Role, "call %d messages[0] role", i)
+		assert.Equal(t, agent.RoleUser, in.Messages[1].Role, "call %d messages[1] role", i)
 		assert.Equal(t, system, in.Messages[0].Content, "call %d system prefix changed", i)
 		assert.Equal(t, user, in.Messages[1].Content, "call %d first user changed", i)
 	}
