@@ -125,7 +125,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action).
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
-**Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call with the same tools bound and calling disabled, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
+**Forced Conclusion**: When an iterating agent hits `max_iterations` or remaining parent time drops to the wrap-up reserve (`min(LLMCallTimeout, 3m)`), the system forces a conclusion -- one extra LLM call with the same tools bound and calling disabled, asking the agent to provide the best analysis with available data. Operator cancel stays fail-fast (no wrap-up). There is no pause/resume mechanism. See [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md).
 
 **Provider Fallback**: All controller paths (iterating, forced conclusion, single-shot) support automatic fallback to alternative LLM providers when the primary fails. Fallback state is tracked per-execution; each new execution resets to the primary provider.
 
@@ -143,7 +143,7 @@ Orchestration is triggered by configuration, not agent type — any investigatio
 
 Chat agents can also become orchestrators via `chat.sub_agents` (overrides chain-level) or by inheriting chain-level `sub_agents`.
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics) and [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger and prompt model)
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics), [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger and prompt model), and [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md) (timeouts, wrap-up, `max_iterations` default)
 
 ### 6. Automated Actions
 
@@ -354,23 +354,25 @@ sequenceDiagram
         end
     end
 
-    alt Max iterations reached
+    alt Max iterations reached or remaining time at wrap-up reserve
         C->>LLM: Force conclusion (tools bound, calling disabled)
         Note over C,LLM: "Provide your best analysis<br/>with the data collected so far"
         LLM-->>C: Forced final answer
     end
 ```
 
-### Forced Conclusion at Max Iterations
+### Forced Conclusion
 
-When an agent reaches its configured `max_iterations` limit, the system forces a conclusion rather than leaving the investigation incomplete. The controller makes one extra LLM call with the **same tool list bound** and calling disabled, asking the agent to synthesize everything it has learned into a final analysis. This keeps the looping prompt-cache prefix stable and ensures every investigation produces actionable output.
+When an iterating agent reaches its configured `max_iterations` limit, or remaining parent time drops to the wrap-up reserve (`min(LLMCallTimeout, 3m)`), the system forces a conclusion rather than leaving the investigation incomplete. The controller makes one extra LLM call with the **same tool list bound** and calling disabled, asking the agent to synthesize everything it has learned into a final analysis. This keeps the looping prompt-cache prefix stable and ensures every investigation produces actionable output. Timeline metadata records `reason: max_iterations` or `reason: time_budget`. Operator cancel stays fail-fast.
 
 **Hierarchical iteration configuration** allows fine-grained control:
-- **System defaults** (e.g., `max_iterations: 20`)
+- **System defaults** (built-in `max_iterations: 40`)
 - **Agent-level** override
 - **Chain-level** override
 - **Stage-level** override
 - **Parallel agent-level** override (highest precedence)
+
+See [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md).
 
 ### Follow-up Chat
 
@@ -457,7 +459,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **Agent Skills**: Add reusable domain knowledge as `SKILL.md` files in `<configDir>/skills/`. `skills` controls on-demand catalog (nil = all, `[]` = none), `required_skills` injects into prompt — both independent. See [ADR-0012](adr/0012-agent-skills.md)
 - **New MCP Servers**: Integrate additional diagnostic tools via `mcp_servers` section (stdio, HTTP, or SSE transports)
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
-- **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`, `agent_timeout`, `max_budget`). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md)
+- **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`; optional `agent_timeout` clamped to remaining parent — omit to use session/chat time). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md) and [ADR-0029](adr/0029-sub-agent-execution-limits.md)
 - **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream investigation, synthesis, or prior compose report with the action memo into session `final_analysis` (skipped on action-only chains; a later action may use the previous compose report; fail-open). See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field

@@ -1,7 +1,8 @@
 # ADR-0002: Orchestrator Agent
 
 **Status:** Implemented  
-**Date:** 2026-02-26
+**Date:** 2026-02-26  
+**Amended by:** [ADR-0029: Sub-Agent Execution Limits](0029-sub-agent-execution-limits.md) (2026-09-02) — `agent_timeout` optional (remaining parent); `max_budget` removed; iterating wrap-up on deadline
 
 ## Overview
 
@@ -211,7 +212,7 @@ Sub-agents are **regular TARSy agents** — both config agents (`agents:` in tar
 - **Idle wait:** When the LLM has no more tool calls but sub-agents are running, the controller pauses until at least one result arrives.
 - **Depth 1 only:** Sub-agents cannot spawn their own sub-agents.
 - **Failure handling:** Sub-agent failures are reported to the orchestrator with full context. The LLM decides what to do. No auto-retry at orchestration level.
-- **Final response (not synthesis):** The orchestrator is typically a single agent in a stage. Its final response is just the LLM's last output — no separate synthesis step. If `max_iterations` is hit, the existing forced-conclusion path produces the final analysis. Remaining sub-agents are cancelled when the composite executor closes.
+- **Final response (not synthesis):** The orchestrator is typically a single agent in a stage. Its final response is just the LLM's last output — no separate synthesis step. If `max_iterations` is hit, or remaining parent time drops to the wrap-up reserve, the existing forced-conclusion path produces the final analysis ([ADR-0029](0029-sub-agent-execution-limits.md)). Remaining sub-agents are cancelled when the composite executor closes.
 
 ## Configuration
 
@@ -223,8 +224,8 @@ Per [ADR-0001](0001-agent-type-refactor.md), `AgentConfig` already has `Type`, `
 defaults:
   orchestrator:
     max_concurrent_agents: 5
-    agent_timeout: 300s
-    max_budget: 600s
+    # agent_timeout omitted → remaining parent (session/chat) time
+    # agent_timeout: 20m     # optional dedicated cap, still clamped to parent
 
 agents:
   MyOrchestrator:
@@ -235,6 +236,8 @@ agents:
     orchestrator:
       max_concurrent_agents: 3
 ```
+
+**Amendment (ADR-0029):** this example originally advertised `agent_timeout: 300s` and unused `max_budget: 600s` as required-looking defaults. `max_budget` is removed. Omitted `agent_timeout` uses remaining parent time.
 
 ### `sub_agents` Override
 
@@ -412,17 +415,20 @@ When the orchestrator is cancelled (session cancel via API):
 4. Sub-agent runner waits for all goroutines to exit
 5. Orchestrator returns `ExecutionStatusCancelled`
 
-Sub-agent goroutines derive their contexts from the parent session context (with `agent_timeout` deadline), **not** from the per-iteration context — this is critical so sub-agents survive across orchestrator iterations and are only cancelled when the session itself is cancelled.
+Sub-agent goroutines derive their contexts from the parent session context, **not** from the per-iteration context — this is critical so sub-agents survive across orchestrator iterations and are only cancelled when the session itself is cancelled. An optional YAML `agent_timeout` adds a shorter cap from dispatch start (`min(configured, remaining parent)`); omitted means remaining parent time.
+
+**Amendment (ADR-0029):** originally every dispatch also applied a hardcoded `agent_timeout` deadline (documented here as 300s; the resolver filled 420s). That extra clock is gone unless YAML sets `agent_timeout`.
 
 ## Guardrails
 
 | Guardrail | Config | Default |
 |-----------|--------|---------|
 | Max concurrent sub-agents | `orchestrator.max_concurrent_agents` | 5 |
-| Per sub-agent timeout | `orchestrator.agent_timeout` | 300s |
-| Total orchestrator budget | `orchestrator.max_budget` | 600s |
+| Per sub-agent timeout | `orchestrator.agent_timeout` | none (remaining parent) |
 | Allowed sub-agents | `sub_agents` override | All agents |
 | Max depth | Hardcoded | 1 (no nesting) |
+
+**Amendment (ADR-0029):** originally listed `agent_timeout` default 300s and unused `max_budget` default 600s. There is no built-in agent timeout duration; `max_budget` is removed, not implemented.
 
 ## Dashboard
 
@@ -521,3 +527,11 @@ Execution: exec-001 (Orchestrator)
 | D3 | Trace view display? | Nested tabs within orchestrator's panel | Reuses parallel execution tabs pattern |
 | D4 | Interaction counting? | Recursive total + "N sub-agents" chip | Operators see scope AND know sub-agents exist |
 | D5 | One PR or split? | Backend and dashboard shipped together for this feature | Backend changes exist to serve the operator experience |
+
+## Amendments ([ADR-0029](0029-sub-agent-execution-limits.md), 2026-09-02)
+
+The orchestrator runtime (composite executor, sub-agent runner, push-based results, DB schema, dashboard) still stands. ADR-0029 changes how long a sub-agent is allowed to run, and what happens when time runs out:
+
+- **`agent_timeout` (guardrails / I5).** Originally documented as a 300s per-sub-agent default (code filled 420s when YAML omitted the field). Omitted now means remaining parent (session/chat) time. If set, `min(configured, remaining parent)` with `WithTimeoutCause`. Never extend past the parent.
+- **`max_budget`.** Originally listed as “total orchestrator budget” (600s here; 900s in the later resolver). It was never applied. Removed from config, API, and this table.
+- **Forced conclusion.** Originally only `max_iterations`. Approaching a real deadline now wraps up with reason `time_budget` (all iterating agents). Operator cancel stays fail-fast. See ADR-0029.

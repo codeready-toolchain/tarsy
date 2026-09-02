@@ -2,6 +2,7 @@
 
 **Status:** Implemented
 **Date:** 2026-04-02
+**Amended by:** [ADR-0029: Sub-Agent Execution Limits](0029-sub-agent-execution-limits.md) (2026-09-02) — `agent_timeout` is optional, not a 300s default
 
 ## Overview
 
@@ -135,7 +136,8 @@ agents:
     mcp_servers: [kubernetes-server]
     orchestrator:
       max_concurrent_agents: 3
-      agent_timeout: 300s
+      # agent_timeout omitted → remaining parent (session/chat) time
+      # agent_timeout: 20m     # optional dedicated cap, still clamped to parent
 
 agent_chains:
   orchestrator-investigation:
@@ -145,6 +147,8 @@ agent_chains:
           - name: KubernetesAgent
             sub_agents: [WebResearcher, CodeExecutor, GeneralWorker]
 ```
+
+**Amendment (ADR-0029):** `agent_timeout: 300s` was shown here as if required. It is optional; omit it to use remaining parent time.
 
 **Chat orchestrator (opt-in via chat.sub_agents):**
 ```yaml
@@ -160,3 +164,11 @@ agent_chains:
 
 - **Action agents with orchestration**: The action prompt path currently returns early before orchestrator prompt injection. If needed, action agents could gain orchestration support with additional prompt integration work.
 - **Stage-level orchestrator guardrails**: Currently, `orchestrator:` guardrails are resolved from agent definitions and defaults only. Stage-level overrides could be added if needed.
+
+## Amendments ([ADR-0029](0029-sub-agent-execution-limits.md), 2026-09-02)
+
+D4 (`orchestrator:` guardrails on any agent) still stands. ADR-0029 changes the meaning of `agent_timeout` in those blocks:
+
+- This example originally listed `agent_timeout: 300s` as if it were required. The field is optional and has **no built-in duration**. Omitted → remaining parent (session/chat) time. If set → `min(configured, remaining parent)`.
+- Unused `max_budget` (documented on [ADR-0002](0002-orchestrator-impl.md)) is removed, not added here.
+- Iterating wrap-up on deadline (investigation, action, chat, sub-agent) is specified in ADR-0029; this ADR’s trigger and prompt-injection model are unchanged.

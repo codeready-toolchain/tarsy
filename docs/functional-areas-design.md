@@ -473,10 +473,11 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
 1. Build initial messages (system prompt + user context)
 2. List tools from MCP servers
 3. **Iteration loop** (up to `MaxIterations`):
+   - If remaining parent time is at or below the wrap-up reserve (`min(LLMCallTimeout, 3m)`): `forceConclusion()` with reason `time_budget` (operator cancel / already-expired deadline skip wrap-up)
    - Call LLM with streaming AND tool bindings (structured function calling)
    - If **tool calls** in response: execute each tool, append results, continue
    - If **no tool calls**: this is the final answer -- create `final_analysis` event, return
-4. If max iterations reached: `forceConclusion()` -- same tools bound, `disable_tool_calls` so the model must answer in text
+4. If max iterations reached: `forceConclusion()` with reason `max_iterations` -- same tools bound, `disable_tool_calls` so the model must answer in text
 
 Investigation / chat / orchestrator / sub-agent loops (`AgentTypeDefault`) set `PromptCache` on the iterating Generate so Python can attach Claude `cache_control` / GPT-5.6+ OpenAI breakpoints. Forced conclusion uses the same eligibility so the looping prefix can be **read**; action loops leave it off. GPT-5.6+ ineligible calls still send explicit mode with no breakpoints (no implicit write tax). See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
@@ -515,7 +516,7 @@ Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestra
 **Key components**:
 
 - **`CompositeToolExecutor`** (`pkg/agent/orchestrator/composite_executor.go`) — wraps MCP tools + orchestration tools (`dispatch_agent`, `cancel_agent`, `list_agents`) into a single `ToolExecutor`. Routes by name: orchestration tools go to `SubAgentRunner`, everything else delegates to MCP.
-- **`SubAgentRunner`** (`pkg/agent/orchestrator/runner.go`) — manages sub-agent goroutine lifecycle. Push-based result delivery via buffered channel. Sub-agent contexts derive from session-level context (survive across orchestrator iterations).
+- **`SubAgentRunner`** (`pkg/agent/orchestrator/runner.go`) — manages sub-agent goroutine lifecycle. Push-based result delivery via buffered channel. Sub-agent contexts derive from session-level context (survive across orchestrator iterations). Omitted `agent_timeout` uses remaining parent time; if set, `min(configured, remaining parent)` with `WithTimeoutCause`.
 - **`SubAgentRegistry`** (`pkg/config/sub_agent_registry.go`) — agents with a `description` field, filtered by optional `sub_agents` override at chain/stage/agent level.
 
 **Result flow**: `dispatch_agent` returns immediately → sub-agent runs in goroutine → result sent to channel → controller drains before next LLM call → injected as user-role message (injection format is internal to `FormatSubAgentResult` and intentionally not disclosed in the orchestrator prompt).
@@ -526,7 +527,7 @@ Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestra
 
 **Chat orchestrator**: `ChatConfig.SubAgents` enables chat agents to gain orchestration. Resolution follows: `chat.sub_agents` > `chain.sub_agents` > none.
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics) and [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger, prompt injection, stage-level skills)
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics), [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger, prompt injection, stage-level skills), and [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md) (timeouts, wrap-up, `max_iterations` default)
 
 #### Instruction Composition
 
@@ -594,7 +595,7 @@ This auto-injection pattern means custom agents with sub-agents or `type: action
 
 #### Forced Conclusion
 
-At max iterations, `forceConclusion()` makes one extra LLM call with the same tools bound and calling disabled, asking for the best conclusion with available data. Every investigation produces actionable output.
+At max iterations, or when remaining parent time is at or below the wrap-up reserve (`min(LLMCallTimeout, 3m)`), `forceConclusion()` makes one extra LLM call with the same tools bound and calling disabled, asking for the best conclusion with available data. Successful wrap-up stays `completed` with metadata `reason: max_iterations` or `reason: time_budget`. Operator cancel stays fail-fast. Wrap-up LLM failure (including overrun) is `timed_out`. Built-in `max_iterations` default is 40. See [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md).
 
 #### Provider Fallback
 
@@ -1097,7 +1098,7 @@ graph TB
 - `GetOrCreateChat()` -- one Chat per session
 - Chat metadata, context snapshot, pod tracking
 
-**Design principle**: Chat is a prompt concern, not a controller concern. The same Iterating and SingleShot controllers handle both investigation and chat -- the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. Same iteration limits, same `forceConclusion()` at max iterations.
+**Design principle**: Chat is a prompt concern, not a controller concern. The same Iterating and SingleShot controllers handle both investigation and chat -- the `ChatContext` on `ExecutionContext` triggers chat-specific prompting. Same iteration limits, same `forceConclusion()` at max iterations or when remaining time hits the wrap-up reserve.
 
 #### Lifecycle Constraints
 
