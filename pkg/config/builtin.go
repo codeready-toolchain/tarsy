@@ -220,7 +220,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Google Gemini ---
 		"google-default": {
 			Type:        LLMProviderTypeGoogle,
-			Model:       "gemini-3.7-flash",
+			Model:       "gemini-3.8-flash",
 			APIKeyEnv:   "GOOGLE_API_KEY",
 			NativeTools: geminiNativeTools(),
 		},
@@ -248,6 +248,12 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			APIKeyEnv:   "GOOGLE_API_KEY",
 			NativeTools: geminiNativeTools(),
 		},
+		"gemini-3.8-flash": {
+			Type:        LLMProviderTypeGoogle,
+			Model:       "gemini-3.8-flash",
+			APIKeyEnv:   "GOOGLE_API_KEY",
+			NativeTools: geminiNativeTools(),
+		},
 		"gemini-3.7-flash": {
 			Type:        LLMProviderTypeGoogle,
 			Model:       "gemini-3.7-flash",
@@ -263,18 +269,6 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		"gemini-3.5-flash": {
 			Type:        LLMProviderTypeGoogle,
 			Model:       "gemini-3.5-flash",
-			APIKeyEnv:   "GOOGLE_API_KEY",
-			NativeTools: geminiNativeTools(),
-		},
-		"gemini-2.5-flash": {
-			Type:        LLMProviderTypeGoogle,
-			Model:       "gemini-2.5-flash",
-			APIKeyEnv:   "GOOGLE_API_KEY",
-			NativeTools: geminiNativeTools(),
-		},
-		"gemini-2.5-pro": {
-			Type:        LLMProviderTypeGoogle,
-			Model:       "gemini-2.5-pro",
 			APIKeyEnv:   "GOOGLE_API_KEY",
 			NativeTools: geminiNativeTools(),
 		},

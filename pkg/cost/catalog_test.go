@@ -252,11 +252,16 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.True(t, sol.RatesValidUntil.Equal(wantUntil))
 	assert.Nil(t, entries["gpt-5.6-terra"].RatesValidUntil)
 
-	flash := entries["gemini-3.7-flash"]
+	require.Contains(t, entries, "gemini-3.8-flash")
+	require.Contains(t, entries, "gemini/gemini-3.8-flash")
+	flash := entries["gemini-3.8-flash"]
 	assert.InDelta(t, 7.5e-07, flash.InputCostPerToken, 1e-15)
 	assert.InDelta(t, 3.75e-06, flash.OutputCostPerToken, 1e-15)
 	assert.True(t, flash.HasCacheRead)
 	assert.InDelta(t, 7.5e-08, flash.CacheReadCost, 1e-15)
+	flash37 := entries["gemini-3.7-flash"]
+	assert.InDelta(t, 7.5e-07, flash37.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 3.75e-06, flash37.OutputCostPerToken, 1e-15)
 
 	claude := entries["claude-sonnet-5"]
 	assert.True(t, claude.HasCacheRead)
