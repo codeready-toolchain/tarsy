@@ -252,11 +252,25 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.True(t, sol.RatesValidUntil.Equal(wantUntil))
 	assert.Nil(t, entries["gpt-5.6-terra"].RatesValidUntil)
 
-	flash := entries["gemini-3.7-flash"]
-	assert.InDelta(t, 7.5e-07, flash.InputCostPerToken, 1e-15)
-	assert.InDelta(t, 3.75e-06, flash.OutputCostPerToken, 1e-15)
+	require.Contains(t, entries, "gemini-3.8-flash")
+	require.Contains(t, entries, "gemini/gemini-3.8-flash")
+	require.Contains(t, entries, "gemini-3.7-flash")
+	require.Contains(t, entries, "gemini/gemini-3.7-flash")
+	flashUntil := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, key := range []string{
+		"gemini-3.8-flash", "gemini/gemini-3.8-flash",
+		"gemini-3.7-flash", "gemini/gemini-3.7-flash",
+	} {
+		e := entries[key]
+		assert.InDelta(t, 7.5e-07, e.InputCostPerToken, 1e-15, key)
+		assert.InDelta(t, 3.75e-06, e.OutputCostPerToken, 1e-15, key)
+		require.NotNil(t, e.RatesValidUntil, key)
+		assert.True(t, e.RatesValidUntil.Equal(flashUntil), key)
+	}
+	flash := entries["gemini-3.8-flash"]
 	assert.True(t, flash.HasCacheRead)
 	assert.InDelta(t, 7.5e-08, flash.CacheReadCost, 1e-15)
+	assert.Nil(t, entries["gemini-3.6-flash"].RatesValidUntil)
 
 	claude := entries["claude-sonnet-5"]
 	assert.True(t, claude.HasCacheRead)

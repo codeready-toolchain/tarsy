@@ -242,7 +242,7 @@ func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
 	}
 
 	nonImageProviders := []string{
-		"google-default", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash", "gemini-2.5-flash", "gemini-2.5-pro",
+		"google-default", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash",
 	}
 	for _, name := range nonImageProviders {
 		t.Run(name+" has url_context", func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:        "google-default",
 			providerID:  "google-default",
 			wantType:    LLMProviderTypeGoogle,
-			wantModel:   "gemini-3.7-flash",
+			wantModel:   "gemini-3.8-flash",
 			checkAPIKey: true,
 		},
 		{
@@ -365,6 +365,13 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey: true,
 		},
 		{
+			name:        "gemini-3.8-flash",
+			providerID:  "gemini-3.8-flash",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-3.8-flash",
+			checkAPIKey: true,
+		},
+		{
 			name:        "gemini-3.7-flash",
 			providerID:  "gemini-3.7-flash",
 			wantType:    LLMProviderTypeGoogle,
@@ -381,18 +388,6 @@ func TestBuiltinLLMProviders(t *testing.T) {
 		{
 			name:        "gemini-3.5-flash",
 			providerID:  "gemini-3.5-flash",
-			wantType:    LLMProviderTypeGoogle,
-			checkAPIKey: true,
-		},
-		{
-			name:        "gemini-2.5-flash",
-			providerID:  "gemini-2.5-flash",
-			wantType:    LLMProviderTypeGoogle,
-			checkAPIKey: true,
-		},
-		{
-			name:        "gemini-2.5-pro",
-			providerID:  "gemini-2.5-pro",
 			wantType:    LLMProviderTypeGoogle,
 			checkAPIKey: true,
 		},
