@@ -142,6 +142,26 @@ func TestResolveAgentConfig(t *testing.T) {
 		assert.Equal(t, config.AgentTypeAction, resolved.Type)
 	})
 
+	t.Run("falls back to DefaultMaxIterations when no level sets max_iterations", func(t *testing.T) {
+		noIterCfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"PlainAgent": {},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		chain := &config.ChainConfig{}
+		stageConfig := config.StageConfig{}
+		agentConfig := config.StageAgentConfig{Name: "PlainAgent"}
+
+		resolved, err := ResolveAgentConfig(noIterCfg, chain, stageConfig, agentConfig)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultMaxIterations, resolved.MaxIterations)
+		assert.Equal(t, 40, resolved.MaxIterations)
+	})
+
 	t.Run("falls back to DefaultLLMBackend when no level sets backend", func(t *testing.T) {
 		noBackendCfg := &config.Config{
 			Defaults: &config.Defaults{

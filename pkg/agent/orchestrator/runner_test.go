@@ -186,7 +186,7 @@ func TestSubAgentRunner_OverridesMap(t *testing.T) {
 		runner := NewSubAgentRunner(
 			context.Background(), &SubAgentDeps{},
 			"parent", "sess", "stg", registry,
-			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute, MaxBudget: time.Minute},
+			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute},
 			nil,
 		)
 		assert.Empty(t, runner.overrides)
@@ -200,7 +200,7 @@ func TestSubAgentRunner_OverridesMap(t *testing.T) {
 		runner := NewSubAgentRunner(
 			context.Background(), &SubAgentDeps{},
 			"parent", "sess", "stg", registry,
-			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute, MaxBudget: time.Minute},
+			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute},
 			refs,
 		)
 		require.Len(t, runner.overrides, 2)
@@ -214,7 +214,7 @@ func TestSubAgentRunner_OverridesMap(t *testing.T) {
 		runner := NewSubAgentRunner(
 			context.Background(), &SubAgentDeps{},
 			"parent", "sess", "stg", registry,
-			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute, MaxBudget: time.Minute},
+			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute},
 			nil,
 		)
 		ref := runner.overrides["NonExistent"]
@@ -284,10 +284,127 @@ func TestSubAgentRunner_Dispatch_AgentError(t *testing.T) {
 	assert.Contains(t, result.Error, "infrastructure failure")
 }
 
+func TestSubAgentContext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no extra cap inherits parent deadline", func(t *testing.T) {
+		t.Parallel()
+		parent, cancel := context.WithTimeout(t.Context(), time.Minute)
+		t.Cleanup(cancel)
+		parentDeadline, ok := parent.Deadline()
+		require.True(t, ok)
+
+		child, childCancel := subAgentContext(parent, 0, "Worker")
+		t.Cleanup(childCancel)
+
+		childDeadline, ok := child.Deadline()
+		require.True(t, ok)
+		assert.Equal(t, parentDeadline, childDeadline)
+	})
+
+	t.Run("no extra cap and no parent deadline has no deadline", func(t *testing.T) {
+		t.Parallel()
+		child, cancel := subAgentContext(t.Context(), 0, "Worker")
+		t.Cleanup(cancel)
+
+		_, ok := child.Deadline()
+		assert.False(t, ok)
+	})
+
+	t.Run("short cap without parent deadline times out with cause", func(t *testing.T) {
+		t.Parallel()
+		child, cancel := subAgentContext(t.Context(), 20*time.Millisecond, "Worker")
+		t.Cleanup(cancel)
+
+		select {
+		case <-child.Done():
+		case <-time.After(time.Second):
+			t.Fatal("child context did not time out")
+		}
+		assert.ErrorIs(t, child.Err(), context.DeadlineExceeded)
+		assert.Equal(t, "sub-agent Worker timed out after 20ms", context.Cause(child).Error())
+	})
+
+	t.Run("parent sooner than cap wins without sub-agent cause", func(t *testing.T) {
+		t.Parallel()
+		parent, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		t.Cleanup(cancel)
+		parentDeadline, ok := parent.Deadline()
+		require.True(t, ok)
+
+		child, childCancel := subAgentContext(parent, time.Hour, "Worker")
+		t.Cleanup(childCancel)
+
+		childDeadline, ok := child.Deadline()
+		require.True(t, ok)
+		assert.Equal(t, parentDeadline, childDeadline)
+
+		select {
+		case <-child.Done():
+		case <-time.After(time.Second):
+			t.Fatal("child context did not inherit parent timeout")
+		}
+		assert.ErrorIs(t, child.Err(), context.DeadlineExceeded)
+		assert.Equal(t, context.DeadlineExceeded, context.Cause(child))
+	})
+
+	t.Run("expired parent is inherited not wrapped", func(t *testing.T) {
+		t.Parallel()
+		parent, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+		t.Cleanup(cancel)
+		<-parent.Done()
+
+		child, childCancel := subAgentContext(parent, time.Hour, "Worker")
+		t.Cleanup(childCancel)
+
+		require.Error(t, child.Err())
+		assert.Equal(t, context.Cause(parent), context.Cause(child))
+		assert.NotEqual(t, "sub-agent Worker timed out after 1h0m0s", context.Cause(child).Error())
+	})
+
+	t.Run("cap shorter than remaining parent applies extra timeout with cause", func(t *testing.T) {
+		t.Parallel()
+		parent, cancel := context.WithTimeout(t.Context(), time.Hour)
+		t.Cleanup(cancel)
+		parentDeadline, ok := parent.Deadline()
+		require.True(t, ok)
+
+		child, childCancel := subAgentContext(parent, 20*time.Millisecond, "Worker")
+		t.Cleanup(childCancel)
+
+		childDeadline, ok := child.Deadline()
+		require.True(t, ok)
+		assert.True(t, childDeadline.Before(parentDeadline))
+
+		select {
+		case <-child.Done():
+		case <-time.After(time.Second):
+			t.Fatal("child context did not time out")
+		}
+		assert.ErrorIs(t, child.Err(), context.DeadlineExceeded)
+		assert.Equal(t, "sub-agent Worker timed out after 20ms", context.Cause(child).Error())
+		assert.NoError(t, parent.Err())
+	})
+
+	t.Run("child cancel does not cancel parent", func(t *testing.T) {
+		t.Parallel()
+		parent, parentCancel := context.WithCancel(t.Context())
+		t.Cleanup(parentCancel)
+
+		child, childCancel := subAgentContext(parent, 0, "Worker")
+		childCancel()
+
+		assert.ErrorIs(t, child.Err(), context.Canceled)
+		assert.NoError(t, parent.Err())
+	})
+}
+
 func TestSubAgentRunner_Dispatch_Timeout(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
+	var cause atomic.Value
 	runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
-		<-runCtx.Done() // blocks until timeout
+		<-runCtx.Done()
+		cause.Store(context.Cause(runCtx))
 		return nil, runCtx.Err()
 	})
 	defer cleanup()
@@ -298,12 +415,68 @@ func TestSubAgentRunner_Dispatch_Timeout(t *testing.T) {
 
 	result, err := runner.WaitForNext(ctx)
 	require.NoError(t, err)
-	// The agent sees DeadlineExceeded and maps to TimedOut or Cancelled
-	assert.Contains(t, []agent.ExecutionStatus{
-		agent.ExecutionStatusTimedOut,
-		agent.ExecutionStatusCancelled,
-		agent.ExecutionStatusFailed,
-	}, result.Status)
+	assert.Equal(t, agent.ExecutionStatusTimedOut, result.Status)
+	gotCause, ok := cause.Load().(error)
+	require.True(t, ok)
+	assert.Equal(t, "sub-agent TestAgent timed out after 200ms", gotCause.Error())
+}
+
+func TestSubAgentRunner_Dispatch_NoExtraTimeoutInheritsParent(t *testing.T) {
+	parent, cancel := context.WithTimeout(t.Context(), time.Minute)
+	t.Cleanup(cancel)
+	parentDeadline, ok := parent.Deadline()
+	require.True(t, ok)
+
+	var gotDeadline atomic.Value
+	runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
+		if dl, ok := runCtx.Deadline(); ok {
+			gotDeadline.Store(dl)
+		}
+		return &agent.ExecutionResult{
+			Status:        agent.ExecutionStatusCompleted,
+			FinalAnalysis: "ok",
+		}, nil
+	})
+	defer cleanup()
+	runner.parentCtx = parent
+	runner.guardrails.AgentTimeout = 0
+
+	_, err := runner.Dispatch(t.Context(), "TestAgent", "task")
+	require.NoError(t, err)
+
+	result, err := runner.WaitForNext(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+	got, ok := gotDeadline.Load().(time.Time)
+	require.True(t, ok, "sub-agent context should inherit the parent deadline")
+	assert.Equal(t, parentDeadline, got)
+}
+
+func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
+	parent, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	t.Cleanup(cancel)
+
+	var cause atomic.Value
+	runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
+		<-runCtx.Done()
+		cause.Store(context.Cause(runCtx))
+		return nil, runCtx.Err()
+	})
+	defer cleanup()
+	runner.parentCtx = parent
+	runner.guardrails.AgentTimeout = time.Hour
+
+	_, err := runner.Dispatch(t.Context(), "TestAgent", "slow task")
+	require.NoError(t, err)
+
+	result, err := runner.WaitForNext(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, agent.ExecutionStatusTimedOut, result.Status)
+
+	gotCause, ok := cause.Load().(error)
+	require.True(t, ok)
+	assert.Equal(t, context.DeadlineExceeded, gotCause)
 }
 
 func TestSubAgentRunner_Cancel_RunningAgent(t *testing.T) {
@@ -742,7 +915,6 @@ func newMinimalRunner(maxConcurrent int) *SubAgentRunner {
 		&OrchestratorGuardrails{
 			MaxConcurrentAgents: maxConcurrent,
 			AgentTimeout:        5 * time.Minute,
-			MaxBudget:           10 * time.Minute,
 		},
 		nil,
 	)
@@ -1013,7 +1185,6 @@ func setupIntegrationRunner(
 		&OrchestratorGuardrails{
 			MaxConcurrentAgents: 5,
 			AgentTimeout:        30 * time.Second,
-			MaxBudget:           60 * time.Second,
 		},
 		nil,
 	)

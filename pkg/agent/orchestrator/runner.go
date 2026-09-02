@@ -210,7 +210,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		}
 	}
 
-	subCtx, cancel := context.WithTimeout(r.parentCtx, r.guardrails.AgentTimeout)
+	subCtx, cancel := subAgentContext(r.parentCtx, r.guardrails.AgentTimeout, name)
 
 	subExec := &subAgentExecution{
 		executionID: executionID,
@@ -546,6 +546,23 @@ func mapToEntStatus(status agent.ExecutionStatus) agentexecution.Status {
 	default:
 		return agentexecution.StatusFailed
 	}
+}
+
+// subAgentContext derives the context for a dispatched sub-agent.
+// timeout == 0 means no extra cap (remaining parent time). A configured cap
+// applies only when it is strictly shorter than remaining parent; otherwise
+// the parent deadline wins and session timeout stays a plain DeadlineExceeded.
+func subAgentContext(parent context.Context, timeout time.Duration, name string) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(parent)
+	}
+	if deadline, ok := parent.Deadline(); ok {
+		if time.Until(deadline) <= timeout {
+			return context.WithCancel(parent)
+		}
+	}
+	return context.WithTimeoutCause(parent, timeout,
+		fmt.Errorf("sub-agent %s timed out after %s", name, timeout))
 }
 
 func subAgentDefaultSummarization(cfg *config.Config) *config.SummarizationConfig {

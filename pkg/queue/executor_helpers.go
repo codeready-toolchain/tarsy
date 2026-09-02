@@ -484,20 +484,15 @@ func (e *RealSessionExecutor) resolvedSuccessPolicy(input executeStageInput) con
 // Orchestrator resolution
 // ────────────────────────────────────────────────────────────
 
-// resolveOrchestratorGuardrails merges hardcoded fallbacks < defaults.orchestrator < per-agent orchestrator config.
-// The config validator (pkg/config/validator.go) rejects invalid values at load
-// time, but we clamp here as defense-in-depth for programmatic construction.
+// resolveOrchestratorGuardrails merges built-in fallbacks < defaults.orchestrator < per-agent orchestrator config.
+// Omitted agent_timeout stays 0 (remaining parent time). The config validator
+// rejects invalid values at load time; MaxConcurrentAgents is still clamped
+// here as defense-in-depth for programmatic construction.
 func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentConfig) *orchestrator.OrchestratorGuardrails {
-	const (
-		defaultMaxConcurrent = 5
-		defaultAgentTimeout  = 420 * time.Second
-		defaultMaxBudget     = 900 * time.Second
-	)
+	const defaultMaxConcurrent = 5
 
 	g := &orchestrator.OrchestratorGuardrails{
 		MaxConcurrentAgents: defaultMaxConcurrent,
-		AgentTimeout:        defaultAgentTimeout,
-		MaxBudget:           defaultMaxBudget,
 	}
 	if cfg.Defaults != nil && cfg.Defaults.Orchestrator != nil {
 		applyOrchestratorConfig(g, cfg.Defaults.Orchestrator)
@@ -509,12 +504,6 @@ func resolveOrchestratorGuardrails(cfg *config.Config, agentDef *config.AgentCon
 	if g.MaxConcurrentAgents < 1 {
 		g.MaxConcurrentAgents = defaultMaxConcurrent
 	}
-	if g.AgentTimeout <= 0 {
-		g.AgentTimeout = defaultAgentTimeout
-	}
-	if g.MaxBudget <= 0 {
-		g.MaxBudget = defaultMaxBudget
-	}
 	return g
 }
 
@@ -524,9 +513,6 @@ func applyOrchestratorConfig(g *orchestrator.OrchestratorGuardrails, oc *config.
 	}
 	if oc.AgentTimeout != nil {
 		g.AgentTimeout = *oc.AgentTimeout
-	}
-	if oc.MaxBudget != nil {
-		g.MaxBudget = *oc.MaxBudget
 	}
 }
 

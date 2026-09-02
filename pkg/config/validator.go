@@ -884,9 +884,6 @@ func (v *Validator) validateOrchestratorConfig(oc *OrchestratorConfig, section, 
 	if oc.AgentTimeout != nil && *oc.AgentTimeout <= 0 {
 		return NewValidationError(section, name, "orchestrator.agent_timeout", fmt.Errorf("must be positive"))
 	}
-	if oc.MaxBudget != nil && *oc.MaxBudget <= 0 {
-		return NewValidationError(section, name, "orchestrator.max_budget", fmt.Errorf("must be positive"))
-	}
 	return nil
 }
 

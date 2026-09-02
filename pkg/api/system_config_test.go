@@ -429,7 +429,6 @@ func TestSystemConfigHandler(t *testing.T) {
 		maxIter := 10
 		maxConcurrent := 3
 		agentTimeout := 2 * time.Minute
-		maxBudget := 30 * time.Minute
 		emptySkills := []string{}
 
 		s := &Server{
@@ -456,7 +455,6 @@ func TestSystemConfigHandler(t *testing.T) {
 					Orchestrator: &config.OrchestratorConfig{
 						MaxConcurrentAgents: &maxConcurrent,
 						AgentTimeout:        &agentTimeout,
-						MaxBudget:           &maxBudget,
 					},
 				},
 				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
@@ -532,8 +530,6 @@ func TestSystemConfigHandler(t *testing.T) {
 		require.NotNil(t, resp.Defaults.Orchestrator)
 		require.NotNil(t, resp.Defaults.Orchestrator.AgentTimeout)
 		assert.Equal(t, "2m", *resp.Defaults.Orchestrator.AgentTimeout)
-		require.NotNil(t, resp.Defaults.Orchestrator.MaxBudget)
-		assert.Equal(t, "30m", *resp.Defaults.Orchestrator.MaxBudget)
 
 		assert.Equal(t, []string{"alpha-chain", "zeta-chain"}, sortedKeys(resp.Chains))
 		alpha := resp.Chains["alpha-chain"]
@@ -641,6 +637,44 @@ func TestSanitizeURL(t *testing.T) {
 			assert.Equal(t, tt.want, sanitizeURL(tt.in))
 		})
 	}
+}
+
+func TestBuildOrchestratorView(t *testing.T) {
+	t.Parallel()
+
+	maxConcurrent := 5
+	timeout := 2 * time.Minute
+
+	t.Run("omits unset agent_timeout and has no max_budget", func(t *testing.T) {
+		t.Parallel()
+		view := buildOrchestratorView(&config.OrchestratorConfig{
+			MaxConcurrentAgents: &maxConcurrent,
+		})
+		require.NotNil(t, view)
+		assert.Equal(t, 5, *view.MaxConcurrentAgents)
+		assert.Nil(t, view.AgentTimeout)
+
+		raw, err := json.Marshal(view)
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), "agent_timeout")
+		assert.NotContains(t, string(raw), "max_budget")
+	})
+
+	t.Run("emits set agent_timeout", func(t *testing.T) {
+		t.Parallel()
+		view := buildOrchestratorView(&config.OrchestratorConfig{
+			MaxConcurrentAgents: &maxConcurrent,
+			AgentTimeout:        &timeout,
+		})
+		require.NotNil(t, view)
+		require.NotNil(t, view.AgentTimeout)
+		assert.Equal(t, "2m", *view.AgentTimeout)
+	})
+
+	t.Run("nil config yields nil view", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, buildOrchestratorView(nil))
+	})
 }
 
 func TestSystemConfigSkillHandler(t *testing.T) {

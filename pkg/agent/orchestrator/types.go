@@ -53,8 +53,7 @@ type SubAgentDeps struct {
 // (defaults.orchestrator merged with per-agent orchestrator config).
 type OrchestratorGuardrails struct {
 	MaxConcurrentAgents int
-	AgentTimeout        time.Duration
-	MaxBudget           time.Duration
+	AgentTimeout        time.Duration // 0 = no extra cap; use remaining parent time
 }
 
 // SubAgentResult is the outcome of a completed sub-agent execution.

@@ -55,7 +55,6 @@ type AgentConfig struct {
 type OrchestratorConfig struct {
 	MaxConcurrentAgents *int           `yaml:"max_concurrent_agents,omitempty"`
 	AgentTimeout        *time.Duration `yaml:"agent_timeout,omitempty"`
-	MaxBudget           *time.Duration `yaml:"max_budget,omitempty"`
 }
 
 // AgentRegistry stores agent configurations in memory with thread-safe access

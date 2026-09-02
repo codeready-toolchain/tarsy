@@ -10,7 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 )
 
-const DefaultMaxIterations = 20
+const DefaultMaxIterations = 40
 
 // DefaultLLMBackend is the fallback when no level in the config hierarchy
 // specifies an LLM backend. LangChain is the general-purpose multi-provider
