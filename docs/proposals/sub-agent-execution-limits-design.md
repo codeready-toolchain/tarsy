@@ -274,7 +274,7 @@ Split so each PR leaves the product working.
 
 **Gap:** Wrap-up not yet implemented — a deadline mid-LLM still looks like a gRPC error until PR 2. Unconfigured deploys already stop dying at 7:00.
 
-### PR 2 — Soft-deadline wrap-up and labeling
+### PR 2 — Soft-deadline wrap-up and labeling - DONE
 
 **Lands:**
 

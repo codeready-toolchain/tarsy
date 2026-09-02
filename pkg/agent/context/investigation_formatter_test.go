@@ -205,6 +205,22 @@ func TestFormatTimelineEvents(t *testing.T) {
 			expected: "**Agent Response:**\n\nRoot cause: OOM.\n\n",
 		},
 		{
+			name: "forced final analysis identical to preceding response keeps the wrap-up header",
+			events: []*ent.TimelineEvent{
+				{EventType: timelineevent.EventTypeLlmResponse, Content: "Root cause: OOM."},
+				{
+					EventType: timelineevent.EventTypeFinalAnalysis,
+					Content:   "Root cause: OOM.",
+					Metadata: map[string]interface{}{
+						"forced_conclusion": true,
+						"reason":            "time_budget",
+					},
+				},
+			},
+			expected: "**Agent Response:**\n\nRoot cause: OOM.\n\n" +
+				"**Final Analysis (forced conclusion — time budget):**\n\nRoot cause: OOM.\n\n",
+		},
+		{
 			name: "final analysis dedup: different content is kept",
 			events: []*ent.TimelineEvent{
 				{EventType: timelineevent.EventTypeLlmResponse, Content: "Checking pods."},

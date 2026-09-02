@@ -201,7 +201,11 @@ func formatTimelineEvents(sb *strings.Builder, events []*ent.TimelineEvent) {
 			sb.WriteString("\n\n")
 
 		case timelineevent.EventTypeFinalAnalysis:
-			if !(prevWasLlmResponse && event.Content == lastResponseContent) {
+			duplicate := prevWasLlmResponse && event.Content == lastResponseContent
+			forced, _ := event.Metadata["forced_conclusion"].(bool)
+			// Wrap-up reports often repeat the last response text; still emit
+			// the header so later LLMs see the reason.
+			if forced || !duplicate {
 				sb.WriteString(finalAnalysisHeader(event.Metadata))
 				sb.WriteString(event.Content)
 				sb.WriteString("\n\n")

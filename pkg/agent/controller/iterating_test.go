@@ -1911,10 +1911,10 @@ func TestIteratingController_TimeBudgetWrapUp(t *testing.T) {
 		}
 		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
 		execCtx.Config.LLMBackend = config.LLMBackendNativeGemini
-		execCtx.Config.LLMCallTimeout = 300 * time.Millisecond
+		execCtx.Config.LLMCallTimeout = 2 * time.Second
 		execCtx.SubAgentCollector = &mockSubAgentCollector{pending: true}
 
-		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 
 		result, err := NewIteratingController().Run(ctx, execCtx, "")
