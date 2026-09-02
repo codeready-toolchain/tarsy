@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -59,15 +60,11 @@ func ResolveAgentConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", agentConfig.Name, err)
 	}
 
-	// Resolve LLM backend (defaults → agentDef → chain → agentConfig)
-	backend := resolveLLMBackend(
-		defaults.LLMBackend, agentDef.LLMBackend,
-		chain.LLMBackend, agentConfig.LLMBackend,
-	)
-
-	// Resolve LLM provider (defaults → chain → agentConfig)
-	provider, providerName, err := resolveLLMProvider(cfg,
-		defaults.LLMProvider, chain.LLMProvider, agentConfig.LLMProvider,
+	provider, providerName, backend, err := ResolveLLMPair(cfg,
+		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
+		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		LLMLayer{Provider: agentConfig.LLMProvider, Backend: agentConfig.LLMBackend},
 	)
 	if err != nil {
 		return nil, err
@@ -193,15 +190,11 @@ func ResolveChatAgentConfig(
 		chatMaxIter = chatCfg.MaxIterations
 	}
 
-	// Resolve LLM backend (defaults → agentDef → chain → chatCfg)
-	backend := resolveLLMBackend(
-		defaults.LLMBackend, agentDef.LLMBackend,
-		chain.LLMBackend, chatBackend,
-	)
-
-	// Resolve LLM provider (defaults → chain → chatCfg)
-	provider, providerName, err := resolveLLMProvider(cfg,
-		defaults.LLMProvider, chain.LLMProvider, chatProvider,
+	provider, providerName, backend, err := ResolveLLMPair(cfg,
+		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
+		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		LLMLayer{Provider: chatProvider, Backend: chatBackend},
 	)
 	if err != nil {
 		return nil, err
@@ -318,18 +311,15 @@ func ResolveScoringConfig(
 		scoringMaxIter = scoringCfg.MaxIterations
 	}
 
-	// Resolve LLM backend (defaults → agentDef → defaults.Scoring → scoringCfg).
-	// chain.LLMBackend is intentionally excluded: the chain-level
-	// backend targets investigation agents.
-	backend := resolveLLMBackend(
-		defaults.LLMBackend, agentDef.LLMBackend,
-		defaultsScoringBackend, scoringBackend,
-	)
-
-	// Resolve LLM provider (defaults → defaults.Scoring → chain → scoringCfg)
-	provider, providerName, err := resolveLLMProvider(cfg,
-		defaults.LLMProvider, defaultsScoringProvider,
-		chain.LLMProvider, scoringProvider,
+	// chain.LLMBackend is excluded: it targets investigation agents.
+	// A chain llm_provider without a scoring-level backend therefore
+	// pairs with langchain.
+	provider, providerName, backend, err := ResolveLLMPair(cfg,
+		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
+		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: defaultsScoringProvider, Backend: defaultsScoringBackend},
+		LLMLayer{Provider: chain.LLMProvider},
+		LLMLayer{Provider: scoringProvider, Backend: scoringBackend},
 	)
 	if err != nil {
 		return nil, err
@@ -407,16 +397,12 @@ func ResolveExecSummaryConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", config.AgentNameExecSummary, err)
 	}
 
-	// Resolve LLM backend (defaults → agentDef → chain).
-	backend := resolveLLMBackend(
-		defaults.LLMBackend, agentDef.LLMBackend, chain.LLMBackend,
-	)
-
-	// Resolve LLM provider (defaults → chain.llm_provider → chain.executive_summary_provider).
-	// executive_summary_provider is the highest-priority override, allowing a dedicated
-	// model for summaries without affecting investigation agents.
-	provider, providerName, err := resolveLLMProvider(cfg,
-		defaults.LLMProvider, chain.LLMProvider, chain.ExecutiveSummaryProvider,
+	// executive_summary_provider has no sibling backend field; omit → langchain.
+	provider, providerName, backend, err := ResolveLLMPair(cfg,
+		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
+		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		LLMLayer{Provider: chain.ExecutiveSummaryProvider},
 	)
 	if err != nil {
 		return nil, err
@@ -480,12 +466,13 @@ func ResolveComposeConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", config.AgentNameCompose, err)
 	}
 
-	backend := resolveLLMBackend(
-		defaults.LLMBackend, agentDef.LLMBackend, chain.LLMBackend,
-	)
-
-	provider, providerName, err := resolveLLMProvider(cfg,
-		defaults.LLMProvider, chain.LLMProvider, defaults.ComposeProvider, chain.ComposeProvider,
+	// compose_provider has no sibling backend field; omit → langchain.
+	provider, providerName, backend, err := ResolveLLMPair(cfg,
+		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
+		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		LLMLayer{Provider: defaults.ComposeProvider},
+		LLMLayer{Provider: chain.ComposeProvider},
 	)
 	if err != nil {
 		return nil, err
@@ -564,33 +551,40 @@ func applyAgentNativeTools(provider *config.LLMProviderConfig, agentTools map[co
 	return &cloned
 }
 
-// resolveLLMBackend returns the last non-empty backend from the
-// given overrides, listed in lowest-to-highest precedence order.
-// Falls back to DefaultLLMBackend when no override provides a value.
-func resolveLLMBackend(overrides ...config.LLMBackend) config.LLMBackend {
-	backend := DefaultLLMBackend
-	for _, o := range overrides {
-		if o != "" {
-			backend = o
-		}
-	}
-	return backend
+// LLMLayer is one config level in provider/backend pairing.
+// A layer that names a provider without a sibling backend resolves
+// backend to langchain and does not inherit a parent backend.
+type LLMLayer struct {
+	Provider string
+	Backend  config.LLMBackend
 }
 
-// resolveLLMProvider picks the last non-empty provider name from the given
-// overrides and looks it up in the config registry.
-func resolveLLMProvider(cfg *config.Config, providerNames ...string) (*config.LLMProviderConfig, string, error) {
-	var name string
-	for _, n := range providerNames {
-		if n != "" {
-			name = n
+// applyLLMLayers walks layers lowest-to-highest and returns the resolved pair.
+func applyLLMLayers(layers ...LLMLayer) (providerName string, backend config.LLMBackend) {
+	backend = DefaultLLMBackend
+	for _, layer := range layers {
+		if layer.Provider != "" {
+			providerName = layer.Provider
+			backend = cmp.Or(layer.Backend, DefaultLLMBackend)
+		} else if layer.Backend != "" {
+			backend = layer.Backend
 		}
+	}
+	return providerName, backend
+}
+
+// ResolveLLMPair walks layers (lowest to highest) and looks up the provider.
+// On lookup failure, name and backend from the walk are still returned.
+func ResolveLLMPair(cfg *config.Config, layers ...LLMLayer) (*config.LLMProviderConfig, string, config.LLMBackend, error) {
+	name, backend := applyLLMLayers(layers...)
+	if cfg == nil {
+		return nil, name, backend, fmt.Errorf("LLM provider %q not found: config is nil", name)
 	}
 	provider, err := cfg.GetLLMProvider(name)
 	if err != nil {
-		return nil, "", fmt.Errorf("LLM provider %q not found: %w", name, err)
+		return nil, name, backend, fmt.Errorf("LLM provider %q not found: %w", name, err)
 	}
-	return provider, name, nil
+	return provider, name, backend, nil
 }
 
 // resolveFallbackProviders returns the last non-nil fallback list from the
