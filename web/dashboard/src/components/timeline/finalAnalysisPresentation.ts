@@ -5,7 +5,7 @@ export interface FinalAnalysisPresentation {
   label: string;
   emoji: string;
   color: string;
-  /** Filled warning-chip text when wrap-up was forced; omitted on a normal finish. */
+  /** Wrap-up reason shown next to the stage label; omitted on a normal finish. */
   wrapUpBadge?: string;
 }
 
@@ -17,8 +17,7 @@ const WRAP_UP_REASON_LABEL: Record<string, string> = {
 
 function wrapUpBadgeLabel(metadata: Record<string, unknown> | undefined): string {
   const raw = typeof metadata?.reason === 'string' ? metadata.reason : '';
-  const why = WRAP_UP_REASON_LABEL[raw];
-  return why ? `forced — ${why}` : 'forced conclusion';
+  return WRAP_UP_REASON_LABEL[raw] || 'forced conclusion';
 }
 
 /**

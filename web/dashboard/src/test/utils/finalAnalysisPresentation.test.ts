@@ -12,7 +12,7 @@ describe('getFinalAnalysisPresentation', () => {
     );
     expect(maxIter.label).toBe('CONCLUSION');
     expect(maxIter.color).toBe('success.main');
-    expect(maxIter.wrapUpBadge).toBe('forced — max iterations');
+    expect(maxIter.wrapUpBadge).toBe('max iterations');
 
     const timeBudgetChat = getFinalAnalysisPresentation(
       { reason: 'time_budget' },
@@ -20,11 +20,11 @@ describe('getFinalAnalysisPresentation', () => {
       true,
     );
     expect(timeBudgetChat.label).toBe('ANSWER');
-    expect(timeBudgetChat.wrapUpBadge).toBe('forced — time budget');
+    expect(timeBudgetChat.wrapUpBadge).toBe('time budget');
 
     expect(
       getFinalAnalysisPresentation({ reason: 'time_budget' }, STAGE_TYPE.ACTION, true).wrapUpBadge,
-    ).toBe('forced — time budget');
+    ).toBe('time budget');
   });
 
   it('uses a generic badge when reason is missing or unknown', () => {
