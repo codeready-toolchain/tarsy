@@ -36,6 +36,14 @@ describe('getFinalAnalysisPresentation', () => {
     ).toBe('forced conclusion');
   });
 
+  it('does not treat inherited object keys as wrap-up labels', () => {
+    for (const reason of ['__proto__', 'constructor', 'toString']) {
+      expect(
+        getFinalAnalysisPresentation({ reason }, STAGE_TYPE.INVESTIGATION, true).wrapUpBadge,
+      ).toBe('forced conclusion');
+    }
+  });
+
   it('omits the badge when the conclusion was not forced', () => {
     const normal = getFinalAnalysisPresentation({}, undefined, false);
     expect(normal.label).toBe('CONCLUSION');

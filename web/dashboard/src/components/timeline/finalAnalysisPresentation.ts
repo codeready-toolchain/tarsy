@@ -10,14 +10,14 @@ export interface FinalAnalysisPresentation {
 }
 
 /** Human-readable wrap-up reasons; matches backend WrapUpReason.Display(). */
-const WRAP_UP_REASON_LABEL: Record<string, string> = {
-  max_iterations: 'max iterations',
-  time_budget: 'time budget',
-};
+const WRAP_UP_REASON_LABEL = new Map<string, string>([
+  ['max_iterations', 'max iterations'],
+  ['time_budget', 'time budget'],
+]);
 
 function wrapUpBadgeLabel(metadata: Record<string, unknown> | undefined): string {
   const raw = typeof metadata?.reason === 'string' ? metadata.reason : '';
-  return WRAP_UP_REASON_LABEL[raw] || 'forced conclusion';
+  return WRAP_UP_REASON_LABEL.get(raw) ?? 'forced conclusion';
 }
 
 /**
