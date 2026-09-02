@@ -24,7 +24,7 @@ Python now normalizes `input_tokens` to **uncached** input. Shipping that withou
 This decision:
 
 1. Surfaces provider cache usage through proto → DB → Prometheus → trace LLM interactions → Usage totals / by-model, and prices those tokens.
-2. Turns on Anthropic/Vertex Claude `cache_control` and GPT-5.6+ OpenAI explicit breakpoints on investigation-style iterating loops (not action, scoring, or one-shots).
+2. Turns on Anthropic/Vertex Claude `cache_control` and GPT-5.6+ OpenAI explicit breakpoints on investigation-style iterating loops and forced conclusion (not action, scoring, or one-shots). GPT-5.6+ ineligible calls send explicit mode with no breakpoints.
 3. Leaves Gemini implicit caching alone except to measure and price it.
 4. Does **not** introduce Gemini explicit `CachedContent` objects, a local prompt store, or response caching.
 
@@ -45,7 +45,7 @@ This decision:
 |---|-------|----------|-----------|
 | Q1 | v1 scope | Persist cache usage, enable Claude `cache_control` and GPT-5.6+ explicit OpenAI caching on looping calls, price cache tokens, and ship scoped operator UI | Behavior, telemetry, Est. $, and per-call hit/miss land together so ADR-0020’s gap actually closes. Prompt layout, Gemini explicit caches, Usage-page charts, and session-list cache SUMs stay follow-ups. Rejected: observe-only (Claude iterating agents keep paying full input); observe + breakpoints without pricing (Est. $ undercounts once input is normalized). |
 | Q2 | Kill switch | Cluster `system.prompt_caching.enabled` (default true, omit-means-on). Python 400-retry strips Claude `cache_control` / OpenAI cache options. Toggle does **not** disable Gemini implicit caching. No per-agent YAML | GitOps kill switch, same pattern as cost estimation. Python has no `tarsy.yaml`; Go ANDs the toggle onto `GenerateRequest.prompt_cache`. Vertex projects with caching disabled (or older OpenAI models that reject 5.6 fields) degrade instead of failing. Rejected: no YAML (Vertex 400s until a code change); per-provider/per-agent YAML (duplicates eligibility). |
-| Q3 | Eligibility | Controllers set `PromptCache` from eligibility only (`AgentTypeDefault` iterating **loop**). Action, forced conclusion, scoring, single-shot, and summarization stay off | Eligibility is a property of the control flow. Action is usually one “no action” Generate — a 2× Claude write never read. Scoring is two turns with the same last-write problem. Python applies breakpoints only when the proto field is true (already AND-ed with the cluster toggle). Rejected: Python heuristic; all Generate calls. |
+| Q3 | Eligibility | Controllers set `PromptCache` from eligibility (`AgentTypeDefault` iterating **loop** and **forced conclusion**). Action, scoring, single-shot, and summarization stay off | Forced conclusion continues the looping prefix; cache **reads** reuse tools+system+history. The conclusion user prompt sits after the last tool-result breakpoint and is not a 1.25× write. Action is usually one “no action” Generate — a write never read. Scoring is two turns with the same last-write problem. Python stamps Claude `cache_control` / OpenAI breakpoints only when the proto field is true (already AND-ed with the cluster toggle). GPT-5.6+ ineligible calls still send `mode=explicit` with **no** breakpoints so implicit 1.25× writes do not fire. Rejected: Python heuristic; all Generate calls. |
 | Q4 | Claude breakpoints | Last tool + system + last message (growing prefix). Skip the tool breakpoint when there are no tools | Each turn writes the new suffix and reads the prior conversation; stays within Anthropic’s four-breakpoint cap. Rejected: last tool only (skills and history stay full-price); tools + system only (growing history stays uncached). |
 | Q5 | Claude TTL | Hardcoded 1h. On 400, retry without `ttl` (5m default), then strip `cache_control` entirely | Covers sub-agent waits and typical session timeouts; TTL refreshes on hits. Old Vertex Claude 3.x may reject 1h. Rejected: 5m (orchestrator and slow MCP sequences miss); YAML `5m`\|`1h` (extra knob). |
 | Q6 | Gemini explicit caches | Implicit only in v1. Extract and price `cached_content_token_count`. No `CachedContent` objects | Evidence-driven; Gemini looping agents may already get implicit hits. Explicit caches need named objects and replica state. |
@@ -53,7 +53,7 @@ This decision:
 | Q8 | Cost formula | Price cache-read and cache-creation. Catalog/snapshot cache rates when present; overlays stay flat and derive 0.1× read and 2× (Claude) / 1.25× (else) create. Tier selection uses prompt size | Closes the known gap. YAML promotions/`model_rates` stay input/output only (same v1 limit as ADR-0020). Claude 1h writes must not use the 5m catalog create rate. Prompt size = uncached + cache_read + cache_creation so Gemini 200k tiers still fire on cache-heavy calls. Missing cache rates still derive so a row is not silently undercounted. Rejected: keep the gap; defer pricing. |
 | Q9 | System-prompt layout | Leave layout in v1. Intra-session looping is the win | Tier 0 wall-clock time sits first in the system prompt, so cross-session reuse of skills + tools will not hit. Reorder/split is golden-prompt churn for little token volume. Growing-history breakpoints already cache intra-session turns. |
 | Q10 | Operator surfaces | DB + Prometheus `cache_read` / `cache_creation` + Config Viewer toggle + **trace LLM list/detail** + **Usage totals and by-model**. No session-list / header / `ExecutionOverview` / by-alert / by-chain / top-sessions / Usage-chart SUMs | Per-call hit/miss is the diagnostic that matters; fleet hit rate lives on Usage totals and the by-model table. Session totals do not locate a miss. `TokenUsageDisplay` renders cache only when the DTO has the fields (session surfaces omit them). Thinking tokens never landed on trace DTOs; cache does. |
-| Q11 | OpenAI | GPT-5.6+ looping calls: explicit mode, 30m TTL, key = `execution_id`, breakpoints on last tool, system-as-content-block, last **non-tool-result** message. GPT-5.5 and older: extract only | Implicit 5.6 breakpoints sit on the volatile last message and bill 1.25× writes with ~0 prefix reads. Walk back past tool results so a `function_call_output` breakpoint is not relied on to write. Do not bake cache policy into the shared LangChain model instance; pass key/options per request. 400 → retry stripped. Rejected: extract-only on 5.6; ignore OpenAI; tools+system only; key-only; explicit on all OpenAI. |
+| Q11 | OpenAI | GPT-5.6+ looping calls: explicit mode, 30m TTL, key = `execution_id`, sticky breakpoints on last tool schema, system-as-content-block, **first user**, last **tool result** (if any). Ineligible GPT-5.6+ calls: explicit mode with no breakpoints (no implicit write tax). GPT-5.5 and older: extract only | Implicit 5.6 breakpoints sit on the volatile last message and bill 1.25× writes with ~0 prefix reads. Restyling a prior user from content-block+breakpoint to a plain string busts everything after system; sticky first-user + last-tool-result stay stable. Do not mark assistant / tool-call-only messages. Do not bake cache policy into the shared LangChain model instance; pass key/options per request. 400 → retry stripped. Rejected: extract-only on 5.6; ignore OpenAI; tools+system only; key-only; implicit last-message on one-shots. |
 
 ## Architecture
 
@@ -78,7 +78,7 @@ Python has **no** `tarsy.yaml`. The only request it sees is `GenerateRequest`. C
 - `UsageInfo.cache_read_tokens` / `cache_creation_tokens` → `llm_interactions` columns
 - Cluster kill switch: `system.prompt_caching.enabled` (default **true**, same `*bool` omit-means-on pattern as `system.cost_estimation.enabled`)
 
-Controllers set `PromptCache` from **eligibility only**. The streaming LLM helper ANDs the cluster toggle before gRPC (`prompt_cache = eligible && enabled`). Python applies Claude `cache_control` / OpenAI `prompt_cache_options` **only** when `GenerateRequest.prompt_cache` is true. When the toggle is false, Go still records cache usage if the provider sent it (Gemini implicit still happens).
+Controllers set `PromptCache` from **eligibility only**. The streaming LLM helper ANDs the cluster toggle before gRPC (`prompt_cache = eligible && enabled`). Python stamps Claude `cache_control` / OpenAI breakpoints only when `GenerateRequest.prompt_cache` is true. GPT-5.6+ still binds `prompt_cache_options` `{mode: explicit}` with **no** breakpoints when the flag is false so implicit writes stay off. When the toggle is false, Go still records cache usage if the provider sent it (Gemini implicit still happens).
 
 Copy cluster `PromptCaching.Enabled` onto the execution context when the executor builds it — it is cluster-wide, not per-agent YAML.
 
@@ -90,11 +90,13 @@ flowchart TD
   toggle -->|prompt_cache true or false| grpc[gRPC Generate]
   grpc --> py{Python backend}
   py -->|LangChain Claude / Vertex Claude| claude[cache_control on last tool + system + last message]
-  py -->|OpenAI gpt-5.6+| oai[explicit mode + key=execution_id + breakpoints]
+  py -->|OpenAI gpt-5.6+ eligible| oai[explicit mode + key=execution_id + sticky breakpoints]
+  py -->|OpenAI gpt-5.6+ ineligible| oaiOff[explicit mode, no breakpoints]
   py -->|OpenAI older| oaiOld[Extract cached_tokens only]
   py -->|google-native / LangChain Google| gemini[No breakpoint; extract cached_content_token_count]
   claude --> usage[UsageInfo + cache fields]
   oai --> usage
+  oaiOff --> usage
   oaiOld --> usage
   gemini --> usage
   usage --> db[(llm_interactions)]
@@ -110,12 +112,12 @@ flowchart TD
 |-----------|--------|----------------|
 | Investigation / chat / sub-agent / orchestrator loop (`AgentTypeDefault`) | Yes | **on** |
 | Action / remediation loop (`AgentTypeAction`, same iterating controller) | Usually 1 turn | **off** |
-| Forced conclusion (no tools; same iterating controller) | No | **off** |
+| Forced conclusion (same tools, `disable_tool_calls`; same iterating controller) | Continuation | **on** (investigation); **off** (action) |
 | Scoring controller (score + tool-report) | 2 turns | **off** |
 | Single-shot (synthesis, exec summary, compose, memory reflector) | No | **off** |
 | Tool / `search_past_sessions` summarization | No | **off** |
 
-Do **not** set the flag true for every iterating-controller Generate. Gate the loop call on agent type ≠ action. Forced conclusion stays off.
+Do **not** set the flag true for every iterating-controller Generate. Gate the loop and forced-conclusion calls on agent type ≠ action. Forced conclusion is eligible for **reads** of the looping prefix; calling is disabled via `disable_tool_calls`.
 
 ### Claude / Vertex Claude
 
@@ -123,7 +125,7 @@ When `prompt_cache` is set and the LangChain model is Anthropic or Vertex Claude
 
 1. Bind tools in Anthropic dict form; put `cache_control: {type: ephemeral, ttl: 1h}` on the **last tool**. If there are no tools, skip this breakpoint.
 2. Convert the system message to a content block with the same `cache_control`.
-3. Put `cache_control` on the **last** conversation message (growing-history breakpoint, including tool results).
+3. Put `cache_control` on the **last** conversation message (growing-history breakpoint, including tool results). If the last message is `user` **and** a tool result exists (forced conclusion), put it on that last tool result instead so Claude can read the loop prefix without a 2× write of the conclusion prompt.
 
 Do **not** pass `cache_control` as an invoke/astream kwarg — Vertex Claude 400s that. Use content blocks / additional kwargs on messages and tools.
 
@@ -144,14 +146,21 @@ Keep the LangChain model-instance cache keyed by `(provider, model, api_key_env)
 
 **GPT-5.5 and older** (anything that does not match `gpt-5.` with integer minor ≥ 6, including `gpt-5.2`, `gpt-5`, `gpt-5-mini`): automatic prefix cache. Extract `cached_tokens` / `cache_write_tokens` if present. Send no `prompt_cache_options`.
 
-**GPT-5.6 and later** (model id matches `gpt-5.` with integer minor **≥ 6**, case-insensitive, including dated/variant suffixes such as `gpt-5.6-sol`). Built-in `openai-default` is GPT-5.6 and therefore takes this path when `prompt_cache` is set:
+**GPT-5.6 and later** (model id matches `gpt-5.` with integer minor **≥ 6**, case-insensitive, including dated/variant suffixes such as `gpt-5.6-sol`). Built-in `openai-default` is GPT-5.6.
+
+When `prompt_cache` is false (action, scoring, one-shots, empty `execution_id`, cluster kill switch): bind `prompt_cache_options: {mode: "explicit", ttl: "30m"}` with **no** breakpoints. That is caching off for GPT-5.6+ — no implicit last-message write tax. Include `prompt_cache_key` when `execution_id` is non-empty.
+
+When `prompt_cache` is true (investigation loop and forced conclusion):
 
 1. `prompt_cache_options: {mode: "explicit", ttl: "30m"}` — disables the implicit last-message breakpoint; 30m is the only supported TTL.
-2. `prompt_cache_key: execution_id`. Skip explicit mode if `execution_id` is empty.
-3. `prompt_cache_breakpoint: {mode: "explicit"}` on:
+2. `prompt_cache_key: execution_id`.
+3. `prompt_cache_breakpoint: {mode: "explicit"}` on **only** these (do not restyle other messages):
    - the **last tool** schema (if any tools),
    - the **system** text as an `input_text` block on a developer/system message — OpenAI rejects breakpoints on top-level Responses `instructions`,
-   - the last **non-tool-result** message (walk back past `role=tool` / `function_call_output`).
+   - the **first** `role=user` message (sticky original alert),
+   - the last `role=tool` message, if any (growing history).
+
+Do **not** put a breakpoint on assistant / tool-call-only messages. Forced conclusion keeps the same tool list, sets `disable_tool_calls`, and leaves the conclusion user unmarked.
 
 If the SDK 400s on these fields, retry the call stripped (same dedicated degrade path as Claude).
 

@@ -476,9 +476,9 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
    - Call LLM with streaming AND tool bindings (structured function calling)
    - If **tool calls** in response: execute each tool, append results, continue
    - If **no tool calls**: this is the final answer -- create `final_analysis` event, return
-4. If max iterations reached: `forceConclusion()` -- call LLM WITHOUT tools to force text-only response
+4. If max iterations reached: `forceConclusion()` -- same tools bound, `disable_tool_calls` so the model must answer in text
 
-Investigation / chat / orchestrator / sub-agent loops (`AgentTypeDefault`) set `PromptCache` on the iterating Generate so Python can attach Claude `cache_control` / GPT-5.6+ OpenAI breakpoints. Action loops and forced conclusion leave it off. See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+Investigation / chat / orchestrator / sub-agent loops (`AgentTypeDefault`) set `PromptCache` on the iterating Generate so Python can attach Claude `cache_control` / GPT-5.6+ OpenAI breakpoints. Forced conclusion uses the same eligibility so the looping prefix can be **read**; action loops leave it off. GPT-5.6+ ineligible calls still send explicit mode with no breakpoints (no implicit write tax). See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
 #### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
@@ -594,7 +594,7 @@ This auto-injection pattern means custom agents with sub-agents or `type: action
 
 #### Forced Conclusion
 
-At max iterations, `forceConclusion()` makes one extra LLM call without tools, asking for the best conclusion with available data. Every investigation produces actionable output.
+At max iterations, `forceConclusion()` makes one extra LLM call with the same tools bound and calling disabled, asking for the best conclusion with available data. Every investigation produces actionable output.
 
 #### Provider Fallback
 
@@ -812,7 +812,7 @@ type LLMClient interface {
 
 Chunk types: `TextChunk`, `ThinkingChunk`, `ToolCallChunk`, `CodeExecutionChunk`, `UsageChunk`, `ErrorChunk`, `GroundingChunk`.
 
-**GenerateInput** carries: `SessionID`, `ExecutionID`, `Messages`, `Config` (LLMProviderConfig), `Tools`, `Backend`, `PromptCache` (eligible looping investigation-style calls; AND-ed with `system.prompt_caching.enabled` before gRPC).
+**GenerateInput** carries: `SessionID`, `ExecutionID`, `Messages`, `Config` (LLMProviderConfig), `Tools`, `Backend`, `PromptCache` (eligible looping investigation-style calls and forced conclusion; AND-ed with `system.prompt_caching.enabled` before gRPC), `DisableToolCalls` (keep tool schemas, forbid calling).
 
 #### Python Side: Provider Routing
 
@@ -833,7 +833,7 @@ Each provider uses up to 3 total attempts for the same Generate when no chunks h
 
 **LangChainProvider** (`llm/providers/langchain_provider.py`):
 - Multi-provider: OpenAI (`ChatOpenAI`), Anthropic (`ChatAnthropic`), xAI (`ChatXAI`), Google (`ChatGoogleGenerativeAI`), VertexAI
-- Model caching by `(provider, model, api_key_env)` tuple (cache policy is **not** on the shared instance; Claude `cache_control` / OpenAI `prompt_cache_options` are per-request when `prompt_cache` is true)
+- Model caching by `(provider, model, api_key_env)` tuple (cache policy is **not** on the shared instance; Claude `cache_control` / OpenAI breakpoints are per-request when `prompt_cache` is true; GPT-5.6+ ineligible calls still bind `prompt_cache_options` with no breakpoints)
 - `bind_tools()` for structured function calling
 - Streaming via `astream()` with thinking content extraction
 
@@ -849,7 +849,7 @@ Shared convention between Go and Python:
 
 - **RPC**: `Generate(GenerateRequest) returns (stream GenerateResponse)`
 - **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`
-- **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures); `prompt_cache` (Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints — Go ANDs eligibility with `system.prompt_caching.enabled`)
+- **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures); `prompt_cache` (Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints — Go ANDs eligibility with `system.prompt_caching.enabled`); `disable_tool_calls` (keep tool schemas, forbid calling — forced conclusion)
 - **UsageInfo**: `input_tokens` is **uncached** billed input; `cache_read_tokens` / `cache_creation_tokens` persisted when > 0. Python normalizes provider-inclusive counts before streaming usage.
 - **Response streaming**: `TextDelta`, `ThinkingDelta`, `ToolCallDelta`, `UsageInfo`, `ErrorInfo`, `CodeExecutionDelta`, `GroundingDelta`
 

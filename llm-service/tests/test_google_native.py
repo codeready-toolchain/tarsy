@@ -1280,6 +1280,48 @@ class TestGoogleNativeProvider:
 
         assert call_count["n"] == 1
 
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    async def test_disable_tool_calls_keeps_decls_sets_mode_none(
+        self, mock_client_class, provider,
+    ):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        async def mock_stream():
+            yield self._text_chunk("done")
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            disable_tool_calls=True,
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model="gemini-2.5-pro",
+                api_key_env="TEST_API_KEY",
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Hi")],
+            tools=[
+                pb.ToolDefinition(
+                    name="k8s.get_pods",
+                    description="List pods",
+                    parameters_schema='{"type": "object"}',
+                ),
+            ],
+        )
+        async for _ in provider.generate(request):
+            pass
+        config = mock_client.aio.models.generate_content_stream.call_args.kwargs["config"]
+        assert config.tools
+        assert config.tools[0].function_declarations
+        assert config.tools[0].function_declarations[0].name == "k8s__get_pods"
+        assert (
+            config.tool_config.function_calling_config.mode
+            == genai_types.FunctionCallingConfigMode.NONE
+        )
+
 
 class TestStreamPartTypes:
     """Test that _stream_with_timeout handles all Gemini part types."""

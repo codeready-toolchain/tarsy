@@ -298,15 +298,17 @@ func (c *IteratingController) Run(
 		iterCancel()
 	}
 
-	// Max iterations — force conclusion (call LLM WITHOUT tools)
-	return c.forceConclusion(ctx, execCtx, messages, &totalUsage, state, fbState, &msgSeq, &eventSeq)
+	// Max iterations — force conclusion (same tools, calling disabled)
+	return c.forceConclusion(ctx, execCtx, messages, tools, &totalUsage, state, fbState, &msgSeq, &eventSeq)
 }
 
-// forceConclusion forces the LLM to produce a final answer by calling without tools.
+// forceConclusion forces a text-only final answer while keeping the looping tool
+// list bound so the prompt-cache prefix can still hit.
 func (c *IteratingController) forceConclusion(
 	ctx context.Context,
 	execCtx *agent.ExecutionContext,
 	messages []agent.ConversationMessage,
+	tools []agent.ToolDefinition,
 	totalUsage *agent.TokenUsage,
 	state *agent.IterationState,
 	fbState *FallbackState,
@@ -331,8 +333,8 @@ func (c *IteratingController) forceConclusion(
 		"max_iterations":    state.MaxIterations,
 	}
 
-	// Call LLM WITHOUT tools with streaming — forces text-only response.
-	// Apply LLM call timeout (the parent ctx is the session context here).
+	// Keep the same tools bound and disable calling so the looping prefix can
+	// still cache-hit. Apply LLM call timeout (parent ctx is the session).
 	// On failure, attempt fallback to another provider before giving up.
 	var streamed *StreamedResponse
 	var err error
@@ -348,14 +350,15 @@ func (c *IteratingController) forceConclusion(
 		llmCtx, llmCancel := context.WithTimeout(ctx, execCtx.Config.LLMCallTimeout)
 		llmStart := time.Now()
 		streamed, err = callLLMWithStreaming(llmCtx, execCtx, execCtx.LLMClient, &agent.GenerateInput{
-			SessionID:   execCtx.SessionID,
-			ExecutionID: execCtx.ExecutionID,
-			Messages:    messages,
-			Config:      execCtx.Config.LLMProvider,
-			Tools:       nil, // No tools — force conclusion
-			Backend:     execCtx.Config.LLMBackend,
-			ClearCache:  fbState.consumeClearCache(),
-			PromptCache: false,
+			SessionID:        execCtx.SessionID,
+			ExecutionID:      execCtx.ExecutionID,
+			Messages:         messages,
+			Config:           execCtx.Config.LLMProvider,
+			Tools:            tools,
+			DisableToolCalls: true,
+			Backend:          execCtx.Config.LLMBackend,
+			ClearCache:       fbState.consumeClearCache(),
+			PromptCache:      execCtx.Config.Type != config.AgentTypeAction,
 		}, eventSeq, forcedMeta)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,

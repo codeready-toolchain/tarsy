@@ -230,7 +230,7 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 			},
 		})
 	}
-	// Forced conclusion response (no tools)
+	// Forced conclusion response (text-only after max iterations)
 	responses = append(responses, mockLLMResponse{
 		chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Based on investigation: system is healthy."},
@@ -274,8 +274,76 @@ func TestIteratingController_ForcedConclusion(t *testing.T) {
 	require.Len(t, llm.capturedInputs, 4)
 	for i := range 3 {
 		assert.True(t, llm.capturedInputs[i].PromptCache, "loop call %d should request prompt cache", i)
+		assert.False(t, llm.capturedInputs[i].DisableToolCalls, "loop call %d should allow tool calling", i)
 	}
-	assert.False(t, llm.capturedInputs[3].PromptCache, "forced conclusion must not request prompt cache")
+	conclusion := llm.capturedInputs[3]
+	assert.True(t, conclusion.PromptCache, "forced conclusion should request prompt cache reads")
+	assert.True(t, conclusion.DisableToolCalls)
+	require.NotEmpty(t, conclusion.Tools)
+	assert.Equal(t, "k8s.get_pods", conclusion.Tools[0].Name)
+}
+
+func TestIteratingController_ForcedConclusion_Eligibility(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(*agent.ResolvedAgentConfig)
+		promptCache bool
+	}{
+		{
+			name: "action agent does not request prompt cache",
+			mutate: func(c *agent.ResolvedAgentConfig) {
+				c.Type = config.AgentTypeAction
+			},
+			promptCache: false,
+		},
+		{
+			name: "cluster toggle AND disables prompt cache",
+			mutate: func(c *agent.ResolvedAgentConfig) {
+				c.PromptCachingEnabled = false
+			},
+			promptCache: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			llm := &mockLLMClient{
+				capture: true,
+				responses: []mockLLMResponse{
+					{chunks: []agent.Chunk{
+						&agent.ToolCallChunk{CallID: "call-0", Name: "k8s.get_pods", Arguments: "{}"},
+					}},
+					{chunks: []agent.Chunk{
+						&agent.TextChunk{Content: "Conclusion."},
+					}},
+				},
+			}
+			executor := &mockToolExecutor{
+				tools: []agent.ToolDefinition{{Name: "k8s.get_pods", Description: "Get pods"}},
+				results: map[string]*agent.ToolResult{
+					"k8s.get_pods": {Content: "pod-1 Running"},
+				},
+			}
+			execCtx := newTestExecCtx(t, llm, executor)
+			execCtx.Config.MaxIterations = 1
+			tt.mutate(execCtx.Config)
+			ctrl := NewIteratingController()
+
+			result, err := ctrl.Run(t.Context(), execCtx, "")
+			require.NoError(t, err)
+			require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+
+			require.Len(t, llm.capturedInputs, 2)
+			loop := llm.capturedInputs[0]
+			conclusion := llm.capturedInputs[1]
+			assert.Equal(t, tt.promptCache, loop.PromptCache)
+			assert.False(t, loop.DisableToolCalls)
+			assert.Equal(t, tt.promptCache, conclusion.PromptCache)
+			assert.True(t, conclusion.DisableToolCalls)
+			require.Equal(t, loop.Tools, conclusion.Tools)
+			require.NotEmpty(t, conclusion.Tools)
+		})
+	}
 }
 
 func TestIteratingController_ThinkingContent(t *testing.T) {
@@ -407,7 +475,7 @@ func TestIteratingController_ForcedConclusionWithFailedLastLLM(t *testing.T) {
 	responses = append(responses, mockLLMResponse{
 		err: fmt.Errorf("connection reset"),
 	})
-	// Forced conclusion response (called without tools after max iterations)
+	// Forced conclusion response (tools bound, calling disabled after max iterations)
 	responses = append(responses, mockLLMResponse{
 		chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "Despite issues, the system appears healthy."},
@@ -905,6 +973,10 @@ func TestIteratingController_ForcedConclusionWithGrounding(t *testing.T) {
 		}
 	}
 	require.True(t, foundSearch, "google_search_result event should be created during forced conclusion")
+	require.NotNil(t, llm.lastInput)
+	assert.True(t, llm.lastInput.DisableToolCalls)
+	require.NotEmpty(t, llm.lastInput.Tools)
+	assert.Equal(t, "k8s.get_pods", llm.lastInput.Tools[0].Name)
 }
 
 // ─── Sub-agent drain/wait tests ─────────────────────────────────────────────
@@ -1264,7 +1336,7 @@ func TestIteratingController_FallbackReplaysToolHistory(t *testing.T) {
 	}
 
 	ctrl := NewIteratingController()
-	result, err := ctrl.Run(t.Context(), execCtx, "")
+	result, err := ctrl.Run(context.Background(), execCtx, "")
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Equal(t, "Healthy after fallback.", result.FinalAnalysis)
@@ -1612,11 +1684,12 @@ func TestIteratingController_PromptCache(t *testing.T) {
 		execCtx := newTestExecCtx(t, llm, &mockToolExecutor{tools: []agent.ToolDefinition{}})
 		ctrl := NewIteratingController()
 
-		result, err := ctrl.Run(context.Background(), execCtx, "")
+		result, err := ctrl.Run(t.Context(), execCtx, "")
 		require.NoError(t, err)
 		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 		require.Len(t, llm.capturedInputs, 1)
 		assert.True(t, llm.capturedInputs[0].PromptCache)
+		assert.False(t, llm.capturedInputs[0].DisableToolCalls)
 	})
 
 	t.Run("action loop does not set PromptCache", func(t *testing.T) {
@@ -1628,11 +1701,12 @@ func TestIteratingController_PromptCache(t *testing.T) {
 		execCtx.Config.Type = config.AgentTypeAction
 		ctrl := NewIteratingController()
 
-		result, err := ctrl.Run(context.Background(), execCtx, "")
+		result, err := ctrl.Run(t.Context(), execCtx, "")
 		require.NoError(t, err)
 		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 		require.Len(t, llm.capturedInputs, 1)
 		assert.False(t, llm.capturedInputs[0].PromptCache)
+		assert.False(t, llm.capturedInputs[0].DisableToolCalls)
 	})
 
 	t.Run("cluster toggle AND disables PromptCache", func(t *testing.T) {
@@ -1644,11 +1718,12 @@ func TestIteratingController_PromptCache(t *testing.T) {
 		execCtx.Config.PromptCachingEnabled = false
 		ctrl := NewIteratingController()
 
-		result, err := ctrl.Run(context.Background(), execCtx, "")
+		result, err := ctrl.Run(t.Context(), execCtx, "")
 		require.NoError(t, err)
 		require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 		require.Len(t, llm.capturedInputs, 1)
 		assert.False(t, llm.capturedInputs[0].PromptCache)
+		assert.False(t, llm.capturedInputs[0].DisableToolCalls)
 	})
 }
 

@@ -125,7 +125,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action).
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
-**Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call without tools, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
+**Forced Conclusion**: When agents reach their maximum iteration limit, the system forces a conclusion -- one extra LLM call with the same tools bound and calling disabled, asking the agent to provide the best analysis with available data. There is no pause/resume mechanism.
 
 **Provider Fallback**: All controller paths (iterating, forced conclusion, single-shot) support automatic fallback to alternative LLM providers when the primary fails. Fallback state is tracked per-execution; each new execution resets to the primary provider.
 
@@ -355,7 +355,7 @@ sequenceDiagram
     end
 
     alt Max iterations reached
-        C->>LLM: Force conclusion (call WITHOUT tools)
+        C->>LLM: Force conclusion (tools bound, calling disabled)
         Note over C,LLM: "Provide your best analysis<br/>with the data collected so far"
         LLM-->>C: Forced final answer
     end
@@ -363,7 +363,7 @@ sequenceDiagram
 
 ### Forced Conclusion at Max Iterations
 
-When an agent reaches its configured `max_iterations` limit, the system forces a conclusion rather than leaving the investigation incomplete. The controller makes one extra LLM call **without tool bindings**, asking the agent to synthesize everything it has learned into a final analysis. This ensures every investigation produces actionable output.
+When an agent reaches its configured `max_iterations` limit, the system forces a conclusion rather than leaving the investigation incomplete. The controller makes one extra LLM call with the **same tool list bound** and calling disabled, asking the agent to synthesize everything it has learned into a final analysis. This keeps the looping prompt-cache prefix stable and ensures every investigation produces actionable output.
 
 **Hierarchical iteration configuration** allows fine-grained control:
 - **System defaults** (e.g., `max_iterations: 20`)

@@ -25,6 +25,7 @@ message GenerateRequest {
   string execution_id = 5;                  // AgentExecution ID — used by Python for thought signature cache key
   bool clear_cache = 6;                     // Signal to clear provider content cache (e.g., on fallback provider switch)
   bool prompt_cache = 7;                    // Claude cache_control / OpenAI 5.6+ breakpoints; Go ANDs the cluster toggle
+  bool disable_tool_calls = 8;              // Keep tool schemas but forbid calling (forced conclusion)
 }
 
 // GenerateResponse is a streaming chunk from the LLM.
