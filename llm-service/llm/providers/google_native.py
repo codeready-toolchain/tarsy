@@ -382,15 +382,13 @@ class GoogleNativeProvider(LLMProvider):
             )
             if request.disable_tool_calls and has_func_decls:
                 # Keep MCP declarations (prefix stability) but forbid calling them.
-                # Native google_search / url_context stay enabled for grounding.
-                tool_config_kwargs = {
-                    "function_calling_config": genai_types.FunctionCallingConfig(
+                # Do not set include_server_side_tool_invocations: that flag
+                # re-enables google_search / url_context / code_execution.
+                gen_config.tool_config = genai_types.ToolConfig(
+                    function_calling_config=genai_types.FunctionCallingConfig(
                         mode=genai_types.FunctionCallingConfigMode.NONE,
                     ),
-                }
-                if has_native:
-                    tool_config_kwargs["include_server_side_tool_invocations"] = True
-                gen_config.tool_config = genai_types.ToolConfig(**tool_config_kwargs)
+                )
             elif has_func_decls and has_native:
                 gen_config.tool_config = genai_types.ToolConfig(
                     include_server_side_tool_invocations=True,

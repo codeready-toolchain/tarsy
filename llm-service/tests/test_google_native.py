@@ -1301,6 +1301,7 @@ class TestGoogleNativeProvider:
                 backend="google-native",
                 model="gemini-2.5-pro",
                 api_key_env="TEST_API_KEY",
+                native_tools={"google_search": True, "code_execution": True},
             ),
             messages=[pb.ConversationMessage(role="user", content="Hi")],
             tools=[
@@ -1315,12 +1316,20 @@ class TestGoogleNativeProvider:
             pass
         config = mock_client.aio.models.generate_content_stream.call_args.kwargs["config"]
         assert config.tools
-        assert config.tools[0].function_declarations
-        assert config.tools[0].function_declarations[0].name == "k8s__get_pods"
+        decls = [
+            d
+            for t in config.tools
+            if t.function_declarations
+            for d in t.function_declarations
+        ]
+        assert decls[0].name == "k8s__get_pods"
+        assert any(t.google_search for t in config.tools)
+        assert any(t.code_execution for t in config.tools)
         assert (
             config.tool_config.function_calling_config.mode
             == genai_types.FunctionCallingConfigMode.NONE
         )
+        assert not config.tool_config.include_server_side_tool_invocations
 
 
 class TestStreamPartTypes:
