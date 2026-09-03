@@ -25,6 +25,10 @@ type AgentConfig struct {
 	// LLM backend for this agent
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
+	// LLMProvider is copied from BuiltinAgentConfig (WebResearcher / CodeExecutor).
+	// yaml:"-" so agents: YAML cannot set it — pairing belongs in defaults.agents.
+	LLMProvider string `yaml:"-"`
+
 	// Max iterations for this agent (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 

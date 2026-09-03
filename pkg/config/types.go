@@ -57,6 +57,9 @@ type SummarizationConfig struct {
 	SummaryMaxTokenLimit int        `yaml:"summary_max_token_limit,omitempty" validate:"omitempty,min=50"`
 	LLMProvider          string     `yaml:"llm_provider,omitempty"`
 	LLMBackend           LLMBackend `yaml:"llm_backend,omitempty"`
+	// Named catalog list for the summarization-local walk. Valid on
+	// defaults.summarization only; rejected on per-MCP-server blocks.
+	FallbackList string `yaml:"fallback_list,omitempty"`
 }
 
 // SummarizationDisabled returns true only when Enabled is explicitly set to false.
@@ -98,6 +101,9 @@ type SubAgentRef struct {
 	LLMBackend    LLMBackend `yaml:"llm_backend,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
+	// Named catalog list for this dispatch. Empty / omitted inherits
+	// defaults → chain → defaults.agents.<name> (empty stage).
+	FallbackList string `yaml:"fallback_list,omitempty"`
 	// RequiredSkills and Skills merge with the agent definition for this dispatch only
 	// (same additive rules as StageAgentConfig). Parent stage required_skills do not apply.
 	RequiredSkills []string `yaml:"required_skills,omitempty"`
@@ -116,6 +122,7 @@ var subAgentRefAllowedKeys = map[string]bool{
 	"llm_backend":     true,
 	"max_iterations":  true,
 	"mcp_servers":     true,
+	"fallback_list":   true,
 	"required_skills": true,
 	"skills":          true,
 }
@@ -192,9 +199,10 @@ func (e FallbackProviderEntry) ResolvedBackend() LLMBackend {
 
 // SynthesisConfig defines synthesis agent configuration
 type SynthesisConfig struct {
-	Agent       string     `yaml:"agent,omitempty"`
-	LLMBackend  LLMBackend `yaml:"llm_backend,omitempty"`
-	LLMProvider string     `yaml:"llm_provider,omitempty"`
+	Agent        string     `yaml:"agent,omitempty"`
+	LLMBackend   LLMBackend `yaml:"llm_backend,omitempty"`
+	LLMProvider  string     `yaml:"llm_provider,omitempty"`
+	FallbackList string     `yaml:"fallback_list,omitempty"`
 }
 
 // ChatConfig defines chat agent configuration
@@ -206,6 +214,7 @@ type ChatConfig struct {
 	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
 	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
+	FallbackList  string       `yaml:"fallback_list,omitempty"`
 }
 
 // ScoringConfig defines scoring agent configuration for session quality evaluation
@@ -216,6 +225,7 @@ type ScoringConfig struct {
 	LLMProvider   string     `yaml:"llm_provider,omitempty"`
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	FallbackList  string     `yaml:"fallback_list,omitempty"`
 }
 
 // EmbeddingProviderType identifies the embedding API provider.

@@ -9,6 +9,21 @@ type Defaults struct {
 	// LLM provider for compose (amended-report) generation. Beats chain.llm_provider.
 	ComposeProvider string `yaml:"compose_provider,omitempty"`
 
+	// Sibling backend for compose_provider. Omitted means langchain.
+	ComposeBackend LLMBackend `yaml:"compose_backend,omitempty"`
+
+	// Named catalog list for compose. Unset inherits defaults → chain.
+	ComposeFallbackList string `yaml:"compose_fallback_list,omitempty"`
+
+	// LLM provider for executive summary generation. Beats chain.llm_provider.
+	ExecutiveSummaryProvider string `yaml:"executive_summary_provider,omitempty"`
+
+	// Sibling backend for executive_summary_provider. Omitted means langchain.
+	ExecutiveSummaryBackend LLMBackend `yaml:"executive_summary_backend,omitempty"`
+
+	// Named catalog list for executive summary. Unset inherits defaults → chain.
+	ExecutiveSummaryFallbackList string `yaml:"executive_summary_fallback_list,omitempty"`
+
 	// Max iterations default (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 
@@ -51,6 +66,26 @@ type Defaults struct {
 
 	// Investigation memory configuration
 	Memory *MemoryConfig `yaml:"memory,omitempty"`
+
+	// Named-agent pairing (pair + list only). Keyed by registry name.
+	// Does not replace agent identity (tools, instructions). Unknown names fail load.
+	Agents map[string]NamedAgentPairing `yaml:"agents,omitempty"`
+}
+
+// NamedAgentPairing is provider/backend/list for defaults.agents.<name>.
+// Identity stays in agents: / Go builtins. Chain/stage/ref that names the agent wins when set.
+type NamedAgentPairing struct {
+	LLMProvider  string     `yaml:"llm_provider,omitempty"`
+	LLMBackend   LLMBackend `yaml:"llm_backend,omitempty"`
+	FallbackList string     `yaml:"fallback_list,omitempty"`
+}
+
+// AgentPairing returns defaults.agents[name]. The zero value means inherit.
+func (d *Defaults) AgentPairing(name string) NamedAgentPairing {
+	if d == nil || d.Agents == nil {
+		return NamedAgentPairing{}
+	}
+	return d.Agents[name]
 }
 
 // AlertMaskingDefaults holds alert payload masking settings.

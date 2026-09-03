@@ -25,6 +25,7 @@ type BuiltinAgentConfig struct {
 	Type               AgentType
 	MCPServers         []string
 	CustomInstructions string
+	LLMProvider        string
 	LLMBackend         LLMBackend
 	NativeTools        map[GoogleNativeTool]bool
 	Skills             *[]string
@@ -124,6 +125,7 @@ Focus on solving the original alert/issue, not on meta-analyzing agent performan
 		},
 		"WebResearcher": {
 			Description: "Public web and URL research: GitHub/GitLab repos, documentation sites, vendor runbooks, issue trackers, CVEs, release notes, image or dependency lookups, and external HTTP(S) hostnames exposed via OpenShift Routes. Use when the alert, runbook, or task references a specific HTTPS URL or needs live internet search — Kubernetes and other MCP tools cannot fetch arbitrary public web pages. Prefer dispatching here over guessing from memory when external sources would verify versions, upstream bugs, or repo layout.",
+			LLMProvider: "google-default",
 			LLMBackend:  LLMBackendNativeGemini,
 			NativeTools: map[GoogleNativeTool]bool{
 				GoogleNativeToolGoogleSearch:  true,
@@ -140,6 +142,7 @@ Report findings with sources. Be thorough but concise. Cite only what appears in
 		},
 		"CodeExecutor": {
 			Description: "Executes Python code for computation, data analysis, and calculations",
+			LLMProvider: "google-default",
 			LLMBackend:  LLMBackendNativeGemini,
 			NativeTools: map[GoogleNativeTool]bool{
 				GoogleNativeToolGoogleSearch:  false,

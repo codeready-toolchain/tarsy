@@ -710,6 +710,24 @@ func TestValidateMCPServersSummarizationProvider(t *testing.T) {
 			wantErr: true,
 			errMsg:  "invalid LLM backend",
 		},
+		{
+			name: "per-server fallback_list is rejected",
+			servers: map[string]*MCPServerConfig{
+				"test-server": {
+					Transport: TransportConfig{
+						Type:    TransportTypeStdio,
+						Command: "test",
+					},
+					Summarization: &SummarizationConfig{
+						SizeThresholdTokens: 5000,
+						FallbackList:        "google-native",
+					},
+				},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "fallback_list is only valid on defaults.summarization",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1875,6 +1893,54 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			errMsg:  "must be at least 1",
 		},
 		{
+			name: "compose_backend without compose_provider fails",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:     []string{"test"},
+					ComposeBackend: LLMBackendLangChain,
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "compose_backend requires compose_provider at the same level",
+		},
+		{
+			name: "executive_summary_backend without provider fails",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes:              []string{"test"},
+					ExecutiveSummaryBackend: LLMBackendLangChain,
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: true,
+			errMsg:  "executive_summary_backend requires executive_summary_provider at the same level",
+		},
+		{
 			name: "chain with invalid MCP server",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
@@ -2457,6 +2523,22 @@ func TestValidateDefaults(t *testing.T) {
 			errMsg:  "compose_provider",
 		},
 		{
+			name: "compose_backend without compose_provider fails",
+			defaults: &Defaults{
+				ComposeBackend: LLMBackendLangChain,
+			},
+			wantErr: true,
+			errMsg:  "compose_backend requires compose_provider at the same level",
+		},
+		{
+			name: "executive_summary_backend without provider fails",
+			defaults: &Defaults{
+				ExecutiveSummaryBackend: LLMBackendLangChain,
+			},
+			wantErr: true,
+			errMsg:  "executive_summary_backend requires executive_summary_provider at the same level",
+		},
+		{
 			name: "google-native with openai defaults provider fails",
 			defaults: &Defaults{
 				LLMProvider: "openai-default",
@@ -2486,6 +2568,79 @@ func TestValidateDefaults(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestValidateNamedAgentPairings(t *testing.T) {
+	google := &LLMProviderConfig{Type: LLMProviderTypeGoogle, Model: "gemini"}
+	openai := &LLMProviderConfig{Type: LLMProviderTypeOpenAI, Model: "gpt-5"}
+
+	tests := []struct {
+		name      string
+		defaults  *Defaults
+		agents    map[string]*AgentConfig
+		providers map[string]*LLMProviderConfig
+		errMsg    string
+	}{
+		{
+			name: "known agent pairing passes",
+			defaults: &Defaults{
+				Agents: map[string]NamedAgentPairing{
+					"TestAgent": {LLMProvider: "google-default", LLMBackend: LLMBackendNativeGemini},
+				},
+			},
+			agents:    map[string]*AgentConfig{"TestAgent": {}},
+			providers: map[string]*LLMProviderConfig{"google-default": google},
+		},
+		{
+			name: "unknown agent name fails",
+			defaults: &Defaults{
+				Agents: map[string]NamedAgentPairing{
+					"GhostAgent": {FallbackList: "mid"},
+				},
+			},
+			agents: map[string]*AgentConfig{"TestAgent": {}},
+			errMsg: `unknown agent "GhostAgent"`,
+		},
+		{
+			name: "google-native with openai pairing fails",
+			defaults: &Defaults{
+				Agents: map[string]NamedAgentPairing{
+					"TestAgent": {LLMProvider: "openai-default", LLMBackend: LLMBackendNativeGemini},
+				},
+			},
+			agents:    map[string]*AgentConfig{"TestAgent": {}},
+			providers: map[string]*LLMProviderConfig{"openai-default": openai},
+			errMsg:    "requires a google provider",
+		},
+		{
+			name: "unknown pairing provider fails",
+			defaults: &Defaults{
+				Agents: map[string]NamedAgentPairing{
+					"TestAgent": {LLMProvider: "missing"},
+				},
+			},
+			agents:    map[string]*AgentConfig{"TestAgent": {}},
+			providers: map[string]*LLMProviderConfig{},
+			errMsg:    "LLM provider 'missing' not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Defaults:            tt.defaults,
+				AgentRegistry:       NewAgentRegistry(tt.agents),
+				LLMProviderRegistry: NewLLMProviderRegistry(tt.providers),
+			}
+			err := NewValidator(cfg).validateDefaults()
+			if tt.errMsg != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -4189,13 +4344,17 @@ func TestValidateFallbackProviders(t *testing.T) {
 func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
-			LLMProvider:     "defaults-primary",
-			ComposeProvider: "defaults-compose",
+			LLMProvider:              "defaults-primary",
+			ComposeProvider:          "defaults-compose",
+			ExecutiveSummaryProvider: "defaults-exec-summary",
 			FallbackProviders: []FallbackProviderEntry{
 				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
 			},
 			Summarization: &SummarizationConfig{
 				LLMProvider: "defaults-summarization",
+			},
+			Agents: map[string]NamedAgentPairing{
+				"Worker": {LLMProvider: "defaults-agents-worker"},
 			},
 		},
 		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}, "Worker": {}}),
@@ -4211,8 +4370,9 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 		}),
 		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 			"chain1": {
-				AlertTypes:      []string{"test"},
-				ComposeProvider: "chain-compose",
+				AlertTypes:               []string{"test"},
+				ComposeProvider:          "chain-compose",
+				ExecutiveSummaryProvider: "chain-exec-summary",
 				FallbackProviders: []FallbackProviderEntry{
 					{Provider: "chain-fallback", Backend: LLMBackendLangChain},
 				},
@@ -4253,10 +4413,13 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 
 	assert.True(t, referenced["defaults-primary"], "defaults primary provider should be referenced")
 	assert.True(t, referenced["defaults-compose"], "defaults compose provider should be referenced")
+	assert.True(t, referenced["defaults-exec-summary"], "defaults executive_summary_provider should be referenced")
+	assert.True(t, referenced["defaults-agents-worker"], "defaults.agents pairing provider should be referenced")
 	assert.True(t, referenced["defaults-fallback"], "defaults fallback provider should be referenced")
 	assert.True(t, referenced["defaults-summarization"], "defaults summarization provider should be referenced")
 	assert.True(t, referenced["mcp-summarization"], "MCP server summarization provider should be referenced")
 	assert.True(t, referenced["chain-compose"], "chain compose provider should be referenced")
+	assert.True(t, referenced["chain-exec-summary"], "chain executive_summary_provider should be referenced")
 	assert.True(t, referenced["chain-fallback"], "chain fallback provider should be referenced")
 	assert.True(t, referenced["chain-subagent"], "chain sub-agent provider should be referenced")
 	assert.True(t, referenced["chat-subagent"], "chat.sub_agents provider should be referenced")
@@ -4269,11 +4432,23 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 func TestCollectReferencedLLMProviders_NamedFallbackLists(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
-			FallbackList: "premium",
+			FallbackList:                 "premium",
+			ComposeFallbackList:          "compose-list",
+			ExecutiveSummaryFallbackList: "exec-list",
+			Scoring:                      &ScoringConfig{FallbackList: "scoring-list"},
+			Summarization:                &SummarizationConfig{FallbackList: "sum-list"},
+			Agents: map[string]NamedAgentPairing{
+				"TestAgent": {FallbackList: "agent-pairing-list"},
+			},
 		},
 		FallbackLists: map[string][]FallbackProviderEntry{
-			"premium": {{Provider: "catalog-referenced"}},
-			"spare":   {{Provider: "catalog-unused"}},
+			"premium":            {{Provider: "catalog-referenced"}},
+			"spare":              {{Provider: "catalog-unused"}},
+			"compose-list":       {{Provider: "compose-catalog"}},
+			"exec-list":          {{Provider: "exec-catalog"}},
+			"scoring-list":       {{Provider: "scoring-catalog"}},
+			"sum-list":           {{Provider: "sum-catalog"}},
+			"agent-pairing-list": {{Provider: "pairing-catalog"}},
 		},
 		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}}),
 		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
@@ -4303,7 +4478,130 @@ func TestCollectReferencedLLMProviders_NamedFallbackLists(t *testing.T) {
 	assert.True(t, referenced["chain-catalog"])
 	assert.True(t, referenced["stage-catalog"])
 	assert.True(t, referenced["agent-catalog"])
+	assert.True(t, referenced["compose-catalog"])
+	assert.True(t, referenced["exec-catalog"])
+	assert.True(t, referenced["scoring-catalog"])
+	assert.True(t, referenced["sum-catalog"])
+	assert.True(t, referenced["pairing-catalog"])
 	assert.False(t, referenced["catalog-unused"])
+}
+
+func TestCollectReferencedLLMProviders_ReachableBuiltinPair(t *testing.T) {
+	googleDefault := "google-default"
+	web := &AgentConfig{LLMProvider: googleDefault}
+
+	t.Run("reachable WebResearcher includes builtin pair", func(t *testing.T) {
+		cfg := &Config{
+			Defaults:      &Defaults{LLMProvider: "opus"},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}, "WebResearcher": web}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages: []StageConfig{{
+						Name: "s1",
+						Agents: []StageAgentConfig{{
+							Name:      "TestAgent",
+							SubAgents: SubAgentRefs{{Name: "WebResearcher"}},
+						}},
+					}},
+				},
+			}),
+		}
+		referenced := NewValidator(cfg).collectReferencedLLMProviders()
+		assert.True(t, referenced[googleDefault])
+		assert.True(t, referenced["opus"])
+	})
+
+	t.Run("unused builtin in registry is not referenced", func(t *testing.T) {
+		cfg := &Config{
+			Defaults:      &Defaults{LLMProvider: "opus"},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}, "WebResearcher": web}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			}),
+		}
+		referenced := NewValidator(cfg).collectReferencedLLMProviders()
+		assert.False(t, referenced[googleDefault])
+		assert.True(t, referenced["opus"])
+	})
+}
+
+func TestValidateLLMProviders_ExecutiveSummaryAndBuiltinPair(t *testing.T) {
+	t.Run("executive_summary_provider missing key fails", func(t *testing.T) {
+		cfg := &Config{
+			Defaults: &Defaults{
+				LLMProvider:              "primary",
+				ExecutiveSummaryProvider: "exec-only",
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
+				"primary":   {Type: LLMProviderTypeGoogle, Model: "g", APIKeyEnv: "PRIMARY_KEY"},
+				"exec-only": {Type: LLMProviderTypeOpenAI, Model: "gpt", APIKeyEnv: "EXEC_SUMMARY_KEY"},
+			}),
+			MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			}),
+		}
+		t.Setenv("PRIMARY_KEY", "secret")
+		err := NewValidator(cfg).validateLLMProviders()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "EXEC_SUMMARY_KEY")
+	})
+
+	t.Run("reachable builtin google-default missing key fails", func(t *testing.T) {
+		cfg := &Config{
+			Defaults: &Defaults{LLMProvider: "primary"},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"TestAgent":     {},
+				"WebResearcher": {LLMProvider: "google-default"},
+			}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
+				"primary":        {Type: LLMProviderTypeOpenAI, Model: "gpt", APIKeyEnv: "PRIMARY_KEY"},
+				"google-default": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "UNUSED_BUILTIN_KEY"},
+			}),
+			MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}}},
+				},
+			}),
+		}
+		t.Setenv("PRIMARY_KEY", "secret")
+		err := NewValidator(cfg).validateLLMProviders()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "UNUSED_BUILTIN_KEY")
+	})
+
+	t.Run("unused builtin google-default is not credential-checked", func(t *testing.T) {
+		cfg := &Config{
+			Defaults: &Defaults{LLMProvider: "primary"},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"TestAgent":     {},
+				"WebResearcher": {LLMProvider: "google-default"},
+			}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
+				"primary":        {Type: LLMProviderTypeOpenAI, Model: "gpt", APIKeyEnv: "PRIMARY_KEY"},
+				"google-default": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "UNUSED_BUILTIN_KEY"},
+			}),
+			MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			}),
+		}
+		t.Setenv("PRIMARY_KEY", "secret")
+		require.NoError(t, NewValidator(cfg).validateLLMProviders())
+	})
 }
 
 func TestValidateLLMProviders_SummarizationOverlayMissingAPIKey(t *testing.T) {
@@ -5003,6 +5301,108 @@ func TestWarnNativeToolAgentsWithoutCompatibleFallback(t *testing.T) {
 
 		assert.NotContains(t, buf.String(), "native-tool agent with no compatible fallback")
 	})
+
+	t.Run("warns for named list on chat sub-agent ref", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{FallbackList: "langchain-only"},
+			FallbackLists: map[string][]FallbackProviderEntry{
+				"langchain-only": {{Provider: "openai-fb", Backend: LLMBackendLangChain}},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"Orchestrator": {},
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Chat: &ChatConfig{
+						SubAgents: SubAgentRefs{{Name: "WebResearcher"}},
+					},
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "Orchestrator"}}},
+					},
+				},
+			}),
+		}
+		NewValidator(cfg).warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
+		assert.Contains(t, buf.String(), "WebResearcher")
+	})
+
+	t.Run("warns for named list on stage sub-agent ref", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{FallbackList: "langchain-only"},
+			FallbackLists: map[string][]FallbackProviderEntry{
+				"langchain-only": {{Provider: "openai-fb", Backend: LLMBackendLangChain}},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"Orchestrator": {},
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{{
+						Name:      "s1",
+						SubAgents: SubAgentRefs{{Name: "WebResearcher"}},
+						Agents:    []StageAgentConfig{{Name: "Orchestrator"}},
+					}},
+				},
+			}),
+		}
+		NewValidator(cfg).warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
+		assert.Contains(t, buf.String(), "WebResearcher")
+	})
+
+	t.Run("defaults.agents named list suppresses native-tool warning", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackList: "langchain-only",
+				Agents: map[string]NamedAgentPairing{
+					"WebResearcher": {FallbackList: "google-native"},
+				},
+			},
+			FallbackLists: map[string][]FallbackProviderEntry{
+				"langchain-only": {{Provider: "openai-fb", Backend: LLMBackendLangChain}},
+				"google-native":  {{Provider: "google-fb", Backend: LLMBackendNativeGemini}},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		NewValidator(cfg).warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Empty(t, buf.String())
+	})
 }
 
 func TestValidateNamedFallbackLists(t *testing.T) {
@@ -5226,6 +5626,134 @@ func TestValidateNamedFallbackLists(t *testing.T) {
 				}
 			},
 			wantErr: "fallback_lists 'spare': field '[0]': invalid LLM backend: bad",
+		},
+		{
+			name: "unknown defaults.agents fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{
+						Agents: map[string]NamedAgentPairing{
+							"TestAgent": {FallbackList: "ghost"},
+						},
+					},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `defaults 'TestAgent': field 'agents.fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown compose_fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{ComposeFallbackList: "ghost"},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `defaults '': field 'compose_fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown executive_summary_fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{ExecutiveSummaryFallbackList: "ghost"},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `defaults '': field 'executive_summary_fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown scoring.fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{Scoring: &ScoringConfig{FallbackList: "ghost"}},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `defaults '': field 'scoring.fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown summarization.fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{Summarization: &SummarizationConfig{FallbackList: "ghost"}},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `defaults '': field 'summarization.fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown chat.fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+						"chain1": {
+							AlertTypes: []string{"test"},
+							Chat:       &ChatConfig{FallbackList: "ghost"},
+							Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+						},
+					}),
+				}
+			},
+			wantErr: `chain 'chain1': field 'chat.fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown sub-agent ref fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+						"chain1": {
+							AlertTypes: []string{"test"},
+							SubAgents:  SubAgentRefs{{Name: "TestAgent", FallbackList: "ghost"}},
+							Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+						},
+					}),
+				}
+			},
+			wantErr: `chain 'chain1': field 'sub_agents[TestAgent].fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "unknown chat.sub_agents fallback_list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+						"chain1": {
+							AlertTypes: []string{"test"},
+							Chat: &ChatConfig{
+								SubAgents: SubAgentRefs{{Name: "TestAgent", FallbackList: "ghost"}},
+							},
+							Stages: []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+						},
+					}),
+				}
+			},
+			wantErr: `chain 'chain1': field 'chat.sub_agents[TestAgent].fallback_list': unknown fallback list "ghost"`,
 		},
 	}
 

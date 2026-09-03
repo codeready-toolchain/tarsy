@@ -1,8 +1,7 @@
-defaults:
-  llm_provider: "primary-provider"
-  llm_backend: "google-native"
-  max_iterations: 5
-  fallback_providers:
+# Named catalog. Investigation walks `premium` (same order as the former
+# defaults.fallback_providers list).
+fallback_lists:
+  premium:
     - provider: "fallback-1"
       backend: "google-native"
     - provider: "fallback-2"
@@ -10,6 +9,12 @@ defaults:
     # Re-list the primary so a later hop cannot walk back to a name already used.
     - provider: "primary-provider"
       backend: "google-native"
+
+defaults:
+  llm_provider: "primary-provider"
+  llm_backend: "google-native"
+  max_iterations: 5
+  fallback_list: premium
 
 mcp_servers:
   test-mcp:

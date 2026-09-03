@@ -567,6 +567,20 @@ func (e *RealSessionExecutor) executeAgent(
 	agentIndex int,
 	displayName string, // overrides agentConfig.Name for DB record/logs; config name still used for registry lookup
 ) agentResult {
+	resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
+	return e.executeResolvedAgent(ctx, input, stg, agentConfig, agentIndex, displayName, resolvedConfig, err)
+}
+
+func (e *RealSessionExecutor) executeResolvedAgent(
+	ctx context.Context,
+	input executeStageInput,
+	stg *ent.Stage,
+	agentConfig config.StageAgentConfig,
+	agentIndex int,
+	displayName string,
+	resolvedConfig *agent.ResolvedAgentConfig,
+	resolveErr error,
+) agentResult {
 	logger := slog.With(
 		"session_id", input.session.ID,
 		"stage_id", stg.ID,
@@ -574,28 +588,11 @@ func (e *RealSessionExecutor) executeAgent(
 		"agent_index", agentIndex,
 	)
 
-	// Best-effort provider/backend for the error path (before ResolveAgentConfig
-	// succeeds). Same pairing as ResolveAgentConfig, minus agent-def (lookup
-	// may be what failed). Lookup errors are ignored; name/backend still apply.
-	var layers []agent.LLMLayer
-	if e.cfg.Defaults != nil {
-		layers = append(layers, agent.LLMLayer{
-			Provider: e.cfg.Defaults.LLMProvider,
-			Backend:  e.cfg.Defaults.LLMBackend,
-		})
-	}
-	layers = append(layers,
-		agent.LLMLayer{Provider: input.chain.LLMProvider, Backend: input.chain.LLMBackend},
-		agent.LLMLayer{Provider: agentConfig.LLMProvider, Backend: agentConfig.LLMBackend},
-	)
-	_, fallbackProviderName, fallbackBackend, _ := agent.ResolveLLMPair(e.cfg, layers...)
+	fallbackProviderName, fallbackBackend := e.bestEffortLLMPair(input, agentConfig)
 
-	// Resolve agent config from hierarchy (before creating execution record
-	// so the DB record captures the correctly resolved iteration strategy).
-	resolvedConfig, err := agent.ResolveAgentConfig(e.cfg, input.chain, input.stageConfig, agentConfig)
-	if err != nil {
-		resErr := fmt.Errorf("failed to resolve agent config: %w", err)
-		logger.Error("Failed to resolve agent config", "error", err)
+	if resolveErr != nil {
+		resErr := fmt.Errorf("failed to resolve agent config: %w", resolveErr)
+		logger.Error("Failed to resolve agent config", "error", resolveErr)
 
 		// Best-effort: create a failed AgentExecution record so the stage can
 		// be finalized via UpdateStageStatus. Without this, the stage has no
@@ -708,25 +705,26 @@ func (e *RealSessionExecutor) executeAgent(
 
 	// Build execution context
 	execCtx := &agent.ExecutionContext{
-		SessionID:             input.session.ID,
-		StageID:               stg.ID,
-		ExecutionID:           exec.ID,
-		AgentName:             displayName,
-		AgentIndex:            agentIndex + 1, // 1-based
-		AlertData:             input.session.AlertData,
-		AlertType:             input.session.AlertType,
-		StageType:             string(stg.StageType),
-		RunbookContent:        input.runbookContent,
-		Config:                resolvedConfig,
-		LLMClient:             e.llmClient,
-		EventPublisher:        e.eventPublisher,
-		PromptBuilder:         e.promptBuilder,
-		FailedServers:         failedServers,
-		MemoryBriefing:        memoryBriefing,
-		LLMProviders:          e.cfg.LLMProviderRegistry,
-		DefaultSummarization:  defaultSummarization(e.cfg),
-		ComposeUpstreamReport: input.composeUpstreamReport,
-		ComposeActionMemo:     input.composeActionMemo,
+		SessionID:                      input.session.ID,
+		StageID:                        stg.ID,
+		ExecutionID:                    exec.ID,
+		AgentName:                      displayName,
+		AgentIndex:                     agentIndex + 1, // 1-based
+		AlertData:                      input.session.AlertData,
+		AlertType:                      input.session.AlertType,
+		StageType:                      string(stg.StageType),
+		RunbookContent:                 input.runbookContent,
+		Config:                         resolvedConfig,
+		LLMClient:                      e.llmClient,
+		EventPublisher:                 e.eventPublisher,
+		PromptBuilder:                  e.promptBuilder,
+		FailedServers:                  failedServers,
+		MemoryBriefing:                 memoryBriefing,
+		LLMProviders:                   e.cfg.LLMProviderRegistry,
+		DefaultSummarization:           defaultSummarization(e.cfg),
+		SummarizationFallbackProviders: agent.ResolveSummarizationFallback(e.cfg),
+		ComposeUpstreamReport:          input.composeUpstreamReport,
+		ComposeActionMemo:              input.composeActionMemo,
 		Services: &agent.ServiceBundle{
 			Timeline:    input.timelineService,
 			Message:     input.messageService,
@@ -886,6 +884,46 @@ func (e *RealSessionExecutor) executeAgent(
 		llmProviderName: resolvedConfig.LLMProviderName,
 		llmModel:        resolvedModel,
 	}
+}
+
+// bestEffortLLMPair is used on the ResolveAgentConfig error path so the failed
+// execution record still has a provider/backend. Includes builtin / defaults.agents
+// when lookup succeeds. Lookup errors are ignored; name/backend still apply.
+func (e *RealSessionExecutor) bestEffortLLMPair(input executeStageInput, agentConfig config.StageAgentConfig) (string, config.LLMBackend) {
+	var layers []agent.LLMLayer
+	if e.cfg.Defaults != nil {
+		layers = append(layers, agent.LLMLayer{
+			Provider: e.cfg.Defaults.LLMProvider,
+			Backend:  e.cfg.Defaults.LLMBackend,
+		})
+	}
+	if e.cfg != nil {
+		if def, err := e.cfg.GetAgent(agentConfig.Name); err == nil {
+			layers = append(layers, agent.LLMLayer{
+				Provider: def.LLMProvider,
+				Backend:  def.LLMBackend,
+			})
+		}
+	}
+	if input.chain != nil {
+		layers = append(layers, agent.LLMLayer{
+			Provider: input.chain.LLMProvider,
+			Backend:  input.chain.LLMBackend,
+		})
+	}
+	if e.cfg != nil && e.cfg.Defaults != nil {
+		pairing := e.cfg.Defaults.AgentPairing(agentConfig.Name)
+		layers = append(layers, agent.LLMLayer{
+			Provider: pairing.LLMProvider,
+			Backend:  pairing.LLMBackend,
+		})
+	}
+	layers = append(layers, agent.LLMLayer{
+		Provider: agentConfig.LLMProvider,
+		Backend:  agentConfig.LLMBackend,
+	})
+	_, name, backend, _ := agent.ResolveLLMPair(e.cfg, layers...)
+	return name, backend
 }
 
 // allAgentsAreAction returns true if every agent in the stage resolves to AgentTypeAction.

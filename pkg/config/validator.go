@@ -160,9 +160,17 @@ func (v *Validator) validateDefaults() error {
 		return NewValidationError("defaults", "", "llm_backend", err)
 	}
 
-	if defaults.ComposeProvider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(defaults.ComposeProvider)) {
-		return NewValidationError("defaults", "", "compose_provider",
-			fmt.Errorf("LLM provider '%s' not found", defaults.ComposeProvider))
+	if err := v.validateJobProviderBackend(defaults.ComposeProvider, defaults.ComposeBackend,
+		"defaults", "", "compose_provider", "compose_backend"); err != nil {
+		return err
+	}
+	if err := v.validateJobProviderBackend(defaults.ExecutiveSummaryProvider, defaults.ExecutiveSummaryBackend,
+		"defaults", "", "executive_summary_provider", "executive_summary_backend"); err != nil {
+		return err
+	}
+
+	if err := v.validateNamedAgentPairings(defaults.Agents); err != nil {
+		return err
 	}
 
 	// Validate fallback providers if specified
@@ -217,6 +225,48 @@ func (v *Validator) validateDefaultsSummarization(sum *SummarizationConfig) erro
 			fmt.Errorf("summary_max_token_limit is per-MCP-server only; do not set it on defaults.summarization"))
 	}
 	return v.validateSummarizationLLM(sum, "defaults", "", "summarization")
+}
+
+func (v *Validator) validateNamedAgentPairings(agents map[string]NamedAgentPairing) error {
+	for name, pairing := range agents {
+		if v.cfg.AgentRegistry == nil || !v.cfg.AgentRegistry.Has(name) {
+			return NewValidationError("defaults", name, "agents",
+				fmt.Errorf("unknown agent %q", name))
+		}
+		if pairing.LLMBackend != "" && !pairing.LLMBackend.IsValid() {
+			return NewValidationError("defaults", name, "agents.llm_backend",
+				fmt.Errorf("invalid LLM backend: %s", pairing.LLMBackend))
+		}
+		if pairing.LLMProvider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(pairing.LLMProvider)) {
+			return NewValidationError("defaults", name, "agents.llm_provider",
+				fmt.Errorf("LLM provider '%s' not found", pairing.LLMProvider))
+		}
+		if err := v.googleNativeRequiresGoogleProvider(pairing.LLMProvider, pairing.LLMBackend); err != nil {
+			return NewValidationError("defaults", name, "agents.llm_backend", err)
+		}
+	}
+	return nil
+}
+
+// validateJobProviderBackend checks compose/exec-summary sibling backend rules.
+// Backend without a sibling provider is an error (same as summarization).
+func (v *Validator) validateJobProviderBackend(provider string, backend LLMBackend, section, name, providerField, backendField string) error {
+	if backend != "" && provider == "" {
+		return NewValidationError(section, name, backendField,
+			fmt.Errorf("%s requires %s at the same level", backendField, providerField))
+	}
+	if backend != "" && !backend.IsValid() {
+		return NewValidationError(section, name, backendField,
+			fmt.Errorf("invalid LLM backend: %s", backend))
+	}
+	if provider != "" && (v.cfg.LLMProviderRegistry == nil || !v.cfg.LLMProviderRegistry.Has(provider)) {
+		return NewValidationError(section, name, providerField,
+			fmt.Errorf("LLM provider '%s' not found", provider))
+	}
+	if err := v.googleNativeRequiresGoogleProvider(provider, backend); err != nil {
+		return NewValidationError(section, name, backendField, err)
+	}
+	return nil
 }
 
 // validateSummarizationLLM checks optional llm_provider / llm_backend on a
@@ -473,8 +523,13 @@ func (v *Validator) validateChains() error {
 			return NewValidationError("chain", chainID, "llm_backend", err)
 		}
 
-		if chain.ComposeProvider != "" && !v.cfg.LLMProviderRegistry.Has(chain.ComposeProvider) {
-			return NewValidationError("chain", chainID, "compose_provider", fmt.Errorf("LLM provider '%s' not found", chain.ComposeProvider))
+		if err := v.validateJobProviderBackend(chain.ComposeProvider, chain.ComposeBackend,
+			"chain", chainID, "compose_provider", "compose_backend"); err != nil {
+			return err
+		}
+		if err := v.validateJobProviderBackend(chain.ExecutiveSummaryProvider, chain.ExecutiveSummaryBackend,
+			"chain", chainID, "executive_summary_provider", "executive_summary_backend"); err != nil {
+			return err
 		}
 
 		// Validate chain-level fallback providers if specified
@@ -716,6 +771,10 @@ func (v *Validator) validateMCPServers() error {
 			if err := v.validateSummarizationLLM(server.Summarization, "mcp_server", serverID, "summarization"); err != nil {
 				return err
 			}
+			if server.Summarization.FallbackList != "" {
+				return NewValidationError("mcp_server", serverID, "summarization.fallback_list",
+					fmt.Errorf("fallback_list is only valid on defaults.summarization"))
+			}
 			if !server.Summarization.SummarizationDisabled() {
 				if server.Summarization.SizeThresholdTokens < 100 {
 					return NewValidationError("mcp_server", serverID, "summarization.size_threshold_tokens", fmt.Errorf("must be at least 100"))
@@ -788,6 +847,14 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		if v.cfg.Defaults.ComposeProvider != "" {
 			referenced[v.cfg.Defaults.ComposeProvider] = true
 		}
+		if v.cfg.Defaults.ExecutiveSummaryProvider != "" {
+			referenced[v.cfg.Defaults.ExecutiveSummaryProvider] = true
+		}
+		for _, pairing := range v.cfg.Defaults.Agents {
+			if pairing.LLMProvider != "" {
+				referenced[pairing.LLMProvider] = true
+			}
+		}
 	}
 
 	v.addReferencedFallbackListProviders(referenced)
@@ -812,6 +879,9 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		}
 		if chain.ComposeProvider != "" {
 			referenced[chain.ComposeProvider] = true
+		}
+		if chain.ExecutiveSummaryProvider != "" {
+			referenced[chain.ExecutiveSummaryProvider] = true
 		}
 
 		// Chain-level fallback providers
@@ -881,7 +951,48 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		}
 	}
 
+	v.addReachableBuiltinLLMProviders(referenced)
+
 	return referenced
+}
+
+func (v *Validator) addReachableBuiltinLLMProviders(referenced map[string]bool) {
+	if v.cfg.AgentRegistry == nil || v.cfg.ChainRegistry == nil {
+		return
+	}
+	seen := make(map[string]bool)
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		def, err := v.cfg.AgentRegistry.Get(name)
+		if err != nil || def.LLMProvider == "" {
+			return
+		}
+		referenced[def.LLMProvider] = true
+	}
+	for _, chain := range v.cfg.ChainRegistry.GetAll() {
+		for _, ref := range chain.SubAgents {
+			add(ref.Name)
+		}
+		if chain.Chat != nil {
+			for _, ref := range chain.Chat.SubAgents {
+				add(ref.Name)
+			}
+		}
+		for _, stage := range chain.Stages {
+			for _, ref := range stage.SubAgents {
+				add(ref.Name)
+			}
+			for _, ag := range stage.Agents {
+				add(ag.Name)
+				for _, ref := range ag.SubAgents {
+					add(ref.Name)
+				}
+			}
+		}
+	}
 }
 
 func (v *Validator) validateOrchestratorConfig(oc *OrchestratorConfig, section, name string) error {
@@ -912,6 +1023,10 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 		}
 		if err := v.googleNativeRequiresGoogleProvider(ref.LLMProvider, ref.LLMBackend); err != nil {
 			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s': %w", ref.Name, err))
+		}
+		if err := v.validateFallbackSelector(ref.FallbackList, nil, section, name,
+			fmt.Sprintf("%s[%s].fallback_list", field, ref.Name)); err != nil {
+			return err
 		}
 		if ref.MaxIterations != nil && *ref.MaxIterations < 1 {
 			return NewValidationError(section, name, field, fmt.Errorf("sub-agent '%s' max_iterations must be at least 1", ref.Name))
@@ -1001,7 +1116,8 @@ func (v *Validator) validateFallbackEntryCredentials(entry FallbackProviderEntry
 
 // validateNamedFallbackLists structure-validates every catalog entry, credential-
 // checks referenced lists, and rejects unknown names and mixed selector+inline
-// on the four existing layers (defaults, chain, stage, stage-agent).
+// on every selector site (defaults/chain/stage/stage-agent, job knobs,
+// defaults.agents, and sub-agent refs).
 func (v *Validator) validateNamedFallbackLists() error {
 	referenced := v.referencedFallbackListNames()
 
@@ -1028,9 +1144,44 @@ func (v *Validator) validateNamedFallbackLists() error {
 			"defaults", "", "fallback_list"); err != nil {
 			return err
 		}
+		if err := v.validateFallbackSelector(v.cfg.Defaults.ComposeFallbackList, nil,
+			"defaults", "", "compose_fallback_list"); err != nil {
+			return err
+		}
+		if err := v.validateFallbackSelector(v.cfg.Defaults.ExecutiveSummaryFallbackList, nil,
+			"defaults", "", "executive_summary_fallback_list"); err != nil {
+			return err
+		}
+		if v.cfg.Defaults.Scoring != nil {
+			if err := v.validateFallbackSelector(v.cfg.Defaults.Scoring.FallbackList, nil,
+				"defaults", "", "scoring.fallback_list"); err != nil {
+				return err
+			}
+		}
+		if v.cfg.Defaults.Summarization != nil {
+			if err := v.validateFallbackSelector(v.cfg.Defaults.Summarization.FallbackList, nil,
+				"defaults", "", "summarization.fallback_list"); err != nil {
+				return err
+			}
+		}
+		for agentName, pairing := range v.cfg.Defaults.Agents {
+			if err := v.validateFallbackSelector(pairing.FallbackList, nil,
+				"defaults", agentName, "agents.fallback_list"); err != nil {
+				return err
+			}
+		}
 	}
 
 	if v.cfg.ChainRegistry == nil {
+		return nil
+	}
+	validateRefSelectors := func(refs SubAgentRefs, section, id, field string) error {
+		for _, ref := range refs {
+			if err := v.validateFallbackSelector(ref.FallbackList, nil, section, id,
+				fmt.Sprintf("%s[%s].fallback_list", field, ref.Name)); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
@@ -1038,15 +1189,53 @@ func (v *Validator) validateNamedFallbackLists() error {
 			"chain", chainID, "fallback_list"); err != nil {
 			return err
 		}
+		if err := v.validateFallbackSelector(chain.ComposeFallbackList, nil,
+			"chain", chainID, "compose_fallback_list"); err != nil {
+			return err
+		}
+		if err := v.validateFallbackSelector(chain.ExecutiveSummaryFallbackList, nil,
+			"chain", chainID, "executive_summary_fallback_list"); err != nil {
+			return err
+		}
+		if err := validateRefSelectors(chain.SubAgents, "chain", chainID, "sub_agents"); err != nil {
+			return err
+		}
+		if chain.Chat != nil {
+			if err := v.validateFallbackSelector(chain.Chat.FallbackList, nil,
+				"chain", chainID, "chat.fallback_list"); err != nil {
+				return err
+			}
+			if err := validateRefSelectors(chain.Chat.SubAgents, "chain", chainID, "chat.sub_agents"); err != nil {
+				return err
+			}
+		}
+		if chain.Scoring != nil {
+			if err := v.validateFallbackSelector(chain.Scoring.FallbackList, nil,
+				"chain", chainID, "scoring.fallback_list"); err != nil {
+				return err
+			}
+		}
 		for i, stage := range chain.Stages {
 			stageRef := fmt.Sprintf("chain '%s' stage %d", chainID, i)
 			if err := v.validateFallbackSelector(stage.FallbackList, stage.FallbackProviders,
 				stageRef, "", "fallback_list"); err != nil {
 				return err
 			}
+			if stage.Synthesis != nil {
+				if err := v.validateFallbackSelector(stage.Synthesis.FallbackList, nil,
+					stageRef, "", "synthesis.fallback_list"); err != nil {
+					return err
+				}
+			}
+			if err := validateRefSelectors(stage.SubAgents, stageRef, "", "sub_agents"); err != nil {
+				return err
+			}
 			for _, agent := range stage.Agents {
 				if err := v.validateFallbackSelector(agent.FallbackList, agent.FallbackProviders,
 					stageRef, agent.Name, "fallback_list"); err != nil {
+					return err
+				}
+				if err := validateRefSelectors(agent.SubAgents, stageRef, agent.Name, "sub_agents"); err != nil {
 					return err
 				}
 			}
@@ -1070,8 +1259,8 @@ func (v *Validator) validateFallbackSelector(listName string, inline []FallbackP
 	return nil
 }
 
-// referencedFallbackListNames returns every non-empty fallback_list selector on
-// the four existing layers. A default list named in YAML is referenced even if
+// referencedFallbackListNames returns every non-empty fallback_list /
+// *_fallback_list selector. A default list named in YAML is referenced even if
 // every chain overrides it.
 func (v *Validator) referencedFallbackListNames() map[string]bool {
 	referenced := make(map[string]bool)
@@ -1082,16 +1271,50 @@ func (v *Validator) referencedFallbackListNames() map[string]bool {
 	}
 	if v.cfg.Defaults != nil {
 		add(v.cfg.Defaults.FallbackList)
+		add(v.cfg.Defaults.ComposeFallbackList)
+		add(v.cfg.Defaults.ExecutiveSummaryFallbackList)
+		if v.cfg.Defaults.Scoring != nil {
+			add(v.cfg.Defaults.Scoring.FallbackList)
+		}
+		if v.cfg.Defaults.Summarization != nil {
+			add(v.cfg.Defaults.Summarization.FallbackList)
+		}
+		for _, pairing := range v.cfg.Defaults.Agents {
+			add(pairing.FallbackList)
+		}
 	}
 	if v.cfg.ChainRegistry == nil {
 		return referenced
 	}
 	for _, chain := range v.cfg.ChainRegistry.GetAll() {
 		add(chain.FallbackList)
+		add(chain.ComposeFallbackList)
+		add(chain.ExecutiveSummaryFallbackList)
+		if chain.Chat != nil {
+			add(chain.Chat.FallbackList)
+			for _, ref := range chain.Chat.SubAgents {
+				add(ref.FallbackList)
+			}
+		}
+		if chain.Scoring != nil {
+			add(chain.Scoring.FallbackList)
+		}
+		for _, ref := range chain.SubAgents {
+			add(ref.FallbackList)
+		}
 		for _, stage := range chain.Stages {
 			add(stage.FallbackList)
+			if stage.Synthesis != nil {
+				add(stage.Synthesis.FallbackList)
+			}
+			for _, ref := range stage.SubAgents {
+				add(ref.FallbackList)
+			}
 			for _, agent := range stage.Agents {
 				add(agent.FallbackList)
+				for _, ref := range agent.SubAgents {
+					add(ref.FallbackList)
+				}
 			}
 		}
 	}
@@ -1365,24 +1588,46 @@ func (v *Validator) warnNativeToolAgentsWithoutCompatibleFallback() {
 		for _, stage := range chain.Stages {
 			stageLayer := FallbackLayer{ListName: stage.FallbackList, Inline: stage.FallbackProviders}
 			for _, agentCfg := range stage.Agents {
-				effective, err := ResolveFallbackLayers(v.cfg.FallbackLists, defaultsLayer, chainLayer, stageLayer,
+				effective, err := ResolveFallbackLayers(v.cfg.FallbackLists, defaultsLayer, chainLayer,
+					namedAgentFallbackLayer(v.cfg.Defaults, agentCfg.Name),
+					stageLayer,
 					FallbackLayer{ListName: agentCfg.FallbackList, Inline: agentCfg.FallbackProviders})
 				if err != nil {
 					continue
 				}
 				v.warnIfNativeAgentLacksFallback(chainID, agentCfg.Name, effective)
+				for _, ref := range agentCfg.SubAgents {
+					v.warnNativeToolSubAgentRef(chainID, defaultsLayer, chainLayer, ref)
+				}
+			}
+			for _, ref := range stage.SubAgents {
+				v.warnNativeToolSubAgentRef(chainID, defaultsLayer, chainLayer, ref)
 			}
 		}
 
-		// Chain-level sub-agents (orchestrator dispatch targets): defaults → chain only.
 		for _, ref := range chain.SubAgents {
-			effective, err := ResolveFallbackLayers(v.cfg.FallbackLists, defaultsLayer, chainLayer)
-			if err != nil {
-				continue
+			v.warnNativeToolSubAgentRef(chainID, defaultsLayer, chainLayer, ref)
+		}
+		if chain.Chat != nil {
+			for _, ref := range chain.Chat.SubAgents {
+				v.warnNativeToolSubAgentRef(chainID, defaultsLayer, chainLayer, ref)
 			}
-			v.warnIfNativeAgentLacksFallback(chainID, ref.Name, effective)
 		}
 	}
+}
+
+func namedAgentFallbackLayer(defaults *Defaults, name string) FallbackLayer {
+	return FallbackLayer{ListName: defaults.AgentPairing(name).FallbackList}
+}
+
+func (v *Validator) warnNativeToolSubAgentRef(chainID string, defaultsLayer, chainLayer FallbackLayer, ref SubAgentRef) {
+	effective, err := ResolveFallbackLayers(v.cfg.FallbackLists, defaultsLayer, chainLayer,
+		namedAgentFallbackLayer(v.cfg.Defaults, ref.Name),
+		FallbackLayer{ListName: ref.FallbackList})
+	if err != nil {
+		return
+	}
+	v.warnIfNativeAgentLacksFallback(chainID, ref.Name, effective)
 }
 
 func (v *Validator) warnIfNativeAgentLacksFallback(chainID, agentName string, effective []FallbackProviderEntry) {

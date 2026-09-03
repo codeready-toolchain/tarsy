@@ -1,0 +1,44 @@
+# Same primary for investigation / exec summary / scoring; different named lists.
+fallback_lists:
+  premium:
+    - provider: "fallback-1"
+      backend: "google-native"
+    - provider: "fallback-2"
+      backend: "google-native"
+  mid:
+    - provider: "mid-fb"
+      backend: "google-native"
+
+defaults:
+  llm_provider: "primary-provider"
+  llm_backend: "google-native"
+  max_iterations: 5
+  fallback_list: premium
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, investigating the issue."
+
+agent_chains:
+  split-lists:
+    alert_types: [test-split-lists]
+    executive_summary_provider: "primary-provider"
+    executive_summary_fallback_list: mid
+    scoring:
+      enabled: true
+      fallback_list: mid
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator

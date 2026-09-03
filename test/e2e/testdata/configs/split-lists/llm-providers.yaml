@@ -1,0 +1,13 @@
+llm_providers:
+  primary-provider:
+    type: google
+    model: test-primary
+  fallback-1:
+    type: google
+    model: test-fallback-1
+  fallback-2:
+    type: google
+    model: test-fallback-2
+  mid-fb:
+    type: google
+    model: test-mid-fb

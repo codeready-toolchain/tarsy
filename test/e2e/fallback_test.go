@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
 
@@ -584,6 +586,131 @@ func TestE2E_FallbackExecutiveSummary(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────
+// TestE2E_FallbackSplitLists — Same primary, two named lists in one session.
+// Investigation walks `premium` (fallback-1). Exec summary and scoring walk
+// `mid` (mid-fb), not the investigation premium tail.
+//
+// Verifies:
+//   - Named catalog + fallback_list survive production Initialize
+//   - Job knobs bind a different list than the investigation walk
+//   - Timeline hops and execution records identify which list was used
+// ────────────────────────────────────────────────────────────
+
+func TestE2E_FallbackSplitLists(t *testing.T) {
+	llm := NewScriptedLLMClient()
+
+	llm.AddRouted("Investigator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ErrorChunk{Message: "rate limit exceeded", Code: "max_retries", Retryable: true},
+		},
+	})
+	llm.AddRouted("Investigator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Investigation complete: API server is healthy."},
+			&agent.UsageChunk{InputTokens: 50, OutputTokens: 20, TotalTokens: 70},
+		},
+	})
+
+	llm.AddSequential(LLMScriptEntry{Error: fmt.Errorf("executive summary provider overloaded")})
+	llm.AddSequential(LLMScriptEntry{Text: "API server healthy. No action required."})
+
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ErrorChunk{Message: "quota exceeded", Code: "max_retries", Retryable: true},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "Correct conclusion with adequate evidence.\n\n75"},
+			&agent.UsageChunk{InputTokens: 100, OutputTokens: 30, TotalTokens: 130},
+		},
+	})
+	llm.AddSequential(LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.TextChunk{Content: "## Missing Tools\n\nNone."},
+			&agent.UsageChunk{InputTokens: 80, OutputTokens: 20, TotalTokens: 100},
+		},
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "split-lists")),
+		WithLLMClient(llm),
+		WithMCPServers(map[string]map[string]mcpsdk.ToolHandler{
+			"test-mcp": {
+				"check_status": StaticToolHandler(`{"status":"healthy"}`),
+			},
+		}),
+	)
+
+	_, sessionID := submitAndSubscribe(t, app, "test-split-lists", "API server alert triggered")
+	app.WaitForSessionStatus(t, sessionID, "completed")
+
+	require.Eventually(t, func() bool {
+		stgs, err := app.EntClient.Stage.Query().
+			Where(stage.SessionIDEQ(sessionID), stage.StageTypeEQ(stage.StageTypeScoring)).
+			All(context.Background())
+		return err == nil && len(stgs) == 1 && stgs[0].Status == stage.StatusCompleted
+	}, 30*time.Second, 200*time.Millisecond, "scoring stage did not complete")
+
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "completed", session["status"])
+	assert.NotEmpty(t, session["executive_summary"])
+
+	execs := app.QueryExecutions(t, sessionID)
+
+	investigator := findExecution(execs, "Investigator")
+	require.NotNil(t, investigator)
+	require.NotNil(t, investigator.OriginalLlmProvider)
+	assert.Equal(t, "primary-provider", *investigator.OriginalLlmProvider)
+	require.NotNil(t, investigator.LlmProvider)
+	assert.Equal(t, "fallback-1", *investigator.LlmProvider, "investigation must walk premium, not mid")
+	require.NotNil(t, investigator.ModelName)
+	assert.Equal(t, "test-fallback-1", *investigator.ModelName)
+
+	execSummary := findExecution(execs, config.AgentNameExecSummary)
+	require.NotNil(t, execSummary)
+	require.NotNil(t, execSummary.OriginalLlmProvider)
+	assert.Equal(t, "primary-provider", *execSummary.OriginalLlmProvider)
+	require.NotNil(t, execSummary.LlmProvider)
+	assert.Equal(t, "mid-fb", *execSummary.LlmProvider, "exec summary must walk mid, not premium")
+	require.NotNil(t, execSummary.ModelName)
+	assert.Equal(t, "test-mid-fb", *execSummary.ModelName)
+
+	scoring := findExecution(execs, config.AgentNameScoring)
+	require.NotNil(t, scoring)
+	require.NotNil(t, scoring.OriginalLlmProvider)
+	assert.Equal(t, "primary-provider", *scoring.OriginalLlmProvider)
+	require.NotNil(t, scoring.LlmProvider)
+	assert.Equal(t, "mid-fb", *scoring.LlmProvider, "scoring must walk mid, not premium")
+	require.NotNil(t, scoring.ModelName)
+	assert.Equal(t, "test-mid-fb", *scoring.ModelName)
+
+	timeline := app.QueryTimeline(t, sessionID)
+	fallbackEvents := filterTimelineByType(timeline, timelineevent.EventTypeProviderFallback)
+	require.Len(t, fallbackEvents, 3, "investigation + exec summary + scoring should each hop once")
+	assert.Equal(t, 1, countFallbackTransitions(fallbackEvents, "primary-provider", "fallback-1"),
+		"only investigation should hop to the premium tail")
+	assert.Equal(t, 2, countFallbackTransitions(fallbackEvents, "primary-provider", "mid-fb"),
+		"exec summary and scoring should hop to the mid tail")
+	assert.Nil(t, findFallbackTransition(fallbackEvents, "primary-provider", "fallback-2"),
+		"mid jobs must not continue down the premium list")
+
+	inputs := llm.CapturedInputs()
+	require.Len(t, inputs, 7)
+	assert.Equal(t, "test-primary", inputs[0].Config.Model)
+	assert.Equal(t, "test-fallback-1", inputs[1].Config.Model)
+	assert.True(t, inputs[1].ClearCache)
+	assert.Equal(t, "test-primary", inputs[2].Config.Model)
+	assert.Equal(t, "test-mid-fb", inputs[3].Config.Model)
+	assert.True(t, inputs[3].ClearCache)
+	assert.Equal(t, "test-primary", inputs[4].Config.Model)
+	assert.Equal(t, "test-mid-fb", inputs[5].Config.Model)
+	assert.True(t, inputs[5].ClearCache)
+	assert.Equal(t, "test-mid-fb", inputs[6].Config.Model)
+	assert.False(t, inputs[6].ClearCache)
+}
+
+// ────────────────────────────────────────────────────────────
 // TestE2E_NativeToolFallbackSkipsIncompatible — Agent that requires native
 // tools (google_search, url_context) hits a provider error. The first fallback
 // entry uses langchain backend (incompatible) and must be skipped. The second
@@ -821,4 +948,14 @@ func findFallbackTransition(events []*ent.TimelineEvent, fromProvider, toProvide
 		}
 	}
 	return nil
+}
+
+func countFallbackTransitions(events []*ent.TimelineEvent, fromProvider, toProvider string) int {
+	n := 0
+	for _, e := range events {
+		if e.Metadata["original_provider"] == fromProvider && e.Metadata["fallback_provider"] == toProvider {
+			n++
+		}
+	}
+	return n
 }

@@ -28,8 +28,20 @@ type ChainConfig struct {
 	// LLM provider for executive summary generation (overrides LLMProvider for this purpose)
 	ExecutiveSummaryProvider string `yaml:"executive_summary_provider,omitempty"`
 
+	// Sibling backend for executive_summary_provider. Omitted means langchain.
+	ExecutiveSummaryBackend LLMBackend `yaml:"executive_summary_backend,omitempty"`
+
+	// Named catalog list for executive summary. Unset inherits defaults → chain.
+	ExecutiveSummaryFallbackList string `yaml:"executive_summary_fallback_list,omitempty"`
+
 	// LLM provider for compose (amended-report) generation (overrides defaults.compose_provider)
 	ComposeProvider string `yaml:"compose_provider,omitempty"`
+
+	// Sibling backend for compose_provider. Omitted means langchain.
+	ComposeBackend LLMBackend `yaml:"compose_backend,omitempty"`
+
+	// Named catalog list for compose. Unset inherits defaults → chain.
+	ComposeFallbackList string `yaml:"compose_fallback_list,omitempty"`
 
 	// Chain-level LLM backend override
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`

@@ -1699,6 +1699,212 @@ func TestResolveFallbackList(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, premium, resolved.FallbackProviders)
 	})
+
+	t.Run("defaults.agents.WebResearcher fallback_list beats chain premium", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				"WebResearcher": {FallbackList: "mid"},
+			},
+		}
+		cfg.AgentRegistry = config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"WebResearcher": {LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
+			"TestAgent":     {},
+		})
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "premium"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "WebResearcher"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("ref-level fallback_list beats defaults.agents", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				"WebResearcher": {FallbackList: "mid"},
+			},
+		}
+		cfg.AgentRegistry = config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"WebResearcher": {LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
+		})
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "premium"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "WebResearcher", FallbackList: "empty"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, empty, resolved.FallbackProviders)
+	})
+
+	t.Run("empty stage does not inherit parent stage list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "premium"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent", FallbackList: "mid"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("parent stage list does not apply to empty-stage sub-agent", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders,
+			"sub-agent with empty stage inherits defaults/chain, not a parent stage-agent list")
+	})
+
+	t.Run("chain.chat.fallback_list beats defaults.agents.ChatAgent", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				config.AgentNameChat: {FallbackList: "premium"},
+			},
+		}
+		resolved, err := ResolveChatAgentConfig(&cfg, &config.ChainConfig{
+			FallbackList: "premium",
+			Chat:         &config.ChatConfig{FallbackList: "mid"},
+		}, &config.ChatConfig{FallbackList: "mid"})
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("custom chat agent uses defaults.agents of that name", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				"CustomChat": {FallbackList: "mid"},
+			},
+		}
+		cfg.AgentRegistry = config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"CustomChat":                {},
+			config.AgentNameChat:        {},
+			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
+			config.AgentNameCompose:     {Type: config.AgentTypeCompose},
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
+			"TestAgent":                 {},
+		})
+		chatCfg := &config.ChatConfig{Agent: "CustomChat"}
+		resolved, err := ResolveChatAgentConfig(&cfg, &config.ChainConfig{FallbackList: "premium"}, chatCfg)
+		require.NoError(t, err)
+		assert.Equal(t, "CustomChat", resolved.AgentName)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("defaults.scoring.fallback_list beats investigation premium", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Scoring:      &config.ScoringConfig{FallbackList: "mid"},
+		}
+		resolved, err := ResolveScoringConfig(&cfg, &config.ChainConfig{FallbackList: "premium"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("chat does not inherit stage list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveChatAgentConfig(&cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("compose_fallback_list beats chain premium", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:         "google-default",
+			FallbackList:        "premium",
+			ComposeFallbackList: "mid",
+		}
+		resolved, err := ResolveComposeConfig(&cfg, &config.ChainConfig{FallbackList: "premium"})
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("executive_summary_fallback_list beats chain premium", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:                  "google-default",
+			FallbackList:                 "premium",
+			ExecutiveSummaryFallbackList: "mid",
+		}
+		resolved, err := ResolveExecSummaryConfig(&cfg, &config.ChainConfig{FallbackList: "premium"})
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("scoring ignores defaults.agents.ScoringAgent", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				config.AgentNameScoring: {FallbackList: "mid"},
+			},
+		}
+		resolved, err := ResolveScoringConfig(&cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("compose ignores defaults.agents.ComposeAgent", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				config.AgentNameCompose: {FallbackList: "mid"},
+			},
+		}
+		resolved, err := ResolveComposeConfig(&cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("exec summary ignores defaults.agents.ExecSummaryAgent", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Agents: map[string]config.NamedAgentPairing{
+				config.AgentNameExecSummary: {FallbackList: "mid"},
+			},
+		}
+		resolved, err := ResolveExecSummaryConfig(&cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
 }
 
 func TestResolvedFallbackProviders(t *testing.T) {
@@ -2779,7 +2985,7 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 		},
 		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 			"PlainAgent":                {},
-			"WebResearcher":             {LLMBackend: config.LLMBackendNativeGemini},
+			"WebResearcher":             {LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
 			config.AgentNameChat:        {},
 			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
 			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
@@ -2935,6 +3141,129 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 		assert.Equal(t, "openai-default", resolved.LLMProviderName)
 		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 	})
+
+	t.Run("builtin WebResearcher pair beats defaults opus without chain provider", func(t *testing.T) {
+		opusCfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "openai-default",
+				LLMBackend:  config.LLMBackendLangChain,
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"WebResearcher": {LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		resolved, err := ResolveAgentConfig(opusCfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{Name: "WebResearcher"})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("chain llm_provider beats builtin WebResearcher pair", func(t *testing.T) {
+		opusCfg := &config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider: "google-default",
+				LLMBackend:  config.LLMBackendNativeGemini,
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"WebResearcher": {LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
+			}),
+			LLMProviderRegistry: cfg.LLMProviderRegistry,
+		}
+		resolved, err := ResolveAgentConfig(opusCfg, &config.ChainConfig{LLMProvider: "openai-default"},
+			config.StageConfig{}, config.StageAgentConfig{Name: "WebResearcher"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("defaults.agents pair beats chain llm_provider", func(t *testing.T) {
+		namedCfg := *cfg
+		namedCfg.Defaults = &config.Defaults{
+			LLMProvider: "openai-default",
+			LLMBackend:  config.LLMBackendLangChain,
+			Agents: map[string]config.NamedAgentPairing{
+				"MyCustomKubeAgent": {
+					LLMProvider: "google-default",
+					LLMBackend:  config.LLMBackendNativeGemini,
+				},
+			},
+		}
+		namedCfg.AgentRegistry = config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"MyCustomKubeAgent":         {},
+			"PlainAgent":                {},
+			"WebResearcher":             {LLMBackend: config.LLMBackendNativeGemini},
+			config.AgentNameChat:        {},
+			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
+			config.AgentNameCompose:     {Type: config.AgentTypeCompose},
+		})
+		resolved, err := ResolveAgentConfig(&namedCfg,
+			&config.ChainConfig{LLMProvider: "openai-default"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "MyCustomKubeAgent"})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("ref-level pair wins over defaults.agents", func(t *testing.T) {
+		namedCfg := *cfg
+		namedCfg.Defaults = &config.Defaults{
+			LLMProvider: "google-default",
+			Agents: map[string]config.NamedAgentPairing{
+				"MyCustomKubeAgent": {LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
+			},
+		}
+		namedCfg.AgentRegistry = config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"MyCustomKubeAgent": {},
+		})
+		resolved, err := ResolveAgentConfig(&namedCfg, &config.ChainConfig{}, config.StageConfig{},
+			config.StageAgentConfig{Name: "MyCustomKubeAgent", LLMProvider: "openai-default"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("compose omit-backend is langchain; explicit backend is kept", func(t *testing.T) {
+		cfgCompose := *cfg
+		cfgCompose.Defaults = &config.Defaults{
+			LLMProvider:     "openai-default",
+			ComposeProvider: "google-default",
+			ComposeBackend:  config.LLMBackendNativeGemini,
+		}
+		resolved, err := ResolveComposeConfig(&cfgCompose, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
+
+	t.Run("defaults.executive_summary_provider beats chain.llm_provider", func(t *testing.T) {
+		cfgExec := *cfg
+		cfgExec.Defaults = &config.Defaults{
+			LLMProvider:              "google-default",
+			LLMBackend:               config.LLMBackendNativeGemini,
+			ExecutiveSummaryProvider: "openai-default",
+		}
+		resolved, err := ResolveExecSummaryConfig(&cfgExec, &config.ChainConfig{LLMProvider: "google-default"})
+		require.NoError(t, err)
+		assert.Equal(t, "openai-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
+	})
+
+	t.Run("exec summary explicit backend is kept", func(t *testing.T) {
+		cfgExec := *cfg
+		cfgExec.Defaults = &config.Defaults{
+			LLMProvider:              "openai-default",
+			ExecutiveSummaryProvider: "google-default",
+			ExecutiveSummaryBackend:  config.LLMBackendNativeGemini,
+		}
+		resolved, err := ResolveExecSummaryConfig(&cfgExec, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, "google-default", resolved.LLMProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
+	})
 }
 
 func TestResolveLLMPair(t *testing.T) {
@@ -2967,5 +3296,78 @@ func TestResolveLLMPair(t *testing.T) {
 		assert.Equal(t, "missing-provider", name)
 		assert.Equal(t, config.LLMBackendLangChain, backend)
 		assert.Contains(t, err.Error(), `LLM provider "missing-provider" not found`)
+	})
+}
+
+func TestResolveChatProviderName(t *testing.T) {
+	t.Run("includes defaults.agents provider before chat config", func(t *testing.T) {
+		defaults := &config.Defaults{
+			LLMProvider: "openai-default",
+			Agents: map[string]config.NamedAgentPairing{
+				config.AgentNameChat: {LLMProvider: "google-default"},
+			},
+		}
+		assert.Equal(t, "google-default", ResolveChatProviderName(defaults, &config.ChainConfig{}, nil))
+	})
+
+	t.Run("chat config beats defaults.agents", func(t *testing.T) {
+		defaults := &config.Defaults{
+			LLMProvider: "openai-default",
+			Agents: map[string]config.NamedAgentPairing{
+				config.AgentNameChat: {LLMProvider: "google-default"},
+			},
+		}
+		got := ResolveChatProviderName(defaults, &config.ChainConfig{},
+			&config.ChatConfig{LLMProvider: "anthropic-default"})
+		assert.Equal(t, "anthropic-default", got)
+	})
+
+	t.Run("custom chat agent uses defaults.agents of that name", func(t *testing.T) {
+		defaults := &config.Defaults{
+			LLMProvider: "openai-default",
+			Agents: map[string]config.NamedAgentPairing{
+				"CustomChat": {LLMProvider: "google-default"},
+			},
+		}
+		got := ResolveChatProviderName(defaults, &config.ChainConfig{},
+			&config.ChatConfig{Agent: "CustomChat"})
+		assert.Equal(t, "google-default", got)
+	})
+}
+
+func TestResolveSummarizationFallback(t *testing.T) {
+	google := &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "gemini"}
+	cfg := &config.Config{
+		Defaults: &config.Defaults{
+			Summarization: &config.SummarizationConfig{FallbackList: "mid"},
+		},
+		FallbackLists: map[string][]config.FallbackProviderEntry{
+			"mid":   {{Provider: "google-default", Backend: config.LLMBackendLangChain}},
+			"empty": {},
+		},
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": google,
+		}),
+	}
+
+	t.Run("unset selector returns nil", func(t *testing.T) {
+		unset := *cfg
+		unset.Defaults = &config.Defaults{}
+		assert.Nil(t, ResolveSummarizationFallback(&unset))
+	})
+
+	t.Run("named list is expanded", func(t *testing.T) {
+		got := ResolveSummarizationFallback(cfg)
+		require.Len(t, got, 1)
+		assert.Equal(t, "google-default", got[0].ProviderName)
+		assert.Equal(t, config.LLMBackendLangChain, got[0].Backend)
+	})
+
+	t.Run("empty catalog list is no fallback", func(t *testing.T) {
+		empty := *cfg
+		empty.Defaults = &config.Defaults{
+			Summarization: &config.SummarizationConfig{FallbackList: "empty"},
+		}
+		assert.Nil(t, ResolveSummarizationFallback(&empty))
 	})
 }

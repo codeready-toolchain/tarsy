@@ -1477,6 +1477,32 @@ agent_chains: {}
 		require.NoError(t, err)
 		assert.Empty(t, cfg.FallbackLists)
 	})
+
+	t.Run("agents YAML llm_provider is ignored", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  llm_provider: "test-provider"
+agents:
+  WebResearcher:
+    description: "replaced"
+    llm_provider: openai-default
+    llm_backend: langchain
+    mcp_servers: []
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		agent, err := cfg.GetAgent("WebResearcher")
+		require.NoError(t, err)
+		assert.Equal(t, "replaced", agent.Description)
+		assert.Equal(t, LLMBackendLangChain, agent.LLMBackend)
+		assert.Empty(t, agent.LLMProvider,
+			"agents: yaml llm_provider must not bind; pairing belongs in defaults.agents")
+	})
 }
 
 func TestLoadAppliesScoringEnabledDefault(t *testing.T) {
@@ -1632,6 +1658,95 @@ agent_chains:
 		assert.True(t, cfg.Defaults.Scoring.Enabled)
 		assert.Equal(t, "gemini-3-flash", cfg.Defaults.Scoring.LLMProvider)
 		assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.Scoring.LLMBackend)
+	})
+
+	t.Run("defaults.agents and job knobs are parsed", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+fallback_lists:
+  mid:
+    - provider: gemini-3-flash
+  google-native:
+    - provider: google-default
+      backend: google-native
+
+defaults:
+  llm_provider: "vertexai-claude-opus"
+  fallback_list: mid
+  compose_provider: vertexai-claude-sonnet
+  compose_backend: langchain
+  compose_fallback_list: mid
+  executive_summary_provider: vertexai-claude-sonnet
+  executive_summary_backend: langchain
+  executive_summary_fallback_list: mid
+  summarization:
+    llm_provider: google-default
+    llm_backend: google-native
+    fallback_list: google-native
+  agents:
+    WebResearcher:
+      llm_provider: google-default
+      llm_backend: google-native
+      fallback_list: google-native
+    ChatAgent:
+      fallback_list: mid
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    compose_fallback_list: mid
+    executive_summary_fallback_list: mid
+    chat:
+      enabled: true
+      agent: ChatAgent
+      fallback_list: mid
+    scoring:
+      enabled: true
+      fallback_list: mid
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+            sub_agents:
+              - name: WebResearcher
+                fallback_list: google-native
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Defaults.Agents)
+		wr := cfg.Defaults.Agents["WebResearcher"]
+		assert.Equal(t, "google-default", wr.LLMProvider)
+		assert.Equal(t, LLMBackendNativeGemini, wr.LLMBackend)
+		assert.Equal(t, "google-native", wr.FallbackList)
+		assert.Equal(t, "mid", cfg.Defaults.Agents["ChatAgent"].FallbackList)
+
+		assert.Equal(t, "vertexai-claude-sonnet", cfg.Defaults.ComposeProvider)
+		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.ComposeBackend)
+		assert.Equal(t, "mid", cfg.Defaults.ComposeFallbackList)
+		assert.Equal(t, "vertexai-claude-sonnet", cfg.Defaults.ExecutiveSummaryProvider)
+		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.ExecutiveSummaryBackend)
+		assert.Equal(t, "mid", cfg.Defaults.ExecutiveSummaryFallbackList)
+		require.NotNil(t, cfg.Defaults.Summarization)
+		assert.Equal(t, "google-native", cfg.Defaults.Summarization.FallbackList)
+
+		chain, err := cfg.GetChain("test-chain")
+		require.NoError(t, err)
+		assert.Equal(t, "mid", chain.ComposeFallbackList)
+		assert.Equal(t, "mid", chain.ExecutiveSummaryFallbackList)
+		require.NotNil(t, chain.Chat)
+		assert.Equal(t, "mid", chain.Chat.FallbackList)
+		require.NotNil(t, chain.Scoring)
+		assert.Equal(t, "mid", chain.Scoring.FallbackList)
+		require.Len(t, chain.Stages[0].Agents[0].SubAgents, 1)
+		assert.Equal(t, "google-native", chain.Stages[0].Agents[0].SubAgents[0].FallbackList)
 	})
 }
 

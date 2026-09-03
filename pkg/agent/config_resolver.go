@@ -38,7 +38,8 @@ const DefaultInitialResponseTimeout = 120 * time.Second
 const DefaultStallTimeout = 60 * time.Second
 
 // ResolveAgentConfig builds the final agent configuration by applying
-// the hierarchy: defaults → agent definition → chain → stage → stage-agent.
+// the hierarchy: defaults → agent definition → chain → defaults.agents.<name>
+// → stage → stage-agent.
 func ResolveAgentConfig(
 	cfg *config.Config,
 	chain *config.ChainConfig,
@@ -62,8 +63,9 @@ func ResolveAgentConfig(
 
 	provider, providerName, backend, err := ResolveLLMPair(cfg,
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
-		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		namedAgentLLMLayer(&defaults, agentConfig.Name),
 		LLMLayer{Provider: agentConfig.LLMProvider, Backend: agentConfig.LLMBackend},
 	)
 	if err != nil {
@@ -97,10 +99,11 @@ func ResolveAgentConfig(
 		agentType = agentConfig.Type
 	}
 
-	// Resolve fallback providers (defaults → chain → stage → agentConfig)
+	// Resolve fallback providers (defaults → chain → defaults.agents.<name> → stage → agentConfig)
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
-		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
-		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
+		defaultsFallbackLayer(&defaults),
+		chainFallbackLayer(chain),
+		namedAgentFallbackLayer(&defaults, agentConfig.Name),
 		config.FallbackLayer{ListName: stageConfig.FallbackList, Inline: stageConfig.FallbackProviders},
 		config.FallbackLayer{ListName: agentConfig.FallbackList, Inline: agentConfig.FallbackProviders},
 	)
@@ -139,25 +142,49 @@ func ResolveAgentConfig(
 }
 
 // ResolveChatProviderName resolves the LLM provider name for a chat execution
-// using the hierarchy: defaults → chain → chatCfg.
+// using the hierarchy: defaults → chain → defaults.agents.<chat agent> → chatCfg.
 // This is extracted so the same logic can be used in error paths before full
 // config resolution (e.g., for audit-trail records when ResolveChatAgentConfig fails).
 func ResolveChatProviderName(defaults *config.Defaults, chain *config.ChainConfig, chatCfg *config.ChatConfig) string {
-	var providerName string
-	if defaults != nil {
-		providerName = defaults.LLMProvider
+	name, _ := applyLLMLayers(
+		LLMLayer{Provider: defaultsLLMProvider(defaults)},
+		LLMLayer{Provider: chainLLMProvider(chain)},
+		namedAgentLLMLayer(defaults, chatAgentName(chatCfg)),
+		chatLLMLayer(chatCfg),
+	)
+	return name
+}
+
+func defaultsLLMProvider(defaults *config.Defaults) string {
+	if defaults == nil {
+		return ""
 	}
-	if chain != nil && chain.LLMProvider != "" {
-		providerName = chain.LLMProvider
+	return defaults.LLMProvider
+}
+
+func chainLLMProvider(chain *config.ChainConfig) string {
+	if chain == nil {
+		return ""
 	}
-	if chatCfg != nil && chatCfg.LLMProvider != "" {
-		providerName = chatCfg.LLMProvider
+	return chain.LLMProvider
+}
+
+func chatLLMLayer(chatCfg *config.ChatConfig) LLMLayer {
+	if chatCfg == nil {
+		return LLMLayer{}
 	}
-	return providerName
+	return LLMLayer{Provider: chatCfg.LLMProvider, Backend: chatCfg.LLMBackend}
+}
+
+func chatAgentName(chatCfg *config.ChatConfig) string {
+	if chatCfg != nil && chatCfg.Agent != "" {
+		return chatCfg.Agent
+	}
+	return config.AgentNameChat
 }
 
 // ResolveChatAgentConfig builds the agent configuration for a chat execution.
-// Hierarchy: defaults → agent definition → chain → chat config.
+// Hierarchy: defaults → agent definition → chain → defaults.agents.<name> → chat config.
 // Similar to ResolveAgentConfig but without stage-level overrides.
 func ResolveChatAgentConfig(
 	cfg *config.Config,
@@ -173,11 +200,7 @@ func ResolveChatAgentConfig(
 		defaults = *cfg.Defaults
 	}
 
-	// Agent name: chatCfg.Agent → AgentNameChat
-	agentName := config.AgentNameChat
-	if chatCfg != nil && chatCfg.Agent != "" {
-		agentName = chatCfg.Agent
-	}
+	agentName := chatAgentName(chatCfg)
 
 	// Get agent definition (built-in or user-defined)
 	agentDef, err := cfg.GetAgent(agentName)
@@ -197,8 +220,9 @@ func ResolveChatAgentConfig(
 
 	provider, providerName, backend, err := ResolveLLMPair(cfg,
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
-		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		namedAgentLLMLayer(&defaults, agentName),
 		LLMLayer{Provider: chatProvider, Backend: chatBackend},
 	)
 	if err != nil {
@@ -230,10 +254,17 @@ func ResolveChatAgentConfig(
 		mcpServers = chatCfg.MCPServers
 	}
 
-	// Resolve fallback providers (defaults → chain; chatCfg has no fallback field)
+	var chatFallbackList string
+	if chatCfg != nil {
+		chatFallbackList = chatCfg.FallbackList
+	}
+
+	// Resolve fallback providers (defaults → chain → defaults.agents.<name> → chain.chat)
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
-		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
-		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
+		defaultsFallbackLayer(&defaults),
+		chainFallbackLayer(chain),
+		namedAgentFallbackLayer(&defaults, agentName),
+		config.FallbackLayer{ListName: chatFallbackList},
 	)
 	if err != nil {
 		return nil, err
@@ -325,7 +356,7 @@ func ResolveScoringConfig(
 	// pairs with langchain.
 	provider, providerName, backend, err := ResolveLLMPair(cfg,
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
-		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: defaultsScoringProvider, Backend: defaultsScoringBackend},
 		LLMLayer{Provider: chain.LLMProvider},
 		LLMLayer{Provider: scoringProvider, Backend: scoringBackend},
@@ -353,10 +384,21 @@ func ResolveScoringConfig(
 		mcpServers = scoringCfg.MCPServers
 	}
 
-	// Resolve fallback providers (defaults → chain; scoringCfg has no fallback field)
+	var defaultsScoringFallback string
+	if defaults.Scoring != nil {
+		defaultsScoringFallback = defaults.Scoring.FallbackList
+	}
+	var scoringFallback string
+	if scoringCfg != nil {
+		scoringFallback = scoringCfg.FallbackList
+	}
+
+	// Resolve fallback providers (defaults → chain → defaults.scoring → chain.scoring)
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
-		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
-		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
+		defaultsFallbackLayer(&defaults),
+		chainFallbackLayer(chain),
+		config.FallbackLayer{ListName: defaultsScoringFallback},
+		config.FallbackLayer{ListName: scoringFallback},
 	)
 	if err != nil {
 		return nil, err
@@ -388,9 +430,8 @@ func ResolveScoringConfig(
 }
 
 // ResolveExecSummaryConfig builds the agent configuration for an executive summary execution.
-// Hierarchy: defaults → agent definition → chain (including executive_summary_provider).
-// The executive_summary_provider chain field is the highest-priority provider override,
-// allowing a different model for summaries than for investigation agents.
+// Hierarchy: defaults → agent definition → chain → defaults.executive_summary_*
+// → chain.executive_summary_*.
 func ResolveExecSummaryConfig(
 	cfg *config.Config,
 	chain *config.ChainConfig,
@@ -410,12 +451,12 @@ func ResolveExecSummaryConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", config.AgentNameExecSummary, err)
 	}
 
-	// executive_summary_provider has no sibling backend field; omit → langchain.
 	provider, providerName, backend, err := ResolveLLMPair(cfg,
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
-		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
-		LLMLayer{Provider: chain.ExecutiveSummaryProvider},
+		LLMLayer{Provider: defaults.ExecutiveSummaryProvider, Backend: defaults.ExecutiveSummaryBackend},
+		LLMLayer{Provider: chain.ExecutiveSummaryProvider, Backend: chain.ExecutiveSummaryBackend},
 	)
 	if err != nil {
 		return nil, err
@@ -427,10 +468,11 @@ func ResolveExecSummaryConfig(
 		defaults.MaxIterations, agentDef.MaxIterations, chain.MaxIterations, nil,
 	)
 
-	// Resolve fallback providers (defaults → chain).
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
-		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
-		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
+		defaultsFallbackLayer(&defaults),
+		chainFallbackLayer(chain),
+		config.FallbackLayer{ListName: defaults.ExecutiveSummaryFallbackList},
+		config.FallbackLayer{ListName: chain.ExecutiveSummaryFallbackList},
 	)
 	if err != nil {
 		return nil, err
@@ -462,7 +504,7 @@ func ResolveExecSummaryConfig(
 
 // ResolveComposeConfig builds the agent configuration for a compose execution.
 // Provider order (last non-empty wins): defaults.llm_provider → chain.llm_provider
-// → defaults.compose_provider → chain.compose_provider.
+// → defaults.compose_provider/backend → chain.compose_provider/backend.
 // defaults.compose_provider beats chain.llm_provider so a mid-tier compose default
 // is not overridden by a chain's investigation model.
 func ResolveComposeConfig(
@@ -483,13 +525,12 @@ func ResolveComposeConfig(
 		return nil, fmt.Errorf("agent %q not found: %w", config.AgentNameCompose, err)
 	}
 
-	// compose_provider has no sibling backend field; omit → langchain.
 	provider, providerName, backend, err := ResolveLLMPair(cfg,
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
-		LLMLayer{Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
-		LLMLayer{Provider: defaults.ComposeProvider},
-		LLMLayer{Provider: chain.ComposeProvider},
+		LLMLayer{Provider: defaults.ComposeProvider, Backend: defaults.ComposeBackend},
+		LLMLayer{Provider: chain.ComposeProvider, Backend: chain.ComposeBackend},
 	)
 	if err != nil {
 		return nil, err
@@ -500,8 +541,10 @@ func ResolveComposeConfig(
 	)
 
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
-		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
-		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
+		defaultsFallbackLayer(&defaults),
+		chainFallbackLayer(chain),
+		config.FallbackLayer{ListName: defaults.ComposeFallbackList},
+		config.FallbackLayer{ListName: chain.ComposeFallbackList},
 	)
 	if err != nil {
 		return nil, err
@@ -578,6 +621,47 @@ func applyAgentNativeTools(provider *config.LLMProviderConfig, agentTools map[co
 type LLMLayer struct {
 	Provider string
 	Backend  config.LLMBackend
+}
+
+func namedAgentLLMLayer(defaults *config.Defaults, name string) LLMLayer {
+	pairing := defaults.AgentPairing(name)
+	return LLMLayer{Provider: pairing.LLMProvider, Backend: pairing.LLMBackend}
+}
+
+func namedAgentFallbackLayer(defaults *config.Defaults, name string) config.FallbackLayer {
+	return config.FallbackLayer{ListName: defaults.AgentPairing(name).FallbackList}
+}
+
+func defaultsFallbackLayer(defaults *config.Defaults) config.FallbackLayer {
+	if defaults == nil {
+		return config.FallbackLayer{}
+	}
+	return config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders}
+}
+
+func chainFallbackLayer(chain *config.ChainConfig) config.FallbackLayer {
+	if chain == nil {
+		return config.FallbackLayer{}
+	}
+	return config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders}
+}
+
+// ResolveSummarizationFallback expands defaults.summarization.fallback_list.
+// Returns nil when the selector is unset (caller should use the agent's list).
+func ResolveSummarizationFallback(cfg *config.Config) []ResolvedFallbackEntry {
+	if cfg == nil || cfg.Defaults == nil || cfg.Defaults.Summarization == nil ||
+		cfg.Defaults.Summarization.FallbackList == "" {
+		return nil
+	}
+	entries, err := config.ExpandFallbackLayer(cfg.FallbackLists, config.FallbackLayer{
+		ListName: cfg.Defaults.Summarization.FallbackList,
+	})
+	if err != nil {
+		slog.Warn("Summarization fallback list could not be expanded",
+			"list", cfg.Defaults.Summarization.FallbackList, "error", err)
+		return []ResolvedFallbackEntry{}
+	}
+	return resolveFullFallbackEntries(cfg, entries, nil)
 }
 
 // applyLLMLayers walks layers lowest-to-highest and returns the resolved pair.

@@ -53,6 +53,15 @@ func TestSubAgentRefs_UnmarshalYAML(t *testing.T) {
 			want: SubAgentRefs{},
 		},
 		{
+			name: "object with fallback_list",
+			yaml: `sub_agents:
+  - name: WebResearcher
+    fallback_list: google-native`,
+			want: SubAgentRefs{
+				{Name: "WebResearcher", FallbackList: "google-native"},
+			},
+		},
+		{
 			name: "object with mcp_servers",
 			yaml: `sub_agents:
   - name: LogAnalyzer
