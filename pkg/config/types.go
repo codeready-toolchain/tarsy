@@ -71,13 +71,18 @@ func BoolPtr(b bool) *bool { return &b }
 // Used in stage.agents[] array (even for single-agent stages)
 // Parallel execution occurs when: len(agents) > 1 OR replicas > 1
 type StageAgentConfig struct {
-	Name              string                  `yaml:"name" validate:"required"`
-	Type              AgentType               `yaml:"type,omitempty"`
-	LLMProvider       string                  `yaml:"llm_provider,omitempty"`
-	LLMBackend        LLMBackend              `yaml:"llm_backend,omitempty"`
-	MaxIterations     *int                    `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
-	MCPServers        []string                `yaml:"mcp_servers,omitempty"`
-	SubAgents         SubAgentRefs            `yaml:"sub_agents,omitempty"`
+	Name          string       `yaml:"name" validate:"required"`
+	Type          AgentType    `yaml:"type,omitempty"`
+	LLMProvider   string       `yaml:"llm_provider,omitempty"`
+	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
+	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
+	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
+	// Named catalog list for this stage-agent. Expanded at resolve time.
+	// Empty / omitted inherits the next less-specific layer.
+	FallbackList string `yaml:"fallback_list,omitempty"`
+	// Deprecated: use fallback_lists + fallback_list. Still honored when
+	// fallback_list is unset. Mixing both on this node is a load-time error.
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 	// RequiredSkills and Skills are additive with the agent definition (merged at resolve time, deduplicated).
 	RequiredSkills []string `yaml:"required_skills,omitempty"`

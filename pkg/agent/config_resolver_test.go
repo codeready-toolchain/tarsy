@@ -1485,6 +1485,222 @@ func TestResolveFallbackProviders(t *testing.T) {
 	})
 }
 
+func TestResolveFallbackList(t *testing.T) {
+	googleProvider := &config.LLMProviderConfig{
+		Type:      config.LLMProviderTypeGoogle,
+		Model:     "gemini-2.5-pro",
+		APIKeyEnv: "GOOGLE_API_KEY",
+	}
+	premium := []config.FallbackProviderEntry{
+		{Provider: "opus-fb", Backend: config.LLMBackendLangChain},
+	}
+	mid := []config.FallbackProviderEntry{
+		{Provider: "sonnet-fb", Backend: config.LLMBackendLangChain},
+	}
+	empty := []config.FallbackProviderEntry{}
+
+	baseCfg := &config.Config{
+		Defaults: &config.Defaults{
+			LLMProvider: "google-default",
+		},
+		FallbackLists: map[string][]config.FallbackProviderEntry{
+			"premium": premium,
+			"mid":     mid,
+			"empty":   empty,
+		},
+		AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+			"TestAgent":                 {},
+			config.AgentNameScoring:     {Type: config.AgentTypeScoring},
+			config.AgentNameChat:        {},
+			config.AgentNameCompose:     {Type: config.AgentTypeCompose},
+			config.AgentNameExecSummary: {Type: config.AgentTypeExecSummary},
+		}),
+		LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+			"google-default": googleProvider,
+		}),
+	}
+
+	t.Run("defaults fallback_list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("chain fallback_list overrides defaults", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "mid"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("stage fallback_list overrides chain", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "mid"},
+			config.StageConfig{FallbackList: "premium"},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("stage-agent fallback_list overrides stage", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "premium"},
+			config.StageConfig{FallbackList: "premium"},
+			config.StageAgentConfig{Name: "TestAgent", FallbackList: "mid"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("deprecated inline still works when fallback_list is unset", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:       "google-default",
+			FallbackProviders: premium,
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackProviders: mid},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("named empty list clears inherited", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "empty"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.NotNil(t, resolved.FallbackProviders)
+		assert.Empty(t, resolved.FallbackProviders)
+	})
+
+	t.Run("chat inherits defaults.fallback_list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveChatAgentConfig(&cfg, &config.ChainConfig{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("scoring inherits chain.fallback_list over defaults", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveScoringConfig(&cfg, &config.ChainConfig{FallbackList: "mid"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("unknown list name errors", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "ghost",
+		}
+		_, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.Error(t, err)
+		assert.Equal(t, `unknown fallback list "ghost"`, err.Error())
+	})
+
+	t.Run("chain inline beats defaults named list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackProviders: mid},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("chain named list beats defaults inline", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:       "google-default",
+			FallbackProviders: premium,
+		}
+		resolved, err := ResolveAgentConfig(&cfg,
+			&config.ChainConfig{FallbackList: "mid"},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mid, resolved.FallbackProviders)
+	})
+
+	t.Run("compose inherits defaults.fallback_list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveComposeConfig(&cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+
+	t.Run("exec summary inherits defaults.fallback_list", func(t *testing.T) {
+		cfg := *baseCfg
+		cfg.Defaults = &config.Defaults{
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+		}
+		resolved, err := ResolveExecSummaryConfig(&cfg, &config.ChainConfig{})
+		require.NoError(t, err)
+		assert.Equal(t, premium, resolved.FallbackProviders)
+	})
+}
+
 func TestResolvedFallbackProviders(t *testing.T) {
 	primaryProvider := &config.LLMProviderConfig{
 		Type:      config.LLMProviderTypeGoogle,
@@ -1537,6 +1753,32 @@ func TestResolvedFallbackProviders(t *testing.T) {
 
 		assert.Equal(t, "fb-2", resolved.ResolvedFallbackProviders[1].ProviderName)
 		assert.Equal(t, config.LLMBackendLangChain, resolved.ResolvedFallbackProviders[1].Backend)
+		assert.Equal(t, "gpt-fallback-2", resolved.ResolvedFallbackProviders[1].Config.Model)
+	})
+
+	t.Run("named fallback_list populates ResolvedFallbackProviders", func(t *testing.T) {
+		cfgNamed := *cfg
+		cfgNamed.Defaults = &config.Defaults{
+			LLMProvider:  "primary",
+			FallbackList: "premium",
+		}
+		cfgNamed.FallbackLists = map[string][]config.FallbackProviderEntry{
+			"premium": {
+				{Provider: "fb-1", Backend: config.LLMBackendNativeGemini},
+				{Provider: "fb-2", Backend: config.LLMBackendLangChain},
+			},
+		}
+		resolved, err := ResolveAgentConfig(&cfgNamed,
+			&config.ChainConfig{},
+			config.StageConfig{},
+			config.StageAgentConfig{Name: "TestAgent"},
+		)
+		require.NoError(t, err)
+		require.Len(t, resolved.ResolvedFallbackProviders, 2)
+		assert.Equal(t, "fb-1", resolved.ResolvedFallbackProviders[0].ProviderName)
+		assert.Equal(t, config.LLMBackendNativeGemini, resolved.ResolvedFallbackProviders[0].Backend)
+		assert.Equal(t, "gemini-fallback-1", resolved.ResolvedFallbackProviders[0].Config.Model)
+		assert.Equal(t, "fb-2", resolved.ResolvedFallbackProviders[1].ProviderName)
 		assert.Equal(t, "gpt-fallback-2", resolved.ResolvedFallbackProviders[1].Config.Model)
 	})
 

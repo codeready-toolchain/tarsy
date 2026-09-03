@@ -98,10 +98,15 @@ func ResolveAgentConfig(
 	}
 
 	// Resolve fallback providers (defaults → chain → stage → agentConfig)
-	fallbackProviders := resolveFallbackProviders(
-		defaults.FallbackProviders, chain.FallbackProviders,
-		stageConfig.FallbackProviders, agentConfig.FallbackProviders,
+	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
+		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
+		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
+		config.FallbackLayer{ListName: stageConfig.FallbackList, Inline: stageConfig.FallbackProviders},
+		config.FallbackLayer{ListName: agentConfig.FallbackList, Inline: agentConfig.FallbackProviders},
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
@@ -226,9 +231,13 @@ func ResolveChatAgentConfig(
 	}
 
 	// Resolve fallback providers (defaults → chain; chatCfg has no fallback field)
-	fallbackProviders := resolveFallbackProviders(
-		defaults.FallbackProviders, chain.FallbackProviders,
+	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
+		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
+		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
@@ -345,9 +354,13 @@ func ResolveScoringConfig(
 	}
 
 	// Resolve fallback providers (defaults → chain; scoringCfg has no fallback field)
-	fallbackProviders := resolveFallbackProviders(
-		defaults.FallbackProviders, chain.FallbackProviders,
+	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
+		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
+		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
@@ -415,9 +428,13 @@ func ResolveExecSummaryConfig(
 	)
 
 	// Resolve fallback providers (defaults → chain).
-	fallbackProviders := resolveFallbackProviders(
-		defaults.FallbackProviders, chain.FallbackProviders,
+	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
+		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
+		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply agent-level native tools override (provider → agent merge)
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
@@ -482,9 +499,13 @@ func ResolveComposeConfig(
 		defaults.MaxIterations, agentDef.MaxIterations, chain.MaxIterations, nil,
 	)
 
-	fallbackProviders := resolveFallbackProviders(
-		defaults.FallbackProviders, chain.FallbackProviders,
+	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
+		config.FallbackLayer{ListName: defaults.FallbackList, Inline: defaults.FallbackProviders},
+		config.FallbackLayer{ListName: chain.FallbackList, Inline: chain.FallbackProviders},
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
 	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
@@ -585,28 +606,6 @@ func ResolveLLMPair(cfg *config.Config, layers ...LLMLayer) (*config.LLMProvider
 		return nil, name, backend, fmt.Errorf("LLM provider %q not found: %w", name, err)
 	}
 	return provider, name, backend, nil
-}
-
-// resolveFallbackProviders returns the last non-nil fallback list from the
-// given overrides, listed in lowest-to-highest precedence order.
-// A non-nil empty slice is an explicit override that clears inherited values.
-// Returns nil when no override provides a value.
-func resolveFallbackProviders(overrides ...[]config.FallbackProviderEntry) []config.FallbackProviderEntry {
-	var result []config.FallbackProviderEntry
-	found := false
-	for _, o := range overrides {
-		if o != nil {
-			result = o
-			found = true
-		}
-	}
-	if !found {
-		return nil
-	}
-	if len(result) == 0 {
-		return make([]config.FallbackProviderEntry, 0)
-	}
-	return append([]config.FallbackProviderEntry(nil), result...)
 }
 
 // resolveFullFallbackEntries looks up the full LLMProviderConfig for each

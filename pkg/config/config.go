@@ -6,6 +6,10 @@ package config
 type Config struct {
 	configDir string // Configuration directory path (for reference)
 
+	// Named fallback lists (catalog). Resolver / validator / viewer read this,
+	// not the YAML struct. Omitted catalog is nil.
+	FallbackLists map[string][]FallbackProviderEntry
+
 	// System-wide defaults
 	Defaults *Defaults
 

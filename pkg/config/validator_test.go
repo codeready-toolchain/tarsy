@@ -4266,6 +4266,46 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 	assert.True(t, referenced["agent-subagent"], "agent sub-agent provider should be referenced")
 }
 
+func TestCollectReferencedLLMProviders_NamedFallbackLists(t *testing.T) {
+	cfg := &Config{
+		Defaults: &Defaults{
+			FallbackList: "premium",
+		},
+		FallbackLists: map[string][]FallbackProviderEntry{
+			"premium": {{Provider: "catalog-referenced"}},
+			"spare":   {{Provider: "catalog-unused"}},
+		},
+		AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}}),
+		LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+		MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+			"chain1": {
+				AlertTypes:   []string{"test"},
+				FallbackList: "mid",
+				Stages: []StageConfig{{
+					Name:         "s1",
+					FallbackList: "stage-list",
+					Agents: []StageAgentConfig{{
+						Name:         "TestAgent",
+						FallbackList: "agent-list",
+					}},
+				}},
+			},
+		}),
+	}
+	cfg.FallbackLists["mid"] = []FallbackProviderEntry{{Provider: "chain-catalog"}}
+	cfg.FallbackLists["stage-list"] = []FallbackProviderEntry{{Provider: "stage-catalog"}}
+	cfg.FallbackLists["agent-list"] = []FallbackProviderEntry{{Provider: "agent-catalog"}}
+
+	referenced := NewValidator(cfg).collectReferencedLLMProviders()
+
+	assert.True(t, referenced["catalog-referenced"])
+	assert.True(t, referenced["chain-catalog"])
+	assert.True(t, referenced["stage-catalog"])
+	assert.True(t, referenced["agent-catalog"])
+	assert.False(t, referenced["catalog-unused"])
+}
+
 func TestValidateLLMProviders_SummarizationOverlayMissingAPIKey(t *testing.T) {
 	cfg := &Config{
 		Queue:    DefaultQueueConfig(),
@@ -4901,5 +4941,413 @@ func TestWarnNativeToolAgentsWithoutCompatibleFallback(t *testing.T) {
 
 		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
 		assert.Contains(t, buf.String(), "CodeExecutor")
+	})
+
+	t.Run("warns when named list has only langchain entries", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{FallbackList: "langchain-only"},
+			FallbackLists: map[string][]FallbackProviderEntry{
+				"langchain-only": {{Provider: "openai-fb", Backend: LLMBackendLangChain}},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.Contains(t, buf.String(), "native-tool agent with no compatible fallback")
+		assert.Contains(t, buf.String(), "WebResearcher")
+	})
+
+	t.Run("no warning when named list includes google-native entry", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{FallbackList: "google-native"},
+			FallbackLists: map[string][]FallbackProviderEntry{
+				"google-native": {{Provider: "google-fb", Backend: LLMBackendNativeGemini}},
+			},
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"WebResearcher": {
+					NativeTools: map[GoogleNativeTool]bool{
+						GoogleNativeToolGoogleSearch: true,
+					},
+				},
+			}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"test-chain": {
+					Stages: []StageConfig{
+						{Name: "s1", Agents: []StageAgentConfig{{Name: "WebResearcher"}}},
+					},
+				},
+			}),
+		}
+		v := NewValidator(cfg)
+		v.warnNativeToolAgentsWithoutCompatibleFallback()
+
+		assert.NotContains(t, buf.String(), "native-tool agent with no compatible fallback")
+	})
+}
+
+func TestValidateNamedFallbackLists(t *testing.T) {
+	baseAgents := map[string]*AgentConfig{"TestAgent": {}}
+	baseChains := map[string]*ChainConfig{
+		"chain1": {
+			AlertTypes: []string{"test"},
+			Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+		},
+	}
+	providers := map[string]*LLMProviderConfig{
+		"fb-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY"},
+		"fb-2": {Type: LLMProviderTypeOpenAI, Model: "gpt-5", APIKeyEnv: "UNUSED_KEY"},
+	}
+
+	tests := []struct {
+		name    string
+		cfg     func() *Config
+		env     map[string]string
+		wantErr string
+		alsoLLM bool
+	}{
+		{
+			name: "unknown list name",
+			cfg: func() *Config {
+				return &Config{
+					Defaults:            &Defaults{FallbackList: "ghost"},
+					FallbackLists:       map[string][]FallbackProviderEntry{},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `defaults '': field 'fallback_list': unknown fallback list "ghost"`,
+		},
+		{
+			name: "typo provider in unused list still fails",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"spare": {{Provider: "ghost"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: "fallback_lists 'spare': field '[0]': LLM provider 'ghost' not found",
+		},
+		{
+			name: "missing creds fail on referenced list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{FallbackList: "premium"},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"premium": {{Provider: "fb-1"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: "fallback_lists 'premium': field '[0]': environment variable FB_KEY is not set (required by fallback provider 'fb-1')",
+		},
+		{
+			name: "missing creds on unused list pass",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"spare": {{Provider: "fb-2"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			alsoLLM: true,
+		},
+		{
+			name: "both fields on defaults including empty inline",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{
+						FallbackList:      "premium",
+						FallbackProviders: []FallbackProviderEntry{},
+					},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"premium": {{Provider: "fb-1"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: "defaults '': field 'fallback_list': cannot set both fallback_list and fallback_providers",
+		},
+		{
+			name: "both fields on chain",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"premium": {{Provider: "fb-1"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+						"chain1": {
+							AlertTypes:        []string{"test"},
+							FallbackList:      "premium",
+							FallbackProviders: []FallbackProviderEntry{{Provider: "fb-1"}},
+							Stages:            []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+						},
+					}),
+				}
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: "chain 'chain1': field 'fallback_list': cannot set both fallback_list and fallback_providers",
+		},
+		{
+			name: "empty named list is valid",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{FallbackList: "empty"},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"empty": {},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+		},
+		{
+			name: "empty catalog key is rejected",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"": {{Provider: "fb-1"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			wantErr: "fallback_lists '': fallback list name must be non-empty",
+		},
+		{
+			name: "valid named default list",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{FallbackList: "premium"},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"premium": {{Provider: "fb-1", Backend: LLMBackendNativeGemini}},
+						"spare":   {{Provider: "fb-2"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			env:     map[string]string{"FB_KEY": "secret"},
+			alsoLLM: true,
+		},
+		{
+			name: "defaults list still needs creds when every chain overrides",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{FallbackList: "premium"},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"premium": {{Provider: "fb-1"}},
+						"mid":     {{Provider: "fb-2"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+						"chain1": {
+							AlertTypes:   []string{"test"},
+							FallbackList: "mid",
+							Stages:       []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+						},
+					}),
+				}
+			},
+			env:     map[string]string{"UNUSED_KEY": "secret"},
+			wantErr: "fallback_lists 'premium': field '[0]': environment variable FB_KEY is not set (required by fallback provider 'fb-1')",
+		},
+		{
+			name: "google-native on unused non-google list fails structure",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"spare": {{Provider: "fb-2", Backend: LLMBackendNativeGemini}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: `fallback_lists 'spare': field '[0]': llm_backend "google-native" requires a google provider, got type "openai" for "fb-2"`,
+		},
+		{
+			name: "invalid backend in unused list fails structure",
+			cfg: func() *Config {
+				return &Config{
+					Defaults: &Defaults{},
+					FallbackLists: map[string][]FallbackProviderEntry{
+						"spare": {{Provider: "fb-2", Backend: "bad"}},
+					},
+					AgentRegistry:       NewAgentRegistry(baseAgents),
+					LLMProviderRegistry: NewLLMProviderRegistry(providers),
+					ChainRegistry:       NewChainRegistry(baseChains),
+				}
+			},
+			wantErr: "fallback_lists 'spare': field '[0]': invalid LLM backend: bad",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+			v := NewValidator(tt.cfg())
+			err := v.validateNamedFallbackLists()
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Equal(t, tt.wantErr, err.Error())
+				return
+			}
+			require.NoError(t, err)
+			if tt.alsoLLM {
+				require.NoError(t, v.validateLLMProviders())
+			}
+		})
+	}
+}
+
+func TestWarnDeprecatedFallbackProviders(t *testing.T) {
+	captureLogs := func(t *testing.T) (*bytes.Buffer, func()) {
+		t.Helper()
+		var buf bytes.Buffer
+		old := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		return &buf, func() { slog.SetDefault(old) }
+	}
+
+	t.Run("warns for defaults including empty slice", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				FallbackProviders: []FallbackProviderEntry{},
+			},
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{}),
+		}
+		NewValidator(cfg).warnDeprecatedFallbackProviders()
+
+		assert.Contains(t, buf.String(), "fallback_providers is deprecated")
+		assert.Contains(t, buf.String(), "defaults")
+	})
+
+	t.Run("warns for chain stage and stage-agent", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"c1": {
+					FallbackProviders: []FallbackProviderEntry{{Provider: "x"}},
+					Stages: []StageConfig{{
+						Name:              "s1",
+						FallbackProviders: []FallbackProviderEntry{{Provider: "y"}},
+						Agents: []StageAgentConfig{{
+							Name:              "A",
+							FallbackProviders: []FallbackProviderEntry{{Provider: "z"}},
+						}},
+					}},
+				},
+			}),
+		}
+		NewValidator(cfg).warnDeprecatedFallbackProviders()
+
+		logs := buf.String()
+		assert.Contains(t, logs, "fallback_providers is deprecated")
+		assert.Contains(t, logs, "chain=c1")
+		assert.Contains(t, logs, "stage=s1")
+		assert.Contains(t, logs, "agent=A")
+	})
+
+	t.Run("no warning when only fallback_list is set", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults:      &Defaults{FallbackList: "premium"},
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{}),
+		}
+		NewValidator(cfg).warnDeprecatedFallbackProviders()
+
+		assert.NotContains(t, buf.String(), "fallback_providers is deprecated")
+	})
+}
+
+func TestValidateAll_NamedFallbackLists(t *testing.T) {
+	minimal := func(fallbackList string, lists map[string][]FallbackProviderEntry) *Config {
+		return &Config{
+			Queue:         DefaultQueueConfig(),
+			Defaults:      &Defaults{FallbackList: fallbackList},
+			FallbackLists: lists,
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
+				"fb-1": {Type: LLMProviderTypeGoogle, Model: "gemini", APIKeyEnv: "FB_KEY"},
+			}),
+			MCPServerRegistry: NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			}),
+		}
+	}
+
+	t.Run("unknown list name fails ValidateAll", func(t *testing.T) {
+		err := NewValidator(minimal("ghost", map[string][]FallbackProviderEntry{})).ValidateAll()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "fallback list validation failed")
+		assert.Contains(t, err.Error(), `unknown fallback list "ghost"`)
+	})
+
+	t.Run("valid named list passes ValidateAll", func(t *testing.T) {
+		t.Setenv("FB_KEY", "secret")
+		err := NewValidator(minimal("premium", map[string][]FallbackProviderEntry{
+			"premium": {{Provider: "fb-1"}},
+		})).ValidateAll()
+		require.NoError(t, err)
 	})
 }

@@ -15,7 +15,13 @@ type Defaults struct {
 	// LLM backend default
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
-	// Ordered list of fallback providers to try when the primary provider fails
+	// Named catalog list to use as the default fallback walk. Expanded at
+	// resolve time. Empty / omitted inherits nothing (this is the root layer).
+	FallbackList string `yaml:"fallback_list,omitempty"`
+
+	// Ordered list of fallback providers to try when the primary provider fails.
+	// Deprecated: use fallback_lists + fallback_list. Still honored when
+	// fallback_list is unset. Mixing both on this node is a load-time error.
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 
 	// Default scoring configuration for all chains.
