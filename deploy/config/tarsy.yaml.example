@@ -512,6 +512,8 @@ agents:
   # Follow-up chat can dispatch sub-agents too: set sub_agents under chat: or chain-level
   # sub_agents (see agent_chains). Precedence: chat.sub_agents > chain.sub_agents.
   # Stage-level sub_agents apply to investigation agents only, not to chat resolution.
+  # chain.chat.agent is optional (default: ChatAgent). chain.chat.enabled is optional
+  # (default: true); set enabled: false to disable chat for that chain.
   # ChatAgent:
   #   custom_instructions: |
   #     You are a follow-up chat agent for SRE investigations.
@@ -571,12 +573,12 @@ agent_chains:
     # chain.sub_agents when chat.sub_agents is set; otherwise chain.sub_agents applies.
     # sub_agents:
     #   - name: GeneralWorker
-    chat:
-      enabled: true
-      agent: "ChatAgent"
-      # Optional: override chain sub_agents for chat only
-      # sub_agents:
-      #   - name: GeneralWorker
+    # Follow-up chat is on by default (built-in ChatAgent). Uncomment to override or disable.
+    # chat:
+    #   enabled: false                    # Disable follow-up chat for this chain
+    #   # agent: "ChatAgent"              # Optional (default: built-in ChatAgent)
+    #   # sub_agents:
+    #   #   - name: GeneralWorker
     # Automatic scoring — evaluates session quality after investigation completes.
     # Omit this block entirely to disable scoring for the chain.
     scoring:
@@ -662,8 +664,8 @@ agent_chains:
             llm_backend: "langchain"
             max_iterations: 30
     chat:
-      enabled: true
-      agent: "ChatAgent"
+      # enabled: true                     # Optional (default: true). Set false to disable.
+      # agent: "ChatAgent"                # Optional (default: built-in ChatAgent)
       max_iterations: 20
 
   # ── Chains with sub-agents ───────────────────────────────────

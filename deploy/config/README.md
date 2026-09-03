@@ -193,8 +193,25 @@ TARSy includes built-in configurations that work out-of-the-box:
 ### Built-in Agents
 
 - **KubernetesAgent** - Kubernetes troubleshooting
-- **ChatAgent** - Follow-up conversations
+- **ChatAgent** - Follow-up conversations (used when `chain.chat.agent` is omitted)
 - **SynthesisAgent** - Synthesizes parallel investigations
+
+### Follow-up chat
+
+Chat is on by default. Omit the `chat:` block entirely, or include it with only the overrides you need (`llm_provider`, `sub_agents`, `mcp_servers`, …).
+
+```yaml
+agent_chains:
+  my-chain:
+    chat:
+      llm_provider: google-default
+      sub_agents: [KubernetesAgent, WebResearcher]
+```
+
+- **`enabled`** — omit or `true` means on; `false` disables chat for that chain
+- **`agent`** — omit to use built-in `ChatAgent`; otherwise any registered agent
+- MCP tools — union of investigation-stage servers unless `chat.mcp_servers` is set
+- **`sub_agents`** — `chat.sub_agents` overrides `chain.sub_agents`. Stage-agent `sub_agents` lists do not apply to chat
 
 ### Built-in MCP Servers
 

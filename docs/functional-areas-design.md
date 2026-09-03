@@ -1107,7 +1107,7 @@ graph TB
 - **One Chat per session**: enforced by schema uniqueness on `session_id`
 - **Terminal sessions only**: available for completed/failed/timed_out sessions
 - **One-at-a-time per chat**: new message while processing returns 409 Conflict
-- **Chat enabled check**: `chain.Chat.Enabled` must be true
+- **Chat enabled check**: chat is on unless `chain.chat.enabled` is explicitly `false`. Omitting the `chat:` block, or omitting `enabled` on a `chat:` block, both leave chat on. Omitting `agent` uses built-in `ChatAgent`.
 
 #### Configuration
 
@@ -1115,8 +1115,7 @@ graph TB
 agent_chains:
   kubernetes:
     chat:
-      enabled: true
-      agent: "ChatAgent"
+      # enabled and agent are optional (defaults: on, ChatAgent)
       llm_backend: "google-native"
       llm_provider: "google-default"
       mcp_servers: ["kubernetes-server"]
