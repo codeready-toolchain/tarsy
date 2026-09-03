@@ -196,6 +196,11 @@ export interface OrchestratorView {
   max_budget?: string | null;
 }
 
+export interface CatalogFallbackEntryView {
+  llm_provider: string;
+  llm_backend: string;
+}
+
 export interface FallbackProviderView {
   provider: string;
   backend: string;
@@ -413,7 +418,7 @@ export interface SystemConfigResponse {
   defaults: DefaultsView | null;
   queue: QueueView | null;
   system: SystemSettingsView;
-  fallback_lists: Record<string, FallbackProviderView[]>;
+  fallback_lists: Record<string, CatalogFallbackEntryView[]>;
   agents: Record<string, AgentConfigView>;
   chains: Record<string, ChainConfigView>;
   mcp_servers: Record<string, MCPServerConfigView>;

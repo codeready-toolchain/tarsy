@@ -739,14 +739,14 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 
 		assert.Equal(t, []string{"empty", "mid", "premium"}, sortedKeys(resp.FallbackLists))
 		require.Len(t, resp.FallbackLists["premium"], 2)
-		assert.Equal(t, FallbackProviderView{Provider: "claude-opus", Backend: "langchain"},
+		assert.Equal(t, CatalogFallbackEntryView{LLMProvider: "claude-opus", LLMBackend: "langchain"},
 			resp.FallbackLists["premium"][0])
-		assert.Equal(t, FallbackProviderView{Provider: "gemini-pro", Backend: "google-native"},
+		assert.Equal(t, CatalogFallbackEntryView{LLMProvider: "gemini-pro", LLMBackend: "google-native"},
 			resp.FallbackLists["premium"][1])
 		require.NotNil(t, resp.FallbackLists["empty"])
 		assert.Empty(t, resp.FallbackLists["empty"])
 		require.Len(t, resp.FallbackLists["mid"], 1)
-		assert.Equal(t, "claude-sonnet", resp.FallbackLists["mid"][0].Provider)
+		assert.Equal(t, "claude-sonnet", resp.FallbackLists["mid"][0].LLMProvider)
 
 		require.NotNil(t, resp.Defaults)
 		assert.Equal(t, "premium", resp.Defaults.FallbackList)
@@ -802,6 +802,10 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 		emptyRaw, err := json.Marshal(resp.FallbackLists["empty"])
 		require.NoError(t, err)
 		assert.JSONEq(t, `[]`, string(emptyRaw))
+
+		premiumRaw, err := json.Marshal(resp.FallbackLists["premium"][0])
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"llm_provider":"claude-opus","llm_backend":"langchain"}`, string(premiumRaw))
 
 		chainRaw, err := json.Marshal(chain)
 		require.NoError(t, err)

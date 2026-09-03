@@ -114,6 +114,13 @@ func TestSubAgentRefs_UnmarshalYAML(t *testing.T) {
     foo: bar`,
 			wantErr: `sub_agents[1]: unknown field "foo"`,
 		},
+		{
+			name: "catalog backend key hints llm_backend",
+			yaml: `sub_agents:
+  - name: LogAnalyzer
+    backend: google-native`,
+			wantErr: `sub_agents[0]: unknown field "backend" (did you mean "llm_backend"?)`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -180,6 +187,118 @@ func TestFallbackProviderEntry_ResolvedBackend(t *testing.T) {
 			var entry FallbackProviderEntry
 			require.NoError(t, yaml.Unmarshal([]byte(tt.yamlSrc), &entry))
 			assert.Equal(t, tt.want, entry.ResolvedBackend())
+		})
+	}
+}
+
+func TestCatalogFallbackEntry_UnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name    string
+		yamlSrc string
+		want    catalogFallbackEntry
+		wantErr string
+	}{
+		{
+			name:    "llm keys",
+			yamlSrc: "llm_provider: foo\nllm_backend: google-native\n",
+			want:    catalogFallbackEntry{LLMProvider: "foo", LLMBackend: LLMBackendNativeGemini},
+		},
+		{
+			name:    "omitted backend",
+			yamlSrc: "llm_provider: foo\n",
+			want:    catalogFallbackEntry{LLMProvider: "foo"},
+		},
+		{
+			name:    "provider hints llm_provider",
+			yamlSrc: "provider: foo\n",
+			wantErr: `unknown field "provider" (did you mean "llm_provider"?)`,
+		},
+		{
+			name:    "backend hints llm_backend",
+			yamlSrc: "llm_provider: foo\nbackend: google-native\n",
+			wantErr: `unknown field "backend" (did you mean "llm_backend"?)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var entry catalogFallbackEntry
+			err := yaml.Unmarshal([]byte(tt.yamlSrc), &entry)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, entry)
+		})
+	}
+}
+
+func TestNamedAgentPairing_UnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name    string
+		yamlSrc string
+		want    NamedAgentPairing
+		wantErr string
+	}{
+		{
+			name:    "pairing keys",
+			yamlSrc: "llm_provider: google-default\nllm_backend: google-native\nfallback_list: premium\n",
+			want: NamedAgentPairing{
+				LLMProvider:  "google-default",
+				LLMBackend:   LLMBackendNativeGemini,
+				FallbackList: "premium",
+			},
+		},
+		{
+			name:    "backend hints llm_backend",
+			yamlSrc: "llm_provider: google-default\nbackend: google-native\n",
+			wantErr: `unknown field "backend" (did you mean "llm_backend"?)`,
+		},
+		{
+			name:    "provider hints llm_provider",
+			yamlSrc: "provider: google-default\n",
+			wantErr: `unknown field "provider" (did you mean "llm_provider"?)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var pairing NamedAgentPairing
+			err := yaml.Unmarshal([]byte(tt.yamlSrc), &pairing)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, pairing)
+		})
+	}
+}
+
+func TestFallbackProviderEntry_UnmarshalYAML_UnknownKeys(t *testing.T) {
+	tests := []struct {
+		name    string
+		yamlSrc string
+		wantErr string
+	}{
+		{
+			name:    "llm_provider hints provider",
+			yamlSrc: "llm_provider: foo\n",
+			wantErr: `unknown field "llm_provider" (did you mean "provider"?)`,
+		},
+		{
+			name:    "llm_backend hints backend",
+			yamlSrc: "provider: foo\nllm_backend: google-native\n",
+			wantErr: `unknown field "llm_backend" (did you mean "backend"?)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var entry FallbackProviderEntry
+			err := yaml.Unmarshal([]byte(tt.yamlSrc), &entry)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 }

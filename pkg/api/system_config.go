@@ -16,15 +16,15 @@ import (
 
 // SystemConfigResponse is returned by GET /api/v1/system/config.
 type SystemConfigResponse struct {
-	Defaults      *DefaultsView                     `json:"defaults"`
-	Queue         *QueueView                        `json:"queue"`
-	System        SystemView                        `json:"system"`
-	FallbackLists map[string][]FallbackProviderView `json:"fallback_lists"`
-	Agents        map[string]AgentView              `json:"agents"`
-	Chains        map[string]ChainView              `json:"chains"`
-	MCPServers    map[string]MCPServerView          `json:"mcp_servers"`
-	LLMProviders  map[string]LLMProviderView        `json:"llm_providers"`
-	Skills        map[string]SkillMetaView          `json:"skills"`
+	Defaults      *DefaultsView                         `json:"defaults"`
+	Queue         *QueueView                            `json:"queue"`
+	System        SystemView                            `json:"system"`
+	FallbackLists map[string][]CatalogFallbackEntryView `json:"fallback_lists"`
+	Agents        map[string]AgentView                  `json:"agents"`
+	Chains        map[string]ChainView                  `json:"chains"`
+	MCPServers    map[string]MCPServerView              `json:"mcp_servers"`
+	LLMProviders  map[string]LLMProviderView            `json:"llm_providers"`
+	Skills        map[string]SkillMetaView              `json:"skills"`
 }
 
 // SystemConfigSkillResponse is returned by GET /api/v1/system/config/skills/:name.
@@ -139,7 +139,13 @@ type SubAgentView struct {
 	Skills         []string `json:"skills,omitempty"`
 }
 
-// FallbackProviderView is a fallback provider entry.
+// CatalogFallbackEntryView is one fallback_lists catalog entry (matches catalog YAML).
+type CatalogFallbackEntryView struct {
+	LLMProvider string `json:"llm_provider"`
+	LLMBackend  string `json:"llm_backend"`
+}
+
+// FallbackProviderView is a deprecated fallback_providers entry (matches inline YAML).
 type FallbackProviderView struct {
 	Provider string `json:"provider"`
 	Backend  string `json:"backend"`
@@ -359,7 +365,7 @@ type RetentionView struct {
 
 func buildSystemConfigResponse(cfg *config.Config, costBook *cost.Book) SystemConfigResponse {
 	resp := SystemConfigResponse{
-		FallbackLists: map[string][]FallbackProviderView{},
+		FallbackLists: map[string][]CatalogFallbackEntryView{},
 		Agents:        map[string]AgentView{},
 		Chains:        map[string]ChainView{},
 		MCPServers:    map[string]MCPServerView{},
@@ -816,15 +822,15 @@ func buildSubAgentViews(refs config.SubAgentRefs) []SubAgentView {
 	return out
 }
 
-func buildFallbackLists(lists map[string][]config.FallbackProviderEntry) map[string][]FallbackProviderView {
-	out := make(map[string][]FallbackProviderView, len(lists))
+func buildFallbackLists(lists map[string][]config.FallbackProviderEntry) map[string][]CatalogFallbackEntryView {
+	out := make(map[string][]CatalogFallbackEntryView, len(lists))
 	if lists == nil {
 		return out
 	}
 	for _, name := range sortedKeys(lists) {
-		out[name] = buildFallbackProviders(lists[name])
+		out[name] = buildCatalogFallbackEntries(lists[name])
 		if out[name] == nil {
-			out[name] = []FallbackProviderView{}
+			out[name] = []CatalogFallbackEntryView{}
 		}
 	}
 	return out
@@ -842,6 +848,20 @@ func buildNamedAgentPairingViews(agents map[string]config.NamedAgentPairing) map
 			LLMBackend:   string(p.LLMBackend),
 			FallbackList: p.FallbackList,
 		}
+	}
+	return out
+}
+
+func buildCatalogFallbackEntries(entries []config.FallbackProviderEntry) []CatalogFallbackEntryView {
+	if entries == nil {
+		return nil
+	}
+	out := make([]CatalogFallbackEntryView, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, CatalogFallbackEntryView{
+			LLMProvider: e.Provider,
+			LLMBackend:  string(e.ResolvedBackend()),
+		})
 	}
 	return out
 }

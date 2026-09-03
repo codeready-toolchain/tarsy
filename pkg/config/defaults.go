@@ -1,5 +1,7 @@
 package config
 
+import "gopkg.in/yaml.v3"
+
 // Defaults contains system-wide default configurations
 // These values are used when specific components don't specify their own values
 type Defaults struct {
@@ -78,6 +80,18 @@ type NamedAgentPairing struct {
 	LLMProvider  string     `yaml:"llm_provider,omitempty"`
 	LLMBackend   LLMBackend `yaml:"llm_backend,omitempty"`
 	FallbackList string     `yaml:"fallback_list,omitempty"`
+}
+
+var namedAgentPairingAllowedKeys = map[string]bool{
+	"llm_provider":  true,
+	"llm_backend":   true,
+	"fallback_list": true,
+}
+
+// UnmarshalYAML rejects unknown keys (e.g. catalog `backend` instead of `llm_backend`).
+func (p *NamedAgentPairing) UnmarshalYAML(value *yaml.Node) error {
+	type raw NamedAgentPairing
+	return decodeMapping(value, namedAgentPairingAllowedKeys, pairingKeyHints, (*raw)(p))
 }
 
 // AgentPairing returns defaults.agents[name]. The zero value means inherit.

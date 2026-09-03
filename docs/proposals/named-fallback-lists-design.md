@@ -98,25 +98,25 @@ Top-level catalog next to `agents` / `mcp_servers`. `defaults.fallback_list` sel
 ```yaml
 fallback_lists:
   premium:
-    - provider: vertexai-claude-opus-4-8
-    - provider: vertexai-claude-opus-4-6
-    - provider: vertexai-claude-opus
-    - provider: gpt-5.6-sol
-    - provider: google-default
-      backend: google-native
+    - llm_provider: vertexai-claude-opus-4-8
+    - llm_provider: vertexai-claude-opus-4-6
+    - llm_provider: vertexai-claude-opus
+    - llm_provider: gpt-5.6-sol
+    - llm_provider: google-default
+      llm_backend: google-native
   mid:
-    - provider: vertexai-claude-sonnet
-    - provider: gemini-3.7-flash
-      backend: google-native
-    - provider: gemini-3.1-pro
-      backend: google-native
+    - llm_provider: vertexai-claude-sonnet
+    - llm_provider: gemini-3.7-flash
+      llm_backend: google-native
+    - llm_provider: gemini-3.1-pro
+      llm_backend: google-native
   google-native:
-    - provider: google-default
-      backend: google-native
-    - provider: gemini-3.7-flash
-      backend: google-native
-    - provider: gemini-3.1-pro
-      backend: google-native
+    - llm_provider: google-default
+      llm_backend: google-native
+    - llm_provider: gemini-3.7-flash
+      llm_backend: google-native
+    - llm_provider: gemini-3.1-pro
+      llm_backend: google-native
 
 defaults:
   llm_provider: vertexai-claude-opus
@@ -272,9 +272,11 @@ Scoring, compose, exec summary, and summarization keep **job** knobs under `defa
 ```yaml
 fallback_lists:
   <list-name>:
-    - provider: <registered provider>
-      backend: langchain | google-native   # optional; omit → langchain
+    - llm_provider: <registered provider>
+      llm_backend: langchain | google-native   # optional; omit → langchain
 ```
+
+Catalog entries use the same `llm_*` keys as pairing sites. Unknown keys fail load (`provider` / `backend` on a catalog entry hint `llm_provider` / `llm_backend`; the reverse on `defaults.agents`). Deprecated `fallback_providers` keeps `provider` / `backend`.
 
 List names are non-empty YAML mapping keys. Duplicate names cannot exist (YAML map). Every catalog entry is structure-validated (provider exists, backend valid, `google-native` only with a Google provider). Credentials are required only for **referenced** lists.
 
@@ -329,7 +331,7 @@ Native-tool startup **warning** uses the **effective** list after named-list exp
 ## Observability and config viewer
 
 - Timeline / metrics: no new event types. Provider names in existing fallback events already identify what was used.
-- Config viewer (`GET /api/v1/system/config`): emit the `fallback_lists` catalog, `defaults.agents`, and the raw `fallback_list` / deprecated `fallback_providers` / `*_fallback_list` fields as written. Do not compute per-agent expanded walks in v1. Do **not** add `llm_provider` / `fallback_list` to `AgentView` (identity has no pairing YAML).
+- Config viewer (`GET /api/v1/system/config`): emit the `fallback_lists` catalog as `{llm_provider, llm_backend}` (omitted backend filled as `langchain`), `defaults.agents`, and the raw `fallback_list` / deprecated `fallback_providers` (`provider` / `backend`) / `*_fallback_list` fields as written. Do not compute per-agent expanded walks in v1. Do **not** add `llm_provider` / `fallback_list` to `AgentView` (identity has no pairing YAML).
 - Startup: warn on any use of `fallback_providers`.
 
 ## Out of scope

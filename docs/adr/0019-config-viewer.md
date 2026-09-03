@@ -156,7 +156,7 @@ A dedicated response type (not internal config structs):
 | `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, **summarization** (provider/backend and optional `fallback_list`), success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only), **`agents`** pairing map (`llm_provider` / `llm_backend` / `fallback_list`), raw `fallback_list` / `*_fallback_list`, and compose/exec-summary pairing siblings |
 | `queue` | All worker/poll/timeout fields; durations as strings |
 | `system` | GitHub, Slack, Runbooks, Retention, dashboard URL, allowed WS origins — env **names** only for tokens |
-| `fallback_lists` | Named catalog of `{provider, backend}` entries (omitted backend filled as `langchain`). Empty object when unset. Selectors are shown as written — **no** per-agent expanded walks |
+| `fallback_lists` | Named catalog of `{llm_provider, llm_backend}` entries (omitted backend filled as `langchain`). Empty object when unset. Deprecated `fallback_providers` stays `{provider, backend}`. Selectors are shown as written — **no** per-agent expanded walks |
 | `agents` | Full agent fields — **no** `llm_provider` or `fallback_list` on identity |
 | `chains` | Full chain shape including stages, chat, scoring, overrides, raw `fallback_list` / `*_fallback_list`, deprecated `fallback_providers` |
 | `mcp_servers` | Sanitized transport + instructions + masking/summarization |

@@ -62,7 +62,7 @@ describe('ConfigViewer fallback lists', () => {
     mockGetSystemConfig.mockResolvedValue(
       makeConfig(true, {
         fallback_lists: {
-          premium: [{ provider: 'claude-opus', backend: 'langchain' }],
+          premium: [{ llm_provider: 'claude-opus', llm_backend: 'langchain' }],
         },
       }),
     );
