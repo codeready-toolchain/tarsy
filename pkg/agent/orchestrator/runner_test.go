@@ -497,8 +497,10 @@ func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-parent.Done():
 		t.Fatal("agent did not start before parent deadline")
+	case <-time.After(5 * time.Second):
+		t.Fatal("agent did not start in time")
 	}
 
 	result, err := runner.WaitForNext(t.Context())
