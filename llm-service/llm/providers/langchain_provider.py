@@ -99,6 +99,7 @@ class LangChainProvider(LLMProvider):
                 model = self._bind_tools(
                     model, list(tools), cache_kind, strip_ttl,
                     disable_tool_calls=disable_tool_calls,
+                    is_anthropic=prompt_cache.is_anthropic_claude(config),
                 )
         if cache_kind in (
             prompt_cache.OPENAI_EXPLICIT,
@@ -368,6 +369,7 @@ class LangChainProvider(LLMProvider):
         cache_kind: str = prompt_cache.NONE,
         strip_ttl: bool = False,
         disable_tool_calls: bool = False,
+        is_anthropic: bool = False,
     ):
         """Bind MCP tools to the model via LangChain's bind_tools()."""
         langchain_tools = []
@@ -400,7 +402,14 @@ class LangChainProvider(LLMProvider):
                 langchain_tools.append(item)
         if langchain_tools:
             bind_kwargs = {}
-            if disable_tool_calls:
+            # "none" is an OpenAI-only tool_choice value. Anthropic's schema only
+            # knows "auto" / "any" / a forced tool name, so langchain_anthropic
+            # and langchain_google_vertexai treat "none" as a tool name to force —
+            # combined with Claude's always-on thinking, the API rejects that as
+            # "Thinking may not be enabled when tool_choice forces tool use."
+            # Leave tool_choice unset (default "auto") for Anthropic; the forced
+            # conclusion prompt is what actually steers the model away from tools.
+            if disable_tool_calls and not is_anthropic:
                 bind_kwargs["tool_choice"] = "none"
             return model.bind_tools(langchain_tools, **bind_kwargs)
         return model
