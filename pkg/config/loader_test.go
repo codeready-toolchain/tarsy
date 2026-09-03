@@ -1399,6 +1399,86 @@ agent_chains:
 	assert.Equal(t, "fb-agent-3", agentFB[2].Provider)
 }
 
+func TestLoadTarsyYAML_FallbackLists(t *testing.T) {
+	t.Run("catalog and selectors parse onto Config", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+fallback_lists:
+  premium:
+    - provider: "fb-opus"
+      backend: "langchain"
+    - provider: "fb-omit"
+  mid:
+    - provider: "fb-sonnet"
+      backend: "google-native"
+  empty: []
+
+defaults:
+  llm_provider: "test-provider"
+  fallback_list: premium
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    fallback_list: mid
+    stages:
+      - name: "stage1"
+        fallback_list: empty
+        agents:
+          - name: "test-agent"
+            fallback_list: premium
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+
+		require.Len(t, cfg.FallbackLists, 3)
+		require.Len(t, cfg.FallbackLists["premium"], 2)
+		assert.Equal(t, "fb-opus", cfg.FallbackLists["premium"][0].Provider)
+		assert.Equal(t, LLMBackendLangChain, cfg.FallbackLists["premium"][0].Backend)
+		assert.Equal(t, "fb-omit", cfg.FallbackLists["premium"][1].Provider)
+		assert.Empty(t, cfg.FallbackLists["premium"][1].Backend)
+		require.Len(t, cfg.FallbackLists["mid"], 1)
+		assert.Equal(t, "fb-sonnet", cfg.FallbackLists["mid"][0].Provider)
+		assert.Equal(t, LLMBackendNativeGemini, cfg.FallbackLists["mid"][0].Backend)
+		require.NotNil(t, cfg.FallbackLists["empty"])
+		assert.Empty(t, cfg.FallbackLists["empty"])
+
+		require.NotNil(t, cfg.Defaults)
+		assert.Equal(t, "premium", cfg.Defaults.FallbackList)
+
+		chain, err := cfg.GetChain("test-chain")
+		require.NoError(t, err)
+		assert.Equal(t, "mid", chain.FallbackList)
+		assert.Equal(t, "empty", chain.Stages[0].FallbackList)
+		assert.Equal(t, "premium", chain.Stages[0].Agents[0].FallbackList)
+	})
+
+	t.Run("omitted catalog is fine", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(context.Background(), dir)
+		require.NoError(t, err)
+		assert.Empty(t, cfg.FallbackLists)
+	})
+}
+
 func TestLoadAppliesScoringEnabledDefault(t *testing.T) {
 	t.Run("defaults.scoring.enabled injects scoring config for chains without it", func(t *testing.T) {
 		dir := t.TempDir()

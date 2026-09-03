@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,12 +16,13 @@ import (
 
 // TarsyYAMLConfig represents the complete tarsy.yaml file structure
 type TarsyYAMLConfig struct {
-	System      *SystemYAMLConfig          `yaml:"system"`
-	MCPServers  map[string]MCPServerConfig `yaml:"mcp_servers"`
-	Agents      map[string]AgentConfig     `yaml:"agents"`
-	AgentChains map[string]ChainConfig     `yaml:"agent_chains"`
-	Defaults    *Defaults                  `yaml:"defaults"`
-	Queue       *QueueConfig               `yaml:"queue"`
+	System        *SystemYAMLConfig                  `yaml:"system"`
+	MCPServers    map[string]MCPServerConfig         `yaml:"mcp_servers"`
+	Agents        map[string]AgentConfig             `yaml:"agents"`
+	AgentChains   map[string]ChainConfig             `yaml:"agent_chains"`
+	FallbackLists map[string][]FallbackProviderEntry `yaml:"fallback_lists"`
+	Defaults      *Defaults                          `yaml:"defaults"`
+	Queue         *QueueConfig                       `yaml:"queue"`
 }
 
 // SystemYAMLConfig groups system-wide infrastructure settings.
@@ -235,6 +237,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 
 	return &Config{
 		configDir:           configDir,
+		FallbackLists:       maps.Clone(tarsyConfig.FallbackLists),
 		Defaults:            defaults,
 		Queue:               queueConfig,
 		GitHub:              githubCfg,

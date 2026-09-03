@@ -34,7 +34,13 @@ type ChainConfig struct {
 	// Chain-level LLM backend override
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
 
-	// Chain-level fallback providers override
+	// Named catalog list for this chain. Expanded at resolve time. Empty /
+	// omitted inherits the next less-specific layer.
+	FallbackList string `yaml:"fallback_list,omitempty"`
+
+	// Chain-level fallback providers override.
+	// Deprecated: use fallback_lists + fallback_list. Still honored when
+	// fallback_list is unset. Mixing both on this node is a load-time error.
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 
 	// Chain-level max iterations override
@@ -70,7 +76,13 @@ type StageConfig struct {
 	// Stage-level MCP servers override
 	MCPServers []string `yaml:"mcp_servers,omitempty"`
 
-	// Stage-level fallback providers override
+	// Named catalog list for this stage. Expanded at resolve time. Empty /
+	// omitted inherits the next less-specific layer.
+	FallbackList string `yaml:"fallback_list,omitempty"`
+
+	// Stage-level fallback providers override.
+	// Deprecated: use fallback_lists + fallback_list. Still honored when
+	// fallback_list is unset. Mixing both on this node is a load-time error.
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
 
 	// Sub-agents available to orchestrator agents in this stage
