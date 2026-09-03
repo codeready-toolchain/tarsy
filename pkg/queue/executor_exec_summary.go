@@ -7,6 +7,7 @@ import (
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -47,17 +48,14 @@ func (e *RealSessionExecutor) executeExecSummaryStage(ctx context.Context, input
 	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, input.session.ID, stg.ID, "",
 		events.ProgressPhaseFinalizing, "Generating executive summary")
 
-	// Build exec summary agent config. Apply chain.ExecutiveSummaryProvider as the
-	// highest-priority LLM provider override — ResolveAgentConfig picks it up via
-	// agentConfig.LLMProvider (defaults → chain.LLMProvider → agentConfig.LLMProvider).
+	// Build exec summary agent config via the dedicated resolver so
+	// defaults.executive_summary_* and compose/exec-summary fallback knobs apply
+	// and the investigation stage list does not leak.
 	agentCfg := config.StageAgentConfig{Name: config.AgentNameExecSummary}
-	if input.chain.ExecutiveSummaryProvider != "" {
-		agentCfg.LLMProvider = input.chain.ExecutiveSummaryProvider
-	}
-
-	// input.prevContext carries the finalAnalysis; the ExecSummaryController receives
-	// it as prevStageContext and uses it to build the user prompt.
-	ar := e.executeAgent(ctx, input, stg, agentCfg, 0, config.AgentNameExecSummary)
+	execInput := input
+	execInput.stageConfig = config.StageConfig{}
+	resolved, err := agent.ResolveExecSummaryConfig(e.cfg, input.chain)
+	ar := e.executeResolvedAgent(ctx, execInput, stg, agentCfg, 0, config.AgentNameExecSummary, resolved, err)
 
 	// Update exec summary stage status (use background context — ctx may be cancelled).
 	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {

@@ -83,6 +83,11 @@ type ExecutionContext struct {
 	// llm_provider / llm_backend are inherited; enablement stays per-server.
 	DefaultSummarization *config.SummarizationConfig
 
+	// SummarizationFallbackProviders is the resolved defaults.summarization.fallback_list.
+	// Nil (selector unset) means walk the calling agent's ResolvedFallbackProviders.
+	// Non-nil, including empty, is the summarization-local walk.
+	SummarizationFallbackProviders []ResolvedFallbackEntry
+
 	// SummarizationSticky is summarization-local failover, keyed by resolved
 	// primary provider name. Lazily initialized by summarize.go; never written
 	// by tryFallback. A later tool result whose primary is still Flash starts

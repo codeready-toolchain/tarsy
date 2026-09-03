@@ -243,7 +243,13 @@ func callSummarizationLLM(
 }
 
 func summarizationFallbackList(execCtx *agent.ExecutionContext) []agent.ResolvedFallbackEntry {
-	if execCtx == nil || execCtx.Config == nil {
+	if execCtx == nil {
+		return nil
+	}
+	if execCtx.DefaultSummarization != nil && execCtx.DefaultSummarization.FallbackList != "" {
+		return execCtx.SummarizationFallbackProviders
+	}
+	if execCtx.Config == nil {
 		return nil
 	}
 	return execCtx.Config.ResolvedFallbackProviders

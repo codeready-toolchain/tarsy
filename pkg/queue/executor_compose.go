@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
+	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -79,17 +80,14 @@ func (e *RealSessionExecutor) executeComposeStage(
 		events.ProgressPhaseAmending, "Amending report...")
 
 	agentCfg := config.StageAgentConfig{Name: config.AgentNameCompose}
-	if input.chain.ComposeProvider != "" {
-		agentCfg.LLMProvider = input.chain.ComposeProvider
-	} else if e.cfg.Defaults != nil {
-		agentCfg.LLMProvider = e.cfg.Defaults.ComposeProvider
-	}
 
 	composeInput := input
 	composeInput.composeUpstreamReport = upstreamReport
 	composeInput.composeActionMemo = actionMemo
+	composeInput.stageConfig = config.StageConfig{}
 
-	ar := e.executeAgent(ctx, composeInput, stg, agentCfg, 0, config.AgentNameCompose)
+	resolved, err := agent.ResolveComposeConfig(e.cfg, input.chain)
+	ar := e.executeResolvedAgent(ctx, composeInput, stg, agentCfg, 0, config.AgentNameCompose, resolved, err)
 
 	sessionStatus := mapAgentStatusToSessionStatus(ar.status)
 	if sessionStatus == alertsession.StatusCancelled || sessionStatus == alertsession.StatusTimedOut {

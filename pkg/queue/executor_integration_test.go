@@ -3157,6 +3157,86 @@ func TestExecutor_ComposeUsesChainComposeProvider(t *testing.T) {
 	assert.Equal(t, "compose-model", composeInput.Config.Model)
 }
 
+func TestExecutor_ComposeDoesNotInheritActionStageFallbackList(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := investigationThenActionChain()
+	chain.Stages[1].FallbackList = "stage-leak"
+	cfg := actionComposeTestConfig(chain, nil)
+	cfg.Defaults.ComposeFallbackList = "compose-ok"
+	cfg.FallbackLists = map[string][]config.FallbackProviderEntry{
+		"stage-leak": {{Provider: "stage-fb"}},
+		"compose-ok": {{Provider: "compose-fb"}},
+	}
+	cfg.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		"stage-fb":      {Type: config.LLMProviderTypeGoogle, Model: "stage-fb-model"},
+		"compose-fb":    {Type: config.LLMProviderTypeGoogle, Model: "compose-fb-model"},
+	})
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "INV-UPSTREAM"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "ACTION-MEMO"}}},
+			{err: fmt.Errorf("compose primary failed")},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "COMPOSE-OUT"}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary after compose fallback."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "COMPOSE-OUT", result.FinalAnalysis)
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 4)
+	assert.Equal(t, "test-model", llm.capturedInputs[2].Config.Model)
+	assert.Equal(t, "compose-fb-model", llm.capturedInputs[3].Config.Model,
+		"compose fallback must walk compose_fallback_list, not the action stage list")
+}
+
+func TestExecutor_ExecSummaryDoesNotInheritInvestigationStageFallbackList(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{{
+			Name:         "investigation",
+			FallbackList: "stage-leak",
+			Agents:       []config.StageAgentConfig{{Name: "TestAgent"}},
+		}},
+	}
+	cfg := testConfig("test-chain", chain)
+	cfg.Defaults.ExecutiveSummaryFallbackList = "exec-ok"
+	cfg.FallbackLists = map[string][]config.FallbackProviderEntry{
+		"stage-leak": {{Provider: "stage-fb"}},
+		"exec-ok":    {{Provider: "exec-fb"}},
+	}
+	cfg.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		"stage-fb":      {Type: config.LLMProviderTypeGoogle, Model: "stage-fb-model"},
+		"exec-fb":       {Type: config.LLMProviderTypeGoogle, Model: "exec-fb-model"},
+	})
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Investigation complete."}}},
+			{err: fmt.Errorf("exec summary primary failed")},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Exec summary from dedicated list."}}},
+		},
+	}
+	executor := NewRealSessionExecutor(cfg, entClient, llm, &testEventPublisher{}, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "Exec summary from dedicated list.", result.ExecutiveSummary)
+	require.GreaterOrEqual(t, len(llm.capturedInputs), 3)
+	assert.Equal(t, "test-model", llm.capturedInputs[1].Config.Model)
+	assert.Equal(t, "exec-fb-model", llm.capturedInputs[2].Config.Model,
+		"exec summary fallback must walk executive_summary_fallback_list, not the investigation stage list")
+}
+
 func TestExecutor_ComposeCancelDoesNotConcatComplete(t *testing.T) {
 	entClient, _ := util.SetupTestDatabase(t)
 

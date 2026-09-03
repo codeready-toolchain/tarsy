@@ -139,6 +139,7 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 		agent, exists := cfg.Agents["WebResearcher"]
 		require.True(t, exists)
 		assert.Equal(t, LLMBackendNativeGemini, agent.LLMBackend)
+		assert.Equal(t, "google-default", agent.LLMProvider)
 		assert.True(t, agent.NativeTools[GoogleNativeToolGoogleSearch])
 		assert.True(t, agent.NativeTools[GoogleNativeToolURLContext])
 
@@ -151,6 +152,7 @@ func TestBuiltinAgentNativeToolsAndBackend(t *testing.T) {
 		agent, exists := cfg.Agents["CodeExecutor"]
 		require.True(t, exists)
 		assert.Equal(t, LLMBackendNativeGemini, agent.LLMBackend)
+		assert.Equal(t, "google-default", agent.LLMProvider)
 		assert.True(t, agent.NativeTools[GoogleNativeToolCodeExecution])
 
 		val, present := agent.NativeTools[GoogleNativeToolGoogleSearch]

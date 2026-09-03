@@ -347,7 +347,7 @@ Native-tool startup **warning** uses the **effective** list after named-list exp
 
 Split so each PR leaves TARSy working. PR 1: configs without `fallback_lists` / `fallback_list` behave as today (aside from a deprecation warning if they already set `fallback_providers`). PR 2’s builtin `llm_provider: google-default` on native-tool agents is the documented exception.
 
-### PR 1 — Catalog, existing four layers, deprecation
+### PR 1 — Catalog, existing four layers, deprecation - DONE
 
 **Lands**
 
@@ -369,7 +369,7 @@ Split so each PR leaves TARSy working. PR 1: configs without `fallback_lists` / 
 
 **Temporary gap:** operators can name lists and attach them to stage agents, but sub-agents and Sonnet side paths still inherit the default/chain list until PR 2. That matches today’s gap; it does not regress.
 
-### PR 2 — `defaults.agents`, sub-agents, implicit jobs, summarization
+### PR 2 — `defaults.agents`, sub-agents, implicit jobs, summarization - DONE
 
 **Lands**
 

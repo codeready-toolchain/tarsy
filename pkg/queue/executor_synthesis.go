@@ -72,7 +72,9 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 	publishExecutionProgressFromExecutor(ctx, e.eventPublisher, input.session.ID, stg.ID, "",
 		events.ProgressPhaseSynthesizing, fmt.Sprintf("Starting synthesis for %s", parallelResult.stageName))
 
-	// Build synthesis agent config — synthesis: block is optional, defaults apply
+	// Build synthesis agent config — synthesis: block is optional, defaults apply.
+	// Copy stage.synthesis pair/list onto the synthetic stage-agent so they beat
+	// the investigation stage list. Fill omitted pair/list from defaults.agents.
 	synthAgentConfig := config.StageAgentConfig{
 		Name: config.AgentNameSynthesis,
 	}
@@ -80,11 +82,18 @@ func (e *RealSessionExecutor) executeSynthesisStage(
 		if s.Agent != "" {
 			synthAgentConfig.Name = s.Agent
 		}
-		if s.LLMBackend != "" {
-			synthAgentConfig.LLMBackend = s.LLMBackend
+		synthAgentConfig.LLMBackend = s.LLMBackend
+		synthAgentConfig.LLMProvider = s.LLMProvider
+		synthAgentConfig.FallbackList = s.FallbackList
+	}
+	if e.cfg != nil {
+		pairing := e.cfg.Defaults.AgentPairing(synthAgentConfig.Name)
+		if synthAgentConfig.LLMProvider == "" && synthAgentConfig.LLMBackend == "" {
+			synthAgentConfig.LLMProvider = pairing.LLMProvider
+			synthAgentConfig.LLMBackend = pairing.LLMBackend
 		}
-		if s.LLMProvider != "" {
-			synthAgentConfig.LLMProvider = s.LLMProvider
+		if synthAgentConfig.FallbackList == "" {
+			synthAgentConfig.FallbackList = pairing.FallbackList
 		}
 	}
 

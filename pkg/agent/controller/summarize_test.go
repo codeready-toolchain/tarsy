@@ -921,6 +921,81 @@ func TestMaybeSummarizeFallback(t *testing.T) {
 		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
 		assert.False(t, mockLLM.capturedInputs[1].ClearCache)
 	})
+
+	t.Run("defaults.summarization.fallback_list walks that list not agent list", func(t *testing.T) {
+		mockLLM := &mockLLMClient{
+			capture: true,
+			responses: []mockLLMResponse{
+				{err: assert.AnError},
+				{chunks: []agent.Chunk{&agent.TextChunk{Content: "Dedicated list summary"}}},
+			},
+		}
+		execCtx := setup(t, mockLLM)
+		execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+			makeFallbackEntry("vertexai-claude-opus", config.LLMBackendLangChain, "claude-opus"),
+		}
+		execCtx.DefaultSummarization = &config.SummarizationConfig{
+			LLMProvider:  "google-default",
+			FallbackList: "mid",
+		}
+		sonnetEntry := makeFallbackEntry("vertexai-claude-sonnet", config.LLMBackendLangChain, "claude-sonnet")
+		sonnetEntry.Config.NativeTools = map[config.GoogleNativeTool]bool{
+			config.GoogleNativeToolGoogleSearch: true,
+		}
+		execCtx.SummarizationFallbackProviders = []agent.ResolvedFallbackEntry{sonnetEntry}
+
+		eventSeq := 0
+		result, err := maybeSummarize(t.Context(), execCtx, "test-server", "get_pods",
+			largeContent, "", &eventSeq)
+		require.NoError(t, err)
+		assert.True(t, result.WasSummarized)
+		assert.Contains(t, result.Content, "Dedicated list summary")
+		require.Len(t, mockLLM.capturedInputs, 2)
+		assert.Equal(t, "gemini-flash", mockLLM.capturedInputs[0].Config.Model)
+		assert.Equal(t, "claude-sonnet", mockLLM.capturedInputs[1].Config.Model)
+		assertNoInvestigationFallback(t, execCtx)
+	})
+}
+
+func TestSummarizationFallbackListSelection(t *testing.T) {
+	agentList := []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("agent-fb", config.LLMBackendLangChain, "agent-model"),
+	}
+	sumList := []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("sum-fb", config.LLMBackendLangChain, "sum-model"),
+	}
+
+	t.Run("unset selector uses agent list", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config:               &agent.ResolvedAgentConfig{ResolvedFallbackProviders: agentList},
+			DefaultSummarization: &config.SummarizationConfig{},
+		}
+		assert.Equal(t, agentList, summarizationFallbackList(execCtx))
+	})
+
+	t.Run("nil summarization config uses agent list", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config: &agent.ResolvedAgentConfig{ResolvedFallbackProviders: agentList},
+		}
+		assert.Equal(t, agentList, summarizationFallbackList(execCtx))
+	})
+
+	t.Run("set selector uses dedicated list not agent list", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config:                         &agent.ResolvedAgentConfig{ResolvedFallbackProviders: agentList},
+			DefaultSummarization:           &config.SummarizationConfig{FallbackList: "mid"},
+			SummarizationFallbackProviders: sumList,
+		}
+		assert.Equal(t, sumList, summarizationFallbackList(execCtx))
+	})
+
+	t.Run("set selector with empty catalog is no fallback", func(t *testing.T) {
+		execCtx := &agent.ExecutionContext{
+			Config:               &agent.ResolvedAgentConfig{ResolvedFallbackProviders: agentList},
+			DefaultSummarization: &config.SummarizationConfig{FallbackList: "empty"},
+		}
+		assert.Nil(t, summarizationFallbackList(execCtx))
+	})
 }
 
 func TestNextSummarizationFallback_SkipsAlreadyAttemptedNames(t *testing.T) {
@@ -952,4 +1027,26 @@ func TestNextSummarizationFallback_SkipsAlreadyAttemptedNames(t *testing.T) {
 	assert.Equal(t, "fb2", next.ProviderName,
 		"should skip start already attempted this call, not walk back")
 	assert.Equal(t, []string{"start", "fb1", "fb2"}, state.AttemptedProviders)
+}
+
+func TestNextSummarizationFallback_UsesDedicatedList(t *testing.T) {
+	execCtx := newTestExecCtx(t, &mockLLMClient{
+		responses: []mockLLMResponse{{chunks: []agent.Chunk{&agent.TextChunk{Content: "unused"}}}},
+	}, agent.NewStubToolExecutor(nil))
+	execCtx.Config.ResolvedFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("agent-fb", config.LLMBackendLangChain, "agent-model"),
+	}
+	execCtx.DefaultSummarization = &config.SummarizationConfig{FallbackList: "mid"}
+	execCtx.SummarizationFallbackProviders = []agent.ResolvedFallbackEntry{
+		makeFallbackEntry("sum-fb", config.LLMBackendLangChain, "sum-model"),
+	}
+
+	state := &FallbackState{
+		SingleShot:           true,
+		CurrentProviderIndex: -1,
+		AttemptedProviders:   []string{"google-default"},
+	}
+	next, ok := nextSummarizationFallback(execCtx, state, makePartialError(LLMErrorMaxRetries))
+	require.True(t, ok)
+	assert.Equal(t, "sum-fb", next.ProviderName)
 }

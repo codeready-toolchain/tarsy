@@ -690,6 +690,43 @@ func TestSubAgentRunner_Dispatch_WithOverrides(t *testing.T) {
 		"execution should persist the overridden provider's model")
 }
 
+func TestSubAgentRunner_Dispatch_CopiesFallbackList(t *testing.T) {
+	ctx := context.Background()
+	var captured *agent.ExecutionContext
+	runner, cleanup := setupIntegrationRunner(t, func(_ context.Context) (*agent.ExecutionResult, error) {
+		return &agent.ExecutionResult{
+			Status:        agent.ExecutionStatusCompleted,
+			FinalAnalysis: "done",
+		}, nil
+	}, func(execCtx *agent.ExecutionContext) {
+		captured = execCtx
+	})
+	defer cleanup()
+
+	runner.deps.Config.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+		"test-provider": {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
+		"fast-provider": {Type: config.LLMProviderTypeGoogle, Model: "fast-model"},
+	})
+	runner.deps.Config.FallbackLists = map[string][]config.FallbackProviderEntry{
+		"mid": {{Provider: "fast-provider"}},
+	}
+	runner.overrides = map[string]config.SubAgentRef{
+		"TestAgent": {Name: "TestAgent", FallbackList: "mid"},
+	}
+
+	_, err := runner.Dispatch(ctx, "TestAgent", "list override task")
+	require.NoError(t, err)
+	_, err = runner.WaitForNext(ctx)
+	require.NoError(t, err)
+
+	require.NotNil(t, captured)
+	require.NotNil(t, captured.Config)
+	require.Len(t, captured.Config.FallbackProviders, 1)
+	assert.Equal(t, "fast-provider", captured.Config.FallbackProviders[0].Provider)
+	require.Len(t, captured.Config.ResolvedFallbackProviders, 1)
+	assert.Equal(t, "fast-provider", captured.Config.ResolvedFallbackProviders[0].ProviderName)
+}
+
 // ─── Execution status WS events (integration) ──────────────────────────────
 
 func TestSubAgentRunner_Dispatch_PublishesExecutionStatusEvents(t *testing.T) {

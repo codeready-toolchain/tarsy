@@ -226,6 +226,7 @@ func TestMergeAgentsCarriesLLMBackendAndNativeTools(t *testing.T) {
 	builtin := map[string]BuiltinAgentConfig{
 		"web-agent": {
 			Description: "Web agent",
+			LLMProvider: "google-default",
 			LLMBackend:  LLMBackendNativeGemini,
 			NativeTools: map[GoogleNativeTool]bool{
 				GoogleNativeToolGoogleSearch: true,
@@ -239,8 +240,9 @@ func TestMergeAgentsCarriesLLMBackendAndNativeTools(t *testing.T) {
 
 	result := mergeAgents(builtin, map[string]AgentConfig{})
 
-	// web-agent should carry LLMBackend and NativeTools
+	// web-agent should carry LLMBackend, LLMProvider, and NativeTools
 	assert.Equal(t, LLMBackendNativeGemini, result["web-agent"].LLMBackend)
+	assert.Equal(t, "google-default", result["web-agent"].LLMProvider)
 	assert.True(t, result["web-agent"].NativeTools[GoogleNativeToolGoogleSearch])
 	assert.True(t, result["web-agent"].NativeTools[GoogleNativeToolURLContext])
 
@@ -251,6 +253,27 @@ func TestMergeAgentsCarriesLLMBackendAndNativeTools(t *testing.T) {
 	// Defensive copy: mutating the result should not affect original
 	result["web-agent"].NativeTools[GoogleNativeToolCodeExecution] = true
 	assert.Len(t, builtin["web-agent"].NativeTools, 2)
+}
+
+func TestMergeAgentsUserReplaceDropsBuiltinLLMProvider(t *testing.T) {
+	builtin := map[string]BuiltinAgentConfig{
+		"WebResearcher": {
+			Description: "builtin",
+			LLMProvider: "google-default",
+			LLMBackend:  LLMBackendNativeGemini,
+		},
+	}
+	user := map[string]AgentConfig{
+		"WebResearcher": {
+			Description: "replaced",
+			LLMBackend:  LLMBackendLangChain,
+		},
+	}
+	result := mergeAgents(builtin, user)
+	assert.Equal(t, "replaced", result["WebResearcher"].Description)
+	assert.Equal(t, LLMBackendLangChain, result["WebResearcher"].LLMBackend)
+	assert.Empty(t, result["WebResearcher"].LLMProvider,
+		"user agents: YAML replace must not keep builtin LLMProvider")
 }
 
 func TestMergeAgentsCarriesSkillFields(t *testing.T) {

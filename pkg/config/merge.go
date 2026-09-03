@@ -25,6 +25,7 @@ func mergeAgents(builtinAgents map[string]BuiltinAgentConfig, userAgents map[str
 			Description:        builtin.Description,
 			MCPServers:         mcpCopy,
 			CustomInstructions: builtin.CustomInstructions,
+			LLMProvider:        builtin.LLMProvider,
 			LLMBackend:         builtin.LLMBackend,
 			NativeTools:        nativeToolsCopy,
 			Skills:             copyStringSlicePtr(builtin.Skills),
