@@ -303,6 +303,37 @@ func TestFallbackProviderEntry_UnmarshalYAML_UnknownKeys(t *testing.T) {
 	}
 }
 
+func TestChatConfig_IsEnabled(t *testing.T) {
+	var nilCfg *ChatConfig
+	assert.True(t, nilCfg.IsEnabled())
+	assert.True(t, (&ChatConfig{}).IsEnabled())
+	assert.True(t, (&ChatConfig{Enabled: BoolPtr(true)}).IsEnabled())
+	assert.False(t, (&ChatConfig{Enabled: BoolPtr(false)}).IsEnabled())
+}
+
+func TestChatConfig_EnabledYAML(t *testing.T) {
+	tests := []struct {
+		name        string
+		yaml        string
+		wantEnabled bool
+		wantAgent   string
+	}{
+		{name: "enabled omitted with agent", yaml: "agent: ChatAgent\n", wantEnabled: true, wantAgent: "ChatAgent"},
+		{name: "empty mapping", yaml: "{}\n", wantEnabled: true},
+		{name: "explicit true", yaml: "enabled: true\n", wantEnabled: true},
+		{name: "explicit false", yaml: "enabled: false\n", wantEnabled: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var c ChatConfig
+			err := yaml.Unmarshal([]byte(tt.yaml), &c)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEnabled, c.IsEnabled())
+			assert.Equal(t, tt.wantAgent, c.Agent)
+		})
+	}
+}
+
 func TestEmbeddingProviderType_IsValid(t *testing.T) {
 	tests := []struct {
 		provider EmbeddingProviderType

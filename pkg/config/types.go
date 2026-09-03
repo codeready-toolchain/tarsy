@@ -287,9 +287,11 @@ type SynthesisConfig struct {
 	FallbackList string     `yaml:"fallback_list,omitempty"`
 }
 
-// ChatConfig defines chat agent configuration
+// ChatConfig defines chat agent configuration.
+// Enabled is a *bool: nil means enabled (same as omitting the chat block).
+// Explicit false disables chat. Agent omitted defaults to ChatAgent at resolve/validate time.
 type ChatConfig struct {
-	Enabled       bool         `yaml:"enabled"`
+	Enabled       *bool        `yaml:"enabled,omitempty"`
 	Agent         string       `yaml:"agent,omitempty"`
 	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
 	LLMProvider   string       `yaml:"llm_provider,omitempty"`
@@ -297,6 +299,14 @@ type ChatConfig struct {
 	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
 	FallbackList  string       `yaml:"fallback_list,omitempty"`
+}
+
+// IsEnabled reports whether chat is on. Nil ChatConfig or nil Enabled means enabled.
+func (c *ChatConfig) IsEnabled() bool {
+	if c == nil {
+		return true
+	}
+	return c.Enabled == nil || *c.Enabled
 }
 
 // ScoringConfig defines scoring agent configuration for session quality evaluation

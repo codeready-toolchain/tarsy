@@ -378,6 +378,8 @@ See [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.m
 
 After a session reaches a terminal state (completed, failed, or timed out), engineers can start a chat conversation to ask follow-up questions. The chat agent receives the full investigation timeline as context and has access to the same MCP tools. Responses stream in real-time and appear inline in the conversation timeline.
 
+Chat is on by default: omit the `chat:` block, or omit `enabled` / `agent` on it, to use built-in `ChatAgent`. Set `chat.enabled: false` to disable follow-up chat for that chain.
+
 Chat is a **prompt concern, not a controller concern** -- the same IteratingController and SingleShotController handle both investigation and chat. The `ChatContext` on the execution context triggers chat-specific prompting.
 
 ## Authentication & Access Control
@@ -485,7 +487,8 @@ agent_chains:
         max_iterations: 15
         synthesis_llm_provider: "openai-default"
     chat:
-      enabled: true
+      # enabled/agent optional (defaults: on, ChatAgent)
+      llm_provider: "google-default"
 ```
 
 ## Next Steps

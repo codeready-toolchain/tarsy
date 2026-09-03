@@ -82,7 +82,7 @@ func TestChatExecutor_FirstMessage_ExecutesThroughAgentFramework(t *testing.T) {
 				},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	// Chat LLM response — agent produces a final answer in 1 call
@@ -251,7 +251,7 @@ func TestChatExecutor_MemoryEnabled_RecallToolPresent_NoAutoInjection(t *testing
 				Agents: []config.StageAgentConfig{{Name: "TestAgent"}},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	// Seed a memory so the recall tool would have results.
@@ -378,7 +378,7 @@ func TestChatExecutor_ContextAccumulation(t *testing.T) {
 				},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	// Two chat executions: first builds context, second should see it
@@ -571,7 +571,7 @@ func TestChatExecutor_OneAtATimeEnforcement(t *testing.T) {
 				},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	// LLM that blocks until channel is fed (simulates slow execution)
@@ -685,7 +685,7 @@ func TestChatExecutor_CancellationEndToEnd(t *testing.T) {
 				},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	// LLM that blocks until cancelled
@@ -798,7 +798,7 @@ func TestChatExecutor_AcceptsInProgressSession(t *testing.T) {
 				},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	llm := &mockLLMClient{
@@ -879,7 +879,7 @@ func TestChatExecutor_CancelBySessionID(t *testing.T) {
 				},
 			},
 		},
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{},
 	}
 
 	// LLM that blocks
@@ -980,7 +980,6 @@ func TestChatExecutor_ChatSubAgents_DispatchesSubAgent(t *testing.T) {
 			},
 		},
 		Chat: &config.ChatConfig{
-			Enabled:   true,
 			SubAgents: config.SubAgentRefs{{Name: "SubWorker"}},
 		},
 	}

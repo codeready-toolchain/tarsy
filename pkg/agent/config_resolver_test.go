@@ -607,6 +607,16 @@ func TestResolveChatAgentConfig(t *testing.T) {
 		assert.Equal(t, "You are a chat agent", resolved.CustomInstructions)
 	})
 
+	t.Run("defaults to ChatAgent when chatCfg.Agent is empty", func(t *testing.T) {
+		chain := &config.ChainConfig{}
+		chatCfg := &config.ChatConfig{LLMProvider: "openai-default"}
+
+		resolved, err := ResolveChatAgentConfig(cfg, chain, chatCfg)
+		require.NoError(t, err)
+		assert.Equal(t, config.AgentNameChat, resolved.AgentName)
+		assert.Equal(t, openaiProvider, resolved.LLMProvider)
+	})
+
 	t.Run("chatCfg agent overrides default", func(t *testing.T) {
 		chain := &config.ChainConfig{}
 		chatCfg := &config.ChatConfig{

@@ -442,15 +442,17 @@ func (v *Validator) validateChains() error {
 			}
 		}
 
-		// Validate chat agent if enabled
-		if chain.Chat != nil && chain.Chat.Enabled {
-			// Chat agent is required when chat is enabled
-			if chain.Chat.Agent == "" {
-				return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("chat.agent required when chat is enabled"))
+		// Validate chat agent if enabled (omitted enabled defaults to on)
+		if chain.Chat != nil && chain.Chat.IsEnabled() {
+			chatAgent := chain.Chat.Agent
+			if chatAgent == "" {
+				chatAgent = AgentNameChat
 			}
 
-			if !v.cfg.AgentRegistry.Has(chain.Chat.Agent) {
-				return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chain.Chat.Agent))
+			if !v.cfg.AgentRegistry.Has(chatAgent) {
+				if _, isBuiltin := GetBuiltinConfig().Agents[chatAgent]; !isBuiltin {
+					return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chatAgent))
+				}
 			}
 
 			// Validate chat LLM backend if specified

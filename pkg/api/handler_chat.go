@@ -148,7 +148,7 @@ func isChatAvailable(sessionStatus alertsession.Status, chain *config.ChainConfi
 	}
 
 	// Chat is enabled by default; only disabled if explicitly set to false.
-	if chain.Chat != nil && !chain.Chat.Enabled {
+	if !chain.Chat.IsEnabled() {
 		return "chat is not enabled for this chain"
 	}
 
