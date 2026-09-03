@@ -119,6 +119,8 @@ flowchart TD
 
 Do **not** set the flag true for every iterating-controller Generate. Gate the loop and forced-conclusion calls on agent type ≠ action. Forced conclusion is eligible for **reads** of the looping prefix; calling is disabled via `disable_tool_calls`.
 
+`disable_tool_calls` maps to LangChain `tool_choice="none"` for OpenAI/xAI-style providers only. Anthropic's `tool_choice` schema has no `"none"`; `langchain_anthropic`/`langchain_google_vertexai` treat any non-`any`/`auto` string as a forced tool *name*, which the Anthropic API rejects once thinking is enabled ("Thinking may not be enabled when tool_choice forces tool use." — hard 400 on Vertex Claude, silently dropped with a warning on direct Anthropic). For Claude/Vertex Claude, leave `tool_choice` unset (default `auto`) on forced conclusion; the forced-conclusion prompt is what steers the model to answer in text instead of calling a tool.
+
 ### Claude / Vertex Claude
 
 When `prompt_cache` is set and the LangChain model is Anthropic or Vertex Claude:

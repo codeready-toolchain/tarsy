@@ -1510,6 +1510,63 @@ class TestLangChainPromptCacheBreakpoints:
         assert captured["bind_tools_kwargs"]["tool_choice"] == "none"
 
     @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    def test_disable_tool_calls_leaves_anthropic_tool_choice_unset(self, provider):
+        """Anthropic has no 'none' tool_choice; langchain_anthropic/vertexai treat any
+        non-any/auto string as a forced tool name, which 400s once thinking is enabled
+        ("Thinking may not be enabled when tool_choice forces tool use."). Forced
+        conclusion must not set tool_choice at all for Claude models.
+        """
+        captured = {}
+
+        class FakeChatAnthropic:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools, **kwargs):
+                captured["bind_tools_kwargs"] = kwargs
+                return self
+
+        with patch("langchain_anthropic.ChatAnthropic", FakeChatAnthropic):
+            config = pb.LLMConfig(
+                provider="anthropic", model="claude-sonnet-4-5",
+                api_key_env="ANTHROPIC_API_KEY",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.ANTHROPIC, False, "exec-99",
+                disable_tool_calls=True,
+            )
+
+        assert "tool_choice" not in captured["bind_tools_kwargs"]
+
+    def test_disable_tool_calls_leaves_vertex_claude_tool_choice_unset(self, provider):
+        captured = {}
+
+        class FakeChatAnthropicVertex:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+            def bind_tools(self, tools, **kwargs):
+                captured["bind_tools_kwargs"] = kwargs
+                return self
+
+        with patch(
+            "langchain_google_vertexai.model_garden.ChatAnthropicVertex",
+            FakeChatAnthropicVertex,
+        ):
+            config = pb.LLMConfig(
+                provider="vertexai",
+                model="claude-sonnet-4-6",
+                project="p",
+                location="us-east5",
+            )
+            provider._get_or_create_model(
+                config, _sample_tools(), prompt_cache.ANTHROPIC, False, "exec-99",
+                disable_tool_calls=True,
+            )
+
+        assert "tool_choice" not in captured["bind_tools_kwargs"]
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
     def test_anthropic_max_retries_on_constructor_not_bind(self, provider):
         captured = {}
 
