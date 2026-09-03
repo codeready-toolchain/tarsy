@@ -16,6 +16,7 @@ const mockGetSystemConfig = vi.mocked(getSystemConfig);
 
 function makeConfig(
   promptCachingEnabled: boolean,
+  extra?: Partial<SystemConfigResponse>,
 ): SystemConfigResponse {
   return {
     defaults: null,
@@ -24,11 +25,13 @@ function makeConfig(
       allowed_ws_origins: [],
       prompt_caching: { enabled: promptCachingEnabled },
     },
+    fallback_lists: {},
     agents: {},
     chains: {},
     mcp_servers: {},
     llm_providers: {},
     skills: {},
+    ...extra,
   };
 }
 
@@ -51,5 +54,22 @@ describe('ConfigViewer prompt caching', () => {
     await user.click(await screen.findByText('System'));
     expect(await screen.findByText('Prompt caching')).toBeInTheDocument();
     expect(screen.getByText('false')).toBeInTheDocument();
+  });
+});
+
+describe('ConfigViewer fallback lists', () => {
+  it('shows a catalog name under Fallback lists', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        fallback_lists: {
+          premium: [{ provider: 'claude-opus', backend: 'langchain' }],
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('Fallback lists'));
+    expect(await screen.findByText('premium')).toBeInTheDocument();
   });
 });

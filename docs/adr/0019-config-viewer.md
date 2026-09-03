@@ -153,11 +153,12 @@ A dedicated response type (not internal config structs):
 
 | Section | Notes |
 |---------|-------|
-| `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, **summarization** (provider/backend only), success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only) |
+| `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, **summarization** (provider/backend and optional `fallback_list`), success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only), **`agents`** pairing map (`llm_provider` / `llm_backend` / `fallback_list`), raw `fallback_list` / `*_fallback_list`, and compose/exec-summary pairing siblings |
 | `queue` | All worker/poll/timeout fields; durations as strings |
 | `system` | GitHub, Slack, Runbooks, Retention, dashboard URL, allowed WS origins — env **names** only for tokens |
-| `agents` | Full agent fields — **no** `llm_provider` on agents |
-| `chains` | Full chain shape including stages, chat, scoring, overrides |
+| `fallback_lists` | Named catalog of `{provider, backend}` entries (omitted backend filled as `langchain`). Empty object when unset. Selectors are shown as written — **no** per-agent expanded walks |
+| `agents` | Full agent fields — **no** `llm_provider` or `fallback_list` on identity |
+| `chains` | Full chain shape including stages, chat, scoring, overrides, raw `fallback_list` / `*_fallback_list`, deprecated `fallback_providers` |
 | `mcp_servers` | Sanitized transport + instructions + masking/summarization |
 | `llm_providers` | Full provider fields including env names + sanitized `base_url` |
 | `skills` | Metadata only: `name`, `description` |
@@ -165,7 +166,7 @@ A dedicated response type (not internal config structs):
 **Agent fields:**
 
 - `type`, `description`, `mcp_servers`, `custom_instructions`, `llm_backend`, `max_iterations`, `native_tools`, `orchestrator`, `skills`, `required_skills`
-- Provider selection lives on defaults / chains / stage overrides, not on agents.
+- Provider selection lives on defaults / `defaults.agents` / chains / stage / ref overrides, not on agent identity. Do **not** emit `llm_provider` or `fallback_list` on `agents`.
 
 **LLM provider fields:**
 
@@ -259,6 +260,7 @@ GET /api/v1/system/config/skills/:name
     "dashboard_url": "https://…",
     "allowed_ws_origins": []
   },
+  "fallback_lists": {},
   "agents": {
     "KubernetesAgent": {
       "type": "…",

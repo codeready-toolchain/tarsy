@@ -156,6 +156,8 @@ func TestSystemConfigHandler(t *testing.T) {
 
 		var resp SystemConfigResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.NotNil(t, resp.FallbackLists)
+		assert.Empty(t, resp.FallbackLists)
 		assert.NotNil(t, resp.Agents)
 		assert.Empty(t, resp.Agents)
 		assert.NotNil(t, resp.Chains)
@@ -284,6 +286,9 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.Equal(t, 1000, k8s.Summarization.SummaryMaxTokenLimit)
 		assert.Equal(t, "google-default", k8s.Summarization.LLMProvider)
 		assert.Equal(t, "langchain", k8s.Summarization.LLMBackend)
+		mcpSumRaw, err := json.Marshal(k8s.Summarization)
+		require.NoError(t, err)
+		assert.NotContains(t, string(mcpSumRaw), `"fallback_list"`)
 
 		agent := resp.Agents["KubernetesAgent"]
 		assert.Equal(t, "Investigate pods carefully", agent.CustomInstructions)
@@ -323,6 +328,7 @@ func TestSystemConfigHandler(t *testing.T) {
 
 		var resp SystemConfigResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Empty(t, resp.FallbackLists)
 		assert.Empty(t, resp.Agents)
 		assert.Empty(t, resp.Chains)
 		assert.Empty(t, resp.MCPServers)
@@ -559,6 +565,7 @@ func TestSystemConfigHandler(t *testing.T) {
 		raw, err := json.Marshal(resp.Agents)
 		require.NoError(t, err)
 		assert.NotContains(t, string(raw), `"llm_provider"`)
+		assert.NotContains(t, string(raw), `"fallback_list"`)
 	})
 
 	t.Run("fail-closed transport JSON omits secret field names", func(t *testing.T) {
@@ -618,6 +625,244 @@ func TestSystemConfigHandler(t *testing.T) {
 			resp.Defaults.FallbackProviders[0])
 		assert.Equal(t, FallbackProviderView{Provider: "gemini-fb", Backend: "google-native"},
 			resp.Defaults.FallbackProviders[1])
+	})
+}
+
+func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
+	t.Run("emits catalog selectors and pairing as written", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			FallbackLists: map[string][]config.FallbackProviderEntry{
+				"premium": {
+					{Provider: "claude-opus"},
+					{Provider: "gemini-pro", Backend: config.LLMBackendNativeGemini},
+				},
+				"empty": {},
+				"mid": {
+					{Provider: "claude-sonnet"},
+				},
+			},
+			Defaults: &config.Defaults{
+				LLMProvider:                  "claude-opus",
+				FallbackList:                 "premium",
+				ComposeProvider:              "claude-sonnet",
+				ComposeBackend:               config.LLMBackendLangChain,
+				ComposeFallbackList:          "mid",
+				ExecutiveSummaryProvider:     "claude-sonnet",
+				ExecutiveSummaryBackend:      config.LLMBackendNativeGemini,
+				ExecutiveSummaryFallbackList: "mid",
+				Scoring: &config.ScoringConfig{
+					Enabled:      true,
+					LLMProvider:  "claude-sonnet",
+					FallbackList: "mid",
+				},
+				Summarization: &config.SummarizationConfig{
+					LLMProvider:  "google-default",
+					LLMBackend:   config.LLMBackendNativeGemini,
+					FallbackList: "empty",
+				},
+				Agents: map[string]config.NamedAgentPairing{
+					"WebResearcher": {
+						LLMProvider:  "google-default",
+						LLMBackend:   config.LLMBackendNativeGemini,
+						FallbackList: "empty",
+					},
+					"ChatAgent": {
+						FallbackList: "mid",
+					},
+				},
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"WebResearcher": {
+					CustomInstructions: "research",
+					LLMBackend:         config.LLMBackendNativeGemini,
+				},
+			}),
+			ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+				"main": {
+					AlertTypes:                   []string{"TestAlert"},
+					LLMProvider:                  "claude-opus",
+					FallbackList:                 "premium",
+					ComposeProvider:              "claude-sonnet",
+					ComposeBackend:               config.LLMBackendLangChain,
+					ComposeFallbackList:          "mid",
+					ExecutiveSummaryProvider:     "claude-sonnet",
+					ExecutiveSummaryFallbackList: "mid",
+					FallbackProviders: []config.FallbackProviderEntry{
+						{Provider: "legacy-inline"},
+					},
+					SubAgents: config.SubAgentRefs{
+						{Name: "WebResearcher", FallbackList: "empty"},
+					},
+					Chat: &config.ChatConfig{
+						Enabled:      true,
+						FallbackList: "mid",
+						SubAgents: config.SubAgentRefs{
+							{Name: "WebResearcher", LLMProvider: "google-default"},
+						},
+					},
+					Scoring: &config.ScoringConfig{
+						Enabled:      true,
+						FallbackList: "mid",
+					},
+					Stages: []config.StageConfig{
+						{
+							Name:         "investigate",
+							FallbackList: "premium",
+							Agents: []config.StageAgentConfig{
+								{
+									Name:         "Worker",
+									LLMProvider:  "claude-opus",
+									FallbackList: "premium",
+									SubAgents: config.SubAgentRefs{
+										{Name: "WebResearcher", FallbackList: "empty"},
+									},
+								},
+							},
+							Synthesis: &config.SynthesisConfig{
+								LLMProvider:  "claude-sonnet",
+								FallbackList: "mid",
+							},
+						},
+					},
+				},
+			}),
+			MCPServerRegistry: config.NewMCPServerRegistry(map[string]*config.MCPServerConfig{
+				"k8s": {
+					Transport: config.TransportConfig{Type: config.TransportTypeStdio, Command: "npx"},
+					Summarization: &config.SummarizationConfig{
+						LLMProvider:  "google-default",
+						FallbackList: "must-not-appear",
+					},
+				},
+			}),
+		}, nil)
+
+		assert.Equal(t, []string{"empty", "mid", "premium"}, sortedKeys(resp.FallbackLists))
+		require.Len(t, resp.FallbackLists["premium"], 2)
+		assert.Equal(t, FallbackProviderView{Provider: "claude-opus", Backend: "langchain"},
+			resp.FallbackLists["premium"][0])
+		assert.Equal(t, FallbackProviderView{Provider: "gemini-pro", Backend: "google-native"},
+			resp.FallbackLists["premium"][1])
+		require.NotNil(t, resp.FallbackLists["empty"])
+		assert.Empty(t, resp.FallbackLists["empty"])
+		require.Len(t, resp.FallbackLists["mid"], 1)
+		assert.Equal(t, "claude-sonnet", resp.FallbackLists["mid"][0].Provider)
+
+		require.NotNil(t, resp.Defaults)
+		assert.Equal(t, "premium", resp.Defaults.FallbackList)
+		assert.Equal(t, "mid", resp.Defaults.ComposeFallbackList)
+		assert.Equal(t, "langchain", resp.Defaults.ComposeBackend)
+		assert.Equal(t, "claude-sonnet", resp.Defaults.ExecutiveSummaryProvider)
+		assert.Equal(t, "google-native", resp.Defaults.ExecutiveSummaryBackend)
+		assert.Equal(t, "mid", resp.Defaults.ExecutiveSummaryFallbackList)
+		require.NotNil(t, resp.Defaults.Scoring)
+		assert.Equal(t, "mid", resp.Defaults.Scoring.FallbackList)
+		require.NotNil(t, resp.Defaults.Summarization)
+		assert.Equal(t, "empty", resp.Defaults.Summarization.FallbackList)
+		assert.Equal(t, []string{"ChatAgent", "WebResearcher"}, sortedKeys(resp.Defaults.Agents))
+		assert.Equal(t, NamedAgentPairingView{
+			LLMProvider:  "google-default",
+			LLMBackend:   "google-native",
+			FallbackList: "empty",
+		}, resp.Defaults.Agents["WebResearcher"])
+		assert.Equal(t, NamedAgentPairingView{FallbackList: "mid"}, resp.Defaults.Agents["ChatAgent"])
+
+		chain := resp.Chains["main"]
+		assert.Equal(t, "premium", chain.FallbackList)
+		assert.Equal(t, "langchain", chain.ComposeBackend)
+		assert.Equal(t, "mid", chain.ComposeFallbackList)
+		assert.Equal(t, "mid", chain.ExecutiveSummaryFallbackList)
+		require.Len(t, chain.FallbackProviders, 1)
+		assert.Equal(t, "legacy-inline", chain.FallbackProviders[0].Provider)
+		require.Len(t, chain.SubAgents, 1)
+		assert.Equal(t, "empty", chain.SubAgents[0].FallbackList)
+		require.NotNil(t, chain.Chat)
+		assert.Equal(t, "mid", chain.Chat.FallbackList)
+		require.NotNil(t, chain.Scoring)
+		assert.Equal(t, "mid", chain.Scoring.FallbackList)
+		require.Len(t, chain.Stages, 1)
+		assert.Equal(t, "premium", chain.Stages[0].FallbackList)
+		require.Len(t, chain.Stages[0].Agents, 1)
+		assert.Equal(t, "premium", chain.Stages[0].Agents[0].FallbackList)
+		require.Len(t, chain.Stages[0].Agents[0].SubAgents, 1)
+		assert.Equal(t, "empty", chain.Stages[0].Agents[0].SubAgents[0].FallbackList)
+		require.NotNil(t, chain.Stages[0].Synthesis)
+		assert.Equal(t, "mid", chain.Stages[0].Synthesis.FallbackList)
+
+		agentRaw, err := json.Marshal(resp.Agents)
+		require.NoError(t, err)
+		assert.NotContains(t, string(agentRaw), `"llm_provider"`)
+		assert.NotContains(t, string(agentRaw), `"fallback_list"`)
+
+		mcpSumRaw, err := json.Marshal(resp.MCPServers["k8s"].Summarization)
+		require.NoError(t, err)
+		assert.NotContains(t, string(mcpSumRaw), `"fallback_list"`)
+		assert.NotContains(t, string(mcpSumRaw), "must-not-appear")
+
+		emptyRaw, err := json.Marshal(resp.FallbackLists["empty"])
+		require.NoError(t, err)
+		assert.JSONEq(t, `[]`, string(emptyRaw))
+
+		chainRaw, err := json.Marshal(chain)
+		require.NoError(t, err)
+		assert.NotContains(t, string(chainRaw), `"executive_summary_backend"`)
+	})
+
+	t.Run("empty catalogs emit JSON empty object", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			lists map[string][]config.FallbackProviderEntry
+		}{
+			{name: "nil"},
+			{name: "empty map", lists: map[string][]config.FallbackProviderEntry{}},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				resp := buildSystemConfigResponse(&config.Config{FallbackLists: tt.lists}, nil)
+				require.NotNil(t, resp.FallbackLists)
+				assert.Empty(t, resp.FallbackLists)
+
+				raw, err := json.Marshal(resp)
+				require.NoError(t, err)
+				var decoded map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(raw, &decoded))
+				assert.JSONEq(t, `{}`, string(decoded["fallback_lists"]))
+			})
+		}
+	})
+
+	t.Run("omitted selectors and sibling backends stay out of JSON", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			Defaults: &config.Defaults{
+				LLMProvider:     "google-default",
+				ComposeProvider: "google-default",
+			},
+			ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+				"plain": {
+					AlertTypes: []string{"X"},
+					Stages: []config.StageConfig{
+						{Name: "s", Agents: []config.StageAgentConfig{{Name: "A"}}},
+					},
+				},
+			}),
+		}, nil)
+
+		rawDefaults, err := json.Marshal(resp.Defaults)
+		require.NoError(t, err)
+		defaultsBody := string(rawDefaults)
+		assert.NotContains(t, defaultsBody, `"fallback_list"`)
+		assert.NotContains(t, defaultsBody, `"compose_backend"`)
+		assert.NotContains(t, defaultsBody, `"compose_fallback_list"`)
+		assert.NotContains(t, defaultsBody, `"executive_summary_provider"`)
+		assert.NotContains(t, defaultsBody, `"agents"`)
+
+		chainRaw, err := json.Marshal(resp.Chains["plain"])
+		require.NoError(t, err)
+		chainBody := string(chainRaw)
+		assert.NotContains(t, chainBody, `"fallback_list"`)
+		assert.NotContains(t, chainBody, `"compose_backend"`)
+		assert.NotContains(t, chainBody, `"executive_summary_backend"`)
+		assert.NotContains(t, chainBody, `"compose_fallback_list"`)
 	})
 }
 
