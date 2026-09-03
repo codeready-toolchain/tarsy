@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,13 +16,28 @@ import (
 
 // TarsyYAMLConfig represents the complete tarsy.yaml file structure
 type TarsyYAMLConfig struct {
-	System        *SystemYAMLConfig          `yaml:"system"`
-	MCPServers    map[string]MCPServerConfig `yaml:"mcp_servers"`
-	Agents        map[string]AgentConfig     `yaml:"agents"`
-	AgentChains   map[string]ChainConfig     `yaml:"agent_chains"`
-	FallbackLists catalogFallbackLists       `yaml:"fallback_lists"`
-	Defaults      *Defaults                  `yaml:"defaults"`
-	Queue         *QueueConfig               `yaml:"queue"`
+	System        *SystemYAMLConfig                  `yaml:"system"`
+	MCPServers    map[string]MCPServerConfig         `yaml:"mcp_servers"`
+	Agents        map[string]AgentConfig             `yaml:"agents"`
+	AgentChains   map[string]ChainConfig             `yaml:"agent_chains"`
+	FallbackLists map[string][]FallbackProviderEntry `yaml:"-"`
+	Defaults      *Defaults                          `yaml:"defaults"`
+	Queue         *QueueConfig                       `yaml:"queue"`
+}
+
+func (c *TarsyYAMLConfig) UnmarshalYAML(value *yaml.Node) error {
+	type plain TarsyYAMLConfig
+	aux := struct {
+		*plain  `yaml:",inline"`
+		Catalog catalogFallbackLists `yaml:"fallback_lists"`
+	}{
+		plain: (*plain)(c),
+	}
+	if err := value.Decode(&aux); err != nil {
+		return err
+	}
+	c.FallbackLists = aux.Catalog.toEntries()
+	return nil
 }
 
 // SystemYAMLConfig groups system-wide infrastructure settings.
@@ -236,7 +252,7 @@ func load(_ context.Context, configDir string) (*Config, error) {
 
 	return &Config{
 		configDir:           configDir,
-		FallbackLists:       tarsyConfig.FallbackLists.toEntries(),
+		FallbackLists:       maps.Clone(tarsyConfig.FallbackLists),
 		Defaults:            defaults,
 		Queue:               queueConfig,
 		GitHub:              githubCfg,

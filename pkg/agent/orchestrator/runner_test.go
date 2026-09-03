@@ -476,10 +476,10 @@ func TestSubAgentRunner_Dispatch_NoExtraTimeoutInheritsParent(t *testing.T) {
 }
 
 func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
-	started := make(chan struct{})
+	startedAtCh := make(chan time.Time, 1)
 	var cause atomic.Value
 	runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
-		close(started)
+		startedAtCh <- time.Now()
 		<-runCtx.Done()
 		cause.Store(context.Cause(runCtx))
 		return nil, runCtx.Err()
@@ -495,12 +495,23 @@ func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
 	_, err := runner.Dispatch(t.Context(), "TestAgent", "slow task")
 	require.NoError(t, err)
 
+	var startedAt time.Time
 	select {
-	case <-started:
+	case startedAt = <-startedAtCh:
 	case <-parent.Done():
-		t.Fatal("agent did not start before parent deadline")
+		select {
+		case startedAt = <-startedAtCh:
+		default:
+			t.Fatal("agent did not start before parent deadline")
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("agent did not start in time")
+	}
+
+	deadline, ok := parent.Deadline()
+	require.True(t, ok)
+	if !startedAt.Before(deadline) {
+		t.Fatalf("agent started at or after parent deadline: started=%s deadline=%s", startedAt, deadline)
 	}
 
 	result, err := runner.WaitForNext(t.Context())
