@@ -964,7 +964,6 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 						},
 					},
 					Chat: &ChatConfig{
-						Enabled:     true,
 						Agent:       "test-agent",
 						LLMProvider: "chat-provider",
 					},
@@ -1053,8 +1052,7 @@ func TestValidateLLMProvidersOnlyReferencedProviders(t *testing.T) {
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Chat: &ChatConfig{
-						Enabled: true,
-						Agent:   "ChatAgent",
+						Agent: "ChatAgent",
 						SubAgents: SubAgentRefs{
 							{Name: "Worker", LLMProvider: "chat-sub-provider"},
 						},
@@ -1965,13 +1963,12 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			errMsg:  "MCP server 'nonexistent-server' not found",
 		},
 		{
-			name: "chain with chat enabled but no chat agent",
+			name: "chain with chat enabled and omitted agent defaults to ChatAgent",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Chat: &ChatConfig{
-						Enabled: true,
-						// Agent not specified
+						Enabled: BoolPtr(true),
 					},
 					Stages: []StageConfig{
 						{
@@ -1988,8 +1985,34 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			servers: map[string]*MCPServerConfig{
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
-			wantErr: true,
-			errMsg:  "chat.agent required when chat is enabled",
+			wantErr: false,
+		},
+		{
+			name: "chain with chat overrides omitted enabled and agent",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Chat: &ChatConfig{
+						LLMProvider: "test-provider",
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{
+				"test-provider": {Type: LLMProviderTypeOpenAI, Model: "gpt-5"},
+			},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
 		},
 		{
 			name: "chain with chat agent not found",
@@ -1997,8 +2020,7 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Chat: &ChatConfig{
-						Enabled: true,
-						Agent:   "nonexistent-chat-agent",
+						Agent: "nonexistent-chat-agent",
 					},
 					Stages: []StageConfig{
 						{
@@ -2019,6 +2041,32 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			errMsg:  "agent 'nonexistent-chat-agent' not found",
 		},
 		{
+			name: "chat disabled skips agent validation",
+			chains: map[string]*ChainConfig{
+				"test-chain": {
+					AlertTypes: []string{"test"},
+					Chat: &ChatConfig{
+						Enabled: BoolPtr(false),
+						Agent:   "nonexistent-chat-agent",
+					},
+					Stages: []StageConfig{
+						{
+							Name:   "stage1",
+							Agents: []StageAgentConfig{{Name: "test-agent"}},
+						},
+					},
+				},
+			},
+			agents: map[string]*AgentConfig{
+				"test-agent": {MCPServers: []string{"test-server"}},
+			},
+			providers: map[string]*LLMProviderConfig{},
+			servers: map[string]*MCPServerConfig{
+				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
+			},
+			wantErr: false,
+		},
+		{
 			name: "valid chain with all optional fields",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
@@ -2027,8 +2075,7 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 					MaxIterations: &maxIter15,
 					MCPServers:    []string{"test-server"},
 					Chat: &ChatConfig{
-						Enabled: true,
-						Agent:   "chat-agent",
+						Agent: "chat-agent",
 					},
 					Stages: []StageConfig{
 						{
@@ -2086,7 +2133,6 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-chain": {
 					AlertTypes: []string{"test"},
 					Chat: &ChatConfig{
-						Enabled:     true,
 						Agent:       "test-agent",
 						LLMProvider: "openai-default",
 						LLMBackend:  LLMBackendNativeGemini,
@@ -3897,7 +3943,6 @@ func TestValidateSubAgents(t *testing.T) {
 				"chain1": {
 					AlertTypes: []string{"test"},
 					Chat: &ChatConfig{
-						Enabled:   true,
 						Agent:     "ChatAgent",
 						SubAgents: SubAgentRefs{{Name: "LogAnalyzer"}},
 					},
@@ -3925,7 +3970,6 @@ func TestValidateSubAgents(t *testing.T) {
 				"chain1": {
 					AlertTypes: []string{"test"},
 					Chat: &ChatConfig{
-						Enabled:   true,
 						Agent:     "ChatAgent",
 						SubAgents: SubAgentRefs{{Name: "MissingSub"}},
 					},
@@ -4380,8 +4424,7 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 					{Name: "Worker", LLMProvider: "chain-subagent"},
 				},
 				Chat: &ChatConfig{
-					Enabled: true,
-					Agent:   "TestAgent",
+					Agent: "TestAgent",
 					SubAgents: SubAgentRefs{
 						{Name: "Worker", LLMProvider: "chat-subagent"},
 					},

@@ -46,7 +46,19 @@ func setupTestSessionService(_ *testing.T, client *ent.Client) *SessionService {
 		},
 		"chat-disabled-chain": {
 			AlertTypes: []string{"test-no-chat"},
-			Chat:       &config.ChatConfig{Enabled: false},
+			Chat:       &config.ChatConfig{Enabled: config.BoolPtr(false)},
+			Stages: []config.StageConfig{
+				{
+					Name: "stage1",
+					Agents: []config.StageAgentConfig{
+						{Name: "test-agent"},
+					},
+				},
+			},
+		},
+		"chat-omitted-enabled-chain": {
+			AlertTypes: []string{"test-omitted-chat"},
+			Chat:       &config.ChatConfig{},
 			Stages: []config.StageConfig{
 				{
 					Name: "stage1",

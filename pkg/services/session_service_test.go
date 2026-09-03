@@ -1096,6 +1096,16 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, false, detail.ChatEnabled, "chat should be disabled when chain sets Chat.Enabled=false")
 	})
 
+	t.Run("chat_enabled true when chat block omits enabled", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"chat omitted enabled test", "test-omitted-chat", "chat-omitted-enabled-chain",
+			10, 5, 15, 0)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.True(t, detail.ChatEnabled)
+	})
+
 	t.Run("populates fallback metadata in execution overview from timeline events", func(t *testing.T) {
 		now := time.Now()
 		started := now.Add(-10 * time.Second)

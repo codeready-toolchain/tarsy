@@ -116,6 +116,57 @@ agent_chains:
 	assert.Contains(t, err.Error(), "NonexistentAgent")
 }
 
+func TestInitialize_ChatOmitsEnabledAndAgent(t *testing.T) {
+	configDir := t.TempDir()
+	tarsyYAML := `
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  omitted-chat:
+    alert_types: ["omitted-chat"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+    chat:
+      llm_provider: google-default
+  disabled-chat:
+    alert_types: ["disabled-chat"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+    chat:
+      enabled: false
+`
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+	t.Setenv("GOOGLE_API_KEY", "test-key")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("XAI_API_KEY", "test-key")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+	cfg, err := Initialize(context.Background(), configDir)
+	require.NoError(t, err)
+
+	omitted, err := cfg.GetChain("omitted-chat")
+	require.NoError(t, err)
+	require.NotNil(t, omitted.Chat)
+	assert.True(t, omitted.Chat.IsEnabled())
+	assert.Empty(t, omitted.Chat.Agent)
+	assert.Equal(t, "google-default", omitted.Chat.LLMProvider)
+
+	disabled, err := cfg.GetChain("disabled-chat")
+	require.NoError(t, err)
+	require.NotNil(t, disabled.Chat)
+	assert.False(t, disabled.Chat.IsEnabled())
+}
+
 func TestLoadTarsyYAML(t *testing.T) {
 	configDir := t.TempDir()
 

@@ -752,7 +752,7 @@ func buildChatView(c *config.ChatConfig) *ChatView {
 		return nil
 	}
 	return &ChatView{
-		Enabled:       c.Enabled,
+		Enabled:       c.IsEnabled(),
 		Agent:         c.Agent,
 		LLMBackend:    string(c.LLMBackend),
 		LLMProvider:   c.LLMProvider,

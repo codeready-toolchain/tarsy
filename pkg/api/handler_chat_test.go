@@ -15,12 +15,15 @@ import (
 
 func TestIsChatAvailable(t *testing.T) {
 	enabledChain := &config.ChainConfig{
-		Chat: &config.ChatConfig{Enabled: true},
+		Chat: &config.ChatConfig{Enabled: config.BoolPtr(true)},
 	}
 	disabledChain := &config.ChainConfig{
-		Chat: &config.ChatConfig{Enabled: false},
+		Chat: &config.ChatConfig{Enabled: config.BoolPtr(false)},
 	}
 	noChatChain := &config.ChainConfig{}
+	omittedEnabledChain := &config.ChainConfig{
+		Chat: &config.ChatConfig{},
+	}
 
 	tests := []struct {
 		name          string
@@ -81,6 +84,12 @@ func TestIsChatAvailable(t *testing.T) {
 			name:          "no chat config in chain (enabled by default)",
 			sessionStatus: alertsession.StatusCompleted,
 			chain:         noChatChain,
+			wantEmpty:     true,
+		},
+		{
+			name:          "chat block with omitted enabled (enabled by default)",
+			sessionStatus: alertsession.StatusCompleted,
+			chain:         omittedEnabledChain,
 			wantEmpty:     true,
 		},
 	}

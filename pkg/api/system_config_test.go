@@ -497,7 +497,7 @@ func TestSystemConfigHandler(t *testing.T) {
 								},
 							},
 						},
-						Chat: &config.ChatConfig{Enabled: true, Agent: "Worker"},
+						Chat: &config.ChatConfig{Agent: "Worker"},
 					},
 				}),
 				LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
@@ -694,7 +694,6 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 						{Name: "WebResearcher", FallbackList: "empty"},
 					},
 					Chat: &config.ChatConfig{
-						Enabled:      true,
 						FallbackList: "mid",
 						SubAgents: config.SubAgentRefs{
 							{Name: "WebResearcher", LLMProvider: "google-default"},
@@ -923,6 +922,31 @@ func TestBuildOrchestratorView(t *testing.T) {
 	t.Run("nil config yields nil view", func(t *testing.T) {
 		t.Parallel()
 		assert.Nil(t, buildOrchestratorView(nil))
+	})
+}
+
+func TestBuildChatView(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil config yields nil view", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, buildChatView(nil))
+	})
+
+	t.Run("omitted enabled is true and omitted agent stays empty", func(t *testing.T) {
+		t.Parallel()
+		view := buildChatView(&config.ChatConfig{LLMProvider: "google-default"})
+		require.NotNil(t, view)
+		assert.True(t, view.Enabled)
+		assert.Empty(t, view.Agent)
+		assert.Equal(t, "google-default", view.LLMProvider)
+	})
+
+	t.Run("explicit false stays disabled", func(t *testing.T) {
+		t.Parallel()
+		view := buildChatView(&config.ChatConfig{Enabled: config.BoolPtr(false)})
+		require.NotNil(t, view)
+		assert.False(t, view.Enabled)
 	})
 }
 
