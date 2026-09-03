@@ -20,9 +20,25 @@ type TarsyYAMLConfig struct {
 	MCPServers    map[string]MCPServerConfig         `yaml:"mcp_servers"`
 	Agents        map[string]AgentConfig             `yaml:"agents"`
 	AgentChains   map[string]ChainConfig             `yaml:"agent_chains"`
-	FallbackLists map[string][]FallbackProviderEntry `yaml:"fallback_lists"`
+	FallbackLists map[string][]FallbackProviderEntry `yaml:"-"`
 	Defaults      *Defaults                          `yaml:"defaults"`
 	Queue         *QueueConfig                       `yaml:"queue"`
+}
+
+// UnmarshalYAML loads catalog fallback_lists using llm_provider/llm_backend and stores them on FallbackLists.
+func (c *TarsyYAMLConfig) UnmarshalYAML(value *yaml.Node) error {
+	type plain TarsyYAMLConfig
+	aux := struct {
+		*plain  `yaml:",inline"`
+		Catalog catalogFallbackLists `yaml:"fallback_lists"`
+	}{
+		plain: (*plain)(c),
+	}
+	if err := value.Decode(&aux); err != nil {
+		return err
+	}
+	c.FallbackLists = aux.Catalog.toEntries()
+	return nil
 }
 
 // SystemYAMLConfig groups system-wide infrastructure settings.

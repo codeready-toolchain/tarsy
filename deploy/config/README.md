@@ -58,6 +58,7 @@ These files are **tracked in git** and serve as templates:
 Main configuration file containing:
 
 - **`system:`** - Infrastructure settings (GitHub, runbooks, Slack, retention, **cost estimation**, **prompt caching**)
+- **`fallback_lists:`** - Named reusable LLM fallback catalogs (selected via `fallback_list`)
 - **`defaults:`** - System-wide default values
 - **`mcp_servers:`** - MCP server configurations
 - **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
@@ -67,31 +68,51 @@ LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See 
 
 Provider prompt caching (`system.prompt_caching`) is enabled by default. When on, looping investigation-style agents send Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints. Setting `enabled: false` is a GitOps kill switch and does **not** disable Gemini implicit caching. See [ADR-0026: Prompt Caching](../../docs/adr/0026-prompt-caching.md).
 
+Named LLM fallback lists (`fallback_lists` + `fallback_list`) let each job bind a cost/quality preference instead of sharing one global walk. Deprecated inline `fallback_providers` still loads. See [ADR-0030: Named Fallback Lists](../../docs/adr/0030-named-fallback-lists.md).
+
 ```yaml
+fallback_lists:
+  mid:
+    - llm_provider: "gemini-3.1-pro"
+      llm_backend: "google-native"
+    - llm_provider: "google-default"
+      llm_backend: "google-native"
+
 defaults:
   llm_provider: "google-default"
   llm_backend: "google-native"  # sibling of llm_provider; omit → langchain
   # A named llm_provider (chain, stage-agent, chat, scoring, synthesis, …)
   # without a sibling llm_backend on that same node resolves to langchain.
   # google-native must be written next to the provider; it is not inherited.
+  fallback_list: mid            # named catalog entry; prefer this over inline lists
   # Mid-tier model for compose (amended report after action).
   # Resolution: chain.compose_provider → defaults.compose_provider →
   # chain.llm_provider → defaults.llm_provider.
   # chain.llm_provider does not override defaults.compose_provider.
-  # compose_provider has no sibling backend field; omit → langchain.
+  # Omitted compose_backend / executive_summary_backend → langchain.
   compose_provider: "google-default"
+  compose_backend: "langchain"
+  compose_fallback_list: mid
   max_iterations: 40
-  fallback_providers:
-    - provider: "gemini-3.1-pro"
-      backend: "google-native"  # omit backend to default to langchain
+  # Deprecated: inline fallback_providers still loads (startup warning) on
+  # defaults / chain / stage / stage-agent when fallback_list is unset.
+  # Mixing fallback_list and fallback_providers on the same node is a load error.
   # Optional: summarize large MCP results (and search_past_sessions) with a
   # cheaper named provider. Unset keeps the calling agent's model.
   # Omit llm_backend to use langchain. On summarization LLM error, TARSy
-  # walks fallback_providers locally before MCP fail-open / session-search
-  # fail-closed (investigator model unchanged). Empty list: no walk.
+  # walks defaults.summarization.fallback_list when set, otherwise the
+  # calling agent's effective list, locally before MCP fail-open /
+  # session-search fail-closed (investigator model unchanged). Empty list:
+  # no walk.
   # summarization:
   #   llm_provider: "google-default"
   #   llm_backend: "google-native"
+  #   fallback_list: mid
+  # Global pair + list for any registered agent (builtins, ChatAgent, custom).
+  # Does not replace agents: identity. Chain/stage/ref overrides when set.
+  # agents:
+  #   WebResearcher:
+  #     fallback_list: mid
 
 mcp_servers:
   kubernetes-server:

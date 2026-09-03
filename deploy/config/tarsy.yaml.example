@@ -140,6 +140,30 @@ system:
     cleanup_interval: 12h            # How often the cleanup loop runs
 
 # =============================================================================
+# NAMED FALLBACK LISTS
+# =============================================================================
+# Reusable ordered fallback catalogs. Call sites select a list by name with
+# fallback_list (or compose_fallback_list / executive_summary_fallback_list).
+# Catalog entries use llm_provider / llm_backend (omit backend → langchain).
+# Unknown list names fail at load. Credentials are required only for lists
+# that some selector actually names. See docs/adr/0030-named-fallback-lists.md.
+#
+# fallback_lists:
+#   premium:
+#     - llm_provider: "gemini-3.1-pro"
+#       llm_backend: "google-native"
+#     - llm_provider: "google-default"
+#       llm_backend: "google-native"
+#   mid:
+#     - llm_provider: "google-default"
+#       llm_backend: "google-native"
+#   google-native:
+#     - llm_provider: "google-default"
+#       llm_backend: "google-native"
+#     - llm_provider: "gemini-3.1-pro"
+#       llm_backend: "google-native"
+
+# =============================================================================
 # SYSTEM-WIDE DEFAULTS
 # =============================================================================
 # These values are used when components don't specify their own values
@@ -150,7 +174,14 @@ defaults:
 
   # Mid-tier provider for compose (amended-report) generation.
   # Beats chain.llm_provider. Override per chain with compose_provider.
+  # Omitted compose_backend → langchain. Optional compose_fallback_list names
+  # a catalog entry so compose does not walk the investigation list.
   compose_provider: "google-default"
+  # compose_backend: "langchain"
+  # compose_fallback_list: mid
+  # executive_summary_provider: "google-default"
+  # executive_summary_backend: "langchain"
+  # executive_summary_fallback_list: mid
   
   # Default max iterations (forces conclusion when reached, no pause/resume)
   max_iterations: 40
@@ -169,16 +200,32 @@ defaults:
   #   # agent_timeout omitted → remaining parent (session/chat) time
   #   # agent_timeout: 20m     # optional dedicated cap, still clamped to parent
 
-  # LLM provider fallback — ordered list of alternative providers to try when
-  # the primary provider fails (after Python-level retries are exhausted).
-  # Each entry specifies both provider and backend explicitly.
-  # Overridable per chain, stage, or agent.
-  # Validated at startup: all referenced providers must exist with valid credentials.
+  # LLM provider fallback — named catalog (fallback_lists) plus a selector.
+  # Prefer fallback_list everywhere. Deprecated inline fallback_providers still
+  # loads on defaults / chain / stage / stage-agent (startup warning) when
+  # fallback_list is unset. Mixing both on one node is a load-time error.
+  # Overridable per chain, stage, stage-agent, sub-agent ref, and job knobs.
+  # Validated at startup: unknown list names fail; referenced providers need
+  # credentials. See docs/adr/0030-named-fallback-lists.md.
+  # fallback_list: mid
+  # Deprecated inline form (do not add to new sites):
   # fallback_providers:
   #   - provider: "gemini-3.1-pro"
   #     backend: "google-native"
   #   - provider: "anthropic-vertex"
   #     backend: "langchain"
+
+  # Global pair + list for any registered agent (WebResearcher, ChatAgent,
+  # custom, …). Does not replace agents: identity. Chain/stage/ref wins when set.
+  # Builtin WebResearcher / CodeExecutor already pair google-default +
+  # google-native in Go; set fallback_list here so they do not inherit premium.
+  # agents:
+  #   WebResearcher:
+  #     fallback_list: google-native
+  #   CodeExecutor:
+  #     fallback_list: google-native
+  #   ChatAgent:
+  #     fallback_list: mid
   
   # Default scoring configuration for all chains.
   # Chains with an explicit scoring: block are not affected.
@@ -187,14 +234,17 @@ defaults:
   #   agent: "ScoringAgent"               # Default scoring agent name
   #   llm_provider: "gemini-3-flash"      # Default LLM provider for scoring
   #   llm_backend: "google-native"        # Default LLM backend for scoring
+  #   fallback_list: mid                  # Dedicated walk; beats investigation premium
 
   # Optional: summarize large MCP tool results (and search_past_sessions) with a
   # cheaper named provider. Unset keeps the calling agent's model.
-  # Only llm_provider / llm_backend belong here — enablement and size thresholds
-  # stay per-MCP-server. Omit llm_backend to use langchain.
+  # Only llm_provider / llm_backend / fallback_list belong here — enablement
+  # and size thresholds stay per-MCP-server. Omit llm_backend to use langchain.
+  # Unset fallback_list walks the calling agent's effective list.
   # summarization:
   #   llm_provider: "google-default"
   #   llm_backend: "google-native"
+  #   fallback_list: google-native
   
   # Investigation memory — learns from past investigations and injects relevant
   # memories into future sessions via semantic retrieval (pgvector cosine similarity).
@@ -534,6 +584,7 @@ agent_chains:
       # agent: "ScoringAgent"               # Agent to use (default: built-in ScoringAgent)
       llm_backend: "langchain"            # Override LLM backend (default: global default)
       llm_provider: "google-default"      # Override LLM provider (default: global default)
+      # fallback_list: mid                  # Optional; beats investigation chain list
 
   # Multi-stage chain with different strategies
   kubernetes-deep-troubleshooting:
@@ -597,8 +648,10 @@ agent_chains:
   security-incident:
     alert_types: ["SecurityIncident", "IntrusionDetection"]
     description: "Security-focused investigation"
-    # Chain-level fallback overrides defaults.fallback_providers for all
-    # stages/agents in this chain. Can also be set per stage or per agent.
+    # Chain-level fallback_list overrides defaults.fallback_list for stages
+    # that do not set their own. Prefer a named catalog entry. Deprecated
+    # fallback_providers still works here when fallback_list is unset.
+    # fallback_list: premium
     # fallback_providers:
     #   - provider: "gemini-3.1-pro"
     #     backend: "google-native"
@@ -647,7 +700,7 @@ agent_chains:
             # (parent stage required_skills do not apply to sub-agents).
             sub_agents:
               - name: KubernetesAgent              # built-in: K8s pod/deployment inspection
-              - name: WebResearcher                # built-in: public URLs, repos, docs, CVEs (google_search + url_context)
+              - name: WebResearcher                # built-in: google_search + url_context (google-default + google-native)
               - name: CodeExecutor                 # built-in: Python code execution
               - name: GeneralWorker                # built-in: pure reasoning / summarization
                 mcp_servers: [kubernetes-server]   # give GeneralWorker K8s access

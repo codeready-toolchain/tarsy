@@ -476,21 +476,43 @@ func TestSubAgentRunner_Dispatch_NoExtraTimeoutInheritsParent(t *testing.T) {
 }
 
 func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
-	parent, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-	t.Cleanup(cancel)
-
+	startedAtCh := make(chan time.Time, 1)
 	var cause atomic.Value
 	runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
+		startedAtCh <- time.Now()
 		<-runCtx.Done()
 		cause.Store(context.Cause(runCtx))
 		return nil, runCtx.Err()
 	})
 	defer cleanup()
+
+	// Arm after testdb setup so CI schema creation cannot consume the deadline.
+	parent, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	t.Cleanup(cancel)
 	runner.parentCtx = parent
 	runner.guardrails.AgentTimeout = time.Hour
 
 	_, err := runner.Dispatch(t.Context(), "TestAgent", "slow task")
 	require.NoError(t, err)
+
+	var startedAt time.Time
+	select {
+	case startedAt = <-startedAtCh:
+	case <-parent.Done():
+		select {
+		case startedAt = <-startedAtCh:
+		default:
+			t.Fatal("agent did not start before parent deadline")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("agent did not start in time")
+	}
+
+	deadline, ok := parent.Deadline()
+	require.True(t, ok)
+	if !startedAt.Before(deadline) {
+		t.Fatalf("agent started at or after parent deadline: started=%s deadline=%s", startedAt, deadline)
+	}
 
 	result, err := runner.WaitForNext(t.Context())
 	require.NoError(t, err)

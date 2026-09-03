@@ -16,14 +16,15 @@ import (
 
 // SystemConfigResponse is returned by GET /api/v1/system/config.
 type SystemConfigResponse struct {
-	Defaults     *DefaultsView              `json:"defaults"`
-	Queue        *QueueView                 `json:"queue"`
-	System       SystemView                 `json:"system"`
-	Agents       map[string]AgentView       `json:"agents"`
-	Chains       map[string]ChainView       `json:"chains"`
-	MCPServers   map[string]MCPServerView   `json:"mcp_servers"`
-	LLMProviders map[string]LLMProviderView `json:"llm_providers"`
-	Skills       map[string]SkillMetaView   `json:"skills"`
+	Defaults      *DefaultsView                         `json:"defaults"`
+	Queue         *QueueView                            `json:"queue"`
+	System        SystemView                            `json:"system"`
+	FallbackLists map[string][]CatalogFallbackEntryView `json:"fallback_lists"`
+	Agents        map[string]AgentView                  `json:"agents"`
+	Chains        map[string]ChainView                  `json:"chains"`
+	MCPServers    map[string]MCPServerView              `json:"mcp_servers"`
+	LLMProviders  map[string]LLMProviderView            `json:"llm_providers"`
+	Skills        map[string]SkillMetaView              `json:"skills"`
 }
 
 // SystemConfigSkillResponse is returned by GET /api/v1/system/config/skills/:name.
@@ -55,7 +56,7 @@ type MCPServerView struct {
 	Summarization *MCPSummarizationView `json:"summarization,omitempty"`
 }
 
-// AgentView is the agent config view (no llm_provider field).
+// AgentView is the agent config view (no llm_provider or fallback_list).
 type AgentView struct {
 	Type               string            `json:"type,omitempty"`
 	Description        string            `json:"description,omitempty"`
@@ -77,19 +78,24 @@ type OrchestratorView struct {
 
 // ChainView is the chain config view.
 type ChainView struct {
-	AlertTypes               []string               `json:"alert_types"`
-	Description              string                 `json:"description,omitempty"`
-	Stages                   []StageView            `json:"stages"`
-	Chat                     *ChatView              `json:"chat,omitempty"`
-	Scoring                  *ScoringView           `json:"scoring,omitempty"`
-	LLMProvider              string                 `json:"llm_provider,omitempty"`
-	ExecutiveSummaryProvider string                 `json:"executive_summary_provider,omitempty"`
-	ComposeProvider          string                 `json:"compose_provider,omitempty"`
-	LLMBackend               string                 `json:"llm_backend,omitempty"`
-	FallbackProviders        []FallbackProviderView `json:"fallback_providers,omitempty"`
-	MaxIterations            *int                   `json:"max_iterations,omitempty"`
-	MCPServers               []string               `json:"mcp_servers,omitempty"`
-	SubAgents                []SubAgentView         `json:"sub_agents,omitempty"`
+	AlertTypes                   []string               `json:"alert_types"`
+	Description                  string                 `json:"description,omitempty"`
+	Stages                       []StageView            `json:"stages"`
+	Chat                         *ChatView              `json:"chat,omitempty"`
+	Scoring                      *ScoringView           `json:"scoring,omitempty"`
+	LLMProvider                  string                 `json:"llm_provider,omitempty"`
+	ExecutiveSummaryProvider     string                 `json:"executive_summary_provider,omitempty"`
+	ExecutiveSummaryBackend      string                 `json:"executive_summary_backend,omitempty"`
+	ExecutiveSummaryFallbackList string                 `json:"executive_summary_fallback_list,omitempty"`
+	ComposeProvider              string                 `json:"compose_provider,omitempty"`
+	ComposeBackend               string                 `json:"compose_backend,omitempty"`
+	ComposeFallbackList          string                 `json:"compose_fallback_list,omitempty"`
+	LLMBackend                   string                 `json:"llm_backend,omitempty"`
+	FallbackList                 string                 `json:"fallback_list,omitempty"`
+	FallbackProviders            []FallbackProviderView `json:"fallback_providers,omitempty"`
+	MaxIterations                *int                   `json:"max_iterations,omitempty"`
+	MCPServers                   []string               `json:"mcp_servers,omitempty"`
+	SubAgents                    []SubAgentView         `json:"sub_agents,omitempty"`
 }
 
 // StageView is a chain stage.
@@ -100,6 +106,7 @@ type StageView struct {
 	SuccessPolicy     string                 `json:"success_policy,omitempty"`
 	MaxIterations     *int                   `json:"max_iterations,omitempty"`
 	MCPServers        []string               `json:"mcp_servers,omitempty"`
+	FallbackList      string                 `json:"fallback_list,omitempty"`
 	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
 	SubAgents         []SubAgentView         `json:"sub_agents,omitempty"`
 	Synthesis         *SynthesisView         `json:"synthesis,omitempty"`
@@ -114,6 +121,7 @@ type StageAgentView struct {
 	MaxIterations     *int                   `json:"max_iterations,omitempty"`
 	MCPServers        []string               `json:"mcp_servers,omitempty"`
 	SubAgents         []SubAgentView         `json:"sub_agents,omitempty"`
+	FallbackList      string                 `json:"fallback_list,omitempty"`
 	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
 	RequiredSkills    []string               `json:"required_skills,omitempty"`
 	Skills            []string               `json:"skills,omitempty"`
@@ -126,11 +134,18 @@ type SubAgentView struct {
 	LLMBackend     string   `json:"llm_backend,omitempty"`
 	MaxIterations  *int     `json:"max_iterations,omitempty"`
 	MCPServers     []string `json:"mcp_servers,omitempty"`
+	FallbackList   string   `json:"fallback_list,omitempty"`
 	RequiredSkills []string `json:"required_skills,omitempty"`
 	Skills         []string `json:"skills,omitempty"`
 }
 
-// FallbackProviderView is a fallback provider entry.
+// CatalogFallbackEntryView is one fallback_lists catalog entry (matches catalog YAML).
+type CatalogFallbackEntryView struct {
+	LLMProvider string `json:"llm_provider"`
+	LLMBackend  string `json:"llm_backend"`
+}
+
+// FallbackProviderView is a deprecated fallback_providers entry (matches inline YAML).
 type FallbackProviderView struct {
 	Provider string `json:"provider"`
 	Backend  string `json:"backend"`
@@ -138,9 +153,10 @@ type FallbackProviderView struct {
 
 // SynthesisView is stage synthesis config.
 type SynthesisView struct {
-	Agent       string `json:"agent,omitempty"`
-	LLMBackend  string `json:"llm_backend,omitempty"`
-	LLMProvider string `json:"llm_provider,omitempty"`
+	Agent        string `json:"agent,omitempty"`
+	LLMBackend   string `json:"llm_backend,omitempty"`
+	LLMProvider  string `json:"llm_provider,omitempty"`
+	FallbackList string `json:"fallback_list,omitempty"`
 }
 
 // ChatView is chain chat config.
@@ -152,6 +168,7 @@ type ChatView struct {
 	MCPServers    []string       `json:"mcp_servers,omitempty"`
 	MaxIterations *int           `json:"max_iterations,omitempty"`
 	SubAgents     []SubAgentView `json:"sub_agents,omitempty"`
+	FallbackList  string         `json:"fallback_list,omitempty"`
 }
 
 // ScoringView is scoring config.
@@ -162,12 +179,14 @@ type ScoringView struct {
 	LLMProvider   string   `json:"llm_provider,omitempty"`
 	MCPServers    []string `json:"mcp_servers,omitempty"`
 	MaxIterations *int     `json:"max_iterations,omitempty"`
+	FallbackList  string   `json:"fallback_list,omitempty"`
 }
 
-// SummarizationView is defaults.summarization (named provider/backend only).
+// SummarizationView is defaults.summarization (named provider/backend/list).
 type SummarizationView struct {
-	LLMProvider string `json:"llm_provider,omitempty"`
-	LLMBackend  string `json:"llm_backend,omitempty"`
+	LLMProvider  string `json:"llm_provider,omitempty"`
+	LLMBackend   string `json:"llm_backend,omitempty"`
+	FallbackList string `json:"fallback_list,omitempty"`
 }
 
 // MCPSummarizationView is an MCP server summarization block, including
@@ -198,21 +217,35 @@ type SkillMetaView struct {
 	Description string `json:"description"`
 }
 
+// NamedAgentPairingView is defaults.agents.<name> (pair + list only).
+type NamedAgentPairingView struct {
+	LLMProvider  string `json:"llm_provider,omitempty"`
+	LLMBackend   string `json:"llm_backend,omitempty"`
+	FallbackList string `json:"fallback_list,omitempty"`
+}
+
 // DefaultsView is system-wide defaults.
 type DefaultsView struct {
-	LLMProvider       string                 `json:"llm_provider,omitempty"`
-	ComposeProvider   string                 `json:"compose_provider,omitempty"`
-	MaxIterations     *int                   `json:"max_iterations,omitempty"`
-	LLMBackend        string                 `json:"llm_backend,omitempty"`
-	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
-	Scoring           *ScoringView           `json:"scoring,omitempty"`
-	Summarization     *SummarizationView     `json:"summarization,omitempty"`
-	SuccessPolicy     string                 `json:"success_policy,omitempty"`
-	AlertType         string                 `json:"alert_type,omitempty"`
-	Runbook           string                 `json:"runbook,omitempty"`
-	AlertMasking      *AlertMaskingView      `json:"alert_masking,omitempty"`
-	Orchestrator      *OrchestratorView      `json:"orchestrator,omitempty"`
-	Memory            *MemoryView            `json:"memory,omitempty"`
+	LLMProvider                  string                           `json:"llm_provider,omitempty"`
+	ComposeProvider              string                           `json:"compose_provider,omitempty"`
+	ComposeBackend               string                           `json:"compose_backend,omitempty"`
+	ComposeFallbackList          string                           `json:"compose_fallback_list,omitempty"`
+	ExecutiveSummaryProvider     string                           `json:"executive_summary_provider,omitempty"`
+	ExecutiveSummaryBackend      string                           `json:"executive_summary_backend,omitempty"`
+	ExecutiveSummaryFallbackList string                           `json:"executive_summary_fallback_list,omitempty"`
+	MaxIterations                *int                             `json:"max_iterations,omitempty"`
+	LLMBackend                   string                           `json:"llm_backend,omitempty"`
+	FallbackList                 string                           `json:"fallback_list,omitempty"`
+	FallbackProviders            []FallbackProviderView           `json:"fallback_providers,omitempty"`
+	Scoring                      *ScoringView                     `json:"scoring,omitempty"`
+	Summarization                *SummarizationView               `json:"summarization,omitempty"`
+	SuccessPolicy                string                           `json:"success_policy,omitempty"`
+	AlertType                    string                           `json:"alert_type,omitempty"`
+	Runbook                      string                           `json:"runbook,omitempty"`
+	AlertMasking                 *AlertMaskingView                `json:"alert_masking,omitempty"`
+	Orchestrator                 *OrchestratorView                `json:"orchestrator,omitempty"`
+	Memory                       *MemoryView                      `json:"memory,omitempty"`
+	Agents                       map[string]NamedAgentPairingView `json:"agents,omitempty"`
 }
 
 // AlertMaskingView is alert masking defaults.
@@ -332,11 +365,12 @@ type RetentionView struct {
 
 func buildSystemConfigResponse(cfg *config.Config, costBook *cost.Book) SystemConfigResponse {
 	resp := SystemConfigResponse{
-		Agents:       map[string]AgentView{},
-		Chains:       map[string]ChainView{},
-		MCPServers:   map[string]MCPServerView{},
-		LLMProviders: map[string]LLMProviderView{},
-		Skills:       map[string]SkillMetaView{},
+		FallbackLists: map[string][]CatalogFallbackEntryView{},
+		Agents:        map[string]AgentView{},
+		Chains:        map[string]ChainView{},
+		MCPServers:    map[string]MCPServerView{},
+		LLMProviders:  map[string]LLMProviderView{},
+		Skills:        map[string]SkillMetaView{},
 		System: SystemView{
 			AllowedWSOrigins: []string{},
 		},
@@ -345,6 +379,7 @@ func buildSystemConfigResponse(cfg *config.Config, costBook *cost.Book) SystemCo
 		return resp
 	}
 
+	resp.FallbackLists = buildFallbackLists(cfg.FallbackLists)
 	resp.Defaults = buildDefaultsView(cfg.Defaults)
 	resp.Queue = buildQueueView(cfg.Queue)
 	resp.System = buildSystemView(cfg, costBook)
@@ -401,17 +436,24 @@ func buildDefaultsView(d *config.Defaults) *DefaultsView {
 		return nil
 	}
 	view := &DefaultsView{
-		LLMProvider:       d.LLMProvider,
-		ComposeProvider:   d.ComposeProvider,
-		MaxIterations:     d.MaxIterations,
-		LLMBackend:        string(d.LLMBackend),
-		FallbackProviders: buildFallbackProviders(d.FallbackProviders),
-		Scoring:           buildScoringView(d.Scoring),
-		Summarization:     buildSummarizationView(d.Summarization),
-		SuccessPolicy:     string(d.SuccessPolicy),
-		AlertType:         d.AlertType,
-		Runbook:           d.Runbook,
-		Orchestrator:      buildOrchestratorView(d.Orchestrator),
+		LLMProvider:                  d.LLMProvider,
+		ComposeProvider:              d.ComposeProvider,
+		ComposeBackend:               string(d.ComposeBackend),
+		ComposeFallbackList:          d.ComposeFallbackList,
+		ExecutiveSummaryProvider:     d.ExecutiveSummaryProvider,
+		ExecutiveSummaryBackend:      string(d.ExecutiveSummaryBackend),
+		ExecutiveSummaryFallbackList: d.ExecutiveSummaryFallbackList,
+		MaxIterations:                d.MaxIterations,
+		LLMBackend:                   string(d.LLMBackend),
+		FallbackList:                 d.FallbackList,
+		FallbackProviders:            buildFallbackProviders(d.FallbackProviders),
+		Scoring:                      buildScoringView(d.Scoring),
+		Summarization:                buildSummarizationView(d.Summarization),
+		SuccessPolicy:                string(d.SuccessPolicy),
+		AlertType:                    d.AlertType,
+		Runbook:                      d.Runbook,
+		Orchestrator:                 buildOrchestratorView(d.Orchestrator),
+		Agents:                       buildNamedAgentPairingViews(d.Agents),
 	}
 	if d.AlertMasking != nil {
 		view.AlertMasking = &AlertMaskingView{
@@ -644,19 +686,24 @@ func buildChainView(c *config.ChainConfig) ChainView {
 		stages = append(stages, buildStageView(st))
 	}
 	return ChainView{
-		AlertTypes:               c.AlertTypes,
-		Description:              c.Description,
-		Stages:                   stages,
-		Chat:                     buildChatView(c.Chat),
-		Scoring:                  buildScoringView(c.Scoring),
-		LLMProvider:              c.LLMProvider,
-		ExecutiveSummaryProvider: c.ExecutiveSummaryProvider,
-		ComposeProvider:          c.ComposeProvider,
-		LLMBackend:               string(c.LLMBackend),
-		FallbackProviders:        buildFallbackProviders(c.FallbackProviders),
-		MaxIterations:            c.MaxIterations,
-		MCPServers:               c.MCPServers,
-		SubAgents:                buildSubAgentViews(c.SubAgents),
+		AlertTypes:                   c.AlertTypes,
+		Description:                  c.Description,
+		Stages:                       stages,
+		Chat:                         buildChatView(c.Chat),
+		Scoring:                      buildScoringView(c.Scoring),
+		LLMProvider:                  c.LLMProvider,
+		ExecutiveSummaryProvider:     c.ExecutiveSummaryProvider,
+		ExecutiveSummaryBackend:      string(c.ExecutiveSummaryBackend),
+		ExecutiveSummaryFallbackList: c.ExecutiveSummaryFallbackList,
+		ComposeProvider:              c.ComposeProvider,
+		ComposeBackend:               string(c.ComposeBackend),
+		ComposeFallbackList:          c.ComposeFallbackList,
+		LLMBackend:                   string(c.LLMBackend),
+		FallbackList:                 c.FallbackList,
+		FallbackProviders:            buildFallbackProviders(c.FallbackProviders),
+		MaxIterations:                c.MaxIterations,
+		MCPServers:                   c.MCPServers,
+		SubAgents:                    buildSubAgentViews(c.SubAgents),
 	}
 }
 
@@ -671,6 +718,7 @@ func buildStageView(st config.StageConfig) StageView {
 			MaxIterations:     a.MaxIterations,
 			MCPServers:        a.MCPServers,
 			SubAgents:         buildSubAgentViews(a.SubAgents),
+			FallbackList:      a.FallbackList,
 			FallbackProviders: buildFallbackProviders(a.FallbackProviders),
 			RequiredSkills:    a.RequiredSkills,
 			Skills:            a.Skills,
@@ -679,9 +727,10 @@ func buildStageView(st config.StageConfig) StageView {
 	var synthesis *SynthesisView
 	if st.Synthesis != nil {
 		synthesis = &SynthesisView{
-			Agent:       st.Synthesis.Agent,
-			LLMBackend:  string(st.Synthesis.LLMBackend),
-			LLMProvider: st.Synthesis.LLMProvider,
+			Agent:        st.Synthesis.Agent,
+			LLMBackend:   string(st.Synthesis.LLMBackend),
+			LLMProvider:  st.Synthesis.LLMProvider,
+			FallbackList: st.Synthesis.FallbackList,
 		}
 	}
 	return StageView{
@@ -691,6 +740,7 @@ func buildStageView(st config.StageConfig) StageView {
 		SuccessPolicy:     string(st.SuccessPolicy),
 		MaxIterations:     st.MaxIterations,
 		MCPServers:        st.MCPServers,
+		FallbackList:      st.FallbackList,
 		FallbackProviders: buildFallbackProviders(st.FallbackProviders),
 		SubAgents:         buildSubAgentViews(st.SubAgents),
 		Synthesis:         synthesis,
@@ -709,6 +759,7 @@ func buildChatView(c *config.ChatConfig) *ChatView {
 		MCPServers:    c.MCPServers,
 		MaxIterations: c.MaxIterations,
 		SubAgents:     buildSubAgentViews(c.SubAgents),
+		FallbackList:  c.FallbackList,
 	}
 }
 
@@ -723,6 +774,7 @@ func buildScoringView(s *config.ScoringConfig) *ScoringView {
 		LLMProvider:   s.LLMProvider,
 		MCPServers:    s.MCPServers,
 		MaxIterations: s.MaxIterations,
+		FallbackList:  s.FallbackList,
 	}
 }
 
@@ -731,8 +783,9 @@ func buildSummarizationView(s *config.SummarizationConfig) *SummarizationView {
 		return nil
 	}
 	return &SummarizationView{
-		LLMProvider: s.LLMProvider,
-		LLMBackend:  string(s.LLMBackend),
+		LLMProvider:  s.LLMProvider,
+		LLMBackend:   string(s.LLMBackend),
+		FallbackList: s.FallbackList,
 	}
 }
 
@@ -761,8 +814,53 @@ func buildSubAgentViews(refs config.SubAgentRefs) []SubAgentView {
 			LLMBackend:     string(r.LLMBackend),
 			MaxIterations:  r.MaxIterations,
 			MCPServers:     r.MCPServers,
+			FallbackList:   r.FallbackList,
 			RequiredSkills: r.RequiredSkills,
 			Skills:         r.Skills,
+		})
+	}
+	return out
+}
+
+func buildFallbackLists(lists map[string][]config.FallbackProviderEntry) map[string][]CatalogFallbackEntryView {
+	out := make(map[string][]CatalogFallbackEntryView, len(lists))
+	if lists == nil {
+		return out
+	}
+	for _, name := range sortedKeys(lists) {
+		out[name] = buildCatalogFallbackEntries(lists[name])
+		if out[name] == nil {
+			out[name] = []CatalogFallbackEntryView{}
+		}
+	}
+	return out
+}
+
+func buildNamedAgentPairingViews(agents map[string]config.NamedAgentPairing) map[string]NamedAgentPairingView {
+	if len(agents) == 0 {
+		return nil
+	}
+	out := make(map[string]NamedAgentPairingView, len(agents))
+	for _, name := range sortedKeys(agents) {
+		p := agents[name]
+		out[name] = NamedAgentPairingView{
+			LLMProvider:  p.LLMProvider,
+			LLMBackend:   string(p.LLMBackend),
+			FallbackList: p.FallbackList,
+		}
+	}
+	return out
+}
+
+func buildCatalogFallbackEntries(entries []config.FallbackProviderEntry) []CatalogFallbackEntryView {
+	if entries == nil {
+		return nil
+	}
+	out := make([]CatalogFallbackEntryView, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, CatalogFallbackEntryView{
+			LLMProvider: e.Provider,
+			LLMBackend:  string(e.ResolvedBackend()),
 		})
 	}
 	return out

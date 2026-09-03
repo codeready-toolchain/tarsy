@@ -196,6 +196,11 @@ export interface OrchestratorView {
   max_budget?: string | null;
 }
 
+export interface CatalogFallbackEntryView {
+  llm_provider: string;
+  llm_backend: string;
+}
+
 export interface FallbackProviderView {
   provider: string;
   backend: string;
@@ -207,6 +212,7 @@ export interface SubAgentView {
   llm_backend?: string;
   max_iterations?: number | null;
   mcp_servers?: string[];
+  fallback_list?: string;
   required_skills?: string[];
   skills?: string[];
 }
@@ -219,6 +225,7 @@ export interface StageAgentView {
   max_iterations?: number | null;
   mcp_servers?: string[];
   sub_agents?: SubAgentView[];
+  fallback_list?: string;
   fallback_providers?: FallbackProviderView[];
   required_skills?: string[];
   skills?: string[];
@@ -231,12 +238,14 @@ export interface StageView {
   success_policy?: string;
   max_iterations?: number | null;
   mcp_servers?: string[];
+  fallback_list?: string;
   fallback_providers?: FallbackProviderView[];
   sub_agents?: SubAgentView[];
   synthesis?: {
     agent?: string;
     llm_backend?: string;
     llm_provider?: string;
+    fallback_list?: string;
   } | null;
 }
 
@@ -248,6 +257,7 @@ export interface ChatView {
   mcp_servers?: string[];
   max_iterations?: number | null;
   sub_agents?: SubAgentView[];
+  fallback_list?: string;
 }
 
 export interface ScoringView {
@@ -257,6 +267,7 @@ export interface ScoringView {
   llm_provider?: string;
   mcp_servers?: string[];
   max_iterations?: number | null;
+  fallback_list?: string;
 }
 
 export interface ChainConfigView {
@@ -267,8 +278,13 @@ export interface ChainConfigView {
   scoring?: ScoringView | null;
   llm_provider?: string;
   executive_summary_provider?: string;
+  executive_summary_backend?: string;
+  executive_summary_fallback_list?: string;
   compose_provider?: string;
+  compose_backend?: string;
+  compose_fallback_list?: string;
   llm_backend?: string;
+  fallback_list?: string;
   fallback_providers?: FallbackProviderView[];
   max_iterations?: number | null;
   mcp_servers?: string[];
@@ -291,10 +307,11 @@ export interface SkillMetaView {
   description: string;
 }
 
-/** defaults.summarization — named provider/backend only. */
+/** defaults.summarization — named provider/backend/list. */
 export interface SummarizationView {
   llm_provider?: string;
   llm_backend?: string;
+  fallback_list?: string;
 }
 
 /** MCP server summarization, including server-only size/enablement fields. */
@@ -304,11 +321,23 @@ export interface MCPSummarizationView extends SummarizationView {
   summary_max_token_limit?: number;
 }
 
+export interface NamedAgentPairingView {
+  llm_provider?: string;
+  llm_backend?: string;
+  fallback_list?: string;
+}
+
 export interface DefaultsView {
   llm_provider?: string;
   compose_provider?: string;
+  compose_backend?: string;
+  compose_fallback_list?: string;
+  executive_summary_provider?: string;
+  executive_summary_backend?: string;
+  executive_summary_fallback_list?: string;
   max_iterations?: number | null;
   llm_backend?: string;
+  fallback_list?: string;
   fallback_providers?: FallbackProviderView[];
   scoring?: ScoringView | null;
   summarization?: SummarizationView | null;
@@ -329,6 +358,7 @@ export interface DefaultsView {
       base_url?: string;
     };
   } | null;
+  agents?: Record<string, NamedAgentPairingView>;
 }
 
 export interface QueueView {
@@ -388,6 +418,7 @@ export interface SystemConfigResponse {
   defaults: DefaultsView | null;
   queue: QueueView | null;
   system: SystemSettingsView;
+  fallback_lists: Record<string, CatalogFallbackEntryView[]>;
   agents: Record<string, AgentConfigView>;
   chains: Record<string, ChainConfigView>;
   mcp_servers: Record<string, MCPServerConfigView>;

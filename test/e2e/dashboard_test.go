@@ -500,6 +500,12 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, "You are SimpleAgent, performing a quick analysis.", simple["custom_instructions"])
 		_, hasLLMProvider := simple["llm_provider"]
 		assert.False(t, hasLLMProvider, "agents must not expose llm_provider")
+		_, hasFallbackList := simple["fallback_list"]
+		assert.False(t, hasFallbackList, "agents must not expose fallback_list")
+
+		fallbackLists, ok := cfg["fallback_lists"].(map[string]interface{})
+		require.True(t, ok, "fallback_lists should be a map")
+		assert.Empty(t, fallbackLists)
 
 		chains, ok := cfg["chains"].(map[string]interface{})
 		require.True(t, ok, "chains should be a map")

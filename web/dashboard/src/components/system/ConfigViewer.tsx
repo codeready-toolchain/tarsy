@@ -217,6 +217,18 @@ function StructuredConfig({ config }: { config: SystemConfigResponse }) {
         )}
       </ConfigSection>
 
+      <ConfigSection title="Fallback lists" count={Object.keys(config.fallback_lists).length}>
+        {Object.keys(config.fallback_lists).length === 0 ? (
+          <EmptyNote />
+        ) : (
+          Object.entries(config.fallback_lists).map(([name, entries]) => (
+            <NamedEntry key={name} name={name}>
+              <KeyValueBlock data={entries} />
+            </NamedEntry>
+          ))
+        )}
+      </ConfigSection>
+
       <ConfigSection title="Queue" count={config.queue ? 1 : 0}>
         {config.queue ? <KeyValueBlock data={config.queue} /> : <EmptyNote />}
       </ConfigSection>
@@ -532,6 +544,13 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       <Field label="description" value={chain.description} />
       <Field label="llm_provider" value={chain.llm_provider} />
       <Field label="llm_backend" value={chain.llm_backend} />
+      <Field label="fallback_list" value={chain.fallback_list} />
+      <Field label="compose_provider" value={chain.compose_provider} />
+      <Field label="compose_backend" value={chain.compose_backend} />
+      <Field label="compose_fallback_list" value={chain.compose_fallback_list} />
+      <Field label="executive_summary_provider" value={chain.executive_summary_provider} />
+      <Field label="executive_summary_backend" value={chain.executive_summary_backend} />
+      <Field label="executive_summary_fallback_list" value={chain.executive_summary_fallback_list} />
       <Field label="max_iterations" value={chain.max_iterations} />
       <Field label="mcp_servers" value={<ChipList items={chain.mcp_servers} />} />
       <Box sx={{ mt: 1 }}>
@@ -540,6 +559,22 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
         </Typography>
         <KeyValueBlock data={chain.stages} />
       </Box>
+      {chain.fallback_providers && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            fallback_providers
+          </Typography>
+          <KeyValueBlock data={chain.fallback_providers} />
+        </Box>
+      )}
+      {chain.sub_agents && chain.sub_agents.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            sub_agents
+          </Typography>
+          <KeyValueBlock data={chain.sub_agents} />
+        </Box>
+      )}
       {chain.chat && (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary">

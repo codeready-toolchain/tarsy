@@ -1405,12 +1405,12 @@ func TestLoadTarsyYAML_FallbackLists(t *testing.T) {
 		tarsyYAML := `
 fallback_lists:
   premium:
-    - provider: "fb-opus"
-      backend: "langchain"
-    - provider: "fb-omit"
+    - llm_provider: "fb-opus"
+      llm_backend: "langchain"
+    - llm_provider: "fb-omit"
   mid:
-    - provider: "fb-sonnet"
-      backend: "google-native"
+    - llm_provider: "fb-sonnet"
+      llm_backend: "google-native"
   empty: []
 
 defaults:
@@ -1476,6 +1476,69 @@ agent_chains: {}
 		cfg, err := load(context.Background(), dir)
 		require.NoError(t, err)
 		assert.Empty(t, cfg.FallbackLists)
+	})
+
+	t.Run("catalog rejects provider key", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+fallback_lists:
+  premium:
+    - provider: fb-opus
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		_, err := load(context.Background(), dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown field "provider" (did you mean "llm_provider"?)`)
+	})
+
+	t.Run("defaults.agents rejects backend key", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  llm_provider: "test-provider"
+  agents:
+    KubernetesAgent:
+      llm_provider: google-default
+      backend: google-native
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		_, err := load(context.Background(), dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown field "backend" (did you mean "llm_backend"?)`)
+	})
+
+	t.Run("fallback_providers rejects llm_provider key", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  llm_provider: "test-provider"
+  fallback_providers:
+    - llm_provider: fb-1
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		_, err := load(context.Background(), dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown field "llm_provider" (did you mean "provider"?)`)
 	})
 
 	t.Run("agents YAML llm_provider is ignored", func(t *testing.T) {
@@ -1665,10 +1728,10 @@ agent_chains:
 		tarsyYAML := `
 fallback_lists:
   mid:
-    - provider: gemini-3-flash
+    - llm_provider: gemini-3-flash
   google-native:
-    - provider: google-default
-      backend: google-native
+    - llm_provider: google-default
+      llm_backend: google-native
 
 defaults:
   llm_provider: "vertexai-claude-opus"

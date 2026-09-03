@@ -1,13 +1,13 @@
 # Same primary for investigation / exec summary / scoring; different named lists.
 fallback_lists:
   premium:
-    - provider: "fallback-1"
-      backend: "google-native"
-    - provider: "fallback-2"
-      backend: "google-native"
+    - llm_provider: "fallback-1"
+      llm_backend: "google-native"
+    - llm_provider: "fallback-2"
+      llm_backend: "google-native"
   mid:
-    - provider: "mid-fb"
-      backend: "google-native"
+    - llm_provider: "mid-fb"
+      llm_backend: "google-native"
 
 defaults:
   llm_provider: "primary-provider"

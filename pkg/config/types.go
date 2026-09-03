@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 
 	"gopkg.in/yaml.v3"
@@ -144,7 +145,7 @@ func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
 			}
 			refs = append(refs, SubAgentRef{Name: node.Value})
 		case yaml.MappingNode:
-			if err := checkUnknownKeys(node, subAgentRefAllowedKeys, i); err != nil {
+			if err := checkUnknownKeysWithHints(node, subAgentRefAllowedKeys, pairingKeyHints, fmt.Sprintf("sub_agents[%d]", i)); err != nil {
 				return err
 			}
 			var ref SubAgentRef
@@ -157,18 +158,6 @@ func (r *SubAgentRefs) UnmarshalYAML(value *yaml.Node) error {
 		}
 	}
 	*r = refs
-	return nil
-}
-
-// checkUnknownKeys validates that a MappingNode contains only keys in the
-// allowed set. MappingNode.Content alternates key, value, key, value, ...
-func checkUnknownKeys(node *yaml.Node, allowed map[string]bool, index int) error {
-	for j := 0; j < len(node.Content)-1; j += 2 {
-		key := node.Content[j].Value
-		if !allowed[key] {
-			return fmt.Errorf("sub_agents[%d]: unknown field %q", index, key)
-		}
-	}
 	return nil
 }
 
@@ -185,11 +174,104 @@ func (r SubAgentRefs) Names() []string {
 	return names
 }
 
-// FallbackProviderEntry is a single entry in the fallback provider list.
-// Provider is required. Omitted backend defaults to langchain (see ResolvedBackend).
+// pairingKeyHints maps catalog/inline short keys onto pairing-site names.
+var pairingKeyHints = map[string]string{
+	"provider": "llm_provider",
+	"backend":  "llm_backend",
+}
+
+// checkUnknownKeysWithHints validates that a MappingNode contains only keys in
+// the allowed set. MappingNode.Content alternates key, value, key, value, ...
+// hints, when set, turn a rejected key into `unknown field "x" (did you mean "y"?)`.
+func checkUnknownKeysWithHints(node *yaml.Node, allowed map[string]bool, hints map[string]string, prefix string) error {
+	for j := 0; j < len(node.Content)-1; j += 2 {
+		key := node.Content[j].Value
+		if allowed[key] {
+			continue
+		}
+		msg := fmt.Sprintf("unknown field %q", key)
+		if want, ok := hints[key]; ok {
+			msg = fmt.Sprintf("unknown field %q (did you mean %q?)", key, want)
+		}
+		if prefix != "" {
+			return fmt.Errorf("%s: %s", prefix, msg)
+		}
+		return errors.New(msg)
+	}
+	return nil
+}
+
+func decodeMapping(node *yaml.Node, allowed map[string]bool, hints map[string]string, dest any) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("must be a mapping, got %v", node.Tag)
+	}
+	if err := checkUnknownKeysWithHints(node, allowed, hints, ""); err != nil {
+		return err
+	}
+	return node.Decode(dest)
+}
+
+// FallbackProviderEntry is one item in a fallback walk (in-memory).
+// Deprecated fallback_providers YAML uses provider/backend. Catalog YAML uses
+// llm_provider/llm_backend (catalogFallbackEntry). Omitted backend is langchain
+// (see ResolvedBackend).
 type FallbackProviderEntry struct {
 	Provider string     `yaml:"provider" validate:"required"`
 	Backend  LLMBackend `yaml:"backend,omitempty"`
+}
+
+var inlineFallbackAllowedKeys = map[string]bool{
+	"provider": true,
+	"backend":  true,
+}
+
+var inlineFallbackKeyHints = map[string]string{
+	"llm_provider": "provider",
+	"llm_backend":  "backend",
+}
+
+// UnmarshalYAML accepts only provider/backend (deprecated inline lists).
+func (e *FallbackProviderEntry) UnmarshalYAML(value *yaml.Node) error {
+	type raw FallbackProviderEntry
+	return decodeMapping(value, inlineFallbackAllowedKeys, inlineFallbackKeyHints, (*raw)(e))
+}
+
+var catalogFallbackAllowedKeys = map[string]bool{
+	"llm_provider": true,
+	"llm_backend":  true,
+}
+
+// catalogFallbackEntry is the YAML form of one fallback_lists item.
+type catalogFallbackEntry struct {
+	LLMProvider string     `yaml:"llm_provider"`
+	LLMBackend  LLMBackend `yaml:"llm_backend,omitempty"`
+}
+
+func (e *catalogFallbackEntry) UnmarshalYAML(value *yaml.Node) error {
+	type raw catalogFallbackEntry
+	return decodeMapping(value, catalogFallbackAllowedKeys, pairingKeyHints, (*raw)(e))
+}
+
+func (e catalogFallbackEntry) toEntry() FallbackProviderEntry {
+	return FallbackProviderEntry{Provider: e.LLMProvider, Backend: e.LLMBackend}
+}
+
+// catalogFallbackLists is the YAML form of top-level fallback_lists.
+type catalogFallbackLists map[string][]catalogFallbackEntry
+
+func (lists catalogFallbackLists) toEntries() map[string][]FallbackProviderEntry {
+	if lists == nil {
+		return nil
+	}
+	out := make(map[string][]FallbackProviderEntry, len(lists))
+	for name, entries := range lists {
+		converted := make([]FallbackProviderEntry, len(entries))
+		for i, e := range entries {
+			converted[i] = e.toEntry()
+		}
+		out[name] = converted
+	}
+	return out
 }
 
 // ResolvedBackend returns the entry's backend, or DefaultLLMBackend when omitted.

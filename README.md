@@ -76,7 +76,7 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **MCP Server Integration**: Agents dynamically connect to MCP servers for domain-specific tools (kubectl, database clients, monitoring APIs)
 - **Multi-LLM Provider Support**: OpenAI, Google Gemini, Anthropic, xAI, Vertex AI -- configure and switch via YAML with native thinking mode
 - **Automated Actions**: Action agents (`type: action`) evaluate investigation findings and execute remediation via MCP tools with auto-injected safety guardrails -- no custom safety prompt required
-- **Automatic Provider Fallback**: When a primary LLM provider fails, automatically switches to the next configured fallback provider with error-code-aware triggers and adaptive streaming timeouts
+- **Automatic Provider Fallback**: When a primary LLM provider fails, automatically switches to the next provider on that execution’s fallback list (error-code-aware triggers, adaptive streaming timeouts). Operators define reusable named lists and bind each job to one so cheap work does not walk a frontier list
 - **Agent Skills**: Modular, reusable domain knowledge (SKILL.md files) that agents discover at startup and load on-demand via a `load_skill` tool -- or inject directly into the system prompt via `required_skills`. Zero config by default; all skills are available to all agents
 - **Force Conclusion**: Automatic conclusion at iteration limits with hierarchical configuration (system, chain, stage, or agent level)
 
