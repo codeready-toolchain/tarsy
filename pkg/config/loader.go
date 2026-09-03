@@ -25,6 +25,7 @@ type TarsyYAMLConfig struct {
 	Queue         *QueueConfig                       `yaml:"queue"`
 }
 
+// UnmarshalYAML loads catalog fallback_lists using llm_provider/llm_backend and stores them on FallbackLists.
 func (c *TarsyYAMLConfig) UnmarshalYAML(value *yaml.Node) error {
 	type plain TarsyYAMLConfig
 	aux := struct {
