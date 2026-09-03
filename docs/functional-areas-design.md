@@ -170,7 +170,7 @@ queue:
 **Purpose**: System configuration and extensibility
 **Key Responsibility**: Flexible system configuration without code changes
 
-TARSy supports both built-in components and YAML-based configuration, enabling system extension without code changes. Configuration defines agents, chains, MCP servers, LLM providers, and their relationships.
+TARSy supports both built-in components and YAML-based configuration, enabling system extension without code changes. Configuration defines agents, chains, MCP servers, LLM providers, named fallback lists, and their relationships.
 
 #### Configuration Architecture
 
@@ -202,6 +202,7 @@ graph TB
 - **Go template variables**: `{{.VARIABLE_NAME}}` resolved from environment
 - **Agent definitions**: Custom agents with MCP servers, instructions, and skill scoping
 - **Chain definitions**: Multi-stage workflows with alert type mappings
+- **Named fallback lists**: Top-level `fallback_lists` catalog; call sites select with `fallback_list` (see [ADR-0030](adr/0030-named-fallback-lists.md))
 - **MCP server configurations**: Custom tool servers with transport, masking, summarization
 - **Skill definitions**: `skills/*/SKILL.md` (directory layout) or `skills/*` (flat file layout for Kubernetes ConfigMap mounts) with YAML frontmatter (name, description) and Markdown body — loaded at startup, available on-demand via `load_skill` tool
 - **Override support**: YAML definitions override built-in components with same name/ID
@@ -231,7 +232,7 @@ graph TB
 
 **Config Validator**: `pkg/config/validator.go`
 - Validates chain stage references, MCP server existence, runbook domains
-- Validates fallback provider entries: provider exists, backend valid, credentials set (fail-fast at startup)
+- Validates named fallback lists (unknown names, both selector + inline on one node) and fallback entries: provider exists, backend valid; credentials required only for referenced lists (fail-fast at startup)
 - Validates skill references: agent `skills` allowlist entries exist in SkillRegistry, `required_skills` exist in SkillRegistry (validated independently of `skills` allowlist)
 - Startup-time validation prevents runtime failures
 
@@ -360,7 +361,7 @@ Chains support flexible LLM provider configuration with a resolution hierarchy:
 
 Non-stage components (executive summary, follow-up chat) use chain-level provider if defined, otherwise global default.
 
-**Fallback providers** are resolved with the following precedence (highest to lowest): agent-level → stage-level → chain-level → `defaults.fallback_providers`. The first non-nil list wins (an explicit empty list clears inherited values). See [ADR-0003](adr/0003-llm-provider-fallback.md).
+**Fallback lists** are resolved by expanding a named catalog entry (`fallback_list`) or a deprecated inline `fallback_providers` slice, then taking the last non-nil layer. Investigation / dispatched-agent order (lowest to highest): `defaults` → chain → `defaults.agents.<name>` → stage → stage-agent / sub-agent ref. Side paths (chat, scoring, compose, exec summary) inherit defaults → chain when unset; dedicated job knobs (`defaults.scoring.fallback_list`, `compose_fallback_list`, …) beat the investigation list. Stage lists do not leak into chat/scoring/exec summary/compose. See [ADR-0003](adr/0003-llm-provider-fallback.md) and [ADR-0030](adr/0030-named-fallback-lists.md).
 
 ---
 
@@ -611,7 +612,7 @@ No-partial provider errors emit a timeline `error` event and are not appended to
 
 **Adaptive timeouts** reduce time wasted on unresponsive providers. Implemented in `collectStreamWithCallback`: initial response timeout (120s default), stall timeout (60s default), and max call timeout (5m). Configurable per agent through the config hierarchy.
 
-**For detailed design**: See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md), [ADR-0027: Transient LLM Outage Handling](adr/0027-llm-transient-outage.md), and [ADR-0028: LLM Retry Resilience](adr/0028-llm-retry-resilience.md)
+**For detailed design**: See [ADR-0003: LLM Provider Fallback](adr/0003-llm-provider-fallback.md), [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md), [ADR-0027: Transient LLM Outage Handling](adr/0027-llm-transient-outage.md), and [ADR-0028: LLM Retry Resilience](adr/0028-llm-retry-resilience.md)
 
 **Key Implementation Files**:
 - `pkg/agent/agent.go` -- Agent interface
@@ -1160,7 +1161,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 - **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`. Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). Usage totals and by-model include cache-read / cache-creation SUMs (session list / header / `ExecutionOverview` do not). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
-- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status) and `system.prompt_caching.enabled`. See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md) and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status), `system.prompt_caching.enabled`, the `fallback_lists` catalog, `defaults.agents` pairing, and raw `fallback_list` / `*_fallback_list` selectors (no per-agent expanded walks). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), and [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md).
 
 #### Text Search
 

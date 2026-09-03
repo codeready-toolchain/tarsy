@@ -2,7 +2,7 @@
 
 **Status:** Implemented  
 **Date:** 2026-08-21  
-**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — summarization-local skip uses the attempted set, not current-name-only
+**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — summarization-local skip uses the attempted set, not current-name-only. [ADR-0030: Named Fallback Lists](0030-named-fallback-lists.md) (2026-09-03) — optional `defaults.summarization.fallback_list`
 
 ## Overview
 
@@ -283,6 +283,10 @@ No schema migration.
 
 Q4 originally reused investigation’s skip-current-name rule for the summarization-local walk. ADR-0027 changed that sibling skip to **already-attempted this call** (seed start name, append hops). Unchanged: own state vs investigator; SingleShot thresholds; no native-tool skip; sticky per primary; no `provider_fallback` event; fail-open / fail-closed after the list is exhausted.
 
+## Amendment ([ADR-0030](0030-named-fallback-lists.md), 2026-09-03)
+
+Q4 rejected a dedicated summarization fallback list for v1. Operators can now set optional `defaults.summarization.fallback_list` so the local walk stays in a cheap/native band instead of following an investigation `premium` list. Unset keeps Q4 (calling agent’s effective list). Still no per-server overlay, no investigator mutation, no native-tool skip, no `provider_fallback` event.
+
 ## References
 
 - [ADR-0003: LLM Provider Fallback](0003-llm-provider-fallback.md)
@@ -291,5 +295,6 @@ Q4 originally reused investigation’s skip-current-name rule for the summarizat
 - [ADR-0019: Read-Only Configuration Viewer](0019-config-viewer.md)
 - [ADR-0020: Session Usage Cost](0020-session-usage-cost.md)
 - [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) — summarization-local skip is attempted-set, not current-name-only
+- [ADR-0030: Named Fallback Lists](0030-named-fallback-lists.md) — optional `defaults.summarization.fallback_list`
 - [Architecture overview](../architecture-overview.md)
 - [Config README](../../deploy/config/README.md)

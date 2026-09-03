@@ -3,7 +3,7 @@
 **Status:** Implemented  
 **Date:** 2026-05-27  
 **Supersedes:** Extends ADR-0003 (LLM Provider Fallback)  
-**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — attempted-name skip only; native-tool skip unchanged
+**Amended by:** [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md) (2026-08-29) — attempted-name skip only; native-tool skip unchanged. [ADR-0030: Named Fallback Lists](0030-named-fallback-lists.md) (2026-09-03) — warning uses the effective named list; builtin WebResearcher / CodeExecutor pair `google-default` + `google-native`
 
 ## Overview
 
@@ -94,3 +94,7 @@ Agents whose **definition** includes `NativeTools` with at least one enabled too
 ## Amendments ([ADR-0027](0027-llm-transient-outage.md), 2026-08-29)
 
 ADR-0027 did **not** change native-tool compatibility, `RequiresNativeTools`, startup warnings, or the hard skip. It only replaced the sibling “skip current provider name” check in the same candidate loop with skip-already-attempted. Summarization-local failover still does **not** apply this native-tool skip ([ADR-0024](0024-tool-summarization-provider.md)).
+
+## Amendment ([ADR-0030](0030-named-fallback-lists.md), 2026-09-03)
+
+Runtime native-tool skip is unchanged. The startup warning now uses the **effective** list after named-list expansion, including `defaults.agents` and all sub-agent ref sites (chain, stage, stage-agent, chat). Builtin WebResearcher / CodeExecutor set `llm_provider: google-default` with `llm_backend: google-native` so short-form refs no longer pair the defaults primary with native tools.

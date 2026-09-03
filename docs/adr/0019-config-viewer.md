@@ -2,6 +2,7 @@
 
 **Status:** Implemented
 **Date:** 2026-07-22
+**Amended by:** [ADR-0030: Named Fallback Lists](0030-named-fallback-lists.md) (2026-09-03) — snapshot includes `fallback_lists`, `defaults.agents`, and raw `fallback_list` / `*_fallback_list` selectors; no per-agent expanded walks; no pairing fields on agent identity
 
 ## Overview
 
