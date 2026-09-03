@@ -81,6 +81,7 @@ type StageAgentConfig struct {
 	// Named catalog list for this stage-agent. Expanded at resolve time.
 	// Empty / omitted inherits the next less-specific layer.
 	FallbackList string `yaml:"fallback_list,omitempty"`
+	// Stage-agent fallback providers override.
 	// Deprecated: use fallback_lists + fallback_list. Still honored when
 	// fallback_list is unset. Mixing both on this node is a load-time error.
 	FallbackProviders []FallbackProviderEntry `yaml:"fallback_providers,omitempty"`
