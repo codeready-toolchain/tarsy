@@ -44,7 +44,8 @@ agent_chains:
   # Used by: TestE2E_FallbackOnMaxRetries, TestE2E_FallbackAfterToolCall, TestE2E_FallbackCascade
   single-fallback:
     alert_types: [test-fallback, test-cascade]
-    executive_summary_provider: "primary-provider"
+    executive_summary:
+      llm_provider: "primary-provider"
     stages:
       - name: investigation
         agents:
@@ -74,7 +75,8 @@ agent_chains:
   # Used by: TestE2E_FallbackExecutiveSummary
   exec-summary-chain:
     alert_types: [test-exec-fallback]
-    executive_summary_provider: "primary-provider"
+    executive_summary:
+      llm_provider: "primary-provider"
     stages:
       - name: investigation
         agents:

@@ -330,11 +330,11 @@ func TestValidateChains(t *testing.T) {
 			errMsg:    "LLM provider 'invalid-provider' not found",
 		},
 		{
-			name: "chain with invalid compose_provider",
+			name: "chain with invalid compose.llm_provider",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
-					AlertTypes:      []string{"test"},
-					ComposeProvider: "invalid-compose",
+					AlertTypes: []string{"test"},
+					Compose:    &JobPairing{LLMProvider: "invalid-compose"},
 					Stages: []StageConfig{
 						{
 							Name:   "stage1",
@@ -348,7 +348,7 @@ func TestValidateChains(t *testing.T) {
 			},
 			providers: map[string]*LLMProviderConfig{},
 			wantErr:   true,
-			errMsg:    "compose_provider",
+			errMsg:    "compose.llm_provider",
 		},
 		{
 			name: "multiple chains with duplicate alert type",
@@ -1891,11 +1891,11 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 			errMsg:  "must be at least 1",
 		},
 		{
-			name: "compose_backend without compose_provider fails",
+			name: "compose.llm_backend without llm_provider fails",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
-					AlertTypes:     []string{"test"},
-					ComposeBackend: LLMBackendLangChain,
+					AlertTypes: []string{"test"},
+					Compose:    &JobPairing{LLMBackend: LLMBackendLangChain},
 					Stages: []StageConfig{
 						{
 							Name:   "stage1",
@@ -1912,14 +1912,14 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
 			wantErr: true,
-			errMsg:  "compose_backend requires compose_provider at the same level",
+			errMsg:  "compose.llm_backend requires compose.llm_provider at the same level",
 		},
 		{
-			name: "executive_summary_backend without provider fails",
+			name: "executive_summary.llm_backend without provider fails",
 			chains: map[string]*ChainConfig{
 				"test-chain": {
-					AlertTypes:              []string{"test"},
-					ExecutiveSummaryBackend: LLMBackendLangChain,
+					AlertTypes:       []string{"test"},
+					ExecutiveSummary: &JobPairing{LLMBackend: LLMBackendLangChain},
 					Stages: []StageConfig{
 						{
 							Name:   "stage1",
@@ -1936,7 +1936,7 @@ func TestValidateChainsEdgeCases(t *testing.T) {
 				"test-server": {Transport: TransportConfig{Type: TransportTypeStdio, Command: "test"}},
 			},
 			wantErr: true,
-			errMsg:  "executive_summary_backend requires executive_summary_provider at the same level",
+			errMsg:  "executive_summary.llm_backend requires executive_summary.llm_provider at the same level",
 		},
 		{
 			name: "chain with invalid MCP server",
@@ -2561,28 +2561,28 @@ func TestValidateDefaults(t *testing.T) {
 			errMsg:  "pattern_group is required when alert masking is enabled",
 		},
 		{
-			name: "unknown compose_provider fails",
+			name: "unknown compose.llm_provider fails",
 			defaults: &Defaults{
-				ComposeProvider: "no-such-provider",
+				Compose: &JobPairing{LLMProvider: "no-such-provider"},
 			},
 			wantErr: true,
-			errMsg:  "compose_provider",
+			errMsg:  "compose.llm_provider",
 		},
 		{
-			name: "compose_backend without compose_provider fails",
+			name: "compose.llm_backend without llm_provider fails",
 			defaults: &Defaults{
-				ComposeBackend: LLMBackendLangChain,
+				Compose: &JobPairing{LLMBackend: LLMBackendLangChain},
 			},
 			wantErr: true,
-			errMsg:  "compose_backend requires compose_provider at the same level",
+			errMsg:  "compose.llm_backend requires compose.llm_provider at the same level",
 		},
 		{
-			name: "executive_summary_backend without provider fails",
+			name: "executive_summary.llm_backend without provider fails",
 			defaults: &Defaults{
-				ExecutiveSummaryBackend: LLMBackendLangChain,
+				ExecutiveSummary: &JobPairing{LLMBackend: LLMBackendLangChain},
 			},
 			wantErr: true,
-			errMsg:  "executive_summary_backend requires executive_summary_provider at the same level",
+			errMsg:  "executive_summary.llm_backend requires executive_summary.llm_provider at the same level",
 		},
 		{
 			name: "google-native with openai defaults provider fails",
@@ -4388,9 +4388,9 @@ func TestValidateFallbackProviders(t *testing.T) {
 func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
-			LLMProvider:              "defaults-primary",
-			ComposeProvider:          "defaults-compose",
-			ExecutiveSummaryProvider: "defaults-exec-summary",
+			LLMProvider:      "defaults-primary",
+			Compose:          &JobPairing{LLMProvider: "defaults-compose"},
+			ExecutiveSummary: &JobPairing{LLMProvider: "defaults-exec-summary"},
 			FallbackProviders: []FallbackProviderEntry{
 				{Provider: "defaults-fallback", Backend: LLMBackendNativeGemini},
 			},
@@ -4414,9 +4414,9 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 		}),
 		ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
 			"chain1": {
-				AlertTypes:               []string{"test"},
-				ComposeProvider:          "chain-compose",
-				ExecutiveSummaryProvider: "chain-exec-summary",
+				AlertTypes:       []string{"test"},
+				Compose:          &JobPairing{LLMProvider: "chain-compose"},
+				ExecutiveSummary: &JobPairing{LLMProvider: "chain-exec-summary"},
 				FallbackProviders: []FallbackProviderEntry{
 					{Provider: "chain-fallback", Backend: LLMBackendLangChain},
 				},
@@ -4475,11 +4475,11 @@ func TestCollectReferencedLLMProviders_IncludesFallbackAndSubAgents(t *testing.T
 func TestCollectReferencedLLMProviders_NamedFallbackLists(t *testing.T) {
 	cfg := &Config{
 		Defaults: &Defaults{
-			FallbackList:                 "premium",
-			ComposeFallbackList:          "compose-list",
-			ExecutiveSummaryFallbackList: "exec-list",
-			Scoring:                      &ScoringConfig{FallbackList: "scoring-list"},
-			Summarization:                &SummarizationConfig{FallbackList: "sum-list"},
+			FallbackList:     "premium",
+			Compose:          &JobPairing{FallbackList: "compose-list"},
+			ExecutiveSummary: &JobPairing{FallbackList: "exec-list"},
+			Scoring:          &ScoringConfig{FallbackList: "scoring-list"},
+			Summarization:    &SummarizationConfig{FallbackList: "sum-list"},
 			Agents: map[string]NamedAgentPairing{
 				"TestAgent": {FallbackList: "agent-pairing-list"},
 			},
@@ -4576,8 +4576,8 @@ func TestValidateLLMProviders_ExecutiveSummaryAndBuiltinPair(t *testing.T) {
 	t.Run("executive_summary_provider missing key fails", func(t *testing.T) {
 		cfg := &Config{
 			Defaults: &Defaults{
-				LLMProvider:              "primary",
-				ExecutiveSummaryProvider: "exec-only",
+				LLMProvider:      "primary",
+				ExecutiveSummary: &JobPairing{LLMProvider: "exec-only"},
 			},
 			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{"TestAgent": {}}),
 			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{
@@ -5688,30 +5688,30 @@ func TestValidateNamedFallbackLists(t *testing.T) {
 			wantErr: `defaults 'TestAgent': field 'agents.fallback_list': unknown fallback list "ghost"`,
 		},
 		{
-			name: "unknown compose_fallback_list",
+			name: "unknown compose.fallback_list",
 			cfg: func() *Config {
 				return &Config{
-					Defaults:            &Defaults{ComposeFallbackList: "ghost"},
+					Defaults:            &Defaults{Compose: &JobPairing{FallbackList: "ghost"}},
 					FallbackLists:       map[string][]FallbackProviderEntry{},
 					AgentRegistry:       NewAgentRegistry(baseAgents),
 					LLMProviderRegistry: NewLLMProviderRegistry(providers),
 					ChainRegistry:       NewChainRegistry(baseChains),
 				}
 			},
-			wantErr: `defaults '': field 'compose_fallback_list': unknown fallback list "ghost"`,
+			wantErr: `defaults '': field 'compose.fallback_list': unknown fallback list "ghost"`,
 		},
 		{
-			name: "unknown executive_summary_fallback_list",
+			name: "unknown executive_summary.fallback_list",
 			cfg: func() *Config {
 				return &Config{
-					Defaults:            &Defaults{ExecutiveSummaryFallbackList: "ghost"},
+					Defaults:            &Defaults{ExecutiveSummary: &JobPairing{FallbackList: "ghost"}},
 					FallbackLists:       map[string][]FallbackProviderEntry{},
 					AgentRegistry:       NewAgentRegistry(baseAgents),
 					LLMProviderRegistry: NewLLMProviderRegistry(providers),
 					ChainRegistry:       NewChainRegistry(baseChains),
 				}
 			},
-			wantErr: `defaults '': field 'executive_summary_fallback_list': unknown fallback list "ghost"`,
+			wantErr: `defaults '': field 'executive_summary.fallback_list': unknown fallback list "ghost"`,
 		},
 		{
 			name: "unknown scoring.fallback_list",
@@ -5884,6 +5884,54 @@ func TestWarnDeprecatedFallbackProviders(t *testing.T) {
 		NewValidator(cfg).warnDeprecatedFallbackProviders()
 
 		assert.NotContains(t, buf.String(), "fallback_providers is deprecated")
+	})
+}
+
+func TestWarnDeprecatedJobPairings(t *testing.T) {
+	captureLogs := func(t *testing.T) (*bytes.Buffer, func()) {
+		t.Helper()
+		var buf bytes.Buffer
+		old := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		return &buf, func() { slog.SetDefault(old) }
+	}
+
+	t.Run("warns for deprecated defaults and chain keys", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				Compose:          &JobPairing{LLMProvider: "x", fromDeprecated: true},
+				ExecutiveSummary: &JobPairing{LLMProvider: "y", fromDeprecated: true},
+			},
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"c1": {Compose: &JobPairing{FallbackList: "mid", fromDeprecated: true}},
+			}),
+		}
+		NewValidator(cfg).warnDeprecatedJobPairings()
+
+		logs := buf.String()
+		assert.Contains(t, logs, "compose_provider is deprecated")
+		assert.Contains(t, logs, "executive_summary_provider is deprecated")
+		assert.Contains(t, logs, "defaults")
+		assert.Contains(t, logs, "chain=c1")
+	})
+
+	t.Run("no warning for nested blocks", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		cfg := &Config{
+			Defaults: &Defaults{
+				Compose: &JobPairing{LLMProvider: "x"},
+			},
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{}),
+		}
+		NewValidator(cfg).warnDeprecatedJobPairings()
+
+		assert.NotContains(t, buf.String(), "compose_provider is deprecated")
+		assert.NotContains(t, buf.String(), "executive_summary_provider is deprecated")
 	})
 }
 

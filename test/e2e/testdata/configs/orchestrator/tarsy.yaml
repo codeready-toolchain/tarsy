@@ -30,7 +30,8 @@ agents:
 agent_chains:
   orchestrator-chain:
     alert_types: [test-orchestrator]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     stages:
       - name: orchestrate
         agents:

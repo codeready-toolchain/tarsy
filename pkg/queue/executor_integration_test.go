@@ -3126,7 +3126,7 @@ func TestExecutor_ComposeUsesChainComposeProvider(t *testing.T) {
 	entClient, _ := util.SetupTestDatabase(t)
 
 	chain := investigationThenActionChain()
-	chain.ComposeProvider = "compose-provider"
+	chain.Compose = &config.JobPairing{LLMProvider: "compose-provider"}
 	cfg := actionComposeTestConfig(chain, nil)
 	cfg.LLMProviderRegistry = config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
 		"test-provider":    {Type: config.LLMProviderTypeGoogle, Model: "test-model"},
@@ -3163,7 +3163,7 @@ func TestExecutor_ComposeDoesNotInheritActionStageFallbackList(t *testing.T) {
 	chain := investigationThenActionChain()
 	chain.Stages[1].FallbackList = "stage-leak"
 	cfg := actionComposeTestConfig(chain, nil)
-	cfg.Defaults.ComposeFallbackList = "compose-ok"
+	cfg.Defaults.Compose = &config.JobPairing{FallbackList: "compose-ok"}
 	cfg.FallbackLists = map[string][]config.FallbackProviderEntry{
 		"stage-leak": {{Provider: "stage-fb"}},
 		"compose-ok": {{Provider: "compose-fb"}},
@@ -3207,7 +3207,7 @@ func TestExecutor_ExecSummaryDoesNotInheritInvestigationStageFallbackList(t *tes
 		}},
 	}
 	cfg := testConfig("test-chain", chain)
-	cfg.Defaults.ExecutiveSummaryFallbackList = "exec-ok"
+	cfg.Defaults.ExecutiveSummary = &config.JobPairing{FallbackList: "exec-ok"}
 	cfg.FallbackLists = map[string][]config.FallbackProviderEntry{
 		"stage-leak": {{Provider: "stage-fb"}},
 		"exec-ok":    {{Provider: "exec-fb"}},

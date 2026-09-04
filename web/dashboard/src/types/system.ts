@@ -270,6 +270,13 @@ export interface ScoringView {
   fallback_list?: string;
 }
 
+/** compose / executive_summary pairing (same shape as named-agent pairing). */
+export interface JobPairingView {
+  llm_provider?: string;
+  llm_backend?: string;
+  fallback_list?: string;
+}
+
 export interface ChainConfigView {
   alert_types: string[];
   description?: string;
@@ -277,12 +284,8 @@ export interface ChainConfigView {
   chat?: ChatView | null;
   scoring?: ScoringView | null;
   llm_provider?: string;
-  executive_summary_provider?: string;
-  executive_summary_backend?: string;
-  executive_summary_fallback_list?: string;
-  compose_provider?: string;
-  compose_backend?: string;
-  compose_fallback_list?: string;
+  executive_summary?: JobPairingView | null;
+  compose?: JobPairingView | null;
   llm_backend?: string;
   fallback_list?: string;
   fallback_providers?: FallbackProviderView[];
@@ -329,12 +332,8 @@ export interface NamedAgentPairingView {
 
 export interface DefaultsView {
   llm_provider?: string;
-  compose_provider?: string;
-  compose_backend?: string;
-  compose_fallback_list?: string;
-  executive_summary_provider?: string;
-  executive_summary_backend?: string;
-  executive_summary_fallback_list?: string;
+  compose?: JobPairingView | null;
+  executive_summary?: JobPairingView | null;
   max_iterations?: number | null;
   llm_backend?: string;
   fallback_list?: string;

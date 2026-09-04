@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"sync"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ChainConfig defines a multi-stage agent chain configuration
@@ -25,23 +27,14 @@ type ChainConfig struct {
 	// Chain-level LLM provider override
 	LLMProvider string `yaml:"llm_provider,omitempty"`
 
-	// LLM provider for executive summary generation (overrides LLMProvider for this purpose)
-	ExecutiveSummaryProvider string `yaml:"executive_summary_provider,omitempty"`
+	// Executive summary pairing (overrides defaults.executive_summary).
+	// Deprecated aliases: executive_summary_provider / executive_summary_backend /
+	// executive_summary_fallback_list.
+	ExecutiveSummary *JobPairing `yaml:"executive_summary,omitempty"`
 
-	// Sibling backend for executive_summary_provider. Omitted means langchain.
-	ExecutiveSummaryBackend LLMBackend `yaml:"executive_summary_backend,omitempty"`
-
-	// Named catalog list for executive summary. Unset inherits defaults → chain.
-	ExecutiveSummaryFallbackList string `yaml:"executive_summary_fallback_list,omitempty"`
-
-	// LLM provider for compose (amended-report) generation (overrides defaults.compose_provider)
-	ComposeProvider string `yaml:"compose_provider,omitempty"`
-
-	// Sibling backend for compose_provider. Omitted means langchain.
-	ComposeBackend LLMBackend `yaml:"compose_backend,omitempty"`
-
-	// Named catalog list for compose. Unset inherits defaults → chain.
-	ComposeFallbackList string `yaml:"compose_fallback_list,omitempty"`
+	// Compose (amended-report) pairing (overrides defaults.compose).
+	// Deprecated aliases: compose_provider / compose_backend / compose_fallback_list.
+	Compose *JobPairing `yaml:"compose,omitempty"`
 
 	// Chain-level LLM backend override
 	LLMBackend LLMBackend `yaml:"llm_backend,omitempty"`
@@ -63,6 +56,20 @@ type ChainConfig struct {
 
 	// Sub-agents available to orchestrator agents in this chain
 	SubAgents SubAgentRefs `yaml:"sub_agents,omitempty"`
+}
+
+// UnmarshalYAML accepts nested compose / executive_summary blocks and the
+// deprecated compose_* / executive_summary_* keys (migrated into the blocks).
+func (c *ChainConfig) UnmarshalYAML(value *yaml.Node) error {
+	type raw ChainConfig
+	aux := struct {
+		*raw              `yaml:",inline"`
+		deprecatedJobKeys `yaml:",inline"`
+	}{raw: (*raw)(c)}
+	if err := value.Decode(&aux); err != nil {
+		return err
+	}
+	return applyDeprecatedJobPairings(&c.Compose, &c.ExecutiveSummary, aux.deprecatedJobKeys, value)
 }
 
 // StageConfig defines a single stage in a chain

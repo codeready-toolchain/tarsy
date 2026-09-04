@@ -33,8 +33,9 @@ agents:
 agent_chains:
   split-lists:
     alert_types: [test-split-lists]
-    executive_summary_provider: "primary-provider"
-    executive_summary_fallback_list: mid
+    executive_summary:
+      llm_provider: "primary-provider"
+      fallback_list: mid
     scoring:
       enabled: true
       fallback_list: mid

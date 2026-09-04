@@ -28,7 +28,8 @@ agents:
 agent_chains:
   action-chain:
     alert_types: [test-action]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     stages:
       # Stage 1: standard investigation — gathers evidence via MCP tools.
       - name: investigation

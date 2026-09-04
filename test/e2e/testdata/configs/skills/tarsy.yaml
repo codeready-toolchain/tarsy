@@ -27,7 +27,8 @@ agents:
 agent_chains:
   skills-chain:
     alert_types: [test-skills]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     stages:
       - name: investigation
         agents:

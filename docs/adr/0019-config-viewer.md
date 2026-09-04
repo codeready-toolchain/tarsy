@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 **Date:** 2026-07-22
-**Amended by:** [ADR-0030: Named Fallback Lists](0030-named-fallback-lists.md) (2026-09-03) — snapshot includes `fallback_lists`, `defaults.agents`, and raw `fallback_list` / `*_fallback_list` selectors; no per-agent expanded walks; no pairing fields on agent identity
+**Amended by:** [ADR-0030: Named Fallback Lists](0030-named-fallback-lists.md) (2026-09-03) — snapshot includes `fallback_lists`, `defaults.agents`, nested `compose` / `executive_summary`, and raw `fallback_list` selectors; no per-agent expanded walks; no pairing fields on agent identity
 
 ## Overview
 
@@ -154,12 +154,12 @@ A dedicated response type (not internal config structs):
 
 | Section | Notes |
 |---------|-------|
-| `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, **summarization** (provider/backend and optional `fallback_list`), success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only), **`agents`** pairing map (`llm_provider` / `llm_backend` / `fallback_list`), raw `fallback_list` / `*_fallback_list`, and compose/exec-summary pairing siblings |
+| `defaults` | Includes `llm_provider`, iterations, backend, fallbacks, scoring, **summarization** (provider/backend and optional `fallback_list`), success_policy, alert_type, runbook, alert_masking, orchestrator, **memory** (incl. embedding with `api_key_env` name only), **`agents`** pairing map (`llm_provider` / `llm_backend` / `fallback_list`), nested **`compose`** / **`executive_summary`**, and raw `fallback_list` |
 | `queue` | All worker/poll/timeout fields; durations as strings |
 | `system` | GitHub, Slack, Runbooks, Retention, dashboard URL, allowed WS origins — env **names** only for tokens |
 | `fallback_lists` | Named catalog of `{llm_provider, llm_backend}` entries (omitted backend filled as `langchain`). Empty object when unset. Deprecated `fallback_providers` stays `{provider, backend}`. Selectors are shown as written — **no** per-agent expanded walks |
 | `agents` | Full agent fields — **no** `llm_provider` or `fallback_list` on identity |
-| `chains` | Full chain shape including stages, chat, scoring, overrides, raw `fallback_list` / `*_fallback_list`, deprecated `fallback_providers` |
+| `chains` | Full chain shape including stages, chat, scoring, nested compose/executive_summary, raw `fallback_list`, deprecated `fallback_providers` |
 | `mcp_servers` | Sanitized transport + instructions + masking/summarization |
 | `llm_providers` | Full provider fields including env names + sanitized `base_url` |
 | `skills` | Metadata only: `name`, `description` |

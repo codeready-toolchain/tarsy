@@ -35,7 +35,8 @@ agent_chains:
 
   cancel-chat:
     alert_types: [test-chat-cancel]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     chat:
       enabled: true
       agent: "ChatAgent"

@@ -18,7 +18,8 @@ agents:
 agent_chains:
   scoring-via-defaults:
     alert_types: [test-scoring-defaults]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     stages:
       - name: investigation
         agents:

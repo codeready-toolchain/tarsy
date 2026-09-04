@@ -430,8 +430,8 @@ func ResolveScoringConfig(
 }
 
 // ResolveExecSummaryConfig builds the agent configuration for an executive summary execution.
-// Hierarchy: defaults → agent definition → chain → defaults.executive_summary_*
-// → chain.executive_summary_*.
+// Hierarchy: defaults → agent definition → chain → defaults.executive_summary
+// → chain.executive_summary.
 func ResolveExecSummaryConfig(
 	cfg *config.Config,
 	chain *config.ChainConfig,
@@ -455,8 +455,8 @@ func ResolveExecSummaryConfig(
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
 		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
-		LLMLayer{Provider: defaults.ExecutiveSummaryProvider, Backend: defaults.ExecutiveSummaryBackend},
-		LLMLayer{Provider: chain.ExecutiveSummaryProvider, Backend: chain.ExecutiveSummaryBackend},
+		LLMLayer{Provider: defaults.ExecutiveSummary.Provider(), Backend: defaults.ExecutiveSummary.Backend()},
+		LLMLayer{Provider: chain.ExecutiveSummary.Provider(), Backend: chain.ExecutiveSummary.Backend()},
 	)
 	if err != nil {
 		return nil, err
@@ -471,8 +471,8 @@ func ResolveExecSummaryConfig(
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
 		defaultsFallbackLayer(&defaults),
 		chainFallbackLayer(chain),
-		config.FallbackLayer{ListName: defaults.ExecutiveSummaryFallbackList},
-		config.FallbackLayer{ListName: chain.ExecutiveSummaryFallbackList},
+		config.FallbackLayer{ListName: defaults.ExecutiveSummary.List()},
+		config.FallbackLayer{ListName: chain.ExecutiveSummary.List()},
 	)
 	if err != nil {
 		return nil, err
@@ -504,8 +504,8 @@ func ResolveExecSummaryConfig(
 
 // ResolveComposeConfig builds the agent configuration for a compose execution.
 // Provider order (last non-empty wins): defaults.llm_provider → chain.llm_provider
-// → defaults.compose_provider/backend → chain.compose_provider/backend.
-// defaults.compose_provider beats chain.llm_provider so a mid-tier compose default
+// → defaults.compose → chain.compose.
+// defaults.compose beats chain.llm_provider so a mid-tier compose default
 // is not overridden by a chain's investigation model.
 func ResolveComposeConfig(
 	cfg *config.Config,
@@ -529,8 +529,8 @@ func ResolveComposeConfig(
 		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
 		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
 		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
-		LLMLayer{Provider: defaults.ComposeProvider, Backend: defaults.ComposeBackend},
-		LLMLayer{Provider: chain.ComposeProvider, Backend: chain.ComposeBackend},
+		LLMLayer{Provider: defaults.Compose.Provider(), Backend: defaults.Compose.Backend()},
+		LLMLayer{Provider: chain.Compose.Provider(), Backend: chain.Compose.Backend()},
 	)
 	if err != nil {
 		return nil, err
@@ -543,8 +543,8 @@ func ResolveComposeConfig(
 	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
 		defaultsFallbackLayer(&defaults),
 		chainFallbackLayer(chain),
-		config.FallbackLayer{ListName: defaults.ComposeFallbackList},
-		config.FallbackLayer{ListName: chain.ComposeFallbackList},
+		config.FallbackLayer{ListName: defaults.Compose.List()},
+		config.FallbackLayer{ListName: chain.Compose.List()},
 	)
 	if err != nil {
 		return nil, err

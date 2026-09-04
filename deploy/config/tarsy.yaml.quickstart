@@ -20,7 +20,8 @@
 
 defaults:
   llm_provider: "google-default"
-  compose_provider: "google-default"
+  compose:
+    llm_provider: "google-default"
   max_iterations: 20  # explicit; omit to use the built-in default (40)
   llm_backend: "langchain"
   scoring:

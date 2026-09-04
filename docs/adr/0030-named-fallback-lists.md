@@ -113,7 +113,7 @@ Side paths inherit **defaults → chain** when their own selector is unset (stag
 defaults.fallback_list / deprecated inline
   → chain.fallback_list / deprecated inline
   → defaults.agents.<name>            # ChatAgent, SynthesisAgent, …
-  → defaults.<job> selector           # scoring.fallback_list, compose_fallback_list, …
+  → defaults.<job> selector           # scoring.fallback_list, compose.fallback_list, …
   → chain/stage job selector          # chain.chat, chain.scoring, stage.synthesis
 ```
 
@@ -121,7 +121,7 @@ defaults.fallback_list / deprecated inline
 
 This fallback order is **not** the same as scoring’s *provider* order. `chain.llm_provider` still beats `defaults.scoring.llm_provider` (existing). Dedicated `defaults.scoring.fallback_list` still beats an investigation `chain.fallback_list` / `defaults.fallback_list`. That divergence is intentional: the new knobs exist so Sonnet scoring does not walk `premium`.
 
-Compose/exec-summary *provider* order already matches this shape (`defaults.compose_provider` beats `chain.llm_provider`). Compose must not inherit the action stage’s list. Exec summary uses a zero stage at runtime.
+Compose/exec-summary *provider* order already matches this shape (`defaults.compose` beats `chain.llm_provider`). Compose must not inherit the action stage’s list. Exec summary uses a zero stage at runtime.
 
 Synthesis uses `stage.synthesis.fallback_list` when set (copied onto the synthetic stage-agent, same as provider/backend); otherwise `defaults.agents.SynthesisAgent` if set, else the investigation stage list after defaults → chain.
 
@@ -141,9 +141,9 @@ Do not put `llm_provider` / `fallback_list` on the `agents:` map (that would rep
 
 ### Implicit jobs
 
-Scoring, compose, exec summary, and summarization keep **job** knobs under `defaults` (`scoring`, `compose_*`, `executive_summary_*`, `summarization`). Chat global pairing is `defaults.agents.ChatAgent` (or the custom chat agent name); `chain.chat` wins. Memory reflector reuses the scoring execution context, so it walks scoring’s effective list with no extra knob.
+Scoring, compose, exec summary, and summarization keep **job** knobs under `defaults` (`scoring`, `compose`, `executive_summary`, `summarization`). Chat global pairing is `defaults.agents.ChatAgent` (or the custom chat agent name); `chain.chat` wins. Memory reflector reuses the scoring execution context, so it walks scoring’s effective list with no extra knob.
 
-Adding sibling backend on compose and exec summary **amends** ADR-0003’s “those provider fields have no sibling backend.” Omitted `*_backend` still means langchain.
+Adding sibling backend on compose and exec summary **amends** ADR-0003’s “those provider fields have no sibling backend.” Omitted `llm_backend` still means langchain.
 
 ## Configuration (user-facing contract)
 
@@ -173,12 +173,14 @@ defaults:
   scoring:
     llm_provider: vertexai-claude-sonnet
     fallback_list: mid
-  compose_provider: vertexai-claude-sonnet
-  compose_backend: langchain          # omit → langchain
-  compose_fallback_list: mid
-  executive_summary_provider: vertexai-claude-sonnet
-  executive_summary_backend: langchain
-  executive_summary_fallback_list: mid
+  compose:
+    llm_provider: vertexai-claude-sonnet
+    llm_backend: langchain          # omit → langchain
+    fallback_list: mid
+  executive_summary:
+    llm_provider: vertexai-claude-sonnet
+    llm_backend: langchain
+    fallback_list: mid
   summarization:
     llm_provider: google-default
     llm_backend: google-native
@@ -216,9 +218,9 @@ Catalog entries use the same `llm_*` keys as pairing sites. Unknown keys fail lo
 
 List names are non-empty YAML mapping keys. Duplicate names cannot exist (YAML map). Every catalog entry is structure-validated (provider exists, backend valid, `google-native` only with a Google provider). Credentials are required only for **referenced** lists.
 
-**Referenced** means every `fallback_list` / `*_fallback_list` string that appears in YAML (including `defaults.fallback_list` and `defaults.summarization.fallback_list`), plus every deprecated `fallback_providers` entry. It is not a full per-execution resolve: a default list named in YAML is credential-checked even if every chain overrides it. Unnamed catalog entries are structure-only.
+**Referenced** means every `fallback_list` string that appears in YAML (including `defaults.fallback_list`, `defaults.compose.fallback_list`, and `defaults.summarization.fallback_list`), plus every deprecated `fallback_providers` entry and deprecated `compose_fallback_list` / `executive_summary_fallback_list` alias. It is not a full per-execution resolve: a default list named in YAML is credential-checked even if every chain overrides it. Unnamed catalog entries are structure-only.
 
-Also treat as referenced LLM providers: defaults/chain/stage-agent/sub-agent/side-path `llm_provider` fields, including `executive_summary_provider`, `defaults.agents.*.llm_provider`, and compose/exec-summary names. Do not credential-check builtin WebResearcher’s `google-default` merely because the builtin exists; do check it when `defaults.agents.WebResearcher` (or a reachable ref) names it or when the builtin pair is used because the agent can run.
+Also treat as referenced LLM providers: defaults/chain/stage-agent/sub-agent/side-path `llm_provider` fields, including `defaults.executive_summary.llm_provider`, `defaults.agents.*.llm_provider`, and compose/exec-summary names. Do not credential-check builtin WebResearcher’s `google-default` merely because the builtin exists; do check it when `defaults.agents.WebResearcher` (or a reachable ref) names it or when the builtin pair is used because the agent can run.
 
 Deprecated `fallback_providers` still loads on defaults / chain / stage / stage-agent. Startup warns. A fully migrated config never mentions it.
 
@@ -236,11 +238,11 @@ Deprecated `fallback_providers` still loads on defaults / chain / stage / stage-
 | `defaults.scoring` / `chain.scoring` | yes | **not added** | existing |
 | `chain.chat` | yes | **not added** | existing; global pairing is `defaults.agents.ChatAgent` (or custom chat agent name) |
 | `stage.synthesis` | yes | **not added** | existing; optional global `defaults.agents.SynthesisAgent` |
-| compose | `compose_fallback_list` | **not added** | existing `compose_provider` + `compose_backend` (defaults and chain) |
-| exec summary | `executive_summary_fallback_list` | **not added** | `executive_summary_provider` + `executive_summary_backend` (defaults and chain) |
+| compose | `defaults.compose` / `chain.compose` (`fallback_list`) | **not added** | `llm_provider` + `llm_backend` (defaults and chain) |
+| exec summary | `defaults.executive_summary` / `chain.executive_summary` (`fallback_list`) | **not added** | `llm_provider` + `llm_backend` (defaults and chain) |
 | `defaults.summarization` | yes | **not added** | existing; **no** per-MCP-server `fallback_list`; **not** `defaults.agents` |
 
-Keep current names (`compose_provider`, `executive_summary_provider`). Do not nest them into a new mapping that would migrate existing YAML.
+Keep current names (`compose.llm_provider`, `executive_summary.llm_provider`). Deprecated flat aliases (`compose_provider`, `executive_summary_provider`, and their `*_backend` / `*_fallback_list` siblings) still load with a startup warning. Mixing nested + deprecated keys on the same node is a load-time error.
 
 Sub-agent short-form (`sub_agents: [WebResearcher]`) has no ref overlay. Effective list is last non-nil among defaults → chain → `defaults.agents.WebResearcher` → empty stage. Long-form objects may set `fallback_list` and the provider pair.
 
@@ -267,8 +269,8 @@ Native-tool startup **warning** uses the **effective** list after named-list exp
 ## Observability and config viewer
 
 - Timeline / metrics: no new event types. Provider names in existing fallback events already identify what was used.
-- Config viewer (`GET /api/v1/system/config`): emit the `fallback_lists` catalog as `{llm_provider, llm_backend}` (omitted backend filled as `langchain`), `defaults.agents`, and the raw `fallback_list` / deprecated `fallback_providers` (`provider` / `backend`) / `*_fallback_list` fields as written. Do not compute per-agent expanded walks. Do **not** add `llm_provider` / `fallback_list` to agent identity.
-- Startup: warn on any use of `fallback_providers`.
+- Config viewer (`GET /api/v1/system/config`): emit the `fallback_lists` catalog as `{llm_provider, llm_backend}` (omitted backend filled as `langchain`), `defaults.agents`, nested `compose` / `executive_summary` pairings, and the raw `fallback_list` / deprecated `fallback_providers` (`provider` / `backend`) fields as written. Do not compute per-agent expanded walks. Do **not** add `llm_provider` / `fallback_list` to agent identity.
+- Startup: warn on any use of `fallback_providers` and of deprecated `compose_*` / `executive_summary_*` keys.
 
 ## Out of scope
 
@@ -288,3 +290,7 @@ Native-tool startup **warning** uses the **effective** list after named-list exp
 - [ADR-0024: Tool Summarization Provider](0024-tool-summarization-provider.md)
 - [ADR-0027: Transient LLM Outage Handling](0027-llm-transient-outage.md)
 - [ADR-0028: LLM Retry Resilience](0028-llm-retry-resilience.md)
+
+## Amendment (2026-09-03)
+
+**Nested compose / executive_summary.** Scoring and summarization already used nested job blocks (`llm_provider` / `llm_backend` / `fallback_list`). Compose and exec-summary originally kept prefixed flat keys to avoid a YAML migration. They now use the same nested shape (`defaults.compose`, `chain.compose`, `defaults.executive_summary`, `chain.executive_summary`). The old `compose_*` / `executive_summary_*` keys still load and are copied into the nested blocks with a startup warning. Mixing nested + deprecated keys on one node is a load-time error.

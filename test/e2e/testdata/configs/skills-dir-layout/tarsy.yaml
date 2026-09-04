@@ -21,7 +21,8 @@ agents:
 agent_chains:
   dir-layout-chain:
     alert_types: [test-dir-layout]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     stages:
       - name: investigation
         agents:
