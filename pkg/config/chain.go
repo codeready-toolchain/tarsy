@@ -69,7 +69,7 @@ func (c *ChainConfig) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode(&aux); err != nil {
 		return err
 	}
-	return applyDeprecatedJobPairings(&c.Compose, &c.ExecutiveSummary, aux.deprecatedJobKeys)
+	return applyDeprecatedJobPairings(&c.Compose, &c.ExecutiveSummary, aux.deprecatedJobKeys, value)
 }
 
 // StageConfig defines a single stage in a chain

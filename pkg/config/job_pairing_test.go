@@ -84,6 +84,36 @@ compose_provider: google-default
 		assert.Contains(t, err.Error(), "cannot set both compose and compose_provider / compose_backend / compose_fallback_list")
 	})
 
+	t.Run("empty compose mapping mixes with empty compose_provider", func(t *testing.T) {
+		t.Parallel()
+		var d Defaults
+		err := yaml.Unmarshal([]byte(`
+compose: {}
+compose_provider: ""
+`), &d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot set both compose and compose_provider / compose_backend / compose_fallback_list")
+	})
+
+	t.Run("null compose mixes with compose_provider", func(t *testing.T) {
+		t.Parallel()
+		var d Defaults
+		err := yaml.Unmarshal([]byte(`
+compose: null
+compose_provider: google-default
+`), &d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot set both compose and compose_provider / compose_backend / compose_fallback_list")
+	})
+
+	t.Run("null compose without deprecated keys is omitted", func(t *testing.T) {
+		t.Parallel()
+		var d Defaults
+		err := yaml.Unmarshal([]byte("compose: null\n"), &d)
+		require.NoError(t, err)
+		assert.Nil(t, d.Compose)
+	})
+
 	t.Run("mixing executive_summary block and executive_summary_fallback_list fails", func(t *testing.T) {
 		t.Parallel()
 		var d Defaults
@@ -202,14 +232,14 @@ func TestMigrateJobPairing(t *testing.T) {
 
 	t.Run("returns nested when deprecated keys are empty", func(t *testing.T) {
 		t.Parallel()
-		got, err := migrateJobPairing(nested, "", "", "", "compose")
+		got, err := migrateJobPairing(nested, true, "", "", "", false, "compose")
 		require.NoError(t, err)
 		assert.Equal(t, nested, got)
 	})
 
 	t.Run("builds pairing from deprecated keys", func(t *testing.T) {
 		t.Parallel()
-		got, err := migrateJobPairing(nil, "claude-sonnet", LLMBackendLangChain, "mid", "compose")
+		got, err := migrateJobPairing(nil, false, "claude-sonnet", LLMBackendLangChain, "mid", true, "compose")
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, "claude-sonnet", got.LLMProvider)
@@ -220,14 +250,14 @@ func TestMigrateJobPairing(t *testing.T) {
 
 	t.Run("neither nested nor deprecated returns nil", func(t *testing.T) {
 		t.Parallel()
-		got, err := migrateJobPairing(nil, "", "", "", "compose")
+		got, err := migrateJobPairing(nil, false, "", "", "", false, "compose")
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
 
 	t.Run("mixing nested and deprecated is an exact error", func(t *testing.T) {
 		t.Parallel()
-		got, err := migrateJobPairing(nested, "p", "", "", "compose")
+		got, err := migrateJobPairing(nested, true, "p", "", "", true, "compose")
 		assert.Nil(t, got)
 		require.Error(t, err)
 		assert.Equal(t, "cannot set both compose and compose_provider / compose_backend / compose_fallback_list", err.Error())
@@ -235,10 +265,26 @@ func TestMigrateJobPairing(t *testing.T) {
 
 	t.Run("empty nested pairing still mixes", func(t *testing.T) {
 		t.Parallel()
-		got, err := migrateJobPairing(&JobPairing{}, "", "", "mid", "executive_summary")
+		got, err := migrateJobPairing(&JobPairing{}, true, "", "", "mid", true, "executive_summary")
 		assert.Nil(t, got)
 		require.Error(t, err)
 		assert.Equal(t, "cannot set both executive_summary and executive_summary_provider / executive_summary_backend / executive_summary_fallback_list", err.Error())
+	})
+
+	t.Run("null nested mixes with deprecated keys", func(t *testing.T) {
+		t.Parallel()
+		got, err := migrateJobPairing(nil, true, "google-default", "", "", true, "compose")
+		assert.Nil(t, got)
+		require.Error(t, err)
+		assert.Equal(t, "cannot set both compose and compose_provider / compose_backend / compose_fallback_list", err.Error())
+	})
+
+	t.Run("empty nested mapping mixes with empty deprecated values", func(t *testing.T) {
+		t.Parallel()
+		got, err := migrateJobPairing(&JobPairing{}, true, "", "", "", true, "compose")
+		assert.Nil(t, got)
+		require.Error(t, err)
+		assert.Equal(t, "cannot set both compose and compose_provider / compose_backend / compose_fallback_list", err.Error())
 	})
 }
 

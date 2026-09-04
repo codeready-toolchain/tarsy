@@ -76,7 +76,7 @@ func (d *Defaults) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode(&aux); err != nil {
 		return err
 	}
-	return applyDeprecatedJobPairings(&d.Compose, &d.ExecutiveSummary, aux.deprecatedJobKeys)
+	return applyDeprecatedJobPairings(&d.Compose, &d.ExecutiveSummary, aux.deprecatedJobKeys, value)
 }
 
 // NamedAgentPairing is provider/backend/list for defaults.agents.<name>.
