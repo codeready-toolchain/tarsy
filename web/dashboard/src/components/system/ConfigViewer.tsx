@@ -545,12 +545,6 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       <Field label="llm_provider" value={chain.llm_provider} />
       <Field label="llm_backend" value={chain.llm_backend} />
       <Field label="fallback_list" value={chain.fallback_list} />
-      <Field label="compose_provider" value={chain.compose_provider} />
-      <Field label="compose_backend" value={chain.compose_backend} />
-      <Field label="compose_fallback_list" value={chain.compose_fallback_list} />
-      <Field label="executive_summary_provider" value={chain.executive_summary_provider} />
-      <Field label="executive_summary_backend" value={chain.executive_summary_backend} />
-      <Field label="executive_summary_fallback_list" value={chain.executive_summary_fallback_list} />
       <Field label="max_iterations" value={chain.max_iterations} />
       <Field label="mcp_servers" value={<ChipList items={chain.mcp_servers} />} />
       <Box sx={{ mt: 1 }}>
@@ -581,6 +575,22 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
             chat
           </Typography>
           <KeyValueBlock data={chain.chat} />
+        </Box>
+      )}
+      {chain.compose && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            compose
+          </Typography>
+          <KeyValueBlock data={chain.compose} />
+        </Box>
+      )}
+      {chain.executive_summary && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            executive_summary
+          </Typography>
+          <KeyValueBlock data={chain.executive_summary} />
         </Box>
       )}
       {chain.scoring && (

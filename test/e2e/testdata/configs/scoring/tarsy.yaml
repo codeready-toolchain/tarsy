@@ -28,7 +28,8 @@ agents:
 agent_chains:
   scoring-chain:
     alert_types: [test-scoring]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     scoring:
       enabled: true
     stages:
@@ -42,7 +43,8 @@ agent_chains:
 
   scoring-disabled-chain:
     alert_types: [test-scoring-disabled]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     stages:
       - name: investigation
         agents:

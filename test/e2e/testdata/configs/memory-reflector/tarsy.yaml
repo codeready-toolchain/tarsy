@@ -20,7 +20,8 @@ agents:
 agent_chains:
   memory-reflector-chain:
     alert_types: [test-memory-reflector]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     scoring:
       enabled: true
     stages:

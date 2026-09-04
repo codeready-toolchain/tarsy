@@ -1787,12 +1787,14 @@ fallback_lists:
 defaults:
   llm_provider: "vertexai-claude-opus"
   fallback_list: mid
-  compose_provider: vertexai-claude-sonnet
-  compose_backend: langchain
-  compose_fallback_list: mid
-  executive_summary_provider: vertexai-claude-sonnet
-  executive_summary_backend: langchain
-  executive_summary_fallback_list: mid
+  compose:
+    llm_provider: vertexai-claude-sonnet
+    llm_backend: langchain
+    fallback_list: mid
+  executive_summary:
+    llm_provider: vertexai-claude-sonnet
+    llm_backend: langchain
+    fallback_list: mid
   summarization:
     llm_provider: google-default
     llm_backend: google-native
@@ -1812,8 +1814,10 @@ agents:
 agent_chains:
   test-chain:
     alert_types: ["test"]
-    compose_fallback_list: mid
-    executive_summary_fallback_list: mid
+    compose:
+      fallback_list: mid
+    executive_summary:
+      fallback_list: mid
     chat:
       enabled: true
       agent: ChatAgent
@@ -1842,25 +1846,167 @@ agent_chains:
 		assert.Equal(t, "google-native", wr.FallbackList)
 		assert.Equal(t, "mid", cfg.Defaults.Agents["ChatAgent"].FallbackList)
 
-		assert.Equal(t, "vertexai-claude-sonnet", cfg.Defaults.ComposeProvider)
-		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.ComposeBackend)
-		assert.Equal(t, "mid", cfg.Defaults.ComposeFallbackList)
-		assert.Equal(t, "vertexai-claude-sonnet", cfg.Defaults.ExecutiveSummaryProvider)
-		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.ExecutiveSummaryBackend)
-		assert.Equal(t, "mid", cfg.Defaults.ExecutiveSummaryFallbackList)
+		require.NotNil(t, cfg.Defaults.Compose)
+		assert.Equal(t, "vertexai-claude-sonnet", cfg.Defaults.Compose.LLMProvider)
+		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.Compose.LLMBackend)
+		assert.Equal(t, "mid", cfg.Defaults.Compose.FallbackList)
+		assert.False(t, cfg.Defaults.Compose.fromDeprecated)
+		require.NotNil(t, cfg.Defaults.ExecutiveSummary)
+		assert.Equal(t, "vertexai-claude-sonnet", cfg.Defaults.ExecutiveSummary.LLMProvider)
+		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.ExecutiveSummary.LLMBackend)
+		assert.Equal(t, "mid", cfg.Defaults.ExecutiveSummary.FallbackList)
+		assert.False(t, cfg.Defaults.ExecutiveSummary.fromDeprecated)
 		require.NotNil(t, cfg.Defaults.Summarization)
 		assert.Equal(t, "google-native", cfg.Defaults.Summarization.FallbackList)
 
 		chain, err := cfg.GetChain("test-chain")
 		require.NoError(t, err)
-		assert.Equal(t, "mid", chain.ComposeFallbackList)
-		assert.Equal(t, "mid", chain.ExecutiveSummaryFallbackList)
+		require.NotNil(t, chain.Compose)
+		assert.Equal(t, "mid", chain.Compose.FallbackList)
+		assert.False(t, chain.Compose.fromDeprecated)
+		require.NotNil(t, chain.ExecutiveSummary)
+		assert.Equal(t, "mid", chain.ExecutiveSummary.FallbackList)
+		assert.False(t, chain.ExecutiveSummary.fromDeprecated)
 		require.NotNil(t, chain.Chat)
 		assert.Equal(t, "mid", chain.Chat.FallbackList)
 		require.NotNil(t, chain.Scoring)
 		assert.Equal(t, "mid", chain.Scoring.FallbackList)
 		require.Len(t, chain.Stages[0].Agents[0].SubAgents, 1)
 		assert.Equal(t, "google-native", chain.Stages[0].Agents[0].SubAgents[0].FallbackList)
+	})
+
+	t.Run("deprecated compose_* and executive_summary_* keys still load", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+defaults:
+  llm_provider: "test-provider"
+  compose_provider: claude-sonnet
+  compose_backend: langchain
+  compose_fallback_list: mid
+  executive_summary_provider: google-default
+  executive_summary_backend: google-native
+  executive_summary_fallback_list: google-native
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    compose_provider: google-default
+    executive_summary_fallback_list: mid
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		cfg, err := load(t.Context(), dir)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Defaults.Compose)
+		assert.Equal(t, "claude-sonnet", cfg.Defaults.Compose.LLMProvider)
+		assert.Equal(t, LLMBackendLangChain, cfg.Defaults.Compose.LLMBackend)
+		assert.Equal(t, "mid", cfg.Defaults.Compose.FallbackList)
+		assert.True(t, cfg.Defaults.Compose.fromDeprecated)
+		require.NotNil(t, cfg.Defaults.ExecutiveSummary)
+		assert.Equal(t, "google-default", cfg.Defaults.ExecutiveSummary.LLMProvider)
+		assert.Equal(t, LLMBackendNativeGemini, cfg.Defaults.ExecutiveSummary.LLMBackend)
+		assert.Equal(t, "google-native", cfg.Defaults.ExecutiveSummary.FallbackList)
+		assert.True(t, cfg.Defaults.ExecutiveSummary.fromDeprecated)
+
+		chain, err := cfg.GetChain("test-chain")
+		require.NoError(t, err)
+		require.NotNil(t, chain.Compose)
+		assert.Equal(t, "google-default", chain.Compose.LLMProvider)
+		assert.True(t, chain.Compose.fromDeprecated)
+		require.NotNil(t, chain.ExecutiveSummary)
+		assert.Equal(t, "mid", chain.ExecutiveSummary.FallbackList)
+		assert.True(t, chain.ExecutiveSummary.fromDeprecated)
+	})
+
+	t.Run("mixing nested job blocks and deprecated keys fails load", func(t *testing.T) {
+		const composeMix = "cannot set both compose and compose_provider / compose_backend / compose_fallback_list"
+		const execMix = "cannot set both executive_summary and executive_summary_provider / executive_summary_backend / executive_summary_fallback_list"
+
+		minimalAgents := `
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`
+
+		tests := []struct {
+			name      string
+			tarsyYAML string
+			wantErr   string
+		}{
+			{
+				name: "defaults compose",
+				tarsyYAML: `
+defaults:
+  llm_provider: "test-provider"
+  compose:
+    llm_provider: claude-sonnet
+  compose_provider: google-default
+` + minimalAgents,
+				wantErr: composeMix,
+			},
+			{
+				name: "defaults executive_summary",
+				tarsyYAML: `
+defaults:
+  llm_provider: "test-provider"
+  executive_summary:
+    fallback_list: mid
+  executive_summary_fallback_list: premium
+` + minimalAgents,
+				wantErr: execMix,
+			},
+			{
+				name: "chain compose",
+				tarsyYAML: `
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    compose:
+      llm_provider: claude-sonnet
+    compose_provider: google-default
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+`,
+				wantErr: composeMix,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				dir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tt.tarsyYAML), 0644))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+				_, err := load(t.Context(), dir)
+				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrInvalidYAML)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			})
+		}
 	})
 }
 

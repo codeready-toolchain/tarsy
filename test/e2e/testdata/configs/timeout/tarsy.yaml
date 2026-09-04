@@ -31,7 +31,8 @@ agent_chains:
 
   timeout-chat:
     alert_types: [test-chat-timeout]
-    executive_summary_provider: "test-provider"
+    executive_summary:
+      llm_provider: "test-provider"
     chat:
       enabled: true
       agent: "ChatAgent"

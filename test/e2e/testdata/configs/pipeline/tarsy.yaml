@@ -45,7 +45,8 @@ agent_chains:
   test-chain:
     alert_types: [test-alert]
     llm_provider: "test-provider"
-    executive_summary_provider: "test-provider-fast"
+    executive_summary:
+      llm_provider: "test-provider-fast"
     llm_backend: "google-native"
     chat:
       enabled: true

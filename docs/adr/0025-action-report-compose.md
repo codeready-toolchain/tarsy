@@ -28,7 +28,7 @@ This ADR supersedes the preserve/copy contract on the action agent in ADR-0007. 
 |---|--------|----------|-----------|
 | Q1 | Placement | Automatic sibling stage after each successful action stage (same pattern as synthesis) | Compose is a first-class session document, not a helper nested on the remediator. Fail-open is clean: action stays completed; compose can fail without rewriting action status. Independent provider, `referenced_stage_id`, own LLM interaction type. Rejected: in-stage extra call (wrong analogy — compose combines two stages and becomes the session report); chain YAML (product invariant, too easy to omit). |
 | Q2 | Prompt | Strict format-agnostic copy-edit; fold in the action result; no rewrite and no TARSy-imposed template | Closest to the 4.6 document operators liked, without assuming one investigation layout. Constrains even a "helpful" model. Rejected: light rewrite (that is how Claude 5 already replaces the investigation). |
-| Q3 | Model | Builtin compose agent. Default: `defaults.compose_provider` (mid-tier). Override: `chain.compose_provider`. Last resort: `chain.llm_provider` → `defaults.llm_provider`. `chain.llm_provider` does **not** override the defaults compose knob | Copy-edit does not need tools or a frontier model. Same default whether or not synthesis ran. Do not copy exec-summary resolution (`defaults.llm_provider` → `chain.llm_provider` → override) — `chain.llm_provider` is often Opus and would undo cost control. Rejected: provider of whoever wrote the upstream report (chain-shape dependent; frontier-priced copy-edit); exec-summary provider (that prompt is trained to compress). |
+| Q3 | Model | Builtin compose agent. Default: `defaults.compose` (mid-tier). Override: `chain.compose`. Last resort: `chain.llm_provider` → `defaults.llm_provider`. `chain.llm_provider` does **not** override the defaults compose knob | Copy-edit does not need tools or a frontier model. Same default whether or not synthesis ran. Do not copy exec-summary resolution (`defaults.llm_provider` → `chain.llm_provider` → override) — `chain.llm_provider` is often Opus and would undo cost control. Rejected: provider of whoever wrote the upstream report (chain-shape dependent; frontier-priced copy-edit); exec-summary provider (that prompt is trained to compress). |
 | Q4 | LLM failure | Compose stage `failed`; append mechanical concat; `extractFinalAnalysis` still uses that stage | Timeline is honest. The Final Analysis card stays complete (findings + actions). Ugly is acceptable on a rare error path. Do **not** skip a failed compose and land on the action memo — that recreates the original bug. Rejected: completed stage + warning (hides LLM failure). |
 | Q5 | Skip | Only when there is no upstream investigation/synthesis/prior-compose report. Still compose if the remediator took no action | Avoids a no-op stage on action-only chains. "No action" is an amendment operators should see on the card, not a reason to leave the memo as the session report. Rejected: skip when no tools ran (common NO-ACTION path is today's bug); always insert (pointless copy-edit on action-only chains). |
 | Q6 | Naming | `stage_type: compose`; UI `{actionStage} - Amended Report` | `compose` sits with `synthesis` / `exec_summary` as a document-producing stage. List label is unambiguous next to Final Analysis / Exec Summary. Collapsed by default. `referenced_stage_id` → the action stage (trigger). Upstream report is prompt context, not a second FK. Rejected: schema `amendment`; UI `Report`. |
@@ -169,20 +169,22 @@ Expected stage count is computed once from chain YAML (stages + synthesis for mu
 | Action agent (this design) | yes, many | large | short memo (~0.5–2k) |
 | Compose pass | no | two docs (~3–10k) + short prompt | one report (~2–6k) |
 
-Net vs the copy+amend prompt: action **output** shrinks; compose adds one modest call on `defaults.compose_provider`. Do not send the action agent's iteration history into compose.
+Net vs the copy+amend prompt: action **output** shrinks; compose adds one modest call on `defaults.compose`. Do not send the action agent's iteration history into compose.
 
 ## Configuration
 
 ```yaml
 defaults:
   llm_provider: "google-default"
-  compose_provider: "google-default"   # mid-tier copy-edit; beats chain.llm_provider
+  compose:
+    llm_provider: "google-default"   # mid-tier copy-edit; beats chain.llm_provider
 
 agent_chains:
   kubernetes-with-action:
     alert_types: ["SecurityIncident"]
     llm_provider: "anthropic-default"  # investigation / action (often frontier)
-    compose_provider: "google-default" # optional chain override
+    compose:
+      llm_provider: "google-default" # optional chain override
     stages:
       - name: "investigation"
         agents:
@@ -194,8 +196,8 @@ agent_chains:
 
 Provider resolution (do **not** copy exec-summary order):
 
-1. `chain.compose_provider` if set
-2. else `defaults.compose_provider` if set
+1. `chain.compose.llm_provider` if set
+2. else `defaults.compose.llm_provider` if set
 3. else `chain.llm_provider` → `defaults.llm_provider`
 
 Both knobs must name a provider that exists in the LLM provider registry. Unset both compose knobs still runs compose via the last-resort chain/defaults LLM provider.

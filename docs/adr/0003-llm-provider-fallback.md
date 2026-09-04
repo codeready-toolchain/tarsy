@@ -205,10 +205,10 @@ These original decisions still stand. ADR-0027 changed *how* they behave under s
 
 **Q3 / backend specification.** Omitted `fallback_providers[].backend` defaults to `langchain`. `google-native` remains explicit. Backend is still not inferred from provider type and does not inherit `defaults.llm_backend`.
 
-The same pairing applies to investigation, chat, scoring, compose, and executive-summary named-provider layers: a YAML node that sets `llm_provider` (or `compose_provider` / `executive_summary_provider`) without a sibling backend resolves backend to `langchain` and does not keep a parent `llm_backend`. `google-native` paired with a non-google provider at the same node is a load-time error.
+The same pairing applies to investigation, chat, scoring, compose, and executive-summary named-provider layers: a YAML node that sets `llm_provider` without a sibling backend resolves backend to `langchain` and does not keep a parent `llm_backend`. `google-native` paired with a non-google provider at the same node is a load-time error.
 
 ## Amendment ([ADR-0030](0030-named-fallback-lists.md), 2026-09-03)
 
 **How the list is chosen.** Inline `fallback_providers` remains the runtime entry shape and the deprecated YAML spelling on defaults / chain / stage / stage-agent. Operators now bind executions via a named catalog (`fallback_lists` + `fallback_list`). Runtime walk (triggers, stickiness, skip) is unchanged.
 
-**Compose / exec-summary backend.** Those provider fields now have sibling `compose_backend` / `executive_summary_backend`. Omitted still means langchain.
+**Compose / exec-summary backend.** Those jobs use nested `compose` / `executive_summary` blocks with sibling `llm_backend`. Omitted still means langchain. Deprecated `compose_backend` / `executive_summary_backend` aliases still load.

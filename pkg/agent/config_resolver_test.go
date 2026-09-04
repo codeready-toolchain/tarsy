@@ -1853,9 +1853,9 @@ func TestResolveFallbackList(t *testing.T) {
 	t.Run("compose_fallback_list beats chain premium", func(t *testing.T) {
 		cfg := *baseCfg
 		cfg.Defaults = &config.Defaults{
-			LLMProvider:         "google-default",
-			FallbackList:        "premium",
-			ComposeFallbackList: "mid",
+			LLMProvider:  "google-default",
+			FallbackList: "premium",
+			Compose:      &config.JobPairing{FallbackList: "mid"},
 		}
 		resolved, err := ResolveComposeConfig(&cfg, &config.ChainConfig{FallbackList: "premium"})
 		require.NoError(t, err)
@@ -1865,9 +1865,9 @@ func TestResolveFallbackList(t *testing.T) {
 	t.Run("executive_summary_fallback_list beats chain premium", func(t *testing.T) {
 		cfg := *baseCfg
 		cfg.Defaults = &config.Defaults{
-			LLMProvider:                  "google-default",
-			FallbackList:                 "premium",
-			ExecutiveSummaryFallbackList: "mid",
+			LLMProvider:      "google-default",
+			FallbackList:     "premium",
+			ExecutiveSummary: &config.JobPairing{FallbackList: "mid"},
 		}
 		resolved, err := ResolveExecSummaryConfig(&cfg, &config.ChainConfig{FallbackList: "premium"})
 		require.NoError(t, err)
@@ -2237,10 +2237,10 @@ func TestResolveExecSummaryConfig(t *testing.T) {
 		assert.Equal(t, "openai-default", resolved.LLMProviderName)
 	})
 
-	t.Run("chain.ExecutiveSummaryProvider overrides chain.LLMProvider", func(t *testing.T) {
+	t.Run("chain.executive_summary overrides chain.LLMProvider", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			LLMProvider:              "openai-default",
-			ExecutiveSummaryProvider: "anthropic-default",
+			LLMProvider:      "openai-default",
+			ExecutiveSummary: &config.JobPairing{LLMProvider: "anthropic-default"},
 		}
 		resolved, err := ResolveExecSummaryConfig(cfg, chain)
 		require.NoError(t, err)
@@ -2300,7 +2300,7 @@ func TestResolveExecSummaryConfig(t *testing.T) {
 	})
 
 	t.Run("unknown provider returns error", func(t *testing.T) {
-		chain := &config.ChainConfig{ExecutiveSummaryProvider: "nonexistent-provider"}
+		chain := &config.ChainConfig{ExecutiveSummary: &config.JobPairing{LLMProvider: "nonexistent-provider"}}
 		_, err := ResolveExecSummaryConfig(cfg, chain)
 		assert.Error(t, err)
 	})
@@ -2308,9 +2308,9 @@ func TestResolveExecSummaryConfig(t *testing.T) {
 
 func TestResolveComposeConfig(t *testing.T) {
 	defaults := &config.Defaults{
-		LLMProvider:     "google-default",
-		ComposeProvider: "anthropic-default",
-		LLMBackend:      config.LLMBackendLangChain,
+		LLMProvider: "google-default",
+		Compose:     &config.JobPairing{LLMProvider: "anthropic-default"},
+		LLMBackend:  config.LLMBackendLangChain,
 	}
 
 	googleProvider := &config.LLMProviderConfig{
@@ -2348,7 +2348,7 @@ func TestResolveComposeConfig(t *testing.T) {
 		assert.Equal(t, config.AgentTypeCompose, resolved.Type)
 	})
 
-	t.Run("defaults.compose_provider beats chain.llm_provider", func(t *testing.T) {
+	t.Run("defaults.compose beats chain.llm_provider", func(t *testing.T) {
 		chain := &config.ChainConfig{LLMProvider: "openai-default"}
 		resolved, err := ResolveComposeConfig(cfg, chain)
 		require.NoError(t, err)
@@ -2356,10 +2356,10 @@ func TestResolveComposeConfig(t *testing.T) {
 		assert.Equal(t, "anthropic-default", resolved.LLMProviderName)
 	})
 
-	t.Run("chain.compose_provider beats defaults.compose_provider", func(t *testing.T) {
+	t.Run("chain.compose beats defaults.compose", func(t *testing.T) {
 		chain := &config.ChainConfig{
-			LLMProvider:     "openai-default",
-			ComposeProvider: "google-default",
+			LLMProvider: "openai-default",
+			Compose:     &config.JobPairing{LLMProvider: "google-default"},
 		}
 		resolved, err := ResolveComposeConfig(cfg, chain)
 		require.NoError(t, err)
@@ -2387,7 +2387,7 @@ func TestResolveComposeConfig(t *testing.T) {
 	})
 
 	t.Run("unknown provider returns error", func(t *testing.T) {
-		chain := &config.ChainConfig{ComposeProvider: "nonexistent-provider"}
+		chain := &config.ChainConfig{Compose: &config.JobPairing{LLMProvider: "nonexistent-provider"}}
 		_, err := ResolveComposeConfig(cfg, chain)
 		assert.Error(t, err)
 	})
@@ -3117,22 +3117,22 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 	})
 
-	t.Run("executive_summary_provider without sibling uses langchain", func(t *testing.T) {
+	t.Run("executive_summary without sibling uses langchain", func(t *testing.T) {
 		resolved, err := ResolveExecSummaryConfig(cfg, &config.ChainConfig{
-			LLMBackend:               config.LLMBackendNativeGemini,
-			ExecutiveSummaryProvider: "openai-default",
+			LLMBackend:       config.LLMBackendNativeGemini,
+			ExecutiveSummary: &config.JobPairing{LLMProvider: "openai-default"},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "openai-default", resolved.LLMProviderName)
 		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 	})
 
-	t.Run("compose_provider without sibling uses langchain", func(t *testing.T) {
+	t.Run("compose without sibling uses langchain", func(t *testing.T) {
 		cfgCompose := *cfg
 		cfgCompose.Defaults = &config.Defaults{
-			LLMProvider:     "google-default",
-			LLMBackend:      config.LLMBackendNativeGemini,
-			ComposeProvider: "openai-default",
+			LLMProvider: "google-default",
+			LLMBackend:  config.LLMBackendNativeGemini,
+			Compose:     &config.JobPairing{LLMProvider: "openai-default"},
 		}
 		resolved, err := ResolveComposeConfig(&cfgCompose, &config.ChainConfig{
 			LLMBackend: config.LLMBackendNativeGemini,
@@ -3142,10 +3142,10 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 		assert.Equal(t, config.LLMBackendLangChain, resolved.LLMBackend)
 	})
 
-	t.Run("chain compose_provider without sibling uses langchain", func(t *testing.T) {
+	t.Run("chain compose without sibling uses langchain", func(t *testing.T) {
 		resolved, err := ResolveComposeConfig(cfg, &config.ChainConfig{
-			LLMBackend:      config.LLMBackendNativeGemini,
-			ComposeProvider: "openai-default",
+			LLMBackend: config.LLMBackendNativeGemini,
+			Compose:    &config.JobPairing{LLMProvider: "openai-default"},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "openai-default", resolved.LLMProviderName)
@@ -3239,9 +3239,8 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 	t.Run("compose omit-backend is langchain; explicit backend is kept", func(t *testing.T) {
 		cfgCompose := *cfg
 		cfgCompose.Defaults = &config.Defaults{
-			LLMProvider:     "openai-default",
-			ComposeProvider: "google-default",
-			ComposeBackend:  config.LLMBackendNativeGemini,
+			LLMProvider: "openai-default",
+			Compose:     &config.JobPairing{LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
 		}
 		resolved, err := ResolveComposeConfig(&cfgCompose, &config.ChainConfig{})
 		require.NoError(t, err)
@@ -3249,12 +3248,12 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 		assert.Equal(t, config.LLMBackendNativeGemini, resolved.LLMBackend)
 	})
 
-	t.Run("defaults.executive_summary_provider beats chain.llm_provider", func(t *testing.T) {
+	t.Run("defaults.executive_summary beats chain.llm_provider", func(t *testing.T) {
 		cfgExec := *cfg
 		cfgExec.Defaults = &config.Defaults{
-			LLMProvider:              "google-default",
-			LLMBackend:               config.LLMBackendNativeGemini,
-			ExecutiveSummaryProvider: "openai-default",
+			LLMProvider:      "google-default",
+			LLMBackend:       config.LLMBackendNativeGemini,
+			ExecutiveSummary: &config.JobPairing{LLMProvider: "openai-default"},
 		}
 		resolved, err := ResolveExecSummaryConfig(&cfgExec, &config.ChainConfig{LLMProvider: "google-default"})
 		require.NoError(t, err)
@@ -3265,9 +3264,8 @@ func TestLLMProviderBackendPairing(t *testing.T) {
 	t.Run("exec summary explicit backend is kept", func(t *testing.T) {
 		cfgExec := *cfg
 		cfgExec.Defaults = &config.Defaults{
-			LLMProvider:              "openai-default",
-			ExecutiveSummaryProvider: "google-default",
-			ExecutiveSummaryBackend:  config.LLMBackendNativeGemini,
+			LLMProvider:      "openai-default",
+			ExecutiveSummary: &config.JobPairing{LLMProvider: "google-default", LLMBackend: config.LLMBackendNativeGemini},
 		}
 		resolved, err := ResolveExecSummaryConfig(&cfgExec, &config.ChainConfig{})
 		require.NoError(t, err)

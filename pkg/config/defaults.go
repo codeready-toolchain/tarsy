@@ -8,23 +8,14 @@ type Defaults struct {
 	// LLM provider default for all agents/chains
 	LLMProvider string `yaml:"llm_provider,omitempty"`
 
-	// LLM provider for compose (amended-report) generation. Beats chain.llm_provider.
-	ComposeProvider string `yaml:"compose_provider,omitempty"`
+	// Compose (amended-report) pairing. Beats chain.llm_provider.
+	// Deprecated aliases: compose_provider / compose_backend / compose_fallback_list.
+	Compose *JobPairing `yaml:"compose,omitempty"`
 
-	// Sibling backend for compose_provider. Omitted means langchain.
-	ComposeBackend LLMBackend `yaml:"compose_backend,omitempty"`
-
-	// Named catalog list for compose. Unset inherits defaults → chain.
-	ComposeFallbackList string `yaml:"compose_fallback_list,omitempty"`
-
-	// LLM provider for executive summary generation. Beats chain.llm_provider.
-	ExecutiveSummaryProvider string `yaml:"executive_summary_provider,omitempty"`
-
-	// Sibling backend for executive_summary_provider. Omitted means langchain.
-	ExecutiveSummaryBackend LLMBackend `yaml:"executive_summary_backend,omitempty"`
-
-	// Named catalog list for executive summary. Unset inherits defaults → chain.
-	ExecutiveSummaryFallbackList string `yaml:"executive_summary_fallback_list,omitempty"`
+	// Executive summary pairing. Beats chain.llm_provider.
+	// Deprecated aliases: executive_summary_provider / executive_summary_backend /
+	// executive_summary_fallback_list.
+	ExecutiveSummary *JobPairing `yaml:"executive_summary,omitempty"`
 
 	// Max iterations default (forces conclusion when reached, no pause/resume)
 	MaxIterations *int `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
@@ -74,6 +65,20 @@ type Defaults struct {
 	Agents map[string]NamedAgentPairing `yaml:"agents,omitempty"`
 }
 
+// UnmarshalYAML accepts nested compose / executive_summary blocks and the
+// deprecated compose_* / executive_summary_* keys (migrated into the blocks).
+func (d *Defaults) UnmarshalYAML(value *yaml.Node) error {
+	type raw Defaults
+	aux := struct {
+		*raw              `yaml:",inline"`
+		deprecatedJobKeys `yaml:",inline"`
+	}{raw: (*raw)(d)}
+	if err := value.Decode(&aux); err != nil {
+		return err
+	}
+	return applyDeprecatedJobPairings(&d.Compose, &d.ExecutiveSummary, aux.deprecatedJobKeys)
+}
+
 // NamedAgentPairing is provider/backend/list for defaults.agents.<name>.
 // Identity stays in agents: / Go builtins. Chain/stage/ref that names the agent wins when set.
 type NamedAgentPairing struct {
@@ -82,7 +87,7 @@ type NamedAgentPairing struct {
 	FallbackList string     `yaml:"fallback_list,omitempty"`
 }
 
-var namedAgentPairingAllowedKeys = map[string]bool{
+var llmPairingAllowedKeys = map[string]bool{
 	"llm_provider":  true,
 	"llm_backend":   true,
 	"fallback_list": true,
@@ -91,7 +96,7 @@ var namedAgentPairingAllowedKeys = map[string]bool{
 // UnmarshalYAML rejects unknown keys (e.g. catalog `backend` instead of `llm_backend`).
 func (p *NamedAgentPairing) UnmarshalYAML(value *yaml.Node) error {
 	type raw NamedAgentPairing
-	return decodeMapping(value, namedAgentPairingAllowedKeys, pairingKeyHints, (*raw)(p))
+	return decodeMapping(value, llmPairingAllowedKeys, pairingKeyHints, (*raw)(p))
 }
 
 // AgentPairing returns defaults.agents[name]. The zero value means inherit.

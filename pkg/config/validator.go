@@ -55,6 +55,7 @@ func (v *Validator) ValidateAll() error {
 
 	v.warnNativeToolAgentsWithoutCompatibleFallback()
 	v.warnDeprecatedFallbackProviders()
+	v.warnDeprecatedJobPairings()
 
 	if err := v.validateDefaults(); err != nil {
 		return fmt.Errorf("defaults validation failed: %w", err)
@@ -160,12 +161,10 @@ func (v *Validator) validateDefaults() error {
 		return NewValidationError("defaults", "", "llm_backend", err)
 	}
 
-	if err := v.validateJobProviderBackend(defaults.ComposeProvider, defaults.ComposeBackend,
-		"defaults", "", "compose_provider", "compose_backend"); err != nil {
+	if err := v.validateJobPairing(defaults.Compose, "defaults", "", "compose"); err != nil {
 		return err
 	}
-	if err := v.validateJobProviderBackend(defaults.ExecutiveSummaryProvider, defaults.ExecutiveSummaryBackend,
-		"defaults", "", "executive_summary_provider", "executive_summary_backend"); err != nil {
+	if err := v.validateJobPairing(defaults.ExecutiveSummary, "defaults", "", "executive_summary"); err != nil {
 		return err
 	}
 
@@ -246,6 +245,14 @@ func (v *Validator) validateNamedAgentPairings(agents map[string]NamedAgentPairi
 		}
 	}
 	return nil
+}
+
+func (v *Validator) validateJobPairing(p *JobPairing, section, name, fieldPrefix string) error {
+	if p == nil {
+		return nil
+	}
+	return v.validateJobProviderBackend(p.LLMProvider, p.LLMBackend,
+		section, name, fieldPrefix+".llm_provider", fieldPrefix+".llm_backend")
 }
 
 // validateJobProviderBackend checks compose/exec-summary sibling backend rules.
@@ -525,12 +532,10 @@ func (v *Validator) validateChains() error {
 			return NewValidationError("chain", chainID, "llm_backend", err)
 		}
 
-		if err := v.validateJobProviderBackend(chain.ComposeProvider, chain.ComposeBackend,
-			"chain", chainID, "compose_provider", "compose_backend"); err != nil {
+		if err := v.validateJobPairing(chain.Compose, "chain", chainID, "compose"); err != nil {
 			return err
 		}
-		if err := v.validateJobProviderBackend(chain.ExecutiveSummaryProvider, chain.ExecutiveSummaryBackend,
-			"chain", chainID, "executive_summary_provider", "executive_summary_backend"); err != nil {
+		if err := v.validateJobPairing(chain.ExecutiveSummary, "chain", chainID, "executive_summary"); err != nil {
 			return err
 		}
 
@@ -846,11 +851,11 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		if v.cfg.Defaults.Summarization != nil && v.cfg.Defaults.Summarization.LLMProvider != "" {
 			referenced[v.cfg.Defaults.Summarization.LLMProvider] = true
 		}
-		if v.cfg.Defaults.ComposeProvider != "" {
-			referenced[v.cfg.Defaults.ComposeProvider] = true
+		if p := v.cfg.Defaults.Compose.Provider(); p != "" {
+			referenced[p] = true
 		}
-		if v.cfg.Defaults.ExecutiveSummaryProvider != "" {
-			referenced[v.cfg.Defaults.ExecutiveSummaryProvider] = true
+		if p := v.cfg.Defaults.ExecutiveSummary.Provider(); p != "" {
+			referenced[p] = true
 		}
 		for _, pairing := range v.cfg.Defaults.Agents {
 			if pairing.LLMProvider != "" {
@@ -879,11 +884,11 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 		if chain.LLMProvider != "" {
 			referenced[chain.LLMProvider] = true
 		}
-		if chain.ComposeProvider != "" {
-			referenced[chain.ComposeProvider] = true
+		if p := chain.Compose.Provider(); p != "" {
+			referenced[p] = true
 		}
-		if chain.ExecutiveSummaryProvider != "" {
-			referenced[chain.ExecutiveSummaryProvider] = true
+		if p := chain.ExecutiveSummary.Provider(); p != "" {
+			referenced[p] = true
 		}
 
 		// Chain-level fallback providers
@@ -1146,12 +1151,12 @@ func (v *Validator) validateNamedFallbackLists() error {
 			"defaults", "", "fallback_list"); err != nil {
 			return err
 		}
-		if err := v.validateFallbackSelector(v.cfg.Defaults.ComposeFallbackList, nil,
-			"defaults", "", "compose_fallback_list"); err != nil {
+		if err := v.validateFallbackSelector(v.cfg.Defaults.Compose.List(), nil,
+			"defaults", "", "compose.fallback_list"); err != nil {
 			return err
 		}
-		if err := v.validateFallbackSelector(v.cfg.Defaults.ExecutiveSummaryFallbackList, nil,
-			"defaults", "", "executive_summary_fallback_list"); err != nil {
+		if err := v.validateFallbackSelector(v.cfg.Defaults.ExecutiveSummary.List(), nil,
+			"defaults", "", "executive_summary.fallback_list"); err != nil {
 			return err
 		}
 		if v.cfg.Defaults.Scoring != nil {
@@ -1191,12 +1196,12 @@ func (v *Validator) validateNamedFallbackLists() error {
 			"chain", chainID, "fallback_list"); err != nil {
 			return err
 		}
-		if err := v.validateFallbackSelector(chain.ComposeFallbackList, nil,
-			"chain", chainID, "compose_fallback_list"); err != nil {
+		if err := v.validateFallbackSelector(chain.Compose.List(), nil,
+			"chain", chainID, "compose.fallback_list"); err != nil {
 			return err
 		}
-		if err := v.validateFallbackSelector(chain.ExecutiveSummaryFallbackList, nil,
-			"chain", chainID, "executive_summary_fallback_list"); err != nil {
+		if err := v.validateFallbackSelector(chain.ExecutiveSummary.List(), nil,
+			"chain", chainID, "executive_summary.fallback_list"); err != nil {
 			return err
 		}
 		if err := validateRefSelectors(chain.SubAgents, "chain", chainID, "sub_agents"); err != nil {
@@ -1261,9 +1266,9 @@ func (v *Validator) validateFallbackSelector(listName string, inline []FallbackP
 	return nil
 }
 
-// referencedFallbackListNames returns every non-empty fallback_list /
-// *_fallback_list selector. A default list named in YAML is referenced even if
-// every chain overrides it.
+// referencedFallbackListNames returns every non-empty fallback_list selector,
+// including job blocks (compose.fallback_list, scoring.fallback_list, …).
+// A default list named in YAML is referenced even if every chain overrides it.
 func (v *Validator) referencedFallbackListNames() map[string]bool {
 	referenced := make(map[string]bool)
 	add := func(name string) {
@@ -1273,8 +1278,8 @@ func (v *Validator) referencedFallbackListNames() map[string]bool {
 	}
 	if v.cfg.Defaults != nil {
 		add(v.cfg.Defaults.FallbackList)
-		add(v.cfg.Defaults.ComposeFallbackList)
-		add(v.cfg.Defaults.ExecutiveSummaryFallbackList)
+		add(v.cfg.Defaults.Compose.List())
+		add(v.cfg.Defaults.ExecutiveSummary.List())
 		if v.cfg.Defaults.Scoring != nil {
 			add(v.cfg.Defaults.Scoring.FallbackList)
 		}
@@ -1290,8 +1295,8 @@ func (v *Validator) referencedFallbackListNames() map[string]bool {
 	}
 	for _, chain := range v.cfg.ChainRegistry.GetAll() {
 		add(chain.FallbackList)
-		add(chain.ComposeFallbackList)
-		add(chain.ExecutiveSummaryFallbackList)
+		add(chain.Compose.List())
+		add(chain.ExecutiveSummary.List())
 		if chain.Chat != nil {
 			add(chain.Chat.FallbackList)
 			for _, ref := range chain.Chat.SubAgents {
@@ -1332,6 +1337,30 @@ func (v *Validator) addReferencedFallbackListProviders(referenced map[string]boo
 			if entry.Provider != "" {
 				referenced[entry.Provider] = true
 			}
+		}
+	}
+}
+
+func (v *Validator) warnDeprecatedJobPairings() {
+	const composeMsg = "compose_provider is deprecated; use compose.llm_provider, compose.llm_backend, and compose.fallback_list"
+	const execMsg = "executive_summary_provider is deprecated; use executive_summary.llm_provider, executive_summary.llm_backend, and executive_summary.fallback_list"
+	if v.cfg.Defaults != nil {
+		if v.cfg.Defaults.Compose.deprecated() {
+			slog.Warn(composeMsg, "location", "defaults")
+		}
+		if v.cfg.Defaults.ExecutiveSummary.deprecated() {
+			slog.Warn(execMsg, "location", "defaults")
+		}
+	}
+	if v.cfg.ChainRegistry == nil {
+		return
+	}
+	for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
+		if chain.Compose.deprecated() {
+			slog.Warn(composeMsg, "location", "chain", "chain", chainID)
+		}
+		if chain.ExecutiveSummary.deprecated() {
+			slog.Warn(execMsg, "location", "chain", "chain", chainID)
 		}
 	}
 }

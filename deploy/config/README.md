@@ -86,13 +86,21 @@ defaults:
   # google-native must be written next to the provider; it is not inherited.
   fallback_list: mid            # named catalog entry; prefer this over inline lists
   # Mid-tier model for compose (amended report after action).
-  # Resolution: chain.compose_provider → defaults.compose_provider →
+  # Resolution: chain.compose → defaults.compose →
   # chain.llm_provider → defaults.llm_provider.
-  # chain.llm_provider does not override defaults.compose_provider.
-  # Omitted compose_backend / executive_summary_backend → langchain.
-  compose_provider: "google-default"
-  compose_backend: "langchain"
-  compose_fallback_list: mid
+  # chain.llm_provider does not override defaults.compose.
+  # Same nested shape for executive_summary. Omitted llm_backend → langchain.
+  # Deprecated aliases: compose_provider / compose_backend / compose_fallback_list
+  # (and the executive_summary_* equivalents). Mixing nested + deprecated keys
+  # on the same node is a load-time error.
+  compose:
+    llm_provider: "google-default"
+    llm_backend: "langchain"
+    fallback_list: mid
+  # executive_summary:
+  #   llm_provider: "google-default"
+  #   llm_backend: "langchain"
+  #   fallback_list: mid
   max_iterations: 40
   # Deprecated: inline fallback_providers still loads (startup warning) on
   # defaults / chain / stage / stage-agent when fallback_list is unset.
@@ -137,6 +145,10 @@ agents:
 agent_chains:
   my-chain:
     alert_types: ["MyAlert"]
+    # compose:
+    #   fallback_list: mid
+    # executive_summary:
+    #   llm_provider: "google-default"
     stages:
       - name: "investigation"
         agents:

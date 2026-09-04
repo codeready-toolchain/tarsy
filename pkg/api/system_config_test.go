@@ -440,10 +440,10 @@ func TestSystemConfigHandler(t *testing.T) {
 		s := &Server{
 			cfg: &config.Config{
 				Defaults: &config.Defaults{
-					LLMProvider:     "google-default",
-					ComposeProvider: "google-default",
-					MaxIterations:   &maxIter,
-					LLMBackend:      config.LLMBackendNativeGemini,
+					LLMProvider:   "google-default",
+					Compose:       &config.JobPairing{LLMProvider: "google-default"},
+					MaxIterations: &maxIter,
+					LLMBackend:    config.LLMBackendNativeGemini,
 					Summarization: &config.SummarizationConfig{
 						LLMProvider: "google-default",
 						LLMBackend:  config.LLMBackendLangChain,
@@ -485,10 +485,10 @@ func TestSystemConfigHandler(t *testing.T) {
 						},
 					},
 					"alpha-chain": {
-						AlertTypes:      []string{"AlphaAlert"},
-						Description:     "A chain",
-						LLMProvider:     "google-default",
-						ComposeProvider: "google-default",
+						AlertTypes:  []string{"AlphaAlert"},
+						Description: "A chain",
+						LLMProvider: "google-default",
+						Compose:     &config.JobPairing{LLMProvider: "google-default"},
 						Stages: []config.StageConfig{
 							{
 								Name: "investigate",
@@ -515,7 +515,8 @@ func TestSystemConfigHandler(t *testing.T) {
 
 		require.NotNil(t, resp.Defaults)
 		assert.Equal(t, "google-default", resp.Defaults.LLMProvider)
-		assert.Equal(t, "google-default", resp.Defaults.ComposeProvider)
+		require.NotNil(t, resp.Defaults.Compose)
+		assert.Equal(t, "google-default", resp.Defaults.Compose.LLMProvider)
 		require.NotNil(t, resp.Defaults.Summarization)
 		assert.Equal(t, "google-default", resp.Defaults.Summarization.LLMProvider)
 		assert.Equal(t, "langchain", resp.Defaults.Summarization.LLMBackend)
@@ -541,7 +542,8 @@ func TestSystemConfigHandler(t *testing.T) {
 		alpha := resp.Chains["alpha-chain"]
 		assert.Equal(t, []string{"AlphaAlert"}, alpha.AlertTypes)
 		assert.Equal(t, "google-default", alpha.LLMProvider)
-		assert.Equal(t, "google-default", alpha.ComposeProvider)
+		require.NotNil(t, alpha.Compose)
+		assert.Equal(t, "google-default", alpha.Compose.LLMProvider)
 		require.Len(t, alpha.Stages, 1)
 		assert.Equal(t, "investigate", alpha.Stages[0].Name)
 		require.NotNil(t, alpha.Chat)
@@ -642,14 +644,18 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 				},
 			},
 			Defaults: &config.Defaults{
-				LLMProvider:                  "claude-opus",
-				FallbackList:                 "premium",
-				ComposeProvider:              "claude-sonnet",
-				ComposeBackend:               config.LLMBackendLangChain,
-				ComposeFallbackList:          "mid",
-				ExecutiveSummaryProvider:     "claude-sonnet",
-				ExecutiveSummaryBackend:      config.LLMBackendNativeGemini,
-				ExecutiveSummaryFallbackList: "mid",
+				LLMProvider:  "claude-opus",
+				FallbackList: "premium",
+				Compose: &config.JobPairing{
+					LLMProvider:  "claude-sonnet",
+					LLMBackend:   config.LLMBackendLangChain,
+					FallbackList: "mid",
+				},
+				ExecutiveSummary: &config.JobPairing{
+					LLMProvider:  "claude-sonnet",
+					LLMBackend:   config.LLMBackendNativeGemini,
+					FallbackList: "mid",
+				},
 				Scoring: &config.ScoringConfig{
 					Enabled:      true,
 					LLMProvider:  "claude-sonnet",
@@ -679,14 +685,18 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 			}),
 			ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
 				"main": {
-					AlertTypes:                   []string{"TestAlert"},
-					LLMProvider:                  "claude-opus",
-					FallbackList:                 "premium",
-					ComposeProvider:              "claude-sonnet",
-					ComposeBackend:               config.LLMBackendLangChain,
-					ComposeFallbackList:          "mid",
-					ExecutiveSummaryProvider:     "claude-sonnet",
-					ExecutiveSummaryFallbackList: "mid",
+					AlertTypes:   []string{"TestAlert"},
+					LLMProvider:  "claude-opus",
+					FallbackList: "premium",
+					Compose: &config.JobPairing{
+						LLMProvider:  "claude-sonnet",
+						LLMBackend:   config.LLMBackendLangChain,
+						FallbackList: "mid",
+					},
+					ExecutiveSummary: &config.JobPairing{
+						LLMProvider:  "claude-sonnet",
+						FallbackList: "mid",
+					},
 					FallbackProviders: []config.FallbackProviderEntry{
 						{Provider: "legacy-inline"},
 					},
@@ -749,11 +759,19 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 
 		require.NotNil(t, resp.Defaults)
 		assert.Equal(t, "premium", resp.Defaults.FallbackList)
-		assert.Equal(t, "mid", resp.Defaults.ComposeFallbackList)
-		assert.Equal(t, "langchain", resp.Defaults.ComposeBackend)
-		assert.Equal(t, "claude-sonnet", resp.Defaults.ExecutiveSummaryProvider)
-		assert.Equal(t, "google-native", resp.Defaults.ExecutiveSummaryBackend)
-		assert.Equal(t, "mid", resp.Defaults.ExecutiveSummaryFallbackList)
+		require.NotNil(t, resp.Defaults.Compose)
+		assert.Equal(t, "mid", resp.Defaults.Compose.FallbackList)
+		assert.Equal(t, "langchain", resp.Defaults.Compose.LLMBackend)
+		composeRaw, err := json.Marshal(resp.Defaults.Compose)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"llm_provider":"claude-sonnet","llm_backend":"langchain","fallback_list":"mid"}`, string(composeRaw))
+		require.NotNil(t, resp.Defaults.ExecutiveSummary)
+		assert.Equal(t, "claude-sonnet", resp.Defaults.ExecutiveSummary.LLMProvider)
+		assert.Equal(t, "google-native", resp.Defaults.ExecutiveSummary.LLMBackend)
+		assert.Equal(t, "mid", resp.Defaults.ExecutiveSummary.FallbackList)
+		execRaw, err := json.Marshal(resp.Defaults.ExecutiveSummary)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"llm_provider":"claude-sonnet","llm_backend":"google-native","fallback_list":"mid"}`, string(execRaw))
 		require.NotNil(t, resp.Defaults.Scoring)
 		assert.Equal(t, "mid", resp.Defaults.Scoring.FallbackList)
 		require.NotNil(t, resp.Defaults.Summarization)
@@ -768,9 +786,11 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 
 		chain := resp.Chains["main"]
 		assert.Equal(t, "premium", chain.FallbackList)
-		assert.Equal(t, "langchain", chain.ComposeBackend)
-		assert.Equal(t, "mid", chain.ComposeFallbackList)
-		assert.Equal(t, "mid", chain.ExecutiveSummaryFallbackList)
+		require.NotNil(t, chain.Compose)
+		assert.Equal(t, "langchain", chain.Compose.LLMBackend)
+		assert.Equal(t, "mid", chain.Compose.FallbackList)
+		require.NotNil(t, chain.ExecutiveSummary)
+		assert.Equal(t, "mid", chain.ExecutiveSummary.FallbackList)
 		require.Len(t, chain.FallbackProviders, 1)
 		assert.Equal(t, "legacy-inline", chain.FallbackProviders[0].Provider)
 		require.Len(t, chain.SubAgents, 1)
@@ -806,9 +826,19 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"llm_provider":"claude-opus","llm_backend":"langchain"}`, string(premiumRaw))
 
+		chainComposeRaw, err := json.Marshal(chain.Compose)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"llm_provider":"claude-sonnet","llm_backend":"langchain","fallback_list":"mid"}`, string(chainComposeRaw))
+
 		chainRaw, err := json.Marshal(chain)
 		require.NoError(t, err)
-		assert.NotContains(t, string(chainRaw), `"executive_summary_backend"`)
+		chainBody := string(chainRaw)
+		assert.NotContains(t, chainBody, `"compose_provider"`)
+		assert.NotContains(t, chainBody, `"compose_backend"`)
+		assert.NotContains(t, chainBody, `"compose_fallback_list"`)
+		assert.NotContains(t, chainBody, `"executive_summary_provider"`)
+		assert.NotContains(t, chainBody, `"executive_summary_backend"`)
+		assert.NotContains(t, chainBody, `"executive_summary_fallback_list"`)
 	})
 
 	t.Run("empty catalogs emit JSON empty object", func(t *testing.T) {
@@ -837,12 +867,13 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 	t.Run("omitted selectors and sibling backends stay out of JSON", func(t *testing.T) {
 		resp := buildSystemConfigResponse(&config.Config{
 			Defaults: &config.Defaults{
-				LLMProvider:     "google-default",
-				ComposeProvider: "google-default",
+				LLMProvider: "google-default",
+				Compose:     &config.JobPairing{LLMProvider: "google-default"},
 			},
 			ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
 				"plain": {
 					AlertTypes: []string{"X"},
+					Compose:    &config.JobPairing{},
 					Stages: []config.StageConfig{
 						{Name: "s", Agents: []config.StageAgentConfig{{Name: "A"}}},
 					},
@@ -854,18 +885,21 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 		require.NoError(t, err)
 		defaultsBody := string(rawDefaults)
 		assert.NotContains(t, defaultsBody, `"fallback_list"`)
-		assert.NotContains(t, defaultsBody, `"compose_backend"`)
-		assert.NotContains(t, defaultsBody, `"compose_fallback_list"`)
-		assert.NotContains(t, defaultsBody, `"executive_summary_provider"`)
+		assert.NotContains(t, defaultsBody, `"llm_backend"`)
+		assert.NotContains(t, defaultsBody, `"compose_provider"`)
+		assert.NotContains(t, defaultsBody, `"executive_summary"`)
 		assert.NotContains(t, defaultsBody, `"agents"`)
+		require.NotNil(t, resp.Defaults.Compose)
+		composeRaw, err := json.Marshal(resp.Defaults.Compose)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"llm_provider":"google-default"}`, string(composeRaw))
 
 		chainRaw, err := json.Marshal(resp.Chains["plain"])
 		require.NoError(t, err)
 		chainBody := string(chainRaw)
 		assert.NotContains(t, chainBody, `"fallback_list"`)
-		assert.NotContains(t, chainBody, `"compose_backend"`)
-		assert.NotContains(t, chainBody, `"executive_summary_backend"`)
-		assert.NotContains(t, chainBody, `"compose_fallback_list"`)
+		assert.NotContains(t, chainBody, `"compose"`)
+		assert.NotContains(t, chainBody, `"executive_summary"`)
 	})
 }
 
