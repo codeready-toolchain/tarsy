@@ -83,7 +83,7 @@ func TestResolveLabelMap(t *testing.T) {
 
 	custom := LabelMap{Labels: []LabelSpec{{Label: "page", Description: "Page the on-call."}}}
 	catalog := map[string]LabelMap{
-		LabelMapBuiltin:    BuiltinLabelMap(),
+		LabelMapBuiltin: BuiltinLabelMap(),
 		"ops-attention": custom,
 	}
 

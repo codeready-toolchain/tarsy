@@ -5989,7 +5989,7 @@ func TestValidateLabelMaps(t *testing.T) {
 			name: "valid custom map and selectors",
 			cfg: &Config{
 				LabelMaps: map[string]LabelMap{
-					LabelMapBuiltin:    BuiltinLabelMap(),
+					LabelMapBuiltin: BuiltinLabelMap(),
 					"ops-attention": one("page"),
 				},
 				Defaults: &Defaults{LabelMap: "ops-attention"},
