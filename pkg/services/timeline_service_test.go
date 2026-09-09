@@ -275,6 +275,68 @@ func TestTimelineService_UpdateTimelineEvent(t *testing.T) {
 	})
 }
 
+func TestTimelineService_DeleteTimelineEvent(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	timelineService := NewTimelineService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	stageService := NewStageService(client.Client)
+	ctx := t.Context()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	event, err := timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		StageID:        &stg.ID,
+		ExecutionID:    &exec.ID,
+		SequenceNumber: 1,
+		EventType:      timelineevent.EventTypeLlmResponse,
+		Content:        "LABELS: noise",
+	})
+	require.NoError(t, err)
+
+	t.Run("deletes existing event", func(t *testing.T) {
+		require.NoError(t, timelineService.DeleteTimelineEvent(ctx, event.ID))
+		_, err := client.TimelineEvent.Get(ctx, event.ID)
+		require.Error(t, err)
+		assert.True(t, ent.IsNotFound(err))
+	})
+
+	t.Run("returns ErrNotFound for missing event", func(t *testing.T) {
+		err := timelineService.DeleteTimelineEvent(ctx, "nonexistent")
+		require.Error(t, err)
+		assert.Equal(t, ErrNotFound, err)
+	})
+
+	t.Run("validates empty eventID", func(t *testing.T) {
+		err := timelineService.DeleteTimelineEvent(ctx, "")
+		require.Error(t, err)
+		assert.True(t, IsValidationError(err))
+	})
+}
+
 func TestTimelineService_CompleteTimelineEvent(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	timelineService := NewTimelineService(client.Client)

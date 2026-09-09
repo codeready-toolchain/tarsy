@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/codeready-toolchain/tarsy/ent"
@@ -591,15 +592,21 @@ func stripLabelsFromTimeline(timelineService *services.TimelineService, executio
 			continue
 		}
 		ext := controller.ExtractLabels(evt.Content, m)
-		if !ext.Valid || !ext.HasTrailer {
+		if !ext.Valid {
 			continue
 		}
-		if ext.Cleaned == "" {
+		if ext.HasTrailer && ext.Cleaned != "" {
+			if updateErr := timelineService.UpdateTimelineEvent(context.Background(), evt.ID, ext.Cleaned); updateErr != nil {
+				logger.Warn("Failed to strip LABELS trailer from timeline event",
+					"event_id", evt.ID, "event_type", evt.EventType, "error", updateErr)
+			}
 			continue
 		}
-		if updateErr := timelineService.UpdateTimelineEvent(context.Background(), evt.ID, ext.Cleaned); updateErr != nil {
-			logger.Warn("Failed to strip LABELS trailer from timeline event",
-				"event_id", evt.ID, "event_type", evt.EventType, "error", updateErr)
+		if ext.HasTrailer || strings.TrimSpace(evt.Content) == "" {
+			if delErr := timelineService.DeleteTimelineEvent(context.Background(), evt.ID); delErr != nil {
+				logger.Warn("Failed to delete empty LABELS-only timeline event",
+					"event_id", evt.ID, "event_type", evt.EventType, "error", delErr)
+			}
 		}
 	}
 }

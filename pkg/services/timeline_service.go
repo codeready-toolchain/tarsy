@@ -95,6 +95,26 @@ func (s *TimelineService) UpdateTimelineEvent(ctx context.Context, eventID strin
 	return nil
 }
 
+// DeleteTimelineEvent removes a timeline event by ID.
+func (s *TimelineService) DeleteTimelineEvent(ctx context.Context, eventID string) error {
+	if eventID == "" {
+		return NewValidationError("eventID", "required")
+	}
+
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	err := s.client.TimelineEvent.DeleteOneID(eventID).Exec(writeCtx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("failed to delete timeline event: %w", err)
+	}
+
+	return nil
+}
+
 // CompleteTimelineEvent marks an event as completed and sets trace links.
 // llmInteractionID and mcpInteractionID are optional trace links (pass nil if not applicable).
 func (s *TimelineService) CompleteTimelineEvent(ctx context.Context, eventID string, content string, llmInteractionID *string, mcpInteractionID *string) error {

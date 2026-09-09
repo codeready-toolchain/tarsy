@@ -641,14 +641,16 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.
 }
 
 func formatPersistedSessionLabels(labels []string) string {
+	var value string
 	switch {
 	case labels == nil:
-		return "Labels: (unknown)\n"
+		value = "(unknown)"
 	case len(labels) == 0:
-		return "Labels: (none)\n"
+		value = "(none)"
 	default:
-		return "Labels: " + strings.Join(labels, ", ") + "\n"
+		value = strings.Join(labels, ", ")
 	}
+	return "## Session Labels\n\nLabels: " + value + "\n"
 }
 
 // ────────────────────────────────────────────────────────────

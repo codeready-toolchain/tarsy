@@ -800,6 +800,63 @@ func TestExecutor_SessionLabelsNoTrailerIsEmptySlice(t *testing.T) {
 	assert.Empty(t, *result.Labels)
 }
 
+func TestExecutor_ExecutiveSummaryTrailerOnlyDeletesTimeline(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+		},
+	}
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "OOM killed pod-1 due to memory leak."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "LABELS: noise"},
+			}},
+		},
+	}
+
+	cfg := testConfig("test-chain", chain)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, "", result.ExecutiveSummary)
+	require.NotNil(t, result.Labels)
+	assert.Equal(t, []string{"noise"}, *result.Labels)
+
+	execs, err := entClient.AgentExecution.Query().All(t.Context())
+	require.NoError(t, err)
+	var execSummaryID string
+	for _, ex := range execs {
+		if ex.AgentName == config.AgentNameExecSummary {
+			execSummaryID = ex.ID
+			break
+		}
+	}
+	require.NotEmpty(t, execSummaryID)
+
+	remaining, err := entClient.TimelineEvent.Query().
+		Where(
+			timelineevent.ExecutionIDEQ(execSummaryID),
+			timelineevent.EventTypeIn(timelineevent.EventTypeFinalAnalysis, timelineevent.EventTypeLlmResponse),
+		).
+		All(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, remaining, "trailer-only exec-summary timeline events should be deleted")
+}
+
 func TestExecutor_UnknownLabelMapFailOpen(t *testing.T) {
 	entClient, _ := util.SetupTestDatabase(t)
 

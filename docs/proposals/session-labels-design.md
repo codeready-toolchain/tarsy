@@ -354,7 +354,7 @@ Independent of labels. Shared helper: the `## Executive Summary` footer comes fr
 
 **Not in this PR:** Session column, `/status` field, live controller wiring.
 
-### PR 2 — Parse, persist, status/detail API, live prompt
+### PR 2 — Parse, persist, status/detail API, live prompt - DONE
 
 **What lands:**
 

@@ -104,8 +104,8 @@ func AssertGoldenLLMInteraction(t *testing.T, goldenPath string, detail map[stri
 				toolName, _ := msg["tool_name"].(string)
 				header += fmt.Sprintf(" (%s, %s)", toolCallID, toolName)
 			}
-			header += " ==="
-			buf.WriteString(header + "\n")
+			buf.WriteString(header)
+			buf.WriteString(" ===\n")
 
 			// Content (rendered as plain text — no JSON escaping).
 			if content, _ := msg["content"].(string); content != "" {

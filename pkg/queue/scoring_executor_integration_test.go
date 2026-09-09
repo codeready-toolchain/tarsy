@@ -880,6 +880,7 @@ func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
 
 	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_executive_summary", result)
+	assert.Contains(t, result, "## Session Labels\n")
 	assert.Contains(t, result, "Labels: (unknown)\n")
 	assert.NotContains(t, result, "LEGACY-TIMELINE-SUMMARY",
 		"legacy executive_summary timeline event must not populate the footer")
@@ -1191,8 +1192,8 @@ func (m *blockingMockLLMClient) Generate(ctx context.Context, _ *agent.GenerateI
 func (m *blockingMockLLMClient) Close() error { return nil }
 
 func TestFormatPersistedSessionLabels(t *testing.T) {
-	assert.Equal(t, "Labels: (unknown)\n", formatPersistedSessionLabels(nil))
-	assert.Equal(t, "Labels: (none)\n", formatPersistedSessionLabels([]string{}))
-	assert.Equal(t, "Labels: page\n", formatPersistedSessionLabels([]string{"page"}))
-	assert.Equal(t, "Labels: page, watch\n", formatPersistedSessionLabels([]string{"page", "watch"}))
+	assert.Equal(t, "## Session Labels\n\nLabels: (unknown)\n", formatPersistedSessionLabels(nil))
+	assert.Equal(t, "## Session Labels\n\nLabels: (none)\n", formatPersistedSessionLabels([]string{}))
+	assert.Equal(t, "## Session Labels\n\nLabels: page\n", formatPersistedSessionLabels([]string{"page"}))
+	assert.Equal(t, "## Session Labels\n\nLabels: page, watch\n", formatPersistedSessionLabels([]string{"page", "watch"}))
 }
