@@ -166,6 +166,10 @@ The investigation found OOM issues. Recommending memory increase.
 
 Remediation: increase memory limit for pod-1 to 1Gi.
 
+## Executive Summary
+
+Pod-1 OOM killed. Memory limit increase to 1Gi recommended.
+
 
 ═══════════════════════════════════════════════════════════════════════════════
 🎯 CURRENT TASK

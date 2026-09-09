@@ -10,7 +10,6 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
-	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/runbook"
@@ -66,7 +65,7 @@ func (b *InvestigationContextBuilder) Build(ctx context.Context, session *ent.Al
 		sb.WriteString("\n\n")
 	}
 
-	timeline, toolsByExec := b.buildInvestigationData(ctx, session.ID)
+	timeline, toolsByExec := b.buildInvestigationData(ctx, session.ID, stringFromNillable(session.ExecutiveSummary))
 
 	if len(toolsByExec) > 0 {
 		sb.WriteString("## AVAILABLE TOOLS PER AGENT\n\n")
@@ -79,7 +78,7 @@ func (b *InvestigationContextBuilder) Build(ctx context.Context, session *ent.Al
 	return sb.String()
 }
 
-func (b *InvestigationContextBuilder) buildInvestigationData(ctx context.Context, sessionID string) (timeline string, toolsSection string) {
+func (b *InvestigationContextBuilder) buildInvestigationData(ctx context.Context, sessionID string, executiveSummary string) (timeline string, toolsSection string) {
 	logger := slog.With("session_id", sessionID)
 
 	stages, err := b.stageService.GetStagesBySession(ctx, sessionID, true)
@@ -152,7 +151,6 @@ func (b *InvestigationContextBuilder) buildInvestigationData(ctx context.Context
 		investigations = append(investigations, si)
 	}
 
-	executiveSummary := b.getExecutiveSummary(ctx, sessionID)
 	timeline = agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
 
 	merged := make(map[string]string)
@@ -237,17 +235,4 @@ func (b *InvestigationContextBuilder) resolveRunbook(ctx context.Context, sessio
 		return configDefault
 	}
 	return content
-}
-
-func (b *InvestigationContextBuilder) getExecutiveSummary(ctx context.Context, sessionID string) string {
-	sessionEvents, err := b.timelineService.GetSessionTimeline(ctx, sessionID)
-	if err != nil {
-		return ""
-	}
-	for _, evt := range sessionEvents {
-		if evt.EventType == timelineevent.EventTypeExecutiveSummary {
-			return evt.Content
-		}
-	}
-	return ""
 }

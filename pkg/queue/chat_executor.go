@@ -537,7 +537,6 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 
 	var investigations []agentctx.StageInvestigation
 	var previousChats []chatQA
-	var executiveSummary string
 
 	for _, stg := range stages {
 		switch stg.StageType {
@@ -605,13 +604,12 @@ func (e *ChatMessageExecutor) buildChatContext(ctx context.Context, input ChatEx
 		investigations = append(investigations, si)
 	}
 
-	// 3. Get executive summary from session-level timeline event.
-	executiveSummary = e.getExecutiveSummary(ctx, input.Session.ID)
+	// 3. Format the structured investigation context. Posted summary lives on
+	// the session column; new sessions do not write event_type=executive_summary.
+	formattedContext := agentctx.FormatStructuredInvestigation(
+		investigations, stringFromNillable(input.Session.ExecutiveSummary))
 
-	// 4. Format the structured investigation context.
-	formattedContext := agentctx.FormatStructuredInvestigation(investigations, executiveSummary)
-
-	// 5. Append previous chat Q&A if any.
+	// 4. Append previous chat Q&A if any.
 	if len(previousChats) > 0 {
 		formattedContext += formatPreviousChats(previousChats)
 	}
@@ -671,22 +669,6 @@ func (e *ChatMessageExecutor) buildChatQA(ctx context.Context, stg *ent.Stage) c
 		}
 	}
 	return qa
-}
-
-// getExecutiveSummary retrieves the executive summary from session-level timeline events.
-func (e *ChatMessageExecutor) getExecutiveSummary(ctx context.Context, sessionID string) string {
-	// Executive summary is stored as a session-level timeline event with no execution_id.
-	// Use GetSessionTimeline and filter for executive_summary event type.
-	sessionEvents, err := e.timelineService.GetSessionTimeline(ctx, sessionID)
-	if err != nil {
-		return ""
-	}
-	for _, evt := range sessionEvents {
-		if evt.EventType == timelineevent.EventTypeExecutiveSummary {
-			return evt.Content
-		}
-	}
-	return ""
 }
 
 // formatPreviousChats formats previous chat Q&A for the context.
