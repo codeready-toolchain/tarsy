@@ -9,7 +9,7 @@
     "messages_count": 2
   },
   "llm_response": {
-    "text_length": 16,
+    "text_length": 30,
     "tool_calls_count": 0
   },
   "model_name": "test-model",
@@ -18,10 +18,10 @@
 }
 
 === MESSAGE: system ===
-You are an expert Site Reliability Engineer assistant that creates concise 1-4 line executive summaries of incident analyses for alert notifications. Focus on clarity, brevity, and actionable information.
+You are an expert Site Reliability Engineer assistant that creates concise 1-4 line executive summaries of incident analyses for alert notifications. Focus on clarity and brevity. Facts only: do not invent recommendations.
 
 === MESSAGE: user ===
-Generate a 1-4 line executive summary of this incident analysis.
+Generate a 1-4 line executive summary of this incident analysis. After the summary body, add a LABELS trailer only if a label from the map below applies.
 
 CRITICAL RULES:
 - Only summarize what is EXPLICITLY stated in the analysis
@@ -35,8 +35,36 @@ Analysis to summarize:
 Investigation complete: no issues found.
 =================================================================================
 
-Executive Summary (1-4 lines, facts only):
+Encode the session using only labels from the map below. Do not invent labels or a new verdict. The 1-4 line executive summary body stays facts-only.
+
+This map encodes what to do with the alert, not whether automated tools already ran (actions_executed) and not review_status.
+
+Apply at most one of watch, action, or noise. If the report disagrees with itself, prefer watch over action. Prefer watch over noise when unsure. Prefer noise over omitting the LABELS line when the classification is clearly closable with no follow-up.
+
+There is no none or ignore label. An omitted LABELS line is not a close verdict: operators must still read the summary before closing when no label applies.
+
+Labels (in order):
+- watch:
+  Use when: the subject still looks off or evidence is thin. No intervention now; look again if it persists.
+
+  Do not use when: the analysis already concluded the alert can be closed with no follow-up (noise). Detector-tuning as the reason to keep the alert open is not watch.
+- action:
+  Use when: a human must intervene on the affected system (fix the failing workload, approve an emergency change, execute a runbook step that was not automated).
+
+  Do not use when: closing or acking the alert; filing a backlog ticket; tuning detection/rules; "no remediation because it was benign." Not the same as actions_executed. Closable-with-no-work is noise, not action.
+- noise:
+  Use when: this alert can be closed with no remaining human work. False positive, expected/maintenance, already recovered and done, duplicate of known-benign. Optional "tune later" in passing does not block noise.
+
+  Do not use when: a human should still look again (watch), intervene (action), or do a required follow-up (file a ticket, change a rule) before the alert is done. Unsure → watch, never noise. Omitting the LABELS line is not noise.
+
+If one label applies, last line exactly:
+LABELS: <one exact label from the list>
+Copy the label as written. Nothing after that line.
+If none apply, do not add a LABELS line.
+
+Executive Summary (1-4 lines, facts only), then optional LABELS:
 
 === MESSAGE: assistant ===
 No issues found.
+LABELS: noise
 

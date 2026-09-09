@@ -227,6 +227,9 @@ func testConfig(chainID string, chain *config.ChainConfig) *config.Config {
 			chainID: chain,
 		}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 }
 
@@ -419,6 +422,7 @@ func TestExecutor_FailFast(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, alertsession.StatusFailed, result.Status)
 	assert.NotNil(t, result.Error)
+	assert.Nil(t, result.Labels, "skipped exec summary must leave labels nil")
 
 	// Only 1 stage should have been created (stage-2 never starts)
 	stages, err := entClient.Stage.Query().All(context.Background())
@@ -555,7 +559,7 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 				&agent.TextChunk{Content: "OOM killed pod-1 due to memory leak."},
 			}},
 			{chunks: []agent.Chunk{
-				&agent.TextChunk{Content: "Executive summary: Pod-1 OOM killed."},
+				&agent.TextChunk{Content: "Executive summary: Pod-1 OOM killed.\nLABELS: noise"},
 			}},
 		},
 	}
@@ -572,6 +576,8 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 	assert.Equal(t, "OOM killed pod-1 due to memory leak.", result.FinalAnalysis)
 	assert.Equal(t, "Executive summary: Pod-1 OOM killed.", result.ExecutiveSummary)
 	assert.Empty(t, result.ExecutiveSummaryError)
+	require.NotNil(t, result.Labels)
+	assert.Equal(t, []string{"noise"}, *result.Labels)
 
 	// Verify exec_summary Stage DB record was created.
 	stages, err := entClient.Stage.Query().All(context.Background())
@@ -622,6 +628,14 @@ func TestExecutor_ExecutiveSummaryGenerated(t *testing.T) {
 	}
 	assert.True(t, execSummaryStarted, "should publish exec_summary stage.status: started")
 	assert.True(t, execSummaryTerminal, "should publish exec_summary stage.status terminal event")
+
+	tlEvents, err := entClient.TimelineEvent.Query().All(t.Context())
+	require.NoError(t, err)
+	for _, ev := range tlEvents {
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis || ev.EventType == timelineevent.EventTypeLlmResponse {
+			assert.NotContains(t, ev.Content, "LABELS:", "timeline %s should have LABELS trailer stripped", ev.EventType)
+		}
+	}
 }
 
 // Verify that the no-longer-created executive_summary timeline event is absent in new sessions.
@@ -699,6 +713,127 @@ func TestExecutor_ExecutiveSummaryFailOpen(t *testing.T) {
 	assert.Equal(t, "OOM killed pod-1.", result.FinalAnalysis)
 	assert.Empty(t, result.ExecutiveSummary)
 	assert.NotEmpty(t, result.ExecutiveSummaryError)
+	assert.Nil(t, result.Labels)
+}
+
+func TestExecutor_SessionLabelsCustomMap(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		LabelMap:   "oncall",
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+		},
+	}
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Workload is down; human must restart it."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Human must restart the workload.\nLABELS: page"},
+			}},
+		},
+	}
+
+	cfg := testConfig("test-chain", chain)
+	cfg.LabelMaps["oncall"] = config.LabelMap{
+		Multi: false,
+		Labels: []config.LabelSpec{
+			{Label: "monitor", Description: "watch"},
+			{Label: "page", Description: "intervene"},
+			{Label: "false_positive", Description: "close"},
+		},
+	}
+
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Equal(t, "Human must restart the workload.", result.ExecutiveSummary)
+	require.NotNil(t, result.Labels)
+	assert.Equal(t, []string{"page"}, *result.Labels)
+}
+
+func TestExecutor_SessionLabelsNoTrailerIsEmptySlice(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+		},
+	}
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "OOM killed pod-1 due to memory leak."},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Executive summary: Pod-1 OOM killed."},
+			}},
+		},
+	}
+
+	cfg := testConfig("test-chain", chain)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Labels)
+	assert.Empty(t, *result.Labels)
+}
+
+func TestExecutor_UnknownLabelMapFailOpen(t *testing.T) {
+	entClient, _ := util.SetupTestDatabase(t)
+
+	chain := &config.ChainConfig{
+		AlertTypes: []string{"test-alert"},
+		LabelMap:   "does-not-exist",
+		Stages: []config.StageConfig{
+			{
+				Name: "investigation",
+				Agents: []config.StageAgentConfig{
+					{Name: "TestAgent"},
+				},
+			},
+		},
+	}
+
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "OOM killed pod-1."},
+			}},
+		},
+	}
+
+	cfg := testConfig("test-chain", chain)
+	executor := NewRealSessionExecutor(cfg, entClient, llm, nil, nil, nil, nil, nil)
+	session := createExecutorTestSession(t, entClient, "test-chain")
+
+	result := executor.Execute(t.Context(), session)
+	require.NotNil(t, result)
+	assert.Equal(t, alertsession.StatusCompleted, result.Status)
+	assert.Empty(t, result.ExecutiveSummary)
+	assert.Contains(t, result.ExecutiveSummaryError, `unknown label map "does-not-exist"`)
+	assert.Nil(t, result.Labels)
 }
 
 func TestExecutor_MultiAgentAllSucceed(t *testing.T) {
@@ -1450,6 +1585,9 @@ func TestExecutor_AgentExecutionStoresResolvedBackend(t *testing.T) {
 		}),
 		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 
 	publisher := &testEventPublisher{}
@@ -2294,6 +2432,9 @@ func TestExecutor_AgentCreationFailureEmitsTerminalStatus(t *testing.T) {
 			"test-chain": chain,
 		}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 
 	publisher := &testEventPublisher{}
@@ -2369,6 +2510,9 @@ func TestExecutor_ResolveFailureStoresPairedBackend(t *testing.T) {
 			"test-chain": chain,
 		}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 
 	publisher := &testEventPublisher{}
@@ -2499,6 +2643,9 @@ func TestExecutor_OrchestratorDispatchesSubAgent(t *testing.T) {
 			"test-chain": chain,
 		}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 
 	// The orchestrator loop timing is non-deterministic: the sub-agent may
@@ -2665,6 +2812,9 @@ func TestExecutor_ActionStageChain(t *testing.T) {
 		}),
 		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 
 	llm := &mockLLMClient{
@@ -2866,6 +3016,9 @@ func TestExecutor_ActionStageNoActionsTaken(t *testing.T) {
 		}),
 		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 
 	llm := &mockLLMClient{
@@ -2965,6 +3118,9 @@ func actionComposeTestConfig(chain *config.ChainConfig, extraAgents map[string]*
 		}),
 		ChainRegistry:     config.NewChainRegistry(map[string]*config.ChainConfig{"test-chain": chain}),
 		MCPServerRegistry: config.NewMCPServerRegistry(nil),
+		LabelMaps: map[string]config.LabelMap{
+			config.LabelMapBuiltin: config.BuiltinLabelMap(),
+		},
 	}
 }
 

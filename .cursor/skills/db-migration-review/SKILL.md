@@ -15,14 +15,18 @@ After every `make migrate-create` run, review the generated `.up.sql` file befor
 
 Atlas cannot express `WHERE` clauses in index definitions. Several indexes are created manually in migrations and documented in Ent schema comments. Atlas sees them in the database but not in the Ent schema, so it generates `DROP INDEX` statements.
 
-**Known partial indexes (must never be dropped):**
+**Known indexes Atlas cannot model (must never be dropped):**
 
 | Index | Table | Created in |
 |-------|-------|------------|
 | `agentexecution_stage_id_agent_index_top_level` | `agent_executions` | `20260225235224_add_orchestrator_sub_agent_fields.up.sql` |
 | `agentexecution_parent_execution_id_agent_index_sub_agent` | `agent_executions` | `20260225235224_add_orchestrator_sub_agent_fields.up.sql` |
+| `idx_alert_sessions_alert_data_gin` | `alert_sessions` | `CreateGINIndexes` in `pkg/database/migrations.go` |
+| `idx_alert_sessions_final_analysis_gin` | `alert_sessions` | `CreateGINIndexes` in `pkg/database/migrations.go` |
+| `idx_timeline_events_content_gin` | `timeline_events` | `CreateGINIndexes` in `pkg/database/migrations.go` |
+| `idx_alert_sessions_labels_gin` | `alert_sessions` | `CreateGINIndexes` in `pkg/database/migrations.go` |
 
-These enforce sub-agent ordering uniqueness with `WHERE parent_execution_id IS NULL / IS NOT NULL` clauses. The Ent schema at `ent/schema/agentexecution.go` documents this explicitly.
+The first two enforce sub-agent ordering uniqueness with `WHERE parent_execution_id IS NULL / IS NOT NULL` clauses. The Ent schema at `ent/schema/agentexecution.go` documents this explicitly. The GIN indexes are created at startup by `CreateGINIndexes` (FTS and JSONB containment); Atlas cannot express them.
 
 **Action:** Remove any `DROP INDEX` targeting these indexes.
 

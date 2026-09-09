@@ -83,7 +83,7 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Pod-1 OOM killed. Memory limit increase to 1Gi recommended.",
+		Text: "Pod-1 OOM killed. Memory limit increase to 1Gi recommended.\nLABELS: action",
 	})
 
 	// ── Chat: load_skill for kubernetes-basics + final answer ──
@@ -399,6 +399,7 @@ func TestE2E_SkillsRequiredAndOnDemand(t *testing.T) {
 	session := app.GetSession(t, sessionID)
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
+	assert.Equal(t, jsonStringSlice([]string{"action"}), session["labels"])
 
 	// Golden: session.
 	AssertGoldenJSON(t, GoldenPath("skills", "session.golden"), session, normalizer)

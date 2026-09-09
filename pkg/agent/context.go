@@ -50,6 +50,10 @@ type ExecutionContext struct {
 	ComposeUpstreamReport string
 	ComposeActionMemo     string
 
+	// LabelMap is the resolved session label catalog entry for exec summary.
+	// Zero value for other agent types.
+	LabelMap config.LabelMap
+
 	// Chat context (nil for non-chat sessions)
 	ChatContext *ChatContext
 
@@ -210,7 +214,8 @@ type PromptBuilder interface {
 	BuildMCPSummarizationSystemPrompt(serverName, toolName string, maxSummaryTokens int) string
 	BuildMCPSummarizationUserPrompt(conversationContext, serverName, toolName, resultText string) string
 	BuildExecutiveSummarySystemPrompt() string
-	BuildExecutiveSummaryUserPrompt(finalAnalysis string) string
+	BuildExecutiveSummaryUserPrompt(finalAnalysis string, labelMap config.LabelMap) string
+	BuildExecutiveSummaryLabelsReminderPrompt(labelMap config.LabelMap) string
 	BuildComposeSystemPrompt() string
 	BuildComposeUserPrompt(upstreamReport, actionMemo string) string
 	BuildScoringSystemPrompt() string

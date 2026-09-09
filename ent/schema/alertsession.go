@@ -62,6 +62,9 @@ func (AlertSession) Fields() []ent.Field {
 		field.String("executive_summary_error").
 			Optional().
 			Nillable(),
+		field.JSON("labels", []string{}).
+			Optional().
+			Comment("Canonical session labels from exec-summary LABELS trailer; GIN idx_alert_sessions_labels_gin in CreateGINIndexes"),
 		field.JSON("session_metadata", map[string]interface{}{}).
 			Optional(),
 		field.String("author").
@@ -189,8 +192,8 @@ func (AlertSession) Indexes() []ent.Index {
 }
 
 // Annotations for PostgreSQL-specific features.
-// Note: GIN indexes for full-text search are created via migration hooks
-// in pkg/database/migrations.go
+// GIN indexes (full-text search and JSONB containment) are created via
+// CreateGINIndexes in pkg/database/migrations.go.
 func (AlertSession) Annotations() []schema.Annotation {
 	return []schema.Annotation{}
 }

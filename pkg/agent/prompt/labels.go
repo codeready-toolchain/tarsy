@@ -24,7 +24,6 @@ Only labels from the list. Nothing after that line.
 If none apply, do not add a LABELS line.`
 
 // FormatSessionLabelLayers renders LABELS prompt layers 1–4 for the active map.
-// Not wired into BuildExecutiveSummaryUserPrompt yet (PR 2).
 func FormatSessionLabelLayers(m config.LabelMap) string {
 	var sb strings.Builder
 	sb.WriteString(sessionLabelLayer1)
@@ -54,5 +53,25 @@ func FormatSessionLabelLayers(m config.LabelMap) string {
 	} else {
 		sb.WriteString(sessionLabelLayer4Exclusive)
 	}
+	return sb.String()
+}
+
+// FormatSessionLabelReminder is the one-shot user reminder after a LABELS:
+// trailer that did not parse. Not an always-on prompt layer.
+func FormatSessionLabelReminder(m config.LabelMap) string {
+	names := make([]string, len(m.Labels))
+	for i, spec := range m.Labels {
+		names[i] = spec.Label
+	}
+	var sb strings.Builder
+	sb.WriteString("I could not parse the LABELS line from your response.\n\n")
+	sb.WriteString("Keep the 1-4 line executive summary body (facts only).\n")
+	if m.Multi {
+		sb.WriteString(sessionLabelLayer4Multi)
+	} else {
+		sb.WriteString(sessionLabelLayer4Exclusive)
+	}
+	sb.WriteString("\n\nAllowed labels (in order): ")
+	sb.WriteString(strings.Join(names, ", "))
 	return sb.String()
 }

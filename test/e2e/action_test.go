@@ -85,7 +85,7 @@ func TestE2E_ActionChain(t *testing.T) {
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{
 		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "api-gateway outage detected and remediated by automated restart."},
+			&agent.TextChunk{Content: "api-gateway outage detected and remediated by automated restart.\nLABELS: noise"},
 			&agent.UsageChunk{InputTokens: 60, OutputTokens: 20, TotalTokens: 80},
 		},
 	})
@@ -131,6 +131,7 @@ func TestE2E_ActionChain(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["executive_summary"])
 	assert.Equal(t, "COMPOSE-AMENDED-REPORT-BLOB", session["final_analysis"])
+	assert.Equal(t, jsonStringSlice([]string{"noise"}), session["labels"])
 
 	// ── Stage assertions: investigation + remediation + compose + exec_summary ──
 	stages := app.QueryStages(t, sessionID)

@@ -122,6 +122,7 @@ function makeSession(
     final_analysis: 'done',
     executive_summary: null,
     executive_summary_error: null,
+    labels: null,
     runbook_url: null,
     created_at: '2025-01-15T10:00:00Z',
     started_at: '2025-01-15T10:00:00Z',

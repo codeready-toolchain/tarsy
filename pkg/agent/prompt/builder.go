@@ -152,8 +152,15 @@ func (b *PromptBuilder) BuildExecutiveSummarySystemPrompt() string {
 }
 
 // BuildExecutiveSummaryUserPrompt builds the user prompt for generating an executive summary.
-func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis string) string {
-	return fmt.Sprintf(executiveSummaryUserTemplate, finalAnalysis)
+// Order: CRITICAL RULES + analysis, layers 1–4, then the write cue so generation
+// starts after both the summary contract and the LABELS trailer contract.
+func (b *PromptBuilder) BuildExecutiveSummaryUserPrompt(finalAnalysis string, labelMap config.LabelMap) string {
+	return fmt.Sprintf(executiveSummaryUserTemplate, finalAnalysis) + "\n\n" + FormatSessionLabelLayers(labelMap) + "\n\n" + executiveSummaryWriteCue
+}
+
+// BuildExecutiveSummaryLabelsReminderPrompt is the one reminder after a bad LABELS trailer.
+func (b *PromptBuilder) BuildExecutiveSummaryLabelsReminderPrompt(labelMap config.LabelMap) string {
+	return FormatSessionLabelReminder(labelMap)
 }
 
 // BuildComposeSystemPrompt returns the system prompt for compose (amended-report) generation.

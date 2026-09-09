@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
@@ -233,6 +234,24 @@ func (_u *AlertSessionUpdate) SetNillableExecutiveSummaryError(v *string) *Alert
 // ClearExecutiveSummaryError clears the value of the "executive_summary_error" field.
 func (_u *AlertSessionUpdate) ClearExecutiveSummaryError() *AlertSessionUpdate {
 	_u.mutation.ClearExecutiveSummaryError()
+	return _u
+}
+
+// SetLabels sets the "labels" field.
+func (_u *AlertSessionUpdate) SetLabels(v []string) *AlertSessionUpdate {
+	_u.mutation.SetLabels(v)
+	return _u
+}
+
+// AppendLabels appends value to the "labels" field.
+func (_u *AlertSessionUpdate) AppendLabels(v []string) *AlertSessionUpdate {
+	_u.mutation.AppendLabels(v)
+	return _u
+}
+
+// ClearLabels clears the value of the "labels" field.
+func (_u *AlertSessionUpdate) ClearLabels() *AlertSessionUpdate {
+	_u.mutation.ClearLabels()
 	return _u
 }
 
@@ -1126,6 +1145,17 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.ExecutiveSummaryErrorCleared() {
 		_spec.ClearField(alertsession.FieldExecutiveSummaryError, field.TypeString)
 	}
+	if value, ok := _u.mutation.Labels(); ok {
+		_spec.SetField(alertsession.FieldLabels, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedLabels(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, alertsession.FieldLabels, value)
+		})
+	}
+	if _u.mutation.LabelsCleared() {
+		_spec.ClearField(alertsession.FieldLabels, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.SessionMetadata(); ok {
 		_spec.SetField(alertsession.FieldSessionMetadata, field.TypeJSON, value)
 	}
@@ -1973,6 +2003,24 @@ func (_u *AlertSessionUpdateOne) SetNillableExecutiveSummaryError(v *string) *Al
 // ClearExecutiveSummaryError clears the value of the "executive_summary_error" field.
 func (_u *AlertSessionUpdateOne) ClearExecutiveSummaryError() *AlertSessionUpdateOne {
 	_u.mutation.ClearExecutiveSummaryError()
+	return _u
+}
+
+// SetLabels sets the "labels" field.
+func (_u *AlertSessionUpdateOne) SetLabels(v []string) *AlertSessionUpdateOne {
+	_u.mutation.SetLabels(v)
+	return _u
+}
+
+// AppendLabels appends value to the "labels" field.
+func (_u *AlertSessionUpdateOne) AppendLabels(v []string) *AlertSessionUpdateOne {
+	_u.mutation.AppendLabels(v)
+	return _u
+}
+
+// ClearLabels clears the value of the "labels" field.
+func (_u *AlertSessionUpdateOne) ClearLabels() *AlertSessionUpdateOne {
+	_u.mutation.ClearLabels()
 	return _u
 }
 
@@ -2895,6 +2943,17 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 	}
 	if _u.mutation.ExecutiveSummaryErrorCleared() {
 		_spec.ClearField(alertsession.FieldExecutiveSummaryError, field.TypeString)
+	}
+	if value, ok := _u.mutation.Labels(); ok {
+		_spec.SetField(alertsession.FieldLabels, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedLabels(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, alertsession.FieldLabels, value)
+		})
+	}
+	if _u.mutation.LabelsCleared() {
+		_spec.ClearField(alertsession.FieldLabels, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.SessionMetadata(); ok {
 		_spec.SetField(alertsession.FieldSessionMetadata, field.TypeJSON, value)

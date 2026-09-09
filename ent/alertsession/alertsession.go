@@ -37,6 +37,8 @@ const (
 	FieldExecutiveSummary = "executive_summary"
 	// FieldExecutiveSummaryError holds the string denoting the executive_summary_error field in the database.
 	FieldExecutiveSummaryError = "executive_summary_error"
+	// FieldLabels holds the string denoting the labels field in the database.
+	FieldLabels = "labels"
 	// FieldSessionMetadata holds the string denoting the session_metadata field in the database.
 	FieldSessionMetadata = "session_metadata"
 	// FieldAuthor holds the string denoting the author field in the database.
@@ -219,6 +221,7 @@ var Columns = []string{
 	FieldFinalAnalysis,
 	FieldExecutiveSummary,
 	FieldExecutiveSummaryError,
+	FieldLabels,
 	FieldSessionMetadata,
 	FieldAuthor,
 	FieldRunbookURL,

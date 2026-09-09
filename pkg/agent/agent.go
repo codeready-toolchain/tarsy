@@ -85,6 +85,10 @@ type ExecutionResult struct {
 	Error         error
 	TokensUsed    TokenUsage
 	WrapUpReason  WrapUpReason // set when force-concluding; empty on a normal finish
+	// Labels is set only by exec summary. Nil = leave session labels NULL
+	// (parse failure after reminder, skipped/failed summary). Non-nil including
+	// &[]string{} = persist that slice.
+	Labels *[]string
 }
 
 // KeepCompletedWrapUp reports whether a successful wrap-up should keep status

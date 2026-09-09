@@ -68,6 +68,11 @@ var (
 		Name: "tarsy_orphans_recovered_total",
 		Help: "Orphaned sessions recovered.",
 	})
+
+	SessionLabelsParseFailuresTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "tarsy_session_labels_parse_failures_total",
+		Help: "Exec-summary LABELS trailer still invalid after one reminder.",
+	})
 )
 
 // LLM call metrics.

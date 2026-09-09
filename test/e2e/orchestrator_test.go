@@ -104,7 +104,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 
 	// ── Executive summary ──
 	llm.AddSequential(LLMScriptEntry{
-		Text: "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.",
+		Text: "Payment service alert: 2,847 5xx errors caused by memory pressure from recent deployment.\nLABELS: watch",
 	})
 
 	// ── MCP tool results ──
@@ -162,6 +162,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
 	assert.NotEmpty(t, session["executive_summary"])
+	assert.Equal(t, jsonStringSlice([]string{"watch"}), session["labels"])
 
 	// ── DB assertions ──
 

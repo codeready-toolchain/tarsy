@@ -1,0 +1,9 @@
+I could not parse the LABELS line from your response.
+
+Keep the 1-4 line executive summary body (facts only).
+If one label applies, last line exactly:
+LABELS: <one exact label from the list>
+Copy the label as written. Nothing after that line.
+If none apply, do not add a LABELS line.
+
+Allowed labels (in order): watch, action, noise

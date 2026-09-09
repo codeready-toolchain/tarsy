@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -616,6 +617,7 @@ func (e *ScoringExecutor) Stop(gracePeriod time.Duration) {
 // runbook, available tools per agent, and the investigation timeline.
 func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.AlertSession) string {
 	result := e.contextBuilder.Build(ctx, session)
+	result += formatPersistedSessionLabels(session.Labels)
 
 	stages, err := e.stageService.GetStagesBySession(ctx, session.ID, true)
 	if err != nil {
@@ -636,6 +638,17 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.
 		}
 	}
 	return result
+}
+
+func formatPersistedSessionLabels(labels []string) string {
+	switch {
+	case labels == nil:
+		return "Labels: (unknown)\n"
+	case len(labels) == 0:
+		return "Labels: (none)\n"
+	default:
+		return "Labels: " + strings.Join(labels, ", ") + "\n"
+	}
 }
 
 // ────────────────────────────────────────────────────────────

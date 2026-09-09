@@ -64,6 +64,8 @@ Common failure patterns to watch for (use these terms when applicable, but descr
 
 Below is the complete data for the investigation session, including the original alert, runbook (if any), available tools per agent, and the full investigation timeline.
 
+The persisted executive summary and labels are session output: check that the summary stays facts-only and that labels are consistent with the investigation conclusion. Do not treat labels as a separate scoring dimension.
+
 ----------------------------------- Session data start -----------------------------------
 ## ORIGINAL ALERT
 
@@ -180,6 +182,7 @@ Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory l
 
 Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory limit to 1Gi.
 
+Labels: action
 
 
 ## AMENDED REPORT

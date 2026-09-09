@@ -59,6 +59,8 @@ The remaining four dimensions (Evidence Gathering, Tool Utilization, Analytical 
 
 Below is the complete data for the investigation session, including the original alert, runbook (if any), available tools per agent, and the full investigation timeline.
 
+The persisted executive summary and labels are session output: check that the summary stays facts-only and that labels are consistent with the investigation conclusion. Do not treat labels as a separate scoring dimension.
+
 ----------------------------------- Session data start -----------------------------------
 %[1]s
 -----------------------------------  Session data end  -----------------------------------

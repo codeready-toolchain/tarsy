@@ -386,6 +386,9 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 	if result.ExecutiveSummaryError != "" {
 		update = update.SetExecutiveSummaryError(result.ExecutiveSummaryError)
 	}
+	if result.Labels != nil {
+		update = update.SetLabels(*result.Labels)
+	}
 	if result.Error != nil {
 		update = update.SetErrorMessage(result.Error.Error())
 	}

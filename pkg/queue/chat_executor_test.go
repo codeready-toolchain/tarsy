@@ -612,6 +612,8 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 		"footer should use the session column, not the exec_summary stage")
 	assert.NotContains(t, result.InvestigationContext, "LEGACY-TIMELINE-SUMMARY",
 		"legacy executive_summary timeline event must not populate the footer")
+	assert.NotContains(t, result.InvestigationContext, "Labels:",
+		"chat context must not include persisted session labels")
 
 	session.ExecutiveSummary = nil
 	resultNull := executor.buildChatContext(ctx, ChatExecuteInput{

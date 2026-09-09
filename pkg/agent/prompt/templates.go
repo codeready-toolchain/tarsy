@@ -123,11 +123,11 @@ Based on the investigation context above, provide a concise summary of the tool 
 CRITICAL INSTRUCTION: Return ONLY the summary text. Do NOT include "Final Answer:", "Thought:", "Action:", or any other formatting.`
 
 // executiveSummarySystemPrompt is the system prompt for executive summary generation.
-const executiveSummarySystemPrompt = `You are an expert Site Reliability Engineer assistant that creates concise 1-4 line executive summaries of incident analyses for alert notifications. Focus on clarity, brevity, and actionable information.`
+const executiveSummarySystemPrompt = `You are an expert Site Reliability Engineer assistant that creates concise 1-4 line executive summaries of incident analyses for alert notifications. Focus on clarity and brevity. Facts only: do not invent recommendations.`
 
 // executiveSummaryUserTemplate is the user prompt for executive summary generation.
-// %s = final analysis text.
-const executiveSummaryUserTemplate = `Generate a 1-4 line executive summary of this incident analysis.
+// %s = final analysis text. Label layers and the write cue are appended by the builder.
+const executiveSummaryUserTemplate = `Generate a 1-4 line executive summary of this incident analysis. After the summary body, add a LABELS trailer only if a label from the map below applies.
 
 CRITICAL RULES:
 - Only summarize what is EXPLICITLY stated in the analysis
@@ -139,6 +139,8 @@ Analysis to summarize:
 
 =================================================================================
 %s
-=================================================================================
+=================================================================================`
 
-Executive Summary (1-4 lines, facts only):`
+// executiveSummaryWriteCue is the last text in the user message so generation
+// starts after both the summary contract and the LABELS trailer contract.
+const executiveSummaryWriteCue = `Executive Summary (1-4 lines, facts only), then optional LABELS:`

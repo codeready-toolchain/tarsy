@@ -31,6 +31,9 @@
   "id": "{SESSION_ID}",
   "input_tokens": 1310,
   "investigation_feedback": null,
+  "labels": [
+    "watch"
+  ],
   "latest_score": null,
   "llm_interaction_count": 6,
   "mcp_interaction_count": 4,

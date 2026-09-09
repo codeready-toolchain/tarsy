@@ -55,7 +55,28 @@ func (e *RealSessionExecutor) executeExecSummaryStage(ctx context.Context, input
 	execInput := input
 	execInput.stageConfig = config.StageConfig{}
 	resolved, err := agent.ResolveExecSummaryConfig(e.cfg, input.chain)
+	if err == nil {
+		defaultsSel := ""
+		chainSel := ""
+		if e.cfg.Defaults != nil {
+			defaultsSel = e.cfg.Defaults.LabelMap
+		}
+		if input.chain != nil {
+			chainSel = input.chain.LabelMap
+		}
+		labelMap, labelErr := config.ResolveLabelMap(e.cfg.LabelMaps, defaultsSel, chainSel)
+		if labelErr != nil {
+			err = labelErr
+			resolved = nil
+		} else {
+			execInput.labelMap = labelMap
+		}
+	}
 	ar := e.executeResolvedAgent(ctx, execInput, stg, agentCfg, 0, config.AgentNameExecSummary, resolved, err)
+
+	if ar.labels != nil {
+		stripLabelsFromTimeline(input.timelineService, ar.executionID, execInput.labelMap, logger)
+	}
 
 	// Update exec summary stage status (use background context — ctx may be cancelled).
 	if updateErr := input.stageService.UpdateStageStatus(context.Background(), stg.ID); updateErr != nil {
@@ -68,6 +89,7 @@ func (e *RealSessionExecutor) executeExecSummaryStage(ctx context.Context, input
 		stageType:     stg.StageType,
 		status:        mapAgentStatusToSessionStatus(ar.status),
 		finalAnalysis: ar.finalAnalysis,
+		labels:        ar.labels,
 		err:           ar.err,
 		agentResults:  []agentResult{ar},
 	}

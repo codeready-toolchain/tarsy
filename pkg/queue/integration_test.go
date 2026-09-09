@@ -647,6 +647,65 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 		assert.Nil(t, updated.ReviewedAt)
 	})
 
+	t.Run("nil labels leaves column null", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusInProgress).
+			SetStartedAt(time.Now()).
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		_, _, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status:        alertsession.StatusCompleted,
+			FinalAnalysis: "done",
+		})
+		require.NoError(t, err)
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		assert.Nil(t, updated.Labels)
+	})
+
+	t.Run("empty labels slice writes json array", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusInProgress).
+			SetStartedAt(time.Now()).
+			ExecX(ctx)
+
+		empty := []string{}
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		_, _, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status:        alertsession.StatusCompleted,
+			FinalAnalysis: "done",
+			Labels:        &empty,
+		})
+		require.NoError(t, err)
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		require.NotNil(t, updated.Labels)
+		assert.Empty(t, updated.Labels)
+	})
+
+	t.Run("canonical labels are persisted", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusInProgress).
+			SetStartedAt(time.Now()).
+			ExecX(ctx)
+
+		labels := []string{"page"}
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		_, _, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status:        alertsession.StatusCompleted,
+			FinalAnalysis: "done",
+			Labels:        &labels,
+		})
+		require.NoError(t, err)
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		assert.Equal(t, []string{"page"}, updated.Labels)
+	})
+
 	t.Run("cancelled sets review_status to reviewed with nil quality_rating", func(t *testing.T) {
 		session := createTestSession(ctx, t, client)
 		client.AlertSession.UpdateOneID(session.ID).
