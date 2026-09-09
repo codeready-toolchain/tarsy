@@ -31,9 +31,17 @@ describe('SessionLabelChips', () => {
     expect(screen.getByText('Monitor').closest('.MuiChip-root')).toHaveClass('MuiChip-colorInfo');
   });
 
+  it('mutes closable labels', () => {
+    render(<SessionLabelChips labels={['noise', 'fp', 'False_Positive']} />);
+    expect(screen.getByText('noise').closest('.MuiChip-root')).toHaveAttribute('data-muted', 'true');
+    expect(screen.getByText('fp').closest('.MuiChip-root')).toHaveAttribute('data-muted', 'true');
+    expect(screen.getByText('False_Positive').closest('.MuiChip-root')).toHaveAttribute('data-muted', 'true');
+  });
+
   it('leaves unknown labels uncolored', () => {
-    render(<SessionLabelChips labels={['noise', 'false_positive']} />);
-    expect(screen.getByText('noise').closest('.MuiChip-root')).toHaveClass('MuiChip-colorDefault');
-    expect(screen.getByText('false_positive').closest('.MuiChip-root')).toHaveClass('MuiChip-colorDefault');
+    render(<SessionLabelChips labels={['ops-tag']} />);
+    const chip = screen.getByText('ops-tag').closest('.MuiChip-root');
+    expect(chip).toHaveClass('MuiChip-colorDefault');
+    expect(chip).not.toHaveAttribute('data-muted');
   });
 });

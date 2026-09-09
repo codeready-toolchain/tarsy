@@ -14,11 +14,18 @@ const URGENT_LABELS = new Set(['action', 'ban', 'suspend', 'page', 'escalate']);
 /** Names that usually mean "keep an eye on it". */
 const WATCH_LABELS = new Set(['watch', 'monitor']);
 
+/** Closable / no remaining work — same muted grey as the no-action wrench chip. */
+const QUIET_LABELS = new Set(['noise', 'fp', 'false_positive']);
+
 function labelChipColor(label: string): NonNullable<ChipProps['color']> {
   const key = label.toLowerCase();
   if (URGENT_LABELS.has(key)) return 'error';
   if (WATCH_LABELS.has(key)) return 'info';
   return 'default';
+}
+
+function isQuietLabel(label: string): boolean {
+  return QUIET_LABELS.has(label.toLowerCase());
 }
 
 interface SessionLabelChipsProps {
@@ -33,6 +40,7 @@ export function SessionLabelChips({ labels }: SessionLabelChipsProps) {
     <Box sx={{ display: 'inline-flex', flexWrap: 'wrap', gap: 0.375, alignItems: 'center', flexShrink: 0 }}>
       {labels.map((label) => {
         const color = labelChipColor(label);
+        const quiet = isQuietLabel(label);
         return (
           <Chip
             key={label}
@@ -40,9 +48,14 @@ export function SessionLabelChips({ labels }: SessionLabelChipsProps) {
             label={label}
             variant="outlined"
             color={color}
+            data-muted={quiet ? 'true' : undefined}
             sx={(theme) => ({
               ...chipSx,
-              ...(color !== 'default' && {
+              ...(quiet && {
+                borderColor: theme.palette.grey[400],
+                color: theme.palette.grey[400],
+              }),
+              ...(!quiet && color !== 'default' && {
                 backgroundColor: alpha(theme.palette[color].main, 0.1),
                 borderColor: alpha(theme.palette[color].main, 0.4),
               }),
