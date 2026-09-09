@@ -749,6 +749,23 @@ func seedDashboardSession(
 
 func strPtr(s string) *string { return &s }
 
+func assertStatusReviewJSON(t *testing.T, status *models.SessionStatusResponse, reviewStatus, assignee, qualityRating, actionTaken, investigationFeedback any) {
+	t.Helper()
+	raw, err := json.Marshal(status)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(raw, &m))
+	for _, key := range []string{"review_status", "assignee", "quality_rating", "action_taken", "investigation_feedback"} {
+		_, ok := m[key]
+		require.True(t, ok, "json key %s must be present", key)
+	}
+	assert.Equal(t, reviewStatus, m["review_status"])
+	assert.Equal(t, assignee, m["assignee"])
+	assert.Equal(t, qualityRating, m["quality_rating"])
+	assert.Equal(t, actionTaken, m["action_taken"])
+	assert.Equal(t, investigationFeedback, m["investigation_feedback"])
+}
+
 func TestSessionService_GetSessionDetail(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)
@@ -3047,10 +3064,16 @@ func TestSessionService_GetSessionStatus(t *testing.T) {
 		assert.Nil(t, status.ExecutiveSummary)
 		assert.Nil(t, status.ErrorMessage)
 		assert.Nil(t, status.Labels)
+		assert.Nil(t, status.ReviewStatus)
+		assert.Nil(t, status.Assignee)
+		assert.Nil(t, status.QualityRating)
+		assert.Nil(t, status.ActionTaken)
+		assert.Nil(t, status.InvestigationFeedback)
 
 		raw, err := json.Marshal(status)
 		require.NoError(t, err)
 		assert.Contains(t, string(raw), `"labels":null`)
+		assertStatusReviewJSON(t, status, nil, nil, nil, nil, nil)
 	})
 
 	t.Run("returns status for completed session", func(t *testing.T) {
@@ -3069,10 +3092,16 @@ func TestSessionService_GetSessionStatus(t *testing.T) {
 		assert.Contains(t, *status.ExecutiveSummary, "status poll data")
 		assert.Nil(t, status.ErrorMessage)
 		assert.Nil(t, status.Labels)
+		assert.Nil(t, status.ReviewStatus)
+		assert.Nil(t, status.Assignee)
+		assert.Nil(t, status.QualityRating)
+		assert.Nil(t, status.ActionTaken)
+		assert.Nil(t, status.InvestigationFeedback)
 
 		raw, err := json.Marshal(status)
 		require.NoError(t, err)
 		assert.Contains(t, string(raw), `"labels":null`)
+		assertStatusReviewJSON(t, status, nil, nil, nil, nil, nil)
 	})
 
 	t.Run("labels empty array vs populated", func(t *testing.T) {
@@ -3127,6 +3156,80 @@ func TestSessionService_GetSessionStatus(t *testing.T) {
 		detailRaw, err := json.Marshal(detail)
 		require.NoError(t, err)
 		assert.Contains(t, string(detailRaw), `"labels":["page"]`)
+	})
+
+	t.Run("copies review columns onto status", func(t *testing.T) {
+		tests := []struct {
+			name                      string
+			setup                     func(*ent.AlertSessionUpdateOne) *ent.AlertSessionUpdateOne
+			wantReviewStatus          any
+			wantAssignee              any
+			wantQualityRating         any
+			wantActionTaken           any
+			wantInvestigationFeedback any
+		}{
+			{
+				name: "needs_review only",
+				setup: func(u *ent.AlertSessionUpdateOne) *ent.AlertSessionUpdateOne {
+					return u.SetReviewStatus(alertsession.ReviewStatusNeedsReview)
+				},
+				wantReviewStatus: string(alertsession.ReviewStatusNeedsReview),
+			},
+			{
+				name: "in_progress with assignee",
+				setup: func(u *ent.AlertSessionUpdateOne) *ent.AlertSessionUpdateOne {
+					return u.SetReviewStatus(alertsession.ReviewStatusInProgress).SetAssignee("alice")
+				},
+				wantReviewStatus: string(alertsession.ReviewStatusInProgress),
+				wantAssignee:     "alice",
+			},
+			{
+				name: "reviewed with all fields",
+				setup: func(u *ent.AlertSessionUpdateOne) *ent.AlertSessionUpdateOne {
+					return u.SetReviewStatus(alertsession.ReviewStatusReviewed).
+						SetAssignee("alice").
+						SetQualityRating(alertsession.QualityRatingAccurate).
+						SetActionTaken("banned user").
+						SetInvestigationFeedback("helpful")
+				},
+				wantReviewStatus:          string(alertsession.ReviewStatusReviewed),
+				wantAssignee:              "alice",
+				wantQualityRating:         string(alertsession.QualityRatingAccurate),
+				wantActionTaken:           "banned user",
+				wantInvestigationFeedback: "helpful",
+			},
+			{
+				name: "reviewed without quality_rating",
+				setup: func(u *ent.AlertSessionUpdateOne) *ent.AlertSessionUpdateOne {
+					return u.SetReviewStatus(alertsession.ReviewStatusReviewed).SetAssignee("alice")
+				},
+				wantReviewStatus: string(alertsession.ReviewStatusReviewed),
+				wantAssignee:     "alice",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := models.CreateSessionRequest{
+					SessionID: uuid.New().String(),
+					AlertData: "review status poll",
+					AgentType: "kubernetes",
+					ChainID:   "k8s-analysis",
+				}
+				session, err := service.CreateSession(ctx, req)
+				require.NoError(t, err)
+
+				err = tt.setup(client.AlertSession.UpdateOneID(session.ID).
+					SetStatus(alertsession.StatusCompleted)).Exec(ctx)
+				require.NoError(t, err)
+
+				status, err := service.GetSessionStatus(ctx, session.ID)
+				require.NoError(t, err)
+				assertStatusReviewJSON(t, status,
+					tt.wantReviewStatus, tt.wantAssignee, tt.wantQualityRating,
+					tt.wantActionTaken, tt.wantInvestigationFeedback)
+			})
+		}
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

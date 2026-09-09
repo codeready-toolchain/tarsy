@@ -160,6 +160,18 @@ func (app *TestApp) GetSessionStatus(t *testing.T, sessionID string) map[string]
 	return app.getJSON(t, "/api/v1/sessions/"+sessionID+"/status", http.StatusOK)
 }
 
+func assertSessionStatusReview(t *testing.T, status map[string]interface{}, reviewStatus, assignee, qualityRating, actionTaken, investigationFeedback any) {
+	t.Helper()
+	for _, key := range []string{"review_status", "assignee", "quality_rating", "action_taken", "investigation_feedback"} {
+		require.Contains(t, status, key)
+	}
+	assert.Equal(t, reviewStatus, status["review_status"])
+	assert.Equal(t, assignee, status["assignee"])
+	assert.Equal(t, qualityRating, status["quality_rating"])
+	assert.Equal(t, actionTaken, status["action_taken"])
+	assert.Equal(t, investigationFeedback, status["investigation_feedback"])
+}
+
 // GetFilterOptions calls GET /api/v1/sessions/filter-options.
 func (app *TestApp) GetFilterOptions(t *testing.T) map[string]interface{} {
 	t.Helper()

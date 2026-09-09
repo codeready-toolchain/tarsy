@@ -1039,7 +1039,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types, chain IDs, and stored labels |
 | GET | `/api/v1/sessions/:id` | Session details (includes `labels`) |
 | GET | `/api/v1/sessions/:id/summary` | Final analysis + executive summary |
-| GET | `/api/v1/sessions/:id/status` | Lightweight polling status (id, status, final_analysis, executive_summary, labels, error_message) |
+| GET | `/api/v1/sessions/:id/status` | Lightweight polling status (id, status, final_analysis, executive_summary, labels, error_message, review_status, assignee, quality_rating, action_taken, investigation_feedback) |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
 | GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, failure tags, tool improvement report) |
