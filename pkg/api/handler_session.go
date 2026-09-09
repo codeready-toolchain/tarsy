@@ -10,6 +10,7 @@ import (
 	echo "github.com/labstack/echo/v5"
 
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
@@ -87,6 +88,12 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		default:
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid scoring_status: must be scored, not_scored, scoring_in_progress, or scoring_failed")
 		}
+	}
+	if v := c.QueryParam("label"); v != "" {
+		if !config.ValidLabelToken(v) {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*")
+		}
+		params.Label = v
 	}
 	if v := c.QueryParam("search"); v != "" {
 		if len(v) < 3 {

@@ -86,7 +86,14 @@ export function FilterPanel({
     filters.chain_id ? 1 : 0,
     filters.start_date || filters.end_date || filters.date_preset ? 1 : 0,
     filters.scoring_status ? 1 : 0,
+    filters.label ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
+
+  const labelOptions = filterOptions?.labels ?? [];
+  const labelMenuItems =
+    filters.label && !labelOptions.includes(filters.label)
+      ? [filters.label, ...labelOptions]
+      : labelOptions;
 
   // ── Handlers ──
 
@@ -207,6 +214,28 @@ export function FilterPanel({
             </FormControl>
           </Box>
 
+          {/* Label */}
+          <Box sx={{ flex: '1 1 160px', minWidth: 140 }}>
+            <FormControl size="small" fullWidth>
+              <InputLabel id="label-filter-label">Label</InputLabel>
+              <Select
+                labelId="label-filter-label"
+                value={filters.label}
+                label="Label"
+                onChange={(e: SelectChangeEvent) =>
+                  onFiltersChange({ ...filters, label: e.target.value })
+                }
+              >
+                <MenuItem value="">All</MenuItem>
+                {labelMenuItems.map((label) => (
+                  <MenuItem key={label} value={label}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
           {/* Time Range Button — single button opens modal (matches old dashboard) */}
           <Button
             variant="outlined"
@@ -284,6 +313,15 @@ export function FilterPanel({
                 <Chip
                   label={`Scoring: ${filters.scoring_status.replace(/_/g, ' ')}`}
                   onDelete={() => onFiltersChange({ ...filters, scoring_status: '' })}
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                />
+              )}
+              {filters.label && (
+                <Chip
+                  label={`Label: ${filters.label}`}
+                  onDelete={() => onFiltersChange({ ...filters, label: '' })}
                   size="small"
                   color="secondary"
                   variant="outlined"

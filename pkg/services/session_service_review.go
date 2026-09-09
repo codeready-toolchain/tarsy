@@ -668,6 +668,7 @@ type triageRow struct {
 	CompletedAt           *time.Time `sql:"completed_at"`
 	ErrorMessage          *string    `sql:"error_message"`
 	ExecutiveSummary      *string    `sql:"executive_summary"`
+	Labels                []byte     `sql:"labels"`
 	ReviewStatus          *string    `sql:"review_status"`
 	Assignee              *string    `sql:"assignee"`
 	QualityRating         *string    `sql:"quality_rating"`
@@ -742,6 +743,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				sel.C(alertsession.FieldCompletedAt),
 				sel.C(alertsession.FieldErrorMessage),
 				sel.C(alertsession.FieldExecutiveSummary),
+				sel.C(alertsession.FieldLabels),
 				sel.C(alertsession.FieldReviewStatus),
 				sel.C(alertsession.FieldAssignee),
 				sel.C(alertsession.FieldQualityRating),
@@ -820,6 +822,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			DurationMs:            durationMs,
 			ErrorMessage:          row.ErrorMessage,
 			ExecutiveSummary:      row.ExecutiveSummary,
+			Labels:                unmarshalLabels(row.Labels),
 			ReviewStatus:          row.ReviewStatus,
 			Assignee:              row.Assignee,
 			QualityRating:         row.QualityRating,

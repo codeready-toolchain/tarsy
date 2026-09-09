@@ -122,7 +122,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 **Three controller types** (text-based ReAct parsing was completely removed):
 
 - **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
-- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action).
+- **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action). The exec-summary path also parses a last-line `LABELS:` trailer and persists canonical `session.labels`. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
 **Forced Conclusion**: When an iterating agent hits `max_iterations` or remaining parent time drops to the wrap-up reserve (`min(LLMCallTimeout, 3m)`), the system forces a conclusion -- one extra LLM call with the same tools bound and calling disabled, asking the agent to provide the best analysis with available data. Operator cancel stays fail-fast (no wrap-up). There is no pause/resume mechanism. See [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md).
@@ -186,7 +186,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 ### 9. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
-- **Session list** with filtering by status, alert type, chain, date range, and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index)
+- **Session list** with filtering by status, alert type, chain, date range, session labels (`label=` JSON contains), and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index). Historical list and triage show stored `labels` in a Labels column (chips); session detail shows them next to the alert type. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - **In-session search** for terminated sessions — client-side substring matching with highlight, auto-expand of collapsed stages, and match navigation
 - **Session deep links** — shareable `/sessions/:id?stage=…[&event=…]` URLs that expand the target stage/event and scroll to it (copy-link affordances on the timeline; no backend API changes). See [ADR-0021: Session Deep Links](adr/0021-session-deep-links.md)
 - **Conversation timeline** with real-time LLM streaming (thinking, tool calls, final answers)
@@ -196,14 +196,14 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, failure tags, tool improvement report), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
 - **Usage page** (`/usage`) for date-window fleet token and estimated-cost dig-in; soft Est. $ next to tokens on list/detail/execution surfaces when cost estimation is enabled
-- **System status page** with MCP server health and a read-only Config Viewer tab (includes the `fallback_lists` catalog and raw `fallback_list` selectors)
+- **System status page** with MCP server health and a read-only Config Viewer tab (includes the `fallback_lists` catalog and raw `fallback_list` selectors, and the `label_maps` catalog and raw `label_map` selectors). See [ADR-0019](adr/0019-config-viewer.md), [ADR-0030](adr/0030-named-fallback-lists.md), [ADR-0031](adr/0031-session-labels.md).
 - **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `reviewed`), self-claim assignment, complete with `quality_rating` and `action_taken`, and real-time updates via `review.status` WebSocket events
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 
 ### 10. Follow-up Chat
 
 - **Interactive investigation continuation** after sessions reach terminal state (completed, failed, timed out)
-- **Context preservation** -- chat agent receives the full investigation timeline as context
+- **Context preservation** -- chat agent receives the full investigation timeline as context, plus the posted executive-summary footer (not session `labels`). See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - **Same tool access** -- uses the original investigation's MCP server configuration
 - **Unified timeline** -- chat messages appear inline with investigation stages
 - **Real-time streaming** -- follow-up responses stream through the same WebSocket infrastructure
@@ -226,7 +226,7 @@ Provider prompt caching (Claude `cache_control`, GPT-5.6+ OpenAI explicit breakp
 
 TARSy exports Prometheus metrics via a `/metrics` endpoint on the existing HTTP server (port 8080, unauthenticated). Metrics cover session lifecycle, worker pool health, LLM call performance, MCP tool reliability, HTTP request patterns, and WebSocket connections.
 
-- **Session metrics**: submission counts, terminal state counts, processing duration, queue wait time, active/queued gauges (DB-polled)
+- **Session metrics**: submission counts, terminal state counts, processing duration, queue wait time, active/queued gauges (DB-polled); session-label parse failures after reminder (`tarsy_session_labels_parse_failures_total`)
 - **Worker metrics**: configured workers, active workers (event-driven), orphan recovery count
 - **LLM metrics**: call counts, errors, duration histograms, token usage (`direction` includes `input` / `output` / `thinking` / `cache_read` / `cache_creation`), provider fallback events — labeled by `provider`+`model`
 - **MCP metrics**: call counts, errors, duration histograms, health status — labeled by `server`+`tool`
@@ -249,6 +249,7 @@ After an investigation completes, TARSy can automatically evaluate the quality o
 - **Re-scoring** — `POST /api/v1/sessions/:id/score` triggers on-demand re-scoring. Old scores are preserved as history; the dashboard shows the latest completed score.
 - **Dashboard integration** — color-coded score badges on session list, score indicator on session detail, and a dedicated scoring page with full reports.
 - **Configurable per chain** — scoring can be enabled/disabled and configured with different LLM providers per chain.
+- **Session labels** — the judge sees stored `labels` (including `[]` / null) under the executive-summary footer, without the label-map catalog. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 
 **For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md)
 
@@ -318,8 +319,8 @@ sequenceDiagram
     end
 
     Note over E: After a successful action stage, insert compose sibling<br/>only if investigation/synthesis/prior-compose report exists (fail-open;<br/>skip action-only chains)
-    E->>E: Execute exec_summary stage (SingleShotController)
-    E->>DB: Update session (completed)
+    E->>E: Execute exec_summary stage (SingleShotController; parse LABELS trailer)
+    E->>DB: Update session (completed; executive_summary + labels)
     E-->>WS: Publish session status
     D->>D: Engineers review analysis
 ```
@@ -463,6 +464,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`; optional `agent_timeout` clamped to remaining parent — omit to use session/chat time). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md) and [ADR-0029](adr/0029-sub-agent-execution-limits.md)
 - **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream investigation, synthesis, or prior compose report with the action memo into session `final_analysis` (skipped on action-only chains; a later action may use the previous compose report; fail-open). See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
+- **Session label maps**: Optional `label_maps` catalog plus last-non-empty `defaults.label_map` / `chain.label_map` (empty inherits; all empty → injected `builtin` watch/action/noise). See [ADR-0031](adr/0031-session-labels.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
 - **Integration Points**: Connect with monitoring systems (AlertManager, PagerDuty) and notification systems (Slack)

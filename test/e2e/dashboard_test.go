@@ -177,6 +177,7 @@ func TestDashboardEndpoints(t *testing.T) {
 			assert.Equal(t, "concurrency-chain", sess["chain_id"], "session %s chain_id", id)
 			assert.Equal(t, "completed", sess["status"], "session %s status", id)
 			assert.Equal(t, exp.summaryText, sess["executive_summary"], "session %s executive_summary", id)
+			assert.Equal(t, jsonStringSlice(exp.labels), sess["labels"], "session %s labels", id)
 			assert.Nil(t, sess["error_message"], "session %s error_message", id)
 			assert.Equal(t, "api-client", sess["author"], "session %s author", id)
 
@@ -302,6 +303,23 @@ func TestDashboardEndpoints(t *testing.T) {
 		list = app.GetSessionList(t, "alert_type=nonexistent")
 		items = list["sessions"].([]interface{})
 		assert.Empty(t, items)
+	})
+
+	// ── Label filter ──
+	t.Run("SessionList/LabelFilter", func(t *testing.T) {
+		list := app.GetSessionList(t, "label=action")
+		items := list["sessions"].([]interface{})
+		require.Len(t, items, 1)
+		assert.Equal(t, ids[0], items[0].(map[string]interface{})["id"])
+		assert.Equal(t, jsonStringSlice([]string{"action"}), items[0].(map[string]interface{})["labels"])
+
+		list = app.GetSessionList(t, "label=watch")
+		items = list["sessions"].([]interface{})
+		assert.Empty(t, items)
+
+		resp := app.getJSON(t, "/api/v1/sessions?label=1bad", http.StatusBadRequest)
+		msg, _ := resp["message"].(string)
+		assert.Equal(t, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*", msg)
 	})
 
 	// ── Sorting ──
@@ -454,6 +472,10 @@ func TestDashboardEndpoints(t *testing.T) {
 		require.True(t, ok, "chain_ids should be an array")
 		require.Len(t, chainIDs, 1)
 		assert.Equal(t, "concurrency-chain", chainIDs[0])
+
+		labels, ok := options["labels"].([]interface{})
+		require.True(t, ok, "labels should be an array")
+		assert.ElementsMatch(t, []interface{}{"action", "noise"}, labels)
 	})
 
 	// ── System Warnings ──

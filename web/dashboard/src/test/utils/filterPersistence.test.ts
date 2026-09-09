@@ -64,6 +64,7 @@ describe('getDefaultFilters', () => {
       end_date: null,
       date_preset: null,
       scoring_status: '',
+      label: '',
     });
   });
 });
@@ -130,6 +131,7 @@ describe('filter persistence', () => {
       end_date: null,
       date_preset: '1d',
       scoring_status: '',
+      label: '',
     };
     saveFiltersToStorage(filters);
     const loaded = loadFiltersFromStorage();

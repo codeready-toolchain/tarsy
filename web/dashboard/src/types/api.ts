@@ -124,6 +124,7 @@ export interface DashboardListParams {
   start_date?: string;
   end_date?: string;
   scoring_status?: string;
+  label?: string;
 }
 
 /**

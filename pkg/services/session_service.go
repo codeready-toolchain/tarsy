@@ -895,6 +895,7 @@ type dashboardRow struct {
 	CompletedAt       *time.Time `sql:"completed_at"`
 	ErrorMessage      *string    `sql:"error_message"`
 	ExecutiveSummary  *string    `sql:"executive_summary"`
+	Labels            []byte     `sql:"labels"`
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
@@ -925,6 +926,19 @@ type dashboardRow struct {
 	FeedbackEdited        int        `sql:"feedback_edited"`
 	FeedbackEditedBy      *string    `sql:"feedback_edited_by"`
 	FeedbackEditedAt      *time.Time `sql:"feedback_edited_at"`
+}
+
+// unmarshalLabels maps scanned jsonb into the session labels DTO.
+// SQL NULL / JSON null → nil; "[]" → empty non-nil slice.
+func unmarshalLabels(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	var labels []string
+	if err := json.Unmarshal(data, &labels); err != nil {
+		return nil
+	}
+	return labels
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -1013,6 +1027,20 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.QualityRating != "" {
 		query = query.Where(alertsession.QualityRatingEQ(alertsession.QualityRating(params.QualityRating)))
 	}
+	if params.Label != "" {
+		payload, err := json.Marshal([]string{params.Label})
+		if err != nil {
+			return nil, fmt.Errorf("marshal label filter: %w", err)
+		}
+		query = query.Where(func(sel *sql.Selector) {
+			t := sel.TableName()
+			sel.Where(sql.P(func(b *sql.Builder) {
+				b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
+				b.Arg(string(payload))
+				b.WriteString("::jsonb")
+			}))
+		})
+	}
 
 	// Count total (before pagination).
 	totalCount, err := query.Clone().Count(ctx)
@@ -1093,6 +1121,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldCompletedAt),
 				sel.C(alertsession.FieldErrorMessage),
 				sel.C(alertsession.FieldExecutiveSummary),
+				sel.C(alertsession.FieldLabels),
 				sel.C(alertsession.FieldCurrentStageIndex),
 				sel.C(alertsession.FieldCurrentStageID),
 				sel.C(alertsession.FieldReviewStatus),
@@ -1264,6 +1293,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			DurationMs:            durationMs,
 			ErrorMessage:          row.ErrorMessage,
 			ExecutiveSummary:      row.ExecutiveSummary,
+			Labels:                unmarshalLabels(row.Labels),
 			LLMInteractionCount:   row.LLMCount,
 			MCPInteractionCount:   row.MCPCount,
 			InputTokens:           row.LLMInputTokens,
@@ -1479,6 +1509,35 @@ func (s *SessionService) GetDistinctAlertTypes(ctx context.Context) ([]string, e
 		Scan(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get distinct alert types: %w", err)
+	}
+	if results == nil {
+		results = []string{}
+	}
+	return results, nil
+}
+
+// GetDistinctLabels returns distinct stored label tokens from non-deleted sessions.
+// NULL and empty arrays are excluded. Names are sorted lexicographically.
+func (s *SessionService) GetDistinctLabels(ctx context.Context) ([]string, error) {
+	var results []string
+	err := s.client.AlertSession.Query().
+		Where(
+			alertsession.DeletedAtIsNil(),
+			alertsession.LabelsNotNil(),
+		).
+		Unique(false).
+		Modify(func(sel *sql.Selector) {
+			t := sel.TableName()
+			col := fmt.Sprintf("%q.%q", t, alertsession.FieldLabels)
+			sel.SelectExpr(sql.Expr("DISTINCT jsonb_array_elements_text(" + col + ")"))
+			sel.Where(sql.P(func(b *sql.Builder) {
+				b.WriteString("jsonb_typeof(" + col + ") = 'array' AND jsonb_array_length(" + col + ") > 0")
+			}))
+			sel.OrderExpr(sql.Expr("1"))
+		}).
+		Scan(ctx, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distinct labels: %w", err)
 	}
 	if results == nil {
 		results = []string{}

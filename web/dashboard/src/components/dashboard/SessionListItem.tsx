@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
+import { SessionLabelChips } from '../common/SessionLabelChips.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { ScoreCell } from './ScoreCell.tsx';
 import { ReviewCell } from './ReviewCell.tsx';
@@ -76,15 +77,15 @@ export function SessionListItem({
       }}
     >
       {/* Status + Summary hover */}
-      <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <TableCell sx={{ width: '1%', whiteSpace: 'nowrap', pr: 3 }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} />
           <SummaryTooltip summary={session.executive_summary ?? ''} />
         </Box>
       </TableCell>
 
       {/* Session indicators: parallel, sub-agents, fallback, chat */}
-      <TableCell sx={{ width: 130, textAlign: 'right', px: 0.5 }}>
+      <TableCell sx={{ width: 130, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">
@@ -166,6 +167,10 @@ export function SessionListItem({
         <Typography variant="body2" sx={{ fontWeight: 500 }}>
           {highlightSearchTermNodes(session.alert_type ?? '', searchTerm)}
         </Typography>
+      </TableCell>
+
+      <TableCell sx={{ width: '1%', whiteSpace: 'nowrap' }}>
+        <SessionLabelChips labels={session.labels} />
       </TableCell>
 
       {/* Submitted by */}

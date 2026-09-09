@@ -55,6 +55,7 @@ function PillBadge({
   label,
   tooltip,
   onClick,
+  size = 'small',
 }: {
   color: ScoreColor | 'info';
   icon?: React.ReactNode;
@@ -62,8 +63,10 @@ function PillBadge({
   label?: string;
   tooltip: string;
   onClick?: () => void;
+  size?: 'small' | 'medium';
 }) {
   const paletteKey = color === 'info' ? 'info' : color;
+  const medium = size === 'medium';
   return (
     <Tooltip title={tooltip}>
       <Box
@@ -73,7 +76,8 @@ function PillBadge({
           alignItems: 'center',
           gap: 0.5,
           px: 1,
-          py: 0.5,
+          py: medium ? 0 : 0.5,
+          ...(medium && { height: 32, boxSizing: 'border-box' }),
           backgroundColor: alpha(theme.palette[paletteKey].main, 0.08),
           borderRadius: '16px',
           border: '1px solid',
@@ -133,6 +137,7 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
           label={showLabel ? 'eval' : undefined}
           tooltip={`Eval score: ${score} / 100`}
           onClick={onClick}
+          size={size}
         />
       );
     }
@@ -165,6 +170,7 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
           value={<CircularProgress size={16} color="inherit" />}
           tooltip="Scoring in progress"
           onClick={onClick}
+          size={size}
         />
       );
     }
@@ -196,6 +202,7 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
           value={icon}
           tooltip={tooltip}
           onClick={onClick}
+          size={size}
         />
       );
     }

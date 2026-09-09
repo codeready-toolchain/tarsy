@@ -1144,6 +1144,7 @@ func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 		"Indicator test", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
 	client.AlertSession.UpdateOneID(indicatorID).
 		SetReviewStatus(alertsession.ReviewStatusNeedsReview).
+		SetLabels([]string{"page"}).
 		ExecX(ctx)
 
 	// Look up the stage and execution created by the seed helper.
@@ -1240,6 +1241,7 @@ func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 			assert.True(t, *s.ActionsExecuted, "should report actions were executed")
 			assert.Equal(t, 2, s.ProviderFallbackCount, "should count fallback events")
 			assert.Equal(t, 3, s.ChatMessageCount, "should count chat messages")
+			assert.Equal(t, []string{"page"}, s.Labels)
 		}
 		if s.ID == plainID {
 			foundPlain = true
@@ -1249,6 +1251,7 @@ func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 			assert.Nil(t, s.ActionsExecuted)
 			assert.Equal(t, 0, s.ProviderFallbackCount)
 			assert.Equal(t, 0, s.ChatMessageCount)
+			assert.Nil(t, s.Labels)
 		}
 	}
 	require.True(t, foundIndicator, "indicator session should be in results")

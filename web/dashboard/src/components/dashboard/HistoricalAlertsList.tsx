@@ -31,11 +31,11 @@ import type { SessionFilter, PaginationState, SortState } from '../../types/dash
 import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
 
 /**
- * Column order: Status | Indicators | Type | Author | Time | Duration | Tokens | [Est. Cost] | Eval Score | Review | Actions
+ * Column order: Status | Indicators | Type | Labels | Author | Time | Duration | Tokens | [Est. Cost] | Eval Score | Review | Actions
  * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
  * Est. Cost column only renders when cost estimation is enabled.
  */
-const BASE_TOTAL_COLUMNS = 10;
+const BASE_TOTAL_COLUMNS = 11;
 
 interface HistoricalAlertsListProps {
   sessions: DashboardSessionItem[];
@@ -131,7 +131,7 @@ export function HistoricalAlertsList({
               <TableHead>
                 <TableRow>
                   {/* Status — sortable */}
-                  <TableCell sx={{ fontWeight: 600 }}>
+                  <TableCell sx={{ fontWeight: 600, width: '1%', pr: 3 }}>
                     <TableSortLabel
                       active={sortState.field === 'status'}
                       direction={sortState.field === 'status' ? sortState.direction : 'asc'}
@@ -142,7 +142,7 @@ export function HistoricalAlertsList({
                   </TableCell>
 
                   {/* Session indicators: parallel, sub-agents, action, fallback, chat */}
-                  <TableCell sx={{ width: 130, px: 0.5, textAlign: 'right' }}>
+                  <TableCell sx={{ width: 130, pl: 1.5, pr: 0.5, textAlign: 'right' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                       <Tooltip title="Parallel Agents" arrow>
                         <CallSplit
@@ -206,6 +206,10 @@ export function HistoricalAlertsList({
                     >
                       Type
                     </TableSortLabel>
+                  </TableCell>
+
+                  <TableCell sx={{ fontWeight: 600, width: '1%', whiteSpace: 'nowrap' }}>
+                    Labels
                   </TableCell>
 
                   {/* Submitted by — sortable */}

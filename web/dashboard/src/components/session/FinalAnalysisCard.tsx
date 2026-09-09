@@ -129,7 +129,7 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
               <Typography variant="h6">Final AI Analysis</Typography>
               {sessionId && (latestScore != null || scoringStatus) && (
                 <Box onClick={(e) => { e.stopPropagation(); navigate(sessionScoringPath(sessionId)); }}>
-                  <ScoreBadge score={latestScore} scoringStatus={scoringStatus} variant="pill" showLabel={false} />
+                  <ScoreBadge score={latestScore} scoringStatus={scoringStatus} variant="pill" showLabel={false} size="medium" />
                 </Box>
               )}
               {onReviewClick && isTerminalStatus(sessionStatus as SessionStatus) && (() => {
@@ -168,11 +168,12 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 0.75,
+                      height: 32,
+                      boxSizing: 'border-box',
                       bgcolor: alpha(theme.palette.warning.main, 0.08),
                       border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
                       borderRadius: '16px',
                       px: 1,
-                      py: 0.5,
                     })}
                     onClick={(e) => e.stopPropagation()}
                   >

@@ -59,6 +59,7 @@ Main configuration file containing:
 
 - **`system:`** - Infrastructure settings (GitHub, runbooks, Slack, retention, **cost estimation**, **prompt caching**)
 - **`fallback_lists:`** - Named reusable LLM fallback catalogs (selected via `fallback_list`)
+- **`label_maps:`** - Named session-label catalogs (selected via last-non-empty `defaults.label_map` / `chain.label_map`; all empty → `builtin`)
 - **`defaults:`** - System-wide default values
 - **`mcp_servers:`** - MCP server configurations
 - **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
@@ -69,6 +70,45 @@ LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See 
 Provider prompt caching (`system.prompt_caching`) is enabled by default. When on, looping investigation-style agents send Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints. Setting `enabled: false` is a GitOps kill switch and does **not** disable Gemini implicit caching. See [ADR-0026: Prompt Caching](../../docs/adr/0026-prompt-caching.md).
 
 Named LLM fallback lists (`fallback_lists` + `fallback_list`) let each job bind a cost/quality preference instead of sharing one global walk. Deprecated inline `fallback_providers` still loads. See [ADR-0030: Named Fallback Lists](../../docs/adr/0030-named-fallback-lists.md).
+
+Session labels (`label_maps` + `label_map`) are a closed list of tags the executive-summary LLM copies from the investigation. Zero YAML injects a reserved `builtin` map (`watch` / `action` / `noise`, exclusive). YAML `label_maps.builtin` fully replaces that map (no merge). `defaults.label_map` and `chain.label_map` are last-non-empty selectors: an empty `chain.label_map` inherits the preceding non-empty selector; `builtin` is the default only when all selectors are empty. `label_map: builtin` is an explicit opt-back, not the same as empty. They are not knobs on the `executive_summary` job block. `multi: false` (default) allows at most one label; `multi: true` allows a unique subset. See [ADR-0031: Session Labels](../../docs/adr/0031-session-labels.md).
+
+```yaml
+label_maps:
+  oncall:
+    # multi omitted → false (at most one label, or none)
+    instructions: |
+      Prefer Classification and Recommended Action from the analysis.
+    labels:
+      - label: monitor
+        description: |
+          MONITOR. No intervention now; look again if it persists.
+      - label: page
+        description: |
+          PAGE. A human must intervene on the affected system now.
+      - label: false_positive
+        description: |
+          Close with no action. Detector was wrong or the event is expected.
+
+  ops-tags:
+    multi: true
+    labels:
+      - label: watch
+        description: Subject still looks off; look again if it persists.
+      - label: page
+        description: Page the on-call; human intervention needed now.
+      - label: modify_detection_rules
+        description: Detection should be tuned; does not imply paging.
+
+defaults:
+  label_map: oncall   # optional; omit or builtin → catalog["builtin"]
+
+agent_chains:
+  kubernetes-investigation:
+    label_map: oncall          # optional; last non-empty wins
+  argocd-investigation:
+    label_map: builtin         # opt back to builtin when defaults is custom
+```
 
 ```yaml
 fallback_lists:
