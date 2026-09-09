@@ -40,7 +40,11 @@ func (m *mockScoringPromptBuilder) BuildExecutiveSummarySystemPrompt() string {
 	panic("unexpected call")
 }
 
-func (m *mockScoringPromptBuilder) BuildExecutiveSummaryUserPrompt(_ string) string {
+func (m *mockScoringPromptBuilder) BuildExecutiveSummaryUserPrompt(_ string, _ config.LabelMap) string {
+	panic("unexpected call")
+}
+
+func (m *mockScoringPromptBuilder) BuildExecutiveSummaryLabelsReminderPrompt(_ config.LabelMap) string {
 	panic("unexpected call")
 }
 

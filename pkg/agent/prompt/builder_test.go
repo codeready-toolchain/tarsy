@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -157,11 +158,62 @@ func TestBuildMCPSummarizationPrompts(t *testing.T) {
 func TestBuildExecutiveSummaryPrompts(t *testing.T) {
 	builder := newBuilderForTest()
 
-	systemPrompt := builder.BuildExecutiveSummarySystemPrompt()
-	assert.Contains(t, systemPrompt, "executive summaries")
+	t.Run("system prompt is facts-only", func(t *testing.T) {
+		systemPrompt := builder.BuildExecutiveSummarySystemPrompt()
+		assert.Contains(t, systemPrompt, "executive summaries")
+		assert.NotContains(t, systemPrompt, "actionable information")
+	})
 
-	userPrompt := builder.BuildExecutiveSummaryUserPrompt("The root cause was OOM.")
-	assert.Contains(t, userPrompt, "The root cause was OOM.")
+	t.Run("write cue is last after label layers", func(t *testing.T) {
+		analysis := "The root cause was OOM."
+		maps := []struct {
+			name string
+			m    config.LabelMap
+		}{
+			{name: "builtin", m: config.BuiltinLabelMap()},
+			{
+				name: "custom exclusive",
+				m: config.LabelMap{
+					Multi: false,
+					Labels: []config.LabelSpec{
+						{Label: "monitor", Description: "Look again."},
+						{Label: "page", Description: "Intervene now."},
+					},
+				},
+			},
+			{
+				name: "multi",
+				m: config.LabelMap{
+					Multi: true,
+					Labels: []config.LabelSpec{
+						{Label: "watch", Description: "Look again."},
+						{Label: "page", Description: "Page now."},
+					},
+				},
+			},
+		}
+		for _, tt := range maps {
+			t.Run(tt.name, func(t *testing.T) {
+				got := builder.BuildExecutiveSummaryUserPrompt(analysis, tt.m)
+				assert.Contains(t, got, analysis)
+				assert.Contains(t, got, "add a LABELS trailer only if a label from the map below applies")
+				assert.Equal(t, 1, strings.Count(got, executiveSummaryWriteCue))
+				assert.True(t, strings.HasSuffix(strings.TrimRight(got, "\n"), executiveSummaryWriteCue),
+					"write cue must be last so generation starts after the LABELS contract")
+				assert.Greater(t, strings.Index(got, executiveSummaryWriteCue), strings.Index(got, analysis))
+				layers := FormatSessionLabelLayers(tt.m)
+				assert.Greater(t, strings.Index(got, executiveSummaryWriteCue), strings.Index(got, layers),
+					"write cue must follow label layers, not precede them")
+			})
+		}
+	})
+
+	t.Run("reminder lists allowed labels and is not the write cue", func(t *testing.T) {
+		reminder := builder.BuildExecutiveSummaryLabelsReminderPrompt(config.BuiltinLabelMap())
+		assert.Contains(t, reminder, "I could not parse the LABELS line")
+		assert.Contains(t, reminder, "watch, action, noise")
+		assert.NotContains(t, reminder, executiveSummaryWriteCue)
+	})
 }
 
 func TestBuildComposePrompts(t *testing.T) {

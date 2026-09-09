@@ -169,6 +169,12 @@ func (_c *AlertSessionCreate) SetNillableExecutiveSummaryError(v *string) *Alert
 	return _c
 }
 
+// SetLabels sets the "labels" field.
+func (_c *AlertSessionCreate) SetLabels(v []string) *AlertSessionCreate {
+	_c.mutation.SetLabels(v)
+	return _c
+}
+
 // SetSessionMetadata sets the "session_metadata" field.
 func (_c *AlertSessionCreate) SetSessionMetadata(v map[string]interface{}) *AlertSessionCreate {
 	_c.mutation.SetSessionMetadata(v)
@@ -742,6 +748,10 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.ExecutiveSummaryError(); ok {
 		_spec.SetField(alertsession.FieldExecutiveSummaryError, field.TypeString, value)
 		_node.ExecutiveSummaryError = &value
+	}
+	if value, ok := _c.mutation.Labels(); ok {
+		_spec.SetField(alertsession.FieldLabels, field.TypeJSON, value)
+		_node.Labels = value
 	}
 	if value, ok := _c.mutation.SessionMetadata(); ok {
 		_spec.SetField(alertsession.FieldSessionMetadata, field.TypeJSON, value)

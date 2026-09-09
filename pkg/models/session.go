@@ -171,6 +171,7 @@ type SessionDetailResponse struct {
 	FinalAnalysis           *string        `json:"final_analysis"`
 	ExecutiveSummary        *string        `json:"executive_summary"`
 	ExecutiveSummaryError   *string        `json:"executive_summary_error"`
+	Labels                  []string       `json:"labels"`
 	RunbookURL              *string        `json:"runbook_url"`
 	SlackMessageFingerprint *string        `json:"slack_message_fingerprint,omitempty"`
 	MCPSelection            map[string]any `json:"mcp_selection,omitempty"`
@@ -290,11 +291,12 @@ type SessionSummaryResponse struct {
 
 // SessionStatusResponse is returned by GET /api/v1/sessions/:id/status.
 type SessionStatusResponse struct {
-	ID               string  `json:"id"`
-	Status           string  `json:"status"`
-	FinalAnalysis    *string `json:"final_analysis"`
-	ExecutiveSummary *string `json:"executive_summary"`
-	ErrorMessage     *string `json:"error_message"`
+	ID               string   `json:"id"`
+	Status           string   `json:"status"`
+	FinalAnalysis    *string  `json:"final_analysis"`
+	ExecutiveSummary *string  `json:"executive_summary"`
+	ErrorMessage     *string  `json:"error_message"`
+	Labels           []string `json:"labels"`
 }
 
 // ChainStatistics holds stage counts for the session summary.

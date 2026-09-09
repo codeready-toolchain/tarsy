@@ -31,6 +31,9 @@
   "id": "{SESSION_ID}",
   "input_tokens": 540,
   "investigation_feedback": null,
+  "labels": [
+    "noise"
+  ],
   "latest_score": null,
   "llm_interaction_count": 6,
   "mcp_interaction_count": 4,

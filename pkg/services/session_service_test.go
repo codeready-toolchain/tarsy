@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -776,6 +777,10 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Contains(t, *detail.FinalAnalysis, "CPU alert data")
 		require.NotNil(t, detail.ExecutiveSummary)
 		assert.Contains(t, *detail.ExecutiveSummary, "CPU alert data")
+		assert.Nil(t, detail.Labels)
+		detailRaw, err := json.Marshal(detail)
+		require.NoError(t, err)
+		assert.Contains(t, string(detailRaw), `"labels":null`)
 
 		// Computed stats.
 		assert.Equal(t, 1, detail.LLMInteractionCount)
@@ -2882,6 +2887,11 @@ func TestSessionService_GetSessionStatus(t *testing.T) {
 		assert.Nil(t, status.FinalAnalysis)
 		assert.Nil(t, status.ExecutiveSummary)
 		assert.Nil(t, status.ErrorMessage)
+		assert.Nil(t, status.Labels)
+
+		raw, err := json.Marshal(status)
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"labels":null`)
 	})
 
 	t.Run("returns status for completed session", func(t *testing.T) {
@@ -2899,6 +2909,65 @@ func TestSessionService_GetSessionStatus(t *testing.T) {
 		require.NotNil(t, status.ExecutiveSummary)
 		assert.Contains(t, *status.ExecutiveSummary, "status poll data")
 		assert.Nil(t, status.ErrorMessage)
+		assert.Nil(t, status.Labels)
+
+		raw, err := json.Marshal(status)
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"labels":null`)
+	})
+
+	t.Run("labels empty array vs populated", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "labels json",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		err = client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusCompleted).
+			SetLabels([]string{}).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		status, err := service.GetSessionStatus(ctx, session.ID)
+		require.NoError(t, err)
+		require.NotNil(t, status.Labels)
+		assert.Empty(t, status.Labels)
+
+		raw, err := json.Marshal(status)
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"labels":[]`)
+
+		detailEmpty, err := service.GetSessionDetail(ctx, session.ID)
+		require.NoError(t, err)
+		require.NotNil(t, detailEmpty.Labels)
+		assert.Empty(t, detailEmpty.Labels)
+		emptyDetailRaw, err := json.Marshal(detailEmpty)
+		require.NoError(t, err)
+		assert.Contains(t, string(emptyDetailRaw), `"labels":[]`)
+
+		err = client.AlertSession.UpdateOneID(session.ID).
+			SetLabels([]string{"page"}).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		status, err = service.GetSessionStatus(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"page"}, status.Labels)
+
+		raw, err = json.Marshal(status)
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"labels":["page"]`)
+
+		detail, err := service.GetSessionDetail(ctx, session.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"page"}, detail.Labels)
+		detailRaw, err := json.Marshal(detail)
+		require.NoError(t, err)
+		assert.Contains(t, string(detailRaw), `"labels":["page"]`)
 	})
 
 	t.Run("returns ErrNotFound for nonexistent session", func(t *testing.T) {

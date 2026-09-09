@@ -2206,6 +2206,8 @@ type AlertSessionMutation struct {
 	final_analysis            *string
 	executive_summary         *string
 	executive_summary_error   *string
+	labels                    *[]string
+	appendlabels              []string
 	session_metadata          *map[string]interface{}
 	author                    *string
 	runbook_url               *string
@@ -2855,6 +2857,71 @@ func (m *AlertSessionMutation) ExecutiveSummaryErrorCleared() bool {
 func (m *AlertSessionMutation) ResetExecutiveSummaryError() {
 	m.executive_summary_error = nil
 	delete(m.clearedFields, alertsession.FieldExecutiveSummaryError)
+}
+
+// SetLabels sets the "labels" field.
+func (m *AlertSessionMutation) SetLabels(s []string) {
+	m.labels = &s
+	m.appendlabels = nil
+}
+
+// Labels returns the value of the "labels" field in the mutation.
+func (m *AlertSessionMutation) Labels() (r []string, exists bool) {
+	v := m.labels
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLabels returns the old "labels" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldLabels(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLabels is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLabels requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLabels: %w", err)
+	}
+	return oldValue.Labels, nil
+}
+
+// AppendLabels adds s to the "labels" field.
+func (m *AlertSessionMutation) AppendLabels(s []string) {
+	m.appendlabels = append(m.appendlabels, s...)
+}
+
+// AppendedLabels returns the list of values that were appended to the "labels" field in this mutation.
+func (m *AlertSessionMutation) AppendedLabels() ([]string, bool) {
+	if len(m.appendlabels) == 0 {
+		return nil, false
+	}
+	return m.appendlabels, true
+}
+
+// ClearLabels clears the value of the "labels" field.
+func (m *AlertSessionMutation) ClearLabels() {
+	m.labels = nil
+	m.appendlabels = nil
+	m.clearedFields[alertsession.FieldLabels] = struct{}{}
+}
+
+// LabelsCleared returns if the "labels" field was cleared in this mutation.
+func (m *AlertSessionMutation) LabelsCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldLabels]
+	return ok
+}
+
+// ResetLabels resets all changes to the "labels" field.
+func (m *AlertSessionMutation) ResetLabels() {
+	m.labels = nil
+	m.appendlabels = nil
+	delete(m.clearedFields, alertsession.FieldLabels)
 }
 
 // SetSessionMetadata sets the "session_metadata" field.
@@ -4414,7 +4481,7 @@ func (m *AlertSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AlertSessionMutation) Fields() []string {
-	fields := make([]string, 0, 29)
+	fields := make([]string, 0, 30)
 	if m.alert_data != nil {
 		fields = append(fields, alertsession.FieldAlertData)
 	}
@@ -4447,6 +4514,9 @@ func (m *AlertSessionMutation) Fields() []string {
 	}
 	if m.executive_summary_error != nil {
 		fields = append(fields, alertsession.FieldExecutiveSummaryError)
+	}
+	if m.labels != nil {
+		fields = append(fields, alertsession.FieldLabels)
 	}
 	if m.session_metadata != nil {
 		fields = append(fields, alertsession.FieldSessionMetadata)
@@ -4532,6 +4602,8 @@ func (m *AlertSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.ExecutiveSummary()
 	case alertsession.FieldExecutiveSummaryError:
 		return m.ExecutiveSummaryError()
+	case alertsession.FieldLabels:
+		return m.Labels()
 	case alertsession.FieldSessionMetadata:
 		return m.SessionMetadata()
 	case alertsession.FieldAuthor:
@@ -4599,6 +4671,8 @@ func (m *AlertSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldExecutiveSummary(ctx)
 	case alertsession.FieldExecutiveSummaryError:
 		return m.OldExecutiveSummaryError(ctx)
+	case alertsession.FieldLabels:
+		return m.OldLabels(ctx)
 	case alertsession.FieldSessionMetadata:
 		return m.OldSessionMetadata(ctx)
 	case alertsession.FieldAuthor:
@@ -4720,6 +4794,13 @@ func (m *AlertSessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExecutiveSummaryError(v)
+		return nil
+	case alertsession.FieldLabels:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLabels(v)
 		return nil
 	case alertsession.FieldSessionMetadata:
 		v, ok := value.(map[string]interface{})
@@ -4913,6 +4994,9 @@ func (m *AlertSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(alertsession.FieldExecutiveSummaryError) {
 		fields = append(fields, alertsession.FieldExecutiveSummaryError)
 	}
+	if m.FieldCleared(alertsession.FieldLabels) {
+		fields = append(fields, alertsession.FieldLabels)
+	}
 	if m.FieldCleared(alertsession.FieldSessionMetadata) {
 		fields = append(fields, alertsession.FieldSessionMetadata)
 	}
@@ -4998,6 +5082,9 @@ func (m *AlertSessionMutation) ClearField(name string) error {
 		return nil
 	case alertsession.FieldExecutiveSummaryError:
 		m.ClearExecutiveSummaryError()
+		return nil
+	case alertsession.FieldLabels:
+		m.ClearLabels()
 		return nil
 	case alertsession.FieldSessionMetadata:
 		m.ClearSessionMetadata()
@@ -5090,6 +5177,9 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 		return nil
 	case alertsession.FieldExecutiveSummaryError:
 		m.ResetExecutiveSummaryError()
+		return nil
+	case alertsession.FieldLabels:
+		m.ResetLabels()
 		return nil
 	case alertsession.FieldSessionMetadata:
 		m.ResetSessionMetadata()

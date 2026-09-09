@@ -143,7 +143,7 @@ func TestE2E_MemoryInjectionAndRecall(t *testing.T) {
 	})
 
 	// Executive summary.
-	llm.AddSequential(LLMScriptEntry{Text: "All pods healthy. No issues found."})
+	llm.AddSequential(LLMScriptEntry{Text: "All pods healthy. No issues found.\nLABELS: noise"})
 
 	// Chat — iteration 1: agent calls recall_past_investigations.
 	llm.AddSequential(LLMScriptEntry{
@@ -238,6 +238,9 @@ func TestE2E_MemoryInjectionAndRecall(t *testing.T) {
 
 	session, err := app.EntClient.AlertSession.Get(ctx, sessionID)
 	require.NoError(t, err)
+	assert.Equal(t, []string{"noise"}, session.Labels)
+	require.NotNil(t, session.ExecutiveSummary)
+	assert.Equal(t, "All pods healthy. No issues found.", *session.ExecutiveSummary)
 	injectedMemories, err := session.QueryInjectedMemories().All(ctx)
 	require.NoError(t, err)
 	assert.Len(t, injectedMemories, 3, "all 3 seeded memories should be recorded as injected")
@@ -431,7 +434,7 @@ func TestE2E_MemoryReflectorCreation(t *testing.T) {
 	})
 
 	// Executive summary.
-	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit."})
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.\nLABELS: action"})
 
 	// Scoring turn 1: score evaluation.
 	llm.AddSequential(LLMScriptEntry{
@@ -549,7 +552,7 @@ func TestE2E_MemoryFeedbackReflector(t *testing.T) {
 	})
 
 	// Executive summary.
-	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit."})
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.\nLABELS: action"})
 
 	// Scoring turn 1: score evaluation.
 	llm.AddSequential(LLMScriptEntry{
@@ -1157,7 +1160,7 @@ func TestE2E_SearchPastSessionsInChat(t *testing.T) {
 	})
 
 	// Executive summary.
-	llm.AddSequential(LLMScriptEntry{Text: "All pods healthy. No issues detected."})
+	llm.AddSequential(LLMScriptEntry{Text: "All pods healthy. No issues detected.\nLABELS: noise"})
 
 	// Chat iteration 1: agent calls search_past_sessions.
 	llm.AddSequential(LLMScriptEntry{
@@ -1309,7 +1312,7 @@ func TestE2E_SearchPastSessionsNoMatches(t *testing.T) {
 	})
 
 	// Executive summary.
-	llm.AddSequential(LLMScriptEntry{Text: "No issues found."})
+	llm.AddSequential(LLMScriptEntry{Text: "No issues found.\nLABELS: noise"})
 
 	// Chat iteration 1: agent calls search_past_sessions with non-matching query.
 	llm.AddSequential(LLMScriptEntry{

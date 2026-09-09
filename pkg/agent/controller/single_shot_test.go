@@ -2,12 +2,15 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -355,15 +358,135 @@ func TestExecSummaryController_HappyPath(t *testing.T) {
 
 	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
 	execCtx.Config.Type = config.AgentTypeExecSummary
-	ctrl := NewExecSummaryController(execCtx.PromptBuilder)
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
 
+	before := testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal)
 	finalAnalysis := "Root cause: memory leak in web-1. Pods OOMKilled repeatedly."
-	result, err := ctrl.Run(context.Background(), execCtx, finalAnalysis)
+	result, err := ctrl.Run(t.Context(), execCtx, finalAnalysis)
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecutionStatusCompleted, result.Status)
 	require.Contains(t, result.FinalAnalysis, "OOM killed")
 	require.Equal(t, 100, result.TokensUsed.TotalTokens)
 	require.Equal(t, 1, llm.callCount)
+	require.NotNil(t, result.Labels)
+	assert.Empty(t, *result.Labels)
+	assert.Equal(t, before, testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal))
+}
+
+func TestExecSummaryController_ValidLabelsTrailer(t *testing.T) {
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Pod recovered after restart.\nLABELS: noise"},
+			}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
+
+	before := testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal)
+	result, err := ctrl.Run(t.Context(), execCtx, "analysis")
+	require.NoError(t, err)
+	assert.Equal(t, "Pod recovered after restart.", result.FinalAnalysis)
+	require.NotNil(t, result.Labels)
+	assert.Equal(t, []string{"noise"}, *result.Labels)
+	assert.Equal(t, 1, llm.callCount)
+	assert.Equal(t, before, testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal))
+
+	events, err := execCtx.Services.Timeline.GetAgentTimeline(t.Context(), execCtx.ExecutionID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		if ev.EventType == timelineevent.EventTypeFinalAnalysis {
+			assert.Equal(t, "Pod recovered after restart.", ev.Content)
+		}
+	}
+}
+
+func TestExecSummaryController_LabelsReminderSuccess(t *testing.T) {
+	llm := &mockLLMClient{
+		capture: true,
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Pod recovered after restart.\nLABELS: none"},
+			}},
+			{chunks: []agent.Chunk{
+				&agent.TextChunk{Content: "Pod recovered after restart.\nLABELS: noise"},
+			}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
+
+	before := testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal)
+	result, err := ctrl.Run(t.Context(), execCtx, "analysis")
+	require.NoError(t, err)
+	assert.Equal(t, "Pod recovered after restart.", result.FinalAnalysis)
+	require.NotNil(t, result.Labels)
+	assert.Equal(t, []string{"noise"}, *result.Labels)
+	assert.Equal(t, 2, llm.callCount)
+	require.Len(t, llm.capturedInputs, 2)
+	assert.Len(t, llm.capturedInputs[1].Messages, 4)
+	assert.Equal(t, before, testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal))
+}
+
+func TestExecSummaryController_LabelsReminderStillInvalid(t *testing.T) {
+	first := "Pod recovered after restart.\nLABELS: none"
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: first}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "Pod recovered after restart.\nLABELS: bogus"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
+
+	before := testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal)
+	result, err := ctrl.Run(t.Context(), execCtx, "analysis")
+	require.NoError(t, err)
+	assert.Equal(t, first, result.FinalAnalysis)
+	assert.Nil(t, result.Labels)
+	assert.Equal(t, 2, llm.callCount)
+	assert.Equal(t, before+1, testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal))
+}
+
+func TestExecSummaryController_LabelsReminderLLMError(t *testing.T) {
+	first := "Pod recovered after restart.\nLABELS: none"
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: first}}},
+			{err: fmt.Errorf("provider down")},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
+
+	before := testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal)
+	result, err := ctrl.Run(t.Context(), execCtx, "analysis")
+	require.NoError(t, err)
+	assert.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	assert.Equal(t, first, result.FinalAnalysis)
+	assert.Nil(t, result.Labels)
+	assert.Equal(t, before+1, testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal))
+}
+
+func TestExecSummaryController_LabelsReminderEmptyText(t *testing.T) {
+	first := "Pod recovered after restart.\nLABELS: none"
+	llm := &mockLLMClient{
+		responses: []mockLLMResponse{
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: first}}},
+			{chunks: []agent.Chunk{&agent.TextChunk{Content: "   \n"}}},
+		},
+	}
+	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
+
+	before := testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal)
+	result, err := ctrl.Run(t.Context(), execCtx, "analysis")
+	require.NoError(t, err)
+	assert.Equal(t, agent.ExecutionStatusCompleted, result.Status)
+	assert.Equal(t, first, result.FinalAnalysis)
+	assert.Nil(t, result.Labels)
+	assert.Equal(t, before+1, testutil.ToFloat64(metrics.SessionLabelsParseFailuresTotal))
 }
 
 func TestExecSummaryController_NoThinkingFallback(t *testing.T) {
@@ -378,7 +501,7 @@ func TestExecSummaryController_NoThinkingFallback(t *testing.T) {
 
 	llm := &mockLLMClient{responses: responses}
 	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
-	ctrl := NewExecSummaryController(execCtx.PromptBuilder)
+	ctrl := NewExecSummaryController(execCtx.PromptBuilder, config.BuiltinLabelMap())
 
 	result, err := ctrl.Run(context.Background(), execCtx, "some final analysis")
 	require.NoError(t, err)

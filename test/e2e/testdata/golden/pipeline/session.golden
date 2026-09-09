@@ -31,6 +31,9 @@
   "id": "{SESSION_ID}",
   "input_tokens": 2110,
   "investigation_feedback": null,
+  "labels": [
+    "action"
+  ],
   "latest_score": null,
   "llm_interaction_count": 22,
   "mcp_interaction_count": 21,

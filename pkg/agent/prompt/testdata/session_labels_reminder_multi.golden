@@ -1,0 +1,9 @@
+I could not parse the LABELS line from your response.
+
+Keep the 1-4 line executive summary body (facts only).
+If any labels apply, last line exactly:
+LABELS: <comma-separated unique labels from the list>
+Only labels from the list. Nothing after that line.
+If none apply, do not add a LABELS line.
+
+Allowed labels (in order): watch, page

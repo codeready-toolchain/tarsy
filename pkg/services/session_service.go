@@ -659,6 +659,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		FinalAnalysis:           session.FinalAnalysis,
 		ExecutiveSummary:        session.ExecutiveSummary,
 		ExecutiveSummaryError:   session.ExecutiveSummaryError,
+		Labels:                  session.Labels,
 		RunbookURL:              session.RunbookURL,
 		SlackMessageFingerprint: session.SlackMessageFingerprint,
 		MCPSelection:            session.McpSelection,
@@ -806,6 +807,7 @@ func (s *SessionService) GetSessionStatus(ctx context.Context, sessionID string)
 		FinalAnalysis:    session.FinalAnalysis,
 		ExecutiveSummary: session.ExecutiveSummary,
 		ErrorMessage:     session.ErrorMessage,
+		Labels:           session.Labels,
 	}, nil
 }
 

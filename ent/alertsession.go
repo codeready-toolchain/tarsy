@@ -41,6 +41,8 @@ type AlertSession struct {
 	ExecutiveSummary *string `json:"executive_summary,omitempty"`
 	// ExecutiveSummaryError holds the value of the "executive_summary_error" field.
 	ExecutiveSummaryError *string `json:"executive_summary_error,omitempty"`
+	// Canonical session labels from exec-summary LABELS trailer; GIN idx_alert_sessions_labels_gin in CreateGINIndexes
+	Labels []string `json:"labels,omitempty"`
 	// SessionMetadata holds the value of the "session_metadata" field.
 	SessionMetadata map[string]interface{} `json:"session_metadata,omitempty"`
 	// From oauth2-proxy
@@ -229,7 +231,7 @@ func (*AlertSession) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case alertsession.FieldSessionMetadata, alertsession.FieldMcpSelection:
+		case alertsession.FieldLabels, alertsession.FieldSessionMetadata, alertsession.FieldMcpSelection:
 			values[i] = new([]byte)
 		case alertsession.FieldCurrentStageIndex:
 			values[i] = new(sql.NullInt64)
@@ -329,6 +331,14 @@ func (_m *AlertSession) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ExecutiveSummaryError = new(string)
 				*_m.ExecutiveSummaryError = value.String
+			}
+		case alertsession.FieldLabels:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field labels", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Labels); err != nil {
+					return fmt.Errorf("unmarshal field labels: %w", err)
+				}
 			}
 		case alertsession.FieldSessionMetadata:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -597,6 +607,9 @@ func (_m *AlertSession) String() string {
 		builder.WriteString("executive_summary_error=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("labels=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Labels))
 	builder.WriteString(", ")
 	builder.WriteString("session_metadata=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SessionMetadata))

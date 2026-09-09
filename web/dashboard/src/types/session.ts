@@ -85,6 +85,7 @@ export interface SessionDetailResponse {
   final_analysis: string | null;
   executive_summary: string | null;
   executive_summary_error: string | null;
+  labels: string[] | null;
   runbook_url: string | null;
   slack_message_fingerprint?: string | null;
   mcp_selection?: Record<string, unknown>;

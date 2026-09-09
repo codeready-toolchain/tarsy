@@ -180,7 +180,7 @@ func TestE2E_Pipeline(t *testing.T) {
 	})
 
 	// ── Executive summary ──
-	llm.AddSequential(LLMScriptEntry{Text: "Set HPA to 70% CPU with min=2, max=5 replicas for pod-1."})
+	llm.AddSequential(LLMScriptEntry{Text: "Set HPA to 70% CPU with min=2, max=5 replicas for pod-1.\nLABELS: action"})
 
 	// ── Chat 1: "What caused the OOM?" — google-native with test-mcp tool call ──
 	// Iteration 1: thinking + text + tool call to test-mcp/get_pods.
@@ -300,6 +300,9 @@ func TestE2E_Pipeline(t *testing.T) {
 	session := app.GetSession(t, sessionID)
 	assert.Equal(t, "completed", session["status"])
 	assert.NotEmpty(t, session["final_analysis"])
+	assert.Equal(t, "Set HPA to 70% CPU with min=2, max=5 replicas for pod-1.", session["executive_summary"],
+		"LABELS trailer must be stripped from the stored summary")
+	assert.Equal(t, jsonStringSlice([]string{"action"}), session["labels"])
 
 	// Verify DB state — 6 pipeline stages + exec_summary + 2 chat stages.
 	stages := app.QueryStages(t, sessionID)

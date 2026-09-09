@@ -414,6 +414,7 @@ func TestIntegration_ExecutiveSummary(t *testing.T) {
 	systemPrompt := builder.BuildExecutiveSummarySystemPrompt()
 	userPrompt := builder.BuildExecutiveSummaryUserPrompt(
 		"Root cause: OOM kill due to memory leak in pod-1. Recommendation: increase memory limit to 1Gi.",
+		config.BuiltinLabelMap(),
 	)
 
 	combined := systemPrompt + "\n\n=== USER PROMPT ===\n\n" + userPrompt
@@ -489,6 +490,28 @@ Do not invent labels outside this list.`,
 		got := FormatSessionLabelLayers(m)
 		assert.Contains(t, got, sessionLabelLayer2Generic)
 		assert.NotContains(t, got, "prefer watch over action")
+	})
+
+	t.Run("reminder builtin exclusive", func(t *testing.T) {
+		got := FormatSessionLabelReminder(config.BuiltinLabelMap())
+		assertGolden(t, "session_labels_reminder_builtin", got)
+		assert.Contains(t, got, sessionLabelLayer4Exclusive)
+		assert.NotContains(t, got, sessionLabelLayer4Multi)
+	})
+
+	t.Run("reminder multi", func(t *testing.T) {
+		m := config.LabelMap{
+			Multi: true,
+			Labels: []config.LabelSpec{
+				{Label: "watch", Description: "Look again."},
+				{Label: "page", Description: "Page now."},
+			},
+		}
+		got := FormatSessionLabelReminder(m)
+		assertGolden(t, "session_labels_reminder_multi", got)
+		assert.Contains(t, got, sessionLabelLayer4Multi)
+		assert.NotContains(t, got, sessionLabelLayer4Exclusive)
+		assert.Contains(t, got, "watch, page")
 	})
 }
 

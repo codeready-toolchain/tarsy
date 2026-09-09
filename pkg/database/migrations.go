@@ -7,9 +7,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// CreateGINIndexes creates full-text search GIN indexes for PostgreSQL.
-// These indexes enable efficient full-text search on alert_data, final_analysis,
-// and timeline_events content fields.
+// CreateGINIndexes creates PostgreSQL GIN indexes that Atlas cannot model:
+// full-text search on alert_data / final_analysis / timeline content, and
+// JSONB containment on alert_sessions.labels.
 func CreateGINIndexes(ctx context.Context, driver *sql.Driver) error {
 	db := driver.DB()
 
@@ -35,6 +35,13 @@ func CreateGINIndexes(ctx context.Context, driver *sql.Driver) error {
 		ON timeline_events USING gin(to_tsvector('english', content))`)
 	if err != nil {
 		return fmt.Errorf("failed to create timeline_events content GIN index: %w", err)
+	}
+
+	_, err = db.ExecContext(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_alert_sessions_labels_gin
+		ON alert_sessions USING gin (labels jsonb_path_ops)`)
+	if err != nil {
+		return fmt.Errorf("failed to create labels GIN index: %w", err)
 	}
 
 	return nil

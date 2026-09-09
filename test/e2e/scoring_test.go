@@ -52,7 +52,7 @@ func scriptSimpleInvestigation(llm *ScriptedLLMClient) {
 
 // scriptExecSummary adds an executive summary response.
 func scriptExecSummary(llm *ScriptedLLMClient) {
-	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled. Recommend increasing memory limit."})
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled. Recommend increasing memory limit.\nLABELS: action"})
 }
 
 // scriptRichPipeline scripts the full scoring-chain pipeline:
@@ -123,7 +123,7 @@ func scriptRichPipeline(llm *ScriptedLLMClient) {
 	})
 
 	// ── Executive summary ──
-	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory limit to 1Gi."})
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory limit to 1Gi.\nLABELS: action"})
 }
 
 // scriptScoringSuccess adds scoring LLM responses that produce a valid score.
@@ -277,6 +277,9 @@ func TestE2E_Scoring_AutoTrigger(t *testing.T) {
 	assert.Equal(t, float64(75), sessionDetail["latest_score"])
 	assert.Equal(t, "completed", sessionDetail["scoring_status"])
 	assert.NotNil(t, sessionDetail["score_id"])
+	assert.Equal(t, "Pod-1 OOMKilled due to memory pressure. Restarted. Recommend increasing memory limit to 1Gi.",
+		sessionDetail["executive_summary"], "LABELS trailer must be stripped from the stored summary")
+	assert.Equal(t, jsonStringSlice([]string{"action"}), sessionDetail["labels"])
 
 	// ── Verify scoring fields on session summary ──
 

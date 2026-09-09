@@ -850,6 +850,16 @@ func ExecutiveSummaryErrorContainsFold(v string) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldContainsFold(FieldExecutiveSummaryError, v))
 }
 
+// LabelsIsNil applies the IsNil predicate on the "labels" field.
+func LabelsIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldLabels))
+}
+
+// LabelsNotNil applies the NotNil predicate on the "labels" field.
+func LabelsNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldLabels))
+}
+
 // SessionMetadataIsNil applies the IsNil predicate on the "session_metadata" field.
 func SessionMetadataIsNil() predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldIsNull(FieldSessionMetadata))

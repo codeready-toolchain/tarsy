@@ -55,7 +55,10 @@ type ExecutionResult struct {
 	FinalAnalysis         string              // Final analysis text (if completed)
 	ExecutiveSummary      string              // Executive summary (if completed)
 	ExecutiveSummaryError string              // Non-empty if summary generation failed (fail-open)
-	Error                 error               // Error details (if failed/timed_out)
+	// Labels is the three-state persist for alert_sessions.labels.
+	// Nil = leave NULL; non-nil including &[]string{} = SetLabels.
+	Labels *[]string
+	Error  error // Error details (if failed/timed_out)
 }
 
 // PoolHealth contains health information for the entire worker pool.

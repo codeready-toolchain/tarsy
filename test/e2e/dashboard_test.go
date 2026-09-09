@@ -29,31 +29,39 @@ func TestDashboardEndpoints(t *testing.T) {
 	type sessionSpec struct {
 		alertData               string
 		investText              string // investigation LLM response → final_analysis
-		summaryText             string // executive summary LLM response → executive_summary
+		summaryLLM              string // executive summary LLM response (may include LABELS trailer)
+		summaryStored           string // persisted executive_summary after strip
+		wantLabels              []string
 		invIn, invOut, invTotal int
 		sumIn, sumOut, sumTotal int
 	}
 
 	specs := []sessionSpec{
 		{
-			alertData:   "Session Alpha payload",
-			investText:  "Alpha investigation: CPU spike detected on node-1.",
-			summaryText: "Alpha summary: CPU spike resolved.",
-			invIn:       100, invOut: 50, invTotal: 150,
+			alertData:     "Session Alpha payload",
+			investText:    "Alpha investigation: CPU spike detected on node-1.",
+			summaryLLM:    "Alpha summary: CPU spike resolved.\nLABELS: action",
+			summaryStored: "Alpha summary: CPU spike resolved.",
+			wantLabels:    []string{"action"},
+			invIn:         100, invOut: 50, invTotal: 150,
 			sumIn: 30, sumOut: 10, sumTotal: 40,
 		},
 		{
-			alertData:   "Session Beta payload",
-			investText:  "Beta investigation: memory pressure on pod-xyz.",
-			summaryText: "Beta summary: OOM risk mitigated.",
-			invIn:       200, invOut: 100, invTotal: 300,
+			alertData:     "Session Beta payload",
+			investText:    "Beta investigation: memory pressure on pod-xyz.",
+			summaryLLM:    "Beta summary: OOM risk mitigated.\nLABELS: noise",
+			summaryStored: "Beta summary: OOM risk mitigated.",
+			wantLabels:    []string{"noise"},
+			invIn:         200, invOut: 100, invTotal: 300,
 			sumIn: 40, sumOut: 20, sumTotal: 60,
 		},
 		{
-			alertData:   "Session Charlie payload",
-			investText:  "Charlie investigation: network latency anomaly.",
-			summaryText: "Charlie summary: latency normalized.",
-			invIn:       150, invOut: 75, invTotal: 225,
+			alertData:     "Session Charlie payload",
+			investText:    "Charlie investigation: network latency anomaly.",
+			summaryLLM:    "Charlie summary: latency normalized.",
+			summaryStored: "Charlie summary: latency normalized.",
+			wantLabels:    []string{},
+			invIn:         150, invOut: 75, invTotal: 225,
 			sumIn: 35, sumOut: 15, sumTotal: 50,
 		},
 	}
@@ -69,7 +77,7 @@ func TestDashboardEndpoints(t *testing.T) {
 		})
 		llm.AddSequential(LLMScriptEntry{
 			Chunks: []agent.Chunk{
-				&agent.TextChunk{Content: s.summaryText},
+				&agent.TextChunk{Content: s.summaryLLM},
 				&agent.UsageChunk{InputTokens: s.sumIn, OutputTokens: s.sumOut, TotalTokens: s.sumTotal},
 			},
 		})
@@ -95,6 +103,7 @@ func TestDashboardEndpoints(t *testing.T) {
 		alertData    string
 		investText   string
 		summaryText  string
+		labels       []string
 		inputTokens  int
 		outputTokens int
 		totalTokens  int
@@ -104,7 +113,8 @@ func TestDashboardEndpoints(t *testing.T) {
 		expectedByID[ids[i]] = sessionExpected{
 			alertData:    s.alertData,
 			investText:   s.investText,
-			summaryText:  s.summaryText,
+			summaryText:  s.summaryStored,
+			labels:       s.wantLabels,
 			inputTokens:  s.invIn + s.sumIn,
 			outputTokens: s.invOut + s.sumOut,
 			totalTokens:  s.invTotal + s.sumTotal,
@@ -343,6 +353,7 @@ func TestDashboardEndpoints(t *testing.T) {
 		// Analysis results from LLM script.
 		assert.Equal(t, expB.investText, detail["final_analysis"])
 		assert.Equal(t, expB.summaryText, detail["executive_summary"])
+		assert.Equal(t, jsonStringSlice(expB.labels), detail["labels"])
 
 		// Computed stats (exact).
 		// 2 stages (analysis + exec_summary) and 2 LLM interactions.
@@ -415,6 +426,7 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, "completed", status["status"])
 		assert.Equal(t, expA.investText, status["final_analysis"])
 		assert.Equal(t, expA.summaryText, status["executive_summary"])
+		assert.Equal(t, jsonStringSlice(expA.labels), status["labels"])
 		assert.Nil(t, status["error_message"])
 	})
 
@@ -606,4 +618,12 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, "kubernetes", at1["chain_id"])
 		assert.Equal(t, "Single-stage Kubernetes analysis", at1["description"])
 	})
+}
+
+func jsonStringSlice(in []string) []interface{} {
+	out := make([]interface{}, len(in))
+	for i, s := range in {
+		out[i] = s
+	}
+	return out
 }

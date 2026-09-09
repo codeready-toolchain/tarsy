@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/codeready-toolchain/tarsy/ent"
@@ -109,6 +111,7 @@ type stageResult struct {
 	referencedStageID *string
 	status            alertsession.Status // mapped from agent status
 	finalAnalysis     string
+	labels            *[]string
 	err               error
 	agentResults      []agentResult // always populated (1 entry for single-agent, N for multi-agent)
 }
@@ -118,6 +121,7 @@ type agentResult struct {
 	executionID     string
 	status          agent.ExecutionStatus
 	finalAnalysis   string
+	labels          *[]string
 	err             error
 	llmBackend      string // resolved backend (for synthesis context)
 	llmProviderName string // resolved provider name (for synthesis context)
@@ -160,6 +164,9 @@ type executeStageInput struct {
 	// Compose inputs (set only when executing a compose stage)
 	composeUpstreamReport string
 	composeActionMemo     string
+
+	// labelMap is set only for the executive-summary stage.
+	labelMap config.LabelMap
 }
 
 // ────────────────────────────────────────────────────────────
@@ -359,6 +366,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 	// Only run when there is a final analysis to summarize.
 	var execSummary string
 	var execSummaryErr string
+	var execLabels *[]string
 	if finalAnalysis != "" {
 		execSr := e.executeExecSummaryStage(ctx, executeStageInput{
 			session:             session,
@@ -375,6 +383,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		publishStageStatus(context.Background(), e.eventPublisher, session.ID, execSr.stageID, execSr.stageName, dbStageIndex, execSr.stageType, execSr.referencedStageID, mapTerminalStatus(execSr))
 		if execSr.status == alertsession.StatusCompleted {
 			execSummary = execSr.finalAnalysis
+			execLabels = cloneLabelsPtr(execSr.labels)
 		} else if execSr.err != nil {
 			logger.Warn("Executive summary stage failed (fail-open)", "error", execSr.err)
 			execSummaryErr = execSr.err.Error()
@@ -396,6 +405,7 @@ func (e *RealSessionExecutor) Execute(ctx context.Context, session *ent.AlertSes
 		FinalAnalysis:         finalAnalysis,
 		ExecutiveSummary:      execSummary,
 		ExecutiveSummaryError: execSummaryErr,
+		Labels:                execLabels,
 	}
 }
 
@@ -551,6 +561,52 @@ func stripActionMarkerFromTimeline(timelineService *services.TimelineService, ex
 		if updateErr := timelineService.UpdateTimelineEvent(context.Background(), evt.ID, evtCleaned); updateErr != nil {
 			logger.Warn("Failed to strip action marker from timeline event",
 				"event_id", evt.ID, "event_type", evt.EventType, "error", updateErr)
+		}
+	}
+}
+
+func cloneLabelsPtr(in *[]string) *[]string {
+	if in == nil {
+		return nil
+	}
+	out := slices.Clone(*in)
+	if out == nil {
+		out = []string{}
+	}
+	return &out
+}
+
+// stripLabelsFromTimeline removes a valid LABELS trailer from final_analysis
+// and llm_response timeline events for the given execution.
+func stripLabelsFromTimeline(timelineService *services.TimelineService, executionID string, m config.LabelMap, logger *slog.Logger) {
+	if executionID == "" {
+		return
+	}
+	events, err := timelineService.GetAgentTimeline(context.Background(), executionID)
+	if err != nil {
+		logger.Warn("Failed to get timeline for labels cleanup", "execution_id", executionID, "error", err)
+		return
+	}
+	for _, evt := range events {
+		if evt.EventType != timelineevent.EventTypeFinalAnalysis && evt.EventType != timelineevent.EventTypeLlmResponse {
+			continue
+		}
+		ext := controller.ExtractLabels(evt.Content, m)
+		if !ext.Valid {
+			continue
+		}
+		if ext.HasTrailer && ext.Cleaned != "" {
+			if updateErr := timelineService.UpdateTimelineEvent(context.Background(), evt.ID, ext.Cleaned); updateErr != nil {
+				logger.Warn("Failed to strip LABELS trailer from timeline event",
+					"event_id", evt.ID, "event_type", evt.EventType, "error", updateErr)
+			}
+			continue
+		}
+		if ext.HasTrailer || strings.TrimSpace(evt.Content) == "" {
+			if delErr := timelineService.DeleteTimelineEvent(context.Background(), evt.ID); delErr != nil {
+				logger.Warn("Failed to delete empty LABELS-only timeline event",
+					"event_id", evt.ID, "event_type", evt.EventType, "error", delErr)
+			}
 		}
 	}
 }
@@ -725,6 +781,7 @@ func (e *RealSessionExecutor) executeResolvedAgent(
 		SummarizationFallbackProviders: agent.ResolveSummarizationFallback(e.cfg),
 		ComposeUpstreamReport:          input.composeUpstreamReport,
 		ComposeActionMemo:              input.composeActionMemo,
+		LabelMap:                       input.labelMap,
 		Services: &agent.ServiceBundle{
 			Timeline:    input.timelineService,
 			Message:     input.messageService,
@@ -867,6 +924,7 @@ func (e *RealSessionExecutor) executeResolvedAgent(
 			executionID:     exec.ID,
 			status:          agent.ExecutionStatusFailed,
 			finalAnalysis:   result.FinalAnalysis,
+			labels:          cloneLabelsPtr(result.Labels),
 			err:             fmt.Errorf("agent completed but status update failed: %w", updateErr),
 			llmBackend:      resolvedBackend,
 			llmProviderName: resolvedConfig.LLMProviderName,
@@ -879,6 +937,7 @@ func (e *RealSessionExecutor) executeResolvedAgent(
 		executionID:     exec.ID,
 		status:          result.Status,
 		finalAnalysis:   result.FinalAnalysis,
+		labels:          cloneLabelsPtr(result.Labels),
 		err:             result.Error,
 		llmBackend:      resolvedBackend,
 		llmProviderName: resolvedConfig.LLMProviderName,
