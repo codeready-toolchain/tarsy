@@ -71,7 +71,7 @@ Provider prompt caching (`system.prompt_caching`) is enabled by default. When on
 
 Named LLM fallback lists (`fallback_lists` + `fallback_list`) let each job bind a cost/quality preference instead of sharing one global walk. Deprecated inline `fallback_providers` still loads. See [ADR-0030: Named Fallback Lists](../../docs/adr/0030-named-fallback-lists.md).
 
-Session labels (`label_maps` + `label_map`) are a closed list of tags the executive-summary LLM copies from the investigation. Zero YAML injects a reserved `builtin` map (`watch` / `action` / `noise`, exclusive). YAML `label_maps.builtin` fully replaces that map (no merge). `defaults.label_map` and `chain.label_map` are last-non-empty selectors (empty ≡ `builtin`); they are not knobs on the `executive_summary` job block. `multi: false` (default) allows at most one label; `multi: true` allows a unique subset.
+Session labels (`label_maps` + `label_map`) are a closed list of tags the executive-summary LLM copies from the investigation. Zero YAML injects a reserved `builtin` map (`watch` / `action` / `noise`, exclusive). YAML `label_maps.builtin` fully replaces that map (no merge). `defaults.label_map` and `chain.label_map` are last-non-empty selectors (empty ≡ `builtin`); they are not knobs on the `executive_summary` job block. `multi: false` (default) allows at most one label; `multi: true` allows a unique subset. See [ADR-0031: Session Labels](../../docs/adr/0031-session-labels.md).
 
 ```yaml
 label_maps:

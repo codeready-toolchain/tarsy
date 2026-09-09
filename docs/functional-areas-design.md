@@ -153,7 +153,7 @@ queue:
 - `RealSessionExecutor.Execute()` orchestrates the full chain lifecycle
 - Resolves chain config, downloads runbook, iterates stages
 - After each successful action stage with an upstream investigation/synthesis/compose report, inserts an automatic `compose` sibling (fail-open; mechanical concat on LLM failure)
-- Extracts final analysis (last non-empty investigation/synthesis/action/compose), runs executive summary as a typed `exec_summary` stage via SingleShotController (fail-open). The exec-summary controller parses a last-line `LABELS:` trailer, strips it on success, and the worker writes canonical `session.labels`.
+- Extracts final analysis (last non-empty investigation/synthesis/action/compose), runs executive summary as a typed `exec_summary` stage via SingleShotController (fail-open). The exec-summary controller parses a last-line `LABELS:` trailer, strips it on success, and the worker writes canonical `session.labels`. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - Maps context errors to session status (timed_out / cancelled)
 
 **Key Implementation Files**:
@@ -203,7 +203,7 @@ graph TB
 - **Agent definitions**: Custom agents with MCP servers, instructions, and skill scoping
 - **Chain definitions**: Multi-stage workflows with alert type mappings
 - **Named fallback lists**: Top-level `fallback_lists` catalog; call sites select with `fallback_list` (see [ADR-0030](adr/0030-named-fallback-lists.md))
-- **Named label maps**: Top-level `label_maps` catalog; `defaults.label_map` / `chain.label_map` select a map (empty ≡ `builtin`). This is a session-level selector next to `fallback_list`, not a field on the `executive_summary` job block.
+- **Named label maps**: Top-level `label_maps` catalog; `defaults.label_map` / `chain.label_map` select a map (empty ≡ `builtin`). This is a session-level selector next to `fallback_list`, not a field on the `executive_summary` job block. See [ADR-0031](adr/0031-session-labels.md).
 - **MCP server configurations**: Custom tool servers with transport, masking, summarization
 - **Skill definitions**: `skills/*/SKILL.md` (directory layout) or `skills/*` (flat file layout for Kubernetes ConfigMap mounts) with YAML frontmatter (name, description) and Markdown body — loaded at startup, available on-demand via `load_skill` tool
 - **Override support**: YAML definitions override built-in components with same name/ID
@@ -495,6 +495,7 @@ Dedicated controller for session quality evaluation. Orchestrated by `ScoringExe
 ScoringExecutor.ScoreSession(sessionID)
   → Gather investigation context
     (stages: investigation + exec_summary + action; synthesis results attached via parent reference; compose *output* appended as one extra document, compose *process* omitted)
+    (persisted executive_summary footer + stored labels; no label-map catalog — see [ADR-0031](adr/0031-session-labels.md))
   → Create scoring Stage + AgentExecution records
   → ScoringController.Run()
     → Turn 1: Outcome-first evaluation (5 dimensions → holistic score) → total_score (0–100) + score_analysis + failure_tags
@@ -593,7 +594,7 @@ This auto-injection pattern means custom agents with sub-agents or `type: action
 - `BuildForcedConclusionPrompt()` -- force answer at max iterations
 - `ComposeInstructions()` / `ComposeChatInstructions()` -- instruction composition
 - `BuildMCPSummarizationSystemPrompt()` / `BuildMCPSummarizationUserPrompt()` -- tool result summarization
-- `BuildExecutiveSummarySystemPrompt()` / `BuildExecutiveSummaryUserPrompt()` -- executive summary
+- `BuildExecutiveSummarySystemPrompt()` / `BuildExecutiveSummaryUserPrompt()` -- executive summary (user prompt includes LABELS layers 1–4 from the active label map; see [ADR-0031](adr/0031-session-labels.md))
 - `BuildComposeSystemPrompt()` / `BuildComposeUserPrompt()` -- format-agnostic copy-edit of upstream report + action memo
 
 #### Forced Conclusion
@@ -1001,7 +1002,7 @@ AlertSession (session metadata, status, alert data)
 #### Key Entity Fields
 
 **AlertSession** (`ent/schema/alertsession.go`):
-`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels), `mcp_selection`, `author`, `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps
+`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels; GIN `idx_alert_sessions_labels_gin` for `label=` contains), `mcp_selection`, `author`, `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps
 
 **Stage** (`ent/schema/stage.go`):
 `id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
@@ -1094,7 +1095,7 @@ graph TB
 - Spawns one goroutine per message (no pool -- chats are rare, one-at-a-time per chat enforced)
 - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
 - Creates Stage (type: `chat`) and AgentExecution records (reusing existing audit trail infrastructure)
-- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only).
+- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only). The posted `executive_summary` is a footer; the exec-summary stage is skipped; session `labels` are not injected. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - Runs `agent.Execute()` with same controllers as investigation
 
 **Chat Service** (`pkg/services/chat_service.go`):
@@ -1159,10 +1160,10 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Orchestrator sub-agents**: `parent_execution_id` on timeline events and WS payloads enables the dashboard to partition sub-agent events without cross-referencing. `SubAgentCard` components render inline in the orchestrator's timeline; trace view nests sub-agents as tabs within the orchestrator panel.
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
-- **Session labels**: Historical list rows and session detail show stored `labels` as chips. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. Triage has no label query param.
+- **Session labels**: Historical list rows and session detail show stored `labels` as chips. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. Triage has no label query param. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 - **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`. Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). Usage totals and by-model include cache-read / cache-creation SUMs (session list / header / `ExecutionOverview` do not). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
-- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status), `system.prompt_caching.enabled`, the `fallback_lists` catalog, the `label_maps` catalog (including injected `builtin`), `defaults.agents` pairing, nested `compose` / `executive_summary` job blocks, and raw `fallback_list` / `label_map` selectors (no per-agent expanded walks). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), and [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md).
+- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status), `system.prompt_caching.enabled`, the `fallback_lists` catalog, the `label_maps` catalog (including injected `builtin`), `defaults.agents` pairing, nested `compose` / `executive_summary` job blocks, and raw `fallback_list` / `label_map` selectors (no per-agent expanded walks). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md), and [ADR-0031: Session Labels](adr/0031-session-labels.md).
 
 #### Text Search
 

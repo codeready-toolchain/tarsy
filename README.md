@@ -158,13 +158,13 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `GET /metrics` -- Prometheus metrics endpoint
 
 ### Sessions
-- `GET /api/v1/sessions` -- List sessions with filtering and pagination
+- `GET /api/v1/sessions` -- List sessions with filtering and pagination (`label=` contains a stored session label)
 - `GET /api/v1/sessions/active` -- Currently active sessions
-- `GET /api/v1/sessions/filter-options` -- Available filter values
+- `GET /api/v1/sessions/filter-options` -- Available filter values (alert types, chain IDs, statuses, stored labels)
 - `GET /api/v1/sessions/:id` -- Session detail with chronological timeline
 - `GET /api/v1/sessions/:id/summary` -- Session statistics, token usage, estimated cost (when enabled), chain stats, and score (if available)
 - `GET /api/v1/usage/summary` -- Fleet usage aggregates for a date window (tokens + estimated cost when enabled)
-- `GET /api/v1/sessions/:id/status` -- Lightweight polling status (id, status, final_analysis, executive_summary, error_message)
+- `GET /api/v1/sessions/:id/status` -- Lightweight polling status (id, status, final_analysis, executive_summary, labels, error_message)
 - `POST /api/v1/sessions/:id/cancel` -- Cancel an active or paused session
 
 ### Chat

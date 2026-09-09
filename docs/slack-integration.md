@@ -57,7 +57,7 @@ All notifications use Slack Block Kit for rich formatting with emoji status indi
 | Timed Out | :hourglass: | Analysis Timed Out |
 | Cancelled | :no_entry_sign: | Analysis Cancelled |
 
-Content selection for completed sessions: executive summary (preferred) -> final analysis (fallback) -> status + dashboard link only. Text blocks are truncated at 2900 characters.
+Content selection for completed sessions: executive summary (preferred) -> final analysis (fallback) -> status + dashboard link only. Text blocks are truncated at 2900 characters. A successful `LABELS:` trailer is stripped from the stored executive summary before Slack posts it; TARSy does not emit Slack usergroup markup. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 
 ## Setup Instructions
 
