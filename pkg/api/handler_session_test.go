@@ -19,6 +19,7 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 		query   string
 		wantErr int
 		errMsg  string
+		exact   bool
 	}{
 		{
 			name:    "invalid sort_by",
@@ -68,6 +69,27 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			wantErr: http.StatusBadRequest,
 			errMsg:  "invalid quality_rating",
 		},
+		{
+			name:    "invalid label starts with digit",
+			query:   "label=1bad",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label: must match [A-Za-z][A-Za-z0-9_-]*",
+			exact:   true,
+		},
+		{
+			name:    "invalid label starts with hyphen",
+			query:   "label=-page",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label: must match [A-Za-z][A-Za-z0-9_-]*",
+			exact:   true,
+		},
+		{
+			name:    "invalid label contains comma",
+			query:   "label=page,watch",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label: must match [A-Za-z][A-Za-z0-9_-]*",
+			exact:   true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,7 +104,11 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 				he, ok := err.(*echo.HTTPError)
 				if assert.True(t, ok, "expected echo.HTTPError") {
 					assert.Equal(t, tt.wantErr, he.Code)
-					assert.Contains(t, he.Message, tt.errMsg)
+					if tt.exact {
+						assert.Equal(t, tt.errMsg, he.Message)
+					} else {
+						assert.Contains(t, he.Message, tt.errMsg)
+					}
 				}
 			}
 		})
@@ -107,6 +133,31 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 					if ok {
 						assert.NotContains(t, he.Message, "invalid sort_by",
 							"sort_by=%s should be accepted", v)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("valid label values pass validation", func(t *testing.T) {
+		validValues := []string{"page", "false_positive", "Watch"}
+		for _, v := range validValues {
+			t.Run(v, func(t *testing.T) {
+				e := echo.New()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions?label="+v, nil)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+
+				err := func() (retErr error) {
+					defer func() { recover() }()
+					return s.listSessionsHandler(c)
+				}()
+
+				if err != nil {
+					he, ok := err.(*echo.HTTPError)
+					if ok {
+						assert.NotContains(t, he.Message, "invalid label",
+							"label=%s should be accepted", v)
 					}
 				}
 			})

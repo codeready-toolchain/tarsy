@@ -87,6 +87,7 @@ export interface FilterOptionsResponse {
   alert_types: string[];
   chain_ids: string[];
   statuses: string[];
+  labels: string[];
 }
 
 // ── Health endpoint types (matches pkg/api/responses.go, pkg/database/health.go, pkg/queue/types.go) ──

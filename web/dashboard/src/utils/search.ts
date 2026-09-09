@@ -41,6 +41,7 @@ export function hasActiveFilters(filters: SessionFilter): boolean {
       filters.start_date ||
       filters.end_date ||
       filters.date_preset ||
-      filters.scoring_status,
+      filters.scoring_status ||
+      filters.label,
   );
 }

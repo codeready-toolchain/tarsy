@@ -142,6 +142,7 @@ beforeEach(() => {
     alert_types: ['kubernetes'],
     chain_ids: ['default'],
     statuses: [],
+    labels: [],
   });
 });
 

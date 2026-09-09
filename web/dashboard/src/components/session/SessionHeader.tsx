@@ -26,6 +26,7 @@ import {
 import CopyButton from '../shared/CopyButton';
 import { AlertDataContent } from './OriginalAlertCard';
 import { StatusBadge } from '../common/StatusBadge';
+import { SessionLabelChips } from '../common/SessionLabelChips';
 import ProgressIndicator from '../common/ProgressIndicator';
 import { formatTimestamp, formatTokensCompact } from '../../utils/format';
 import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
@@ -197,6 +198,7 @@ export default function SessionHeader({
               {session.alert_type || 'Alert Processing'}
             </Typography>
             <StatusBadge status={session.status} />
+            <SessionLabelChips labels={session.labels} />
             <Typography variant="body2" color="text.disabled">·</Typography>
             <ProgressIndicator
               status={session.status}

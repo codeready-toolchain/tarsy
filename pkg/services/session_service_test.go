@@ -2844,6 +2844,165 @@ func TestSessionService_ListSessionsForDashboard_MixedSearchSources(t *testing.T
 	})
 }
 
+func TestSessionService_ListSessionsForDashboard_LabelFilter(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	idPage := seedDashboardSession(t, client.Client, "page-only", "pod-crash", "k8s-analysis", 10, 5, 15, 0)
+	time.Sleep(10 * time.Millisecond)
+	idMulti := seedDashboardSession(t, client.Client, "multi", "oom-kill", "k8s-analysis", 20, 10, 30, 0)
+	time.Sleep(10 * time.Millisecond)
+	idEmpty := seedDashboardSession(t, client.Client, "empty-labels", "pod-crash", "k8s-analysis", 30, 15, 45, 0)
+	time.Sleep(10 * time.Millisecond)
+	idNull := seedDashboardSession(t, client.Client, "null-labels", "pod-crash", "k8s-analysis", 40, 20, 60, 0)
+
+	client.AlertSession.UpdateOneID(idPage).SetLabels([]string{"page"}).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idMulti).SetLabels([]string{"watch", "page"}).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idEmpty).SetLabels([]string{}).ExecX(ctx)
+
+	listParams := models.DashboardListParams{
+		Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+	}
+
+	t.Run("contains match includes single and multi arrays", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label: "page",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 2)
+		assert.Equal(t, 2, result.Pagination.TotalItems)
+		ids := map[string]bool{result.Sessions[0].ID: true, result.Sessions[1].ID: true}
+		assert.True(t, ids[idPage] && ids[idMulti])
+	})
+
+	t.Run("null and empty arrays are excluded", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label: "page",
+		})
+		require.NoError(t, err)
+		for _, s := range result.Sessions {
+			assert.NotEqual(t, idEmpty, s.ID)
+			assert.NotEqual(t, idNull, s.ID)
+		}
+	})
+
+	t.Run("match is case-sensitive", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label: "Page",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Sessions)
+	})
+
+	t.Run("combined with alert_type", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label:     "page",
+			AlertType: "oom-kill",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, idMulti, result.Sessions[0].ID)
+	})
+
+	t.Run("unknown token returns empty", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label: "noise",
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Sessions)
+		assert.Equal(t, 0, result.Pagination.TotalItems)
+	})
+
+	t.Run("list json null vs empty vs populated", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, listParams)
+		require.NoError(t, err)
+
+		byID := make(map[string]models.DashboardSessionItem, len(result.Sessions))
+		for _, s := range result.Sessions {
+			byID[s.ID] = s
+		}
+
+		require.Contains(t, byID, idNull)
+		assert.Nil(t, byID[idNull].Labels)
+		rawNull, err := json.Marshal(byID[idNull])
+		require.NoError(t, err)
+		assert.Contains(t, string(rawNull), `"labels":null`)
+
+		require.Contains(t, byID, idEmpty)
+		require.NotNil(t, byID[idEmpty].Labels)
+		assert.Empty(t, byID[idEmpty].Labels)
+		rawEmpty, err := json.Marshal(byID[idEmpty])
+		require.NoError(t, err)
+		assert.Contains(t, string(rawEmpty), `"labels":[]`)
+
+		require.Contains(t, byID, idPage)
+		assert.Equal(t, []string{"page"}, byID[idPage].Labels)
+		rawPage, err := json.Marshal(byID[idPage])
+		require.NoError(t, err)
+		assert.Contains(t, string(rawPage), `"labels":["page"]`)
+	})
+}
+
+func TestUnmarshalLabels(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want []string
+	}{
+		{name: "nil bytes", in: nil, want: nil},
+		{name: "empty bytes", in: []byte{}, want: nil},
+		{name: "json null", in: []byte("null"), want: nil},
+		{name: "empty array", in: []byte("[]"), want: []string{}},
+		{name: "populated", in: []byte(`["page"]`), want: []string{"page"}},
+		{name: "invalid json", in: []byte("{"), want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := unmarshalLabels(tt.in)
+			if tt.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSessionService_GetDistinctLabels(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	empty, err := service.GetDistinctLabels(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, empty)
+	assert.Empty(t, empty)
+
+	idA := seedDashboardSession(t, client.Client, "a", "type-a", "k8s-analysis", 10, 5, 15, 0)
+	idB := seedDashboardSession(t, client.Client, "b", "type-b", "k8s-analysis", 10, 5, 15, 0)
+	idEmpty := seedDashboardSession(t, client.Client, "empty", "type-a", "k8s-analysis", 10, 5, 15, 0)
+	_ = seedDashboardSession(t, client.Client, "null", "type-a", "k8s-analysis", 10, 5, 15, 0)
+	idDeleted := seedDashboardSession(t, client.Client, "deleted", "type-a", "k8s-analysis", 10, 5, 15, 0)
+
+	client.AlertSession.UpdateOneID(idA).SetLabels([]string{"page"}).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idB).SetLabels([]string{"action", "page"}).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idEmpty).SetLabels([]string{}).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idDeleted).
+		SetLabels([]string{"noise"}).
+		SetDeletedAt(time.Now()).
+		ExecX(ctx)
+
+	labels, err := service.GetDistinctLabels(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"action", "page"}, labels)
+}
+
 func TestSessionService_GetDistinctAlertTypes(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)

@@ -66,6 +66,7 @@ type DashboardListParams struct {
 	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, reviewed
 	Assignee      string     `json:"assignee"`       // exact match filter
 	QualityRating string     `json:"quality_rating"` // accurate, partially_accurate, inaccurate
+	Label         string     `json:"label"`          // exact canonical name; labels JSON contains
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
@@ -81,6 +82,7 @@ type DashboardSessionItem struct {
 	DurationMs            *int64           `json:"duration_ms"`
 	ErrorMessage          *string          `json:"error_message"`
 	ExecutiveSummary      *string          `json:"executive_summary"`
+	Labels                []string         `json:"labels"`
 	LLMInteractionCount   int              `json:"llm_interaction_count"`
 	MCPInteractionCount   int              `json:"mcp_interaction_count"`
 	InputTokens           int64            `json:"input_tokens"`

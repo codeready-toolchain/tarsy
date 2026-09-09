@@ -109,6 +109,9 @@ function buildQueryParams(
   if (filters.scoring_status) {
     params.scoring_status = filters.scoring_status;
   }
+  if (filters.label) {
+    params.label = filters.label;
+  }
 
   return params;
 }

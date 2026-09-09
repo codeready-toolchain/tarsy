@@ -18,6 +18,7 @@ export interface DashboardSessionItem {
   duration_ms: number | null;
   error_message: string | null;
   executive_summary: string | null;
+  labels: string[] | null;
   llm_interaction_count: number;
   mcp_interaction_count: number;
   input_tokens: number;

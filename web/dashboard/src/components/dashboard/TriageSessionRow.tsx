@@ -20,6 +20,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
+import { SessionLabelChips } from '../common/SessionLabelChips.tsx';
 import { SummaryTooltip } from './SummaryTooltip.tsx';
 import { ScoreCell } from './ScoreCell.tsx';
 import { ReviewCell } from './ReviewCell.tsx';
@@ -107,9 +108,10 @@ export function TriageSessionRow({
         </TableCell>
       )}
       <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <StatusBadge status={session.status} size="small" />
           <SummaryTooltip summary={session.executive_summary ?? ''} />
+          <SessionLabelChips labels={session.labels} />
         </Box>
       </TableCell>
 

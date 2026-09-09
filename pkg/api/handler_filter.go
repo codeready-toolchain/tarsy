@@ -13,6 +13,7 @@ type FilterOptionsResponse struct {
 	AlertTypes []string `json:"alert_types"`
 	ChainIDs   []string `json:"chain_ids"`
 	Statuses   []string `json:"statuses"`
+	Labels     []string `json:"labels"`
 }
 
 // filterOptionsHandler handles GET /api/v1/sessions/filter-options.
@@ -25,6 +26,11 @@ func (s *Server) filterOptionsHandler(c *echo.Context) error {
 	}
 
 	chainIDs, err := s.sessionService.GetDistinctChainIDs(ctx)
+	if err != nil {
+		return mapServiceError(err)
+	}
+
+	labels, err := s.sessionService.GetDistinctLabels(ctx)
 	if err != nil {
 		return mapServiceError(err)
 	}
@@ -45,5 +51,6 @@ func (s *Server) filterOptionsHandler(c *echo.Context) error {
 		AlertTypes: alertTypes,
 		ChainIDs:   chainIDs,
 		Statuses:   statuses,
+		Labels:     labels,
 	})
 }

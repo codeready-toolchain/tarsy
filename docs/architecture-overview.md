@@ -186,7 +186,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 ### 9. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
-- **Session list** with filtering by status, alert type, chain, date range, and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index)
+- **Session list** with filtering by status, alert type, chain, date range, session labels (`label=` JSON contains), and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index). Historical list and session detail show stored `labels` as chips.
 - **In-session search** for terminated sessions — client-side substring matching with highlight, auto-expand of collapsed stages, and match navigation
 - **Session deep links** — shareable `/sessions/:id?stage=…[&event=…]` URLs that expand the target stage/event and scroll to it (copy-link affordances on the timeline; no backend API changes). See [ADR-0021: Session Deep Links](adr/0021-session-deep-links.md)
 - **Conversation timeline** with real-time LLM streaming (thinking, tool calls, final answers)
@@ -196,7 +196,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, failure tags, tool improvement report), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
 - **Usage page** (`/usage`) for date-window fleet token and estimated-cost dig-in; soft Est. $ next to tokens on list/detail/execution surfaces when cost estimation is enabled
-- **System status page** with MCP server health and a read-only Config Viewer tab (includes the `fallback_lists` catalog and raw `fallback_list` selectors)
+- **System status page** with MCP server health and a read-only Config Viewer tab (includes the `fallback_lists` catalog and raw `fallback_list` selectors, and the `label_maps` catalog and raw `label_map` selectors)
 - **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `reviewed`), self-claim assignment, complete with `quality_rating` and `action_taken`, and real-time updates via `review.status` WebSocket events
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 

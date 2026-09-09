@@ -106,6 +106,7 @@ describe('hasActiveFilters', () => {
     end_date: null,
     date_preset: null,
     scoring_status: '',
+    label: '',
   };
 
   it('returns false for default filters', () => {
@@ -138,6 +139,10 @@ describe('hasActiveFilters', () => {
 
   it('returns true when scoring_status is set', () => {
     expect(hasActiveFilters({ ...defaultFilters, scoring_status: 'scored' })).toBe(true);
+  });
+
+  it('returns true when label is set', () => {
+    expect(hasActiveFilters({ ...defaultFilters, label: 'page' })).toBe(true);
   });
 
   it('returns true when start_date is set', () => {
