@@ -59,7 +59,7 @@ Main configuration file containing:
 
 - **`system:`** - Infrastructure settings (GitHub, runbooks, Slack, retention, **cost estimation**, **prompt caching**)
 - **`fallback_lists:`** - Named reusable LLM fallback catalogs (selected via `fallback_list`)
-- **`label_maps:`** - Named session-label catalogs (selected via `defaults.label_map` / `chain.label_map`; empty ≡ `builtin`)
+- **`label_maps:`** - Named session-label catalogs (selected via last-non-empty `defaults.label_map` / `chain.label_map`; all empty → `builtin`)
 - **`defaults:`** - System-wide default values
 - **`mcp_servers:`** - MCP server configurations
 - **`agents:`** - Custom agent definitions (or overrides), including optional `skills` and `required_skills`
@@ -71,7 +71,7 @@ Provider prompt caching (`system.prompt_caching`) is enabled by default. When on
 
 Named LLM fallback lists (`fallback_lists` + `fallback_list`) let each job bind a cost/quality preference instead of sharing one global walk. Deprecated inline `fallback_providers` still loads. See [ADR-0030: Named Fallback Lists](../../docs/adr/0030-named-fallback-lists.md).
 
-Session labels (`label_maps` + `label_map`) are a closed list of tags the executive-summary LLM copies from the investigation. Zero YAML injects a reserved `builtin` map (`watch` / `action` / `noise`, exclusive). YAML `label_maps.builtin` fully replaces that map (no merge). `defaults.label_map` and `chain.label_map` are last-non-empty selectors (empty ≡ `builtin`); they are not knobs on the `executive_summary` job block. `multi: false` (default) allows at most one label; `multi: true` allows a unique subset. See [ADR-0031: Session Labels](../../docs/adr/0031-session-labels.md).
+Session labels (`label_maps` + `label_map`) are a closed list of tags the executive-summary LLM copies from the investigation. Zero YAML injects a reserved `builtin` map (`watch` / `action` / `noise`, exclusive). YAML `label_maps.builtin` fully replaces that map (no merge). `defaults.label_map` and `chain.label_map` are last-non-empty selectors: an empty `chain.label_map` inherits the preceding non-empty selector; `builtin` is the default only when all selectors are empty. `label_map: builtin` is an explicit opt-back, not the same as empty. They are not knobs on the `executive_summary` job block. `multi: false` (default) allows at most one label; `multi: true` allows a unique subset. See [ADR-0031: Session Labels](../../docs/adr/0031-session-labels.md).
 
 ```yaml
 label_maps:

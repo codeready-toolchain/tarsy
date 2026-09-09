@@ -168,8 +168,10 @@ system:
 # =============================================================================
 # Closed vocabularies for session labels (exec-summary last-line LABELS trailer).
 # Zero YAML injects reserved builtin watch/action/noise (exclusive). Select with
-# defaults.label_map / chain.label_map (empty ≡ builtin). YAML label_maps.builtin
-# fully replaces the Go default (no merge). See docs/adr/0031-session-labels.md.
+# last-non-empty defaults.label_map / chain.label_map (empty inherits; all empty
+# → builtin). label_map: builtin is an explicit opt-back, not the same as empty.
+# YAML label_maps.builtin fully replaces the Go default (no merge).
+# See docs/adr/0031-session-labels.md.
 #
 # label_maps:
 #   oncall:

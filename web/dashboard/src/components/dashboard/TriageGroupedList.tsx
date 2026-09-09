@@ -417,8 +417,8 @@ export function TriageGroupedList({
                               />
                             </TableCell>
                           )}
-                          <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                          <TableCell sx={{ width: 130, px: 0.5, textAlign: 'right' }}>
+                          <TableCell sx={{ fontWeight: 600, width: '1%', pr: 3 }}>Status</TableCell>
+                          <TableCell sx={{ width: 130, pl: 1.5, pr: 0.5, textAlign: 'right' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                               <Tooltip title="Parallel Agents" arrow>
                                 <CallSplit aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
@@ -438,6 +438,7 @@ export function TriageGroupedList({
                             </Box>
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                          <TableCell sx={{ fontWeight: 600, width: '1%', whiteSpace: 'nowrap' }}>Labels</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Submitted by</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Assignee</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>

@@ -16,7 +16,7 @@ TARSy does **not** translate custom labels into the builtin three, emit Slack us
 
 1. **Mechanism vs policy.** The schema is generic tags (`labels` + `label_maps`). Builtin policy is exclusive attention. Cardinality is a map field TARSy owns (`multi`), not a prose instruction the parser cannot enforce.
 2. **Encode, do not re-judge.** The investigation (and compose, when present) already classified the incident. Exec summary copies that into zero or more labels from the active list.
-3. **Builtin is a named catalog entry.** Reserved name `builtin`. Zero YAML injects the Go map under that key. YAML `label_maps.builtin` **fully replaces** it (no merge). Empty `label_map` and `label_map: builtin` are the same selector. Format (layer 4) stays a TARSy template keyed by `multi`.
+3. **Builtin is a named catalog entry.** Reserved name `builtin`. Zero YAML injects the Go map under that key. YAML `label_maps.builtin` **fully replaces** it (no merge). Empty / omitted `label_map` inherits the preceding non-empty selector; all empty → `builtin`. `label_map: builtin` is an explicit selector, not the same as empty. Format (layer 4) stays a TARSy template keyed by `multi`.
 4. **Preserve label order.** Map entries are a sequence (YAML list), never an unordered string map.
 5. **Fail-open.** A `LABELS:` line that still does not parse after one reminder does not fail the session. `labels` stays null; the **first** summary is stored as-is (no strip). No `LABELS:` line after a completed summary is `[]`. A valid empty `LABELS:` is also `[]`, but the prompt does not ask for it.
 6. **Reuse existing contracts.** Last-line parse + strip-on-success, session column, `GET /sessions/:id/status` as the poll surface. No dedicated labeling agent in v1.
@@ -99,7 +99,7 @@ After YAML load: if `label_maps` has no `builtin` key, inject the Go map (attent
 
 ### Builtin map
 
-SRE-generic. **`multi: false`.** This is **what to do with the alert**, not `actions_executed` and not `needs_review`. Used when the selector is empty or `builtin`, unless YAML replaced `label_maps.builtin`.
+SRE-generic. **`multi: false`.** This is **what to do with the alert**, not `actions_executed` and not `needs_review`. Used when all selectors are empty or the resolved name is `builtin`, unless YAML replaced `label_maps.builtin`.
 
 There is no `none` / `ignore` label. **`[]` is not a close verdict.** Omit the `LABELS:` line when none of the three apply (unclassified, or remaining work that is not `watch` / `action` / `noise` — for example “file a backlog ticket” as the actual next step). Operators must still read the summary before closing when labels are empty or null.
 

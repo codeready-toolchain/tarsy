@@ -107,15 +107,14 @@ export function TriageSessionRow({
           />
         </TableCell>
       )}
-      <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      <TableCell sx={{ width: '1%', whiteSpace: 'nowrap', pr: 3 }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
           <StatusBadge status={session.status} size="small" />
           <SummaryTooltip summary={session.executive_summary ?? ''} />
-          <SessionLabelChips labels={session.labels} />
         </Box>
       </TableCell>
 
-      <TableCell sx={{ width: 130, textAlign: 'right', px: 0.5 }}>
+      <TableCell sx={{ width: 130, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">
@@ -160,6 +159,10 @@ export function TriageSessionRow({
         <Typography variant="body2" fontWeight={500} noWrap>
           {session.alert_type ?? '—'}
         </Typography>
+      </TableCell>
+
+      <TableCell sx={{ width: '1%', whiteSpace: 'nowrap' }}>
+        <SessionLabelChips labels={session.labels} />
       </TableCell>
 
       {/* Author */}

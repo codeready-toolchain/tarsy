@@ -197,8 +197,8 @@ export default function SessionHeader({
             >
               {session.alert_type || 'Alert Processing'}
             </Typography>
-            <StatusBadge status={session.status} />
             <SessionLabelChips labels={session.labels} />
+            <StatusBadge status={session.status} />
             <Typography variant="body2" color="text.disabled">·</Typography>
             <ProgressIndicator
               status={session.status}
