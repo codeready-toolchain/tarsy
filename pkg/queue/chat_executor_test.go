@@ -10,6 +10,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
@@ -443,6 +444,10 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 	chatService := services.NewChatService(client.Client)
 
 	session := createChatTestSession(t, client.Client)
+	session, err := session.Update().
+		SetExecutiveSummary("POSTED-SUMMARY").
+		Save(ctx)
+	require.NoError(t, err)
 
 	// 1. Investigation stage with an agent execution and timeline event.
 	investStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{
@@ -503,6 +508,15 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 		SequenceNumber: 1,
 		EventType:      "final_analysis",
 		Content:        "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
+	})
+	require.NoError(t, err)
+
+	_, err = timelineService.CreateTimelineEvent(ctx, models.CreateTimelineEventRequest{
+		SessionID:      session.ID,
+		SequenceNumber: 99,
+		EventType:      timelineevent.EventTypeExecutiveSummary,
+		Status:         timelineevent.StatusCompleted,
+		Content:        "LEGACY-TIMELINE-SUMMARY",
 	})
 	require.NoError(t, err)
 
@@ -592,6 +606,27 @@ func TestChatMessageExecutor_BuildChatContext_StageTypeRouting(t *testing.T) {
 		"previous chat answer should appear in context")
 	assert.NotContains(t, result.InvestigationContext, "EXEC-SUMMARY-SHOULD-NOT-APPEAR",
 		"exec_summary stage should be skipped by default branch")
+	assert.Contains(t, result.InvestigationContext, "## Executive Summary",
+		"posted executive summary should appear as a footer")
+	assert.Contains(t, result.InvestigationContext, "POSTED-SUMMARY",
+		"footer should use the session column, not the exec_summary stage")
+	assert.NotContains(t, result.InvestigationContext, "LEGACY-TIMELINE-SUMMARY",
+		"legacy executive_summary timeline event must not populate the footer")
+
+	session.ExecutiveSummary = nil
+	resultNull := executor.buildChatContext(ctx, ChatExecuteInput{
+		Chat:    chat,
+		Message: curMsg,
+		Session: session,
+	})
+	assert.Contains(t, resultNull.InvestigationContext, "INVESTIGATION-FINDINGS")
+	assert.NotContains(t, resultNull.InvestigationContext, "## Executive Summary",
+		"null session column must omit the posted-summary footer")
+	assert.NotContains(t, resultNull.InvestigationContext, "LEGACY-TIMELINE-SUMMARY",
+		"legacy executive_summary timeline event must not substitute for a null column")
+
+	posted := "POSTED-SUMMARY"
+	session.ExecutiveSummary = &posted
 
 	// Compose document stage + action memo that must stay skipped.
 	composeStage, err := stageService.CreateStage(ctx, models.CreateStageRequest{

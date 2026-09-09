@@ -164,6 +164,10 @@ Investigation complete: pod-1 is OOMKilled with 5 restarts.
 
 Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.
 
+## Executive Summary
+
+Pod-1 OOMKilled due to memory pressure. Recommend increasing memory limit.
+
 
 </investigation_context>
 

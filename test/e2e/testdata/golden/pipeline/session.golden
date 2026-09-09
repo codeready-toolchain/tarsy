@@ -19,7 +19,7 @@
   "duration_ms": {DURATION_MS},
   "error_message": null,
   "estimated_cost_usd": 0,
-  "executive_summary": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+  "executive_summary": "Set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
   "executive_summary_error": null,
   "failed_stages": 0,
   "feedback_edited": false,

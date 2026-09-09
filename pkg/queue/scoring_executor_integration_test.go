@@ -862,20 +862,33 @@ func TestScoringExecutor_BuildScoringContext_ExecutiveSummary(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	// Session-level executive summary event (no stage/execution)
 	_, err = entClient.TimelineEvent.Create().
 		SetID(uuid.New().String()).
 		SetSessionID(session.ID).
 		SetSequenceNumber(1).
 		SetEventType(timelineevent.EventTypeExecutiveSummary).
-		SetContent("Overall: memory leak in pod-2 caused cascading failures").
+		SetContent("LEGACY-TIMELINE-SUMMARY").
 		SetStatus(timelineevent.StatusCompleted).
 		SetMetadata(map[string]interface{}{}).
 		Save(ctx)
 	require.NoError(t, err)
 
+	session, err = session.Update().
+		SetExecutiveSummary("Overall: memory leak in pod-2 caused cascading failures").
+		Save(ctx)
+	require.NoError(t, err)
+
 	result := executor.buildScoringContext(ctx, session)
 	assertGolden(t, "context_executive_summary", result)
+	assert.NotContains(t, result, "LEGACY-TIMELINE-SUMMARY",
+		"legacy executive_summary timeline event must not populate the footer")
+
+	session.ExecutiveSummary = nil
+	resultNull := executor.buildScoringContext(ctx, session)
+	assert.NotContains(t, resultNull, "## Executive Summary",
+		"null session column must omit the posted-summary footer")
+	assert.NotContains(t, resultNull, "LEGACY-TIMELINE-SUMMARY",
+		"legacy executive_summary timeline event must not substitute for a null column")
 }
 
 func TestScoringExecutor_BuildScoringContext_OrchestratedStage(t *testing.T) {
@@ -1141,15 +1154,8 @@ func TestScoringExecutor_BuildScoringContext_FullPipeline(t *testing.T) {
 		},
 	})
 
-	// Session-level executive summary
-	_, err := entClient.TimelineEvent.Create().
-		SetID(uuid.New().String()).
-		SetSessionID(session.ID).
-		SetSequenceNumber(1).
-		SetEventType(timelineevent.EventTypeExecutiveSummary).
-		SetContent("Executive: memory leak caused cascading pod failures").
-		SetStatus(timelineevent.StatusCompleted).
-		SetMetadata(map[string]interface{}{}).
+	session, err := session.Update().
+		SetExecutiveSummary("Executive: memory leak caused cascading pod failures").
 		Save(ctx)
 	require.NoError(t, err)
 

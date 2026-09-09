@@ -9,7 +9,7 @@
     "messages_count": 2
   },
   "llm_response": {
-    "text_length": 71,
+    "text_length": 56,
     "tool_calls_count": 0
   },
   "model_name": "test-model-fast",
@@ -38,5 +38,5 @@ Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
 Executive Summary (1-4 lines, facts only):
 
 === MESSAGE: assistant ===
-Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.
+Set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
 
