@@ -43,6 +43,10 @@ type ChainConfig struct {
 	// omitted inherits the next less-specific layer.
 	FallbackList string `yaml:"fallback_list,omitempty"`
 
+	// Named label_maps catalog entry for this chain. Empty / omitted inherits
+	// defaults.label_map. Explicit builtin wins over a custom defaults selector.
+	LabelMap string `yaml:"label_map,omitempty"`
+
 	// Chain-level fallback providers override.
 	// Deprecated: use fallback_lists + fallback_list. Still honored when
 	// fallback_list is unset. Mixing both on this node is a load-time error.

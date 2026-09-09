@@ -20,6 +20,7 @@ type SystemConfigResponse struct {
 	Queue         *QueueView                            `json:"queue"`
 	System        SystemView                            `json:"system"`
 	FallbackLists map[string][]CatalogFallbackEntryView `json:"fallback_lists"`
+	LabelMaps     map[string]LabelMapView               `json:"label_maps"`
 	Agents        map[string]AgentView                  `json:"agents"`
 	Chains        map[string]ChainView                  `json:"chains"`
 	MCPServers    map[string]MCPServerView              `json:"mcp_servers"`
@@ -88,6 +89,7 @@ type ChainView struct {
 	Compose           *JobPairingView        `json:"compose,omitempty"`
 	LLMBackend        string                 `json:"llm_backend,omitempty"`
 	FallbackList      string                 `json:"fallback_list,omitempty"`
+	LabelMap          string                 `json:"label_map,omitempty"`
 	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
 	MaxIterations     *int                   `json:"max_iterations,omitempty"`
 	MCPServers        []string               `json:"mcp_servers,omitempty"`
@@ -139,6 +141,19 @@ type SubAgentView struct {
 type CatalogFallbackEntryView struct {
 	LLMProvider string `json:"llm_provider"`
 	LLMBackend  string `json:"llm_backend"`
+}
+
+// LabelMapView is one label_maps catalog entry (matches catalog YAML).
+type LabelMapView struct {
+	Multi        bool            `json:"multi"`
+	Instructions string          `json:"instructions"`
+	Labels       []LabelSpecView `json:"labels"`
+}
+
+// LabelSpecView is one label in a LabelMapView.
+type LabelSpecView struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
 }
 
 // FallbackProviderView is a deprecated fallback_providers entry (matches inline YAML).
@@ -231,6 +246,7 @@ type DefaultsView struct {
 	MaxIterations     *int                             `json:"max_iterations,omitempty"`
 	LLMBackend        string                           `json:"llm_backend,omitempty"`
 	FallbackList      string                           `json:"fallback_list,omitempty"`
+	LabelMap          string                           `json:"label_map,omitempty"`
 	FallbackProviders []FallbackProviderView           `json:"fallback_providers,omitempty"`
 	Scoring           *ScoringView                     `json:"scoring,omitempty"`
 	Summarization     *SummarizationView               `json:"summarization,omitempty"`
@@ -361,6 +377,7 @@ type RetentionView struct {
 func buildSystemConfigResponse(cfg *config.Config, costBook *cost.Book) SystemConfigResponse {
 	resp := SystemConfigResponse{
 		FallbackLists: map[string][]CatalogFallbackEntryView{},
+		LabelMaps:     map[string]LabelMapView{},
 		Agents:        map[string]AgentView{},
 		Chains:        map[string]ChainView{},
 		MCPServers:    map[string]MCPServerView{},
@@ -375,6 +392,7 @@ func buildSystemConfigResponse(cfg *config.Config, costBook *cost.Book) SystemCo
 	}
 
 	resp.FallbackLists = buildFallbackLists(cfg.FallbackLists)
+	resp.LabelMaps = buildLabelMaps(cfg.LabelMaps)
 	resp.Defaults = buildDefaultsView(cfg.Defaults)
 	resp.Queue = buildQueueView(cfg.Queue)
 	resp.System = buildSystemView(cfg, costBook)
@@ -437,6 +455,7 @@ func buildDefaultsView(d *config.Defaults) *DefaultsView {
 		MaxIterations:     d.MaxIterations,
 		LLMBackend:        string(d.LLMBackend),
 		FallbackList:      d.FallbackList,
+		LabelMap:          d.LabelMap,
 		FallbackProviders: buildFallbackProviders(d.FallbackProviders),
 		Scoring:           buildScoringView(d.Scoring),
 		Summarization:     buildSummarizationView(d.Summarization),
@@ -687,6 +706,7 @@ func buildChainView(c *config.ChainConfig) ChainView {
 		Compose:           buildJobPairingView(c.Compose),
 		LLMBackend:        string(c.LLMBackend),
 		FallbackList:      c.FallbackList,
+		LabelMap:          c.LabelMap,
 		FallbackProviders: buildFallbackProviders(c.FallbackProviders),
 		MaxIterations:     c.MaxIterations,
 		MCPServers:        c.MCPServers,
@@ -835,6 +855,32 @@ func buildFallbackLists(lists map[string][]config.FallbackProviderEntry) map[str
 		}
 	}
 	return out
+}
+
+func buildLabelMaps(catalog map[string]config.LabelMap) map[string]LabelMapView {
+	out := make(map[string]LabelMapView, len(catalog))
+	if catalog == nil {
+		return out
+	}
+	for _, name := range sortedKeys(catalog) {
+		out[name] = buildLabelMapView(catalog[name])
+	}
+	return out
+}
+
+func buildLabelMapView(m config.LabelMap) LabelMapView {
+	labels := make([]LabelSpecView, 0, len(m.Labels))
+	for _, spec := range m.Labels {
+		labels = append(labels, LabelSpecView{
+			Label:       spec.Label,
+			Description: spec.Description,
+		})
+	}
+	return LabelMapView{
+		Multi:        m.Multi,
+		Instructions: m.Instructions,
+		Labels:       labels,
+	}
 }
 
 func buildNamedAgentPairingViews(agents map[string]config.NamedAgentPairing) map[string]NamedAgentPairingView {

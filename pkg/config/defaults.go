@@ -27,6 +27,10 @@ type Defaults struct {
 	// resolve time. Empty / omitted inherits nothing (this is the root layer).
 	FallbackList string `yaml:"fallback_list,omitempty"`
 
+	// Named label_maps catalog entry for session labels. Empty / omitted
+	// inherits the next less-specific layer (empty at defaults → builtin).
+	LabelMap string `yaml:"label_map,omitempty"`
+
 	// Ordered list of fallback providers to try when the primary provider fails.
 	// Deprecated: use fallback_lists + fallback_list. Still honored when
 	// fallback_list is unset. Mixing both on this node is a load-time error.

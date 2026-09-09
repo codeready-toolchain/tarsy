@@ -229,6 +229,18 @@ function StructuredConfig({ config }: { config: SystemConfigResponse }) {
         )}
       </ConfigSection>
 
+      <ConfigSection title="Label maps" count={Object.keys(config.label_maps).length}>
+        {Object.keys(config.label_maps).length === 0 ? (
+          <EmptyNote />
+        ) : (
+          Object.entries(config.label_maps).map(([name, entry]) => (
+            <NamedEntry key={name} name={name}>
+              <KeyValueBlock data={entry} />
+            </NamedEntry>
+          ))
+        )}
+      </ConfigSection>
+
       <ConfigSection title="Queue" count={config.queue ? 1 : 0}>
         {config.queue ? <KeyValueBlock data={config.queue} /> : <EmptyNote />}
       </ConfigSection>
@@ -545,6 +557,7 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       <Field label="llm_provider" value={chain.llm_provider} />
       <Field label="llm_backend" value={chain.llm_backend} />
       <Field label="fallback_list" value={chain.fallback_list} />
+      <Field label="label_map" value={chain.label_map} />
       <Field label="max_iterations" value={chain.max_iterations} />
       <Field label="mcp_servers" value={<ChipList items={chain.mcp_servers} />} />
       <Box sx={{ mt: 1 }}>

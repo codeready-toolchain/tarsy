@@ -26,6 +26,7 @@ function makeConfig(
       prompt_caching: { enabled: promptCachingEnabled },
     },
     fallback_lists: {},
+    label_maps: {},
     agents: {},
     chains: {},
     mcp_servers: {},
@@ -71,5 +72,26 @@ describe('ConfigViewer fallback lists', () => {
 
     await user.click(await screen.findByText('Fallback lists'));
     expect(await screen.findByText('premium')).toBeInTheDocument();
+  });
+});
+
+describe('ConfigViewer label maps', () => {
+  it('shows a catalog name under Label maps', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        label_maps: {
+          builtin: {
+            multi: false,
+            instructions: 'Apply at most one label.',
+            labels: [{ label: 'watch', description: 'Look again if it persists.' }],
+          },
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('Label maps'));
+    expect(await screen.findByText('builtin')).toBeInTheDocument();
   });
 });

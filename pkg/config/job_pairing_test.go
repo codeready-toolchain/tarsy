@@ -212,6 +212,11 @@ stages:
 				yamlSrc: "backend: google-native\n",
 				wantErr: `unknown field "backend" (did you mean "llm_backend"?)`,
 			},
+			{
+				name:    "label_map is not a pairing field",
+				yamlSrc: "label_map: ops-attention\n",
+				wantErr: `unknown field "label_map"`,
+			},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,6 +52,14 @@ func TestInitialize(t *testing.T) {
 	assert.Greater(t, stats.Chains, 0)
 	assert.Greater(t, stats.MCPServers, 0)
 	assert.Greater(t, stats.LLMProviders, 0)
+
+	require.Contains(t, cfg.LabelMaps, LabelMapBuiltin)
+	assert.False(t, cfg.LabelMaps[LabelMapBuiltin].Multi)
+	assert.Equal(t, []string{"watch", "action", "noise"}, []string{
+		cfg.LabelMaps[LabelMapBuiltin].Labels[0].Label,
+		cfg.LabelMaps[LabelMapBuiltin].Labels[1].Label,
+		cfg.LabelMaps[LabelMapBuiltin].Labels[2].Label,
+	})
 }
 
 func TestInitializeConfigNotFound(t *testing.T) {
@@ -114,6 +124,32 @@ agent_chains:
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validation failed")
 	assert.Contains(t, err.Error(), "NonexistentAgent")
+}
+
+func TestInitialize_UnknownLabelMap(t *testing.T) {
+	configDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(`
+defaults:
+  llm_provider: "google-default"
+  label_map: ghost
+agents: {}
+agent_chains: {}
+`), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(configDir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644)
+	require.NoError(t, err)
+
+	t.Setenv("GOOGLE_API_KEY", "test-key")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("XAI_API_KEY", "test-key")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+	t.Setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+	_, err = Initialize(t.Context(), configDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "configuration validation failed")
+	assert.Contains(t, err.Error(), `unknown label map "ghost"`)
 }
 
 func TestInitialize_ChatOmitsEnabledAndAgent(t *testing.T) {
@@ -1616,6 +1652,205 @@ agent_chains: {}
 		assert.Equal(t, LLMBackendLangChain, agent.LLMBackend)
 		assert.Empty(t, agent.LLMProvider,
 			"agents: yaml llm_provider must not bind; pairing belongs in defaults.agents")
+	})
+}
+
+func TestLoadTarsyYAML_LabelMaps(t *testing.T) {
+	writeLoad := func(t *testing.T, tarsyYAML string) *Config {
+		t.Helper()
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+		cfg, err := load(t.Context(), dir)
+		require.NoError(t, err)
+		return cfg
+	}
+
+	t.Run("omitted catalog injects builtin", func(t *testing.T) {
+		cfg := writeLoad(t, `
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`)
+		require.Len(t, cfg.LabelMaps, 1)
+		require.Contains(t, cfg.LabelMaps, LabelMapBuiltin)
+		assert.False(t, cfg.LabelMaps[LabelMapBuiltin].Multi)
+		assert.Equal(t, []string{"watch", "action", "noise"}, labelNames(cfg.LabelMaps[LabelMapBuiltin]))
+		assert.Empty(t, cfg.Defaults.LabelMap)
+	})
+
+	t.Run("empty catalog injects builtin", func(t *testing.T) {
+		cfg := writeLoad(t, `
+label_maps: {}
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`)
+		require.Len(t, cfg.LabelMaps, 1)
+		require.Contains(t, cfg.LabelMaps, LabelMapBuiltin)
+		assert.Equal(t, []string{"watch", "action", "noise"}, labelNames(cfg.LabelMaps[LabelMapBuiltin]))
+	})
+
+	t.Run("custom map plus injected builtin", func(t *testing.T) {
+		cfg := writeLoad(t, `
+label_maps:
+  ops-attention:
+    instructions: |
+      Prefer Classification from the analysis.
+    labels:
+      - label: monitor
+        description: No intervention now.
+      - label: page
+        description: Page the on-call.
+      - label: false_positive
+        description: Close with no action.
+
+defaults:
+  llm_provider: "test-provider"
+  label_map: ops-attention
+
+agents:
+  test-agent:
+    mcp_servers: []
+
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    label_map: builtin
+    stages:
+      - name: "stage1"
+        agents:
+          - name: "test-agent"
+`)
+		require.Len(t, cfg.LabelMaps, 2)
+		require.Contains(t, cfg.LabelMaps, LabelMapBuiltin)
+		require.Contains(t, cfg.LabelMaps, "ops-attention")
+		assert.False(t, cfg.LabelMaps["ops-attention"].Multi)
+		assert.Equal(t, []string{"monitor", "page", "false_positive"}, labelNames(cfg.LabelMaps["ops-attention"]))
+		assert.Equal(t, "ops-attention", cfg.Defaults.LabelMap)
+		chain, err := cfg.GetChain("test-chain")
+		require.NoError(t, err)
+		assert.Equal(t, LabelMapBuiltin, chain.LabelMap)
+
+		resolved, err := ResolveLabelMap(cfg.LabelMaps, cfg.Defaults.LabelMap, chain.LabelMap)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"watch", "action", "noise"}, labelNames(resolved))
+	})
+
+	t.Run("multi omitted defaults false and order preserved", func(t *testing.T) {
+		cfg := writeLoad(t, `
+label_maps:
+  ops-tags:
+    labels:
+      - label: zebra
+        description: last alphabetically
+      - label: apple
+        description: first alphabetically
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`)
+		m := cfg.LabelMaps["ops-tags"]
+		assert.False(t, m.Multi)
+		assert.Equal(t, []string{"zebra", "apple"}, labelNames(m))
+	})
+
+	t.Run("multi true", func(t *testing.T) {
+		cfg := writeLoad(t, `
+label_maps:
+  ops-tags:
+    multi: true
+    labels:
+      - label: watch
+        description: Look again.
+      - label: page
+        description: Intervene.
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`)
+		assert.True(t, cfg.LabelMaps["ops-tags"].Multi)
+	})
+
+	t.Run("YAML builtin is full replace and warns", func(t *testing.T) {
+		var buf bytes.Buffer
+		old := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		t.Cleanup(func() { slog.SetDefault(old) })
+
+		cfg := writeLoad(t, `
+label_maps:
+  builtin:
+    instructions: Custom only.
+    labels:
+      - label: monitor
+        description: Look
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`)
+		m := cfg.LabelMaps[LabelMapBuiltin]
+		assert.Equal(t, "Custom only.", m.Instructions)
+		assert.Equal(t, []string{"monitor"}, labelNames(m))
+		assert.NotContains(t, m.Instructions, "prefer watch over action")
+		assert.Contains(t, buf.String(), "label_maps.builtin in YAML fully replaces the built-in watch/action/noise map")
+	})
+
+	t.Run("YAML builtin without instructions is empty not Go essay", func(t *testing.T) {
+		cfg := writeLoad(t, `
+label_maps:
+  builtin:
+    labels:
+      - label: monitor
+        description: Look
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`)
+		m := cfg.LabelMaps[LabelMapBuiltin]
+		assert.Empty(t, m.Instructions)
+		assert.Equal(t, []string{"monitor"}, labelNames(m))
+	})
+
+	t.Run("rejects name instead of label", func(t *testing.T) {
+		dir := t.TempDir()
+		tarsyYAML := `
+label_maps:
+  ops:
+    labels:
+      - name: page
+        description: Page the on-call.
+defaults:
+  llm_provider: "test-provider"
+agents:
+  test-agent:
+    mcp_servers: []
+agent_chains: {}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+
+		_, err := load(t.Context(), dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown field "name" (did you mean "label"?)`)
 	})
 }
 

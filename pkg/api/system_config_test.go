@@ -158,6 +158,8 @@ func TestSystemConfigHandler(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 		assert.NotNil(t, resp.FallbackLists)
 		assert.Empty(t, resp.FallbackLists)
+		assert.NotNil(t, resp.LabelMaps)
+		assert.Empty(t, resp.LabelMaps)
 		assert.NotNil(t, resp.Agents)
 		assert.Empty(t, resp.Agents)
 		assert.NotNil(t, resp.Chains)
@@ -885,6 +887,7 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 		require.NoError(t, err)
 		defaultsBody := string(rawDefaults)
 		assert.NotContains(t, defaultsBody, `"fallback_list"`)
+		assert.NotContains(t, defaultsBody, `"label_map"`)
 		assert.NotContains(t, defaultsBody, `"llm_backend"`)
 		assert.NotContains(t, defaultsBody, `"compose_provider"`)
 		assert.NotContains(t, defaultsBody, `"executive_summary"`)
@@ -898,8 +901,96 @@ func TestBuildSystemConfigResponse_NamedFallbackLists(t *testing.T) {
 		require.NoError(t, err)
 		chainBody := string(chainRaw)
 		assert.NotContains(t, chainBody, `"fallback_list"`)
+		assert.NotContains(t, chainBody, `"label_map"`)
 		assert.NotContains(t, chainBody, `"compose"`)
 		assert.NotContains(t, chainBody, `"executive_summary"`)
+	})
+}
+
+func TestBuildSystemConfigResponse_LabelMaps(t *testing.T) {
+	t.Run("emits catalog including builtin and raw selectors", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			LabelMaps: map[string]config.LabelMap{
+				config.LabelMapBuiltin: config.BuiltinLabelMap(),
+				"ops-attention": {
+					Multi:        false,
+					Instructions: "Prefer Classification.",
+					Labels: []config.LabelSpec{
+						{Label: "monitor", Description: "Look"},
+						{Label: "page", Description: "Page the on-call."},
+					},
+				},
+			},
+			Defaults: &config.Defaults{
+				LabelMap: "ops-attention",
+			},
+			ChainRegistry: config.NewChainRegistry(map[string]*config.ChainConfig{
+				"main": {
+					AlertTypes: []string{"TestAlert"},
+					LabelMap:   config.LabelMapBuiltin,
+					Stages: []config.StageConfig{
+						{Name: "investigate", Agents: []config.StageAgentConfig{{Name: "Worker"}}},
+					},
+				},
+			}),
+		}, nil)
+
+		require.Contains(t, resp.LabelMaps, "builtin")
+		require.Contains(t, resp.LabelMaps, "ops-attention")
+		assert.False(t, resp.LabelMaps["builtin"].Multi)
+		assert.Equal(t, []string{"watch", "action", "noise"}, []string{
+			resp.LabelMaps["builtin"].Labels[0].Label,
+			resp.LabelMaps["builtin"].Labels[1].Label,
+			resp.LabelMaps["builtin"].Labels[2].Label,
+		})
+		assert.Equal(t, "ops-attention", resp.Defaults.LabelMap)
+		require.Contains(t, resp.Chains, "main")
+		assert.Equal(t, "builtin", resp.Chains["main"].LabelMap)
+
+		raw, err := json.Marshal(resp.LabelMaps["ops-attention"])
+		require.NoError(t, err)
+		assert.JSONEq(t, `{
+			"multi": false,
+			"instructions": "Prefer Classification.",
+			"labels": [
+				{"label": "monitor", "description": "Look"},
+				{"label": "page", "description": "Page the on-call."}
+			]
+		}`, string(raw))
+	})
+
+	t.Run("empty instructions and nil labels stay present in JSON", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			LabelMaps: map[string]config.LabelMap{
+				"ops": {Multi: false},
+			},
+		}, nil)
+		raw, err := json.Marshal(resp.LabelMaps["ops"])
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"multi":false,"instructions":"","labels":[]}`, string(raw))
+	})
+
+	t.Run("empty catalogs emit JSON empty object", func(t *testing.T) {
+		tests := []struct {
+			name string
+			maps map[string]config.LabelMap
+		}{
+			{name: "nil"},
+			{name: "empty map", maps: map[string]config.LabelMap{}},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				resp := buildSystemConfigResponse(&config.Config{LabelMaps: tt.maps}, nil)
+				require.NotNil(t, resp.LabelMaps)
+				assert.Empty(t, resp.LabelMaps)
+
+				raw, err := json.Marshal(resp)
+				require.NoError(t, err)
+				var decoded map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(raw, &decoded))
+				assert.JSONEq(t, `{}`, string(decoded["label_maps"]))
+			})
+		}
 	})
 }
 

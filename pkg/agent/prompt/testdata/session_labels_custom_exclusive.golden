@@ -1,0 +1,17 @@
+Encode the session using only labels from the map below. Do not invent labels or a new verdict. The 1-4 line executive summary body stays facts-only.
+
+Prefer Classification and Recommended Action from the analysis.
+Do not invent labels outside this list.
+
+Labels (in order):
+- monitor:
+  MONITOR. No intervention now; look again if it persists.
+- page:
+  PAGE. A human must intervene on the affected system now.
+- false_positive:
+  Close with no action. Detector was wrong or the event is expected.
+
+If one label applies, last line exactly:
+LABELS: <one exact label from the list>
+Copy the label as written. Nothing after that line.
+If none apply, do not add a LABELS line.

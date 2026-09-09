@@ -507,6 +507,12 @@ func TestDashboardEndpoints(t *testing.T) {
 		require.True(t, ok, "fallback_lists should be a map")
 		assert.Empty(t, fallbackLists)
 
+		labelMaps, ok := cfg["label_maps"].(map[string]interface{})
+		require.True(t, ok, "label_maps should be a map")
+		builtin, ok := labelMaps["builtin"].(map[string]interface{})
+		require.True(t, ok, "injected builtin label map should be present")
+		assert.Equal(t, false, builtin["multi"])
+
 		chains, ok := cfg["chains"].(map[string]interface{})
 		require.True(t, ok, "chains should be a map")
 		concurrency, ok := chains["concurrency-chain"].(map[string]interface{})
