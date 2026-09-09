@@ -19,7 +19,7 @@
   "duration_ms": {DURATION_MS},
   "error_message": null,
   "estimated_cost_usd": 0,
-  "executive_summary": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+  "executive_summary": "Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit.",
   "executive_summary_error": null,
   "failed_stages": 0,
   "feedback_edited": false,

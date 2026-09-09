@@ -238,7 +238,7 @@ Both replicas confirm: set HPA to 70% CPU with min=2, max=5 replicas for pod-1.
 
 ## Executive Summary
 
-Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.
+Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit.
 
 
 ═══════════════════════════════════════════════════════════════════════════════

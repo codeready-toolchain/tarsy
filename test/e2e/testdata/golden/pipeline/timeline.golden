@@ -307,14 +307,14 @@
   },
   {
     "agent": "ExecSummaryAgent",
-    "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+    "content": "Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit.",
     "event_type": "llm_response",
     "sequence": 1,
     "status": "completed"
   },
   {
     "agent": "ExecSummaryAgent",
-    "content": "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit.",
+    "content": "Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit.",
     "event_type": "final_analysis",
     "metadata": {
       "interaction_type": "executive_summary"

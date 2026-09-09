@@ -180,7 +180,7 @@ func TestE2E_Pipeline(t *testing.T) {
 	})
 
 	// ── Executive summary ──
-	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed due to memory leak. Recommend increasing memory limit."})
+	llm.AddSequential(LLMScriptEntry{Text: "Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit."})
 
 	// ── Chat 1: "What caused the OOM?" — google-native with test-mcp tool call ──
 	// Iteration 1: thinking + text + tool call to test-mcp/get_pods.
