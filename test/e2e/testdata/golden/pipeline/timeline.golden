@@ -307,14 +307,14 @@
   },
   {
     "agent": "ExecSummaryAgent",
-    "content": "Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit.",
+    "content": "Set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
     "event_type": "llm_response",
     "sequence": 1,
     "status": "completed"
   },
   {
     "agent": "ExecSummaryAgent",
-    "content": "Pod-1 OOM killed after exceeding the 512Mi memory limit (5 restarts). Recommend increasing the memory limit.",
+    "content": "Set HPA to 70% CPU with min=2, max=5 replicas for pod-1.",
     "event_type": "final_analysis",
     "metadata": {
       "interaction_type": "executive_summary"
