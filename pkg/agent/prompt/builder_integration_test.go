@@ -420,6 +420,78 @@ func TestIntegration_ExecutiveSummary(t *testing.T) {
 	assertGolden(t, "executive_summary", combined)
 }
 
+func TestIntegration_SessionLabelLayers(t *testing.T) {
+	t.Run("builtin", func(t *testing.T) {
+		got := FormatSessionLabelLayers(config.BuiltinLabelMap())
+		assertGolden(t, "session_labels_builtin", got)
+		assert.Contains(t, got, "prefer watch over action")
+		assert.Contains(t, got, "Do not use when")
+		assert.NotContains(t, got, sessionLabelLayer2Generic)
+	})
+
+	t.Run("custom exclusive", func(t *testing.T) {
+		m := config.LabelMap{
+			Multi: false,
+			Instructions: `Prefer Classification and Recommended Action from the analysis.
+Do not invent labels outside this list.`,
+			Labels: []config.LabelSpec{
+				{Label: "monitor", Description: "MONITOR. No intervention now; look again if it persists."},
+				{Label: "page", Description: "PAGE. A human must intervene on the affected system now."},
+				{Label: "false_positive", Description: "Close with no action. Detector was wrong or the event is expected."},
+			},
+		}
+		got := FormatSessionLabelLayers(m)
+		assertGolden(t, "session_labels_custom_exclusive", got)
+		assert.NotContains(t, got, "- watch:")
+		assert.NotContains(t, got, "- action:")
+		assert.NotContains(t, got, "- noise:")
+		assert.NotContains(t, got, "prefer watch over action")
+		assert.Contains(t, got, sessionLabelLayer4Exclusive)
+	})
+
+	t.Run("multi", func(t *testing.T) {
+		m := config.LabelMap{
+			Multi: true,
+			Labels: []config.LabelSpec{
+				{Label: "watch", Description: "Subject still looks off; look again if it persists."},
+				{Label: "page", Description: "Page the on-call; human intervention needed now."},
+				{Label: "modify_detection_rules", Description: "Detection should be tuned; does not imply paging."},
+			},
+		}
+		got := FormatSessionLabelLayers(m)
+		assertGolden(t, "session_labels_multi", got)
+		assert.Contains(t, got, sessionLabelLayer2Generic)
+		assert.Contains(t, got, sessionLabelLayer4Multi)
+		assert.NotContains(t, got, sessionLabelLayer4Exclusive)
+	})
+
+	t.Run("empty instructions uses generic matcher not Go essay", func(t *testing.T) {
+		m := config.LabelMap{
+			Multi: false,
+			Labels: []config.LabelSpec{
+				{Label: "watch", Description: "Look again if it persists."},
+			},
+		}
+		got := FormatSessionLabelLayers(m)
+		assert.Contains(t, got, sessionLabelLayer2Generic)
+		assert.NotContains(t, got, config.BuiltinLabelMap().Instructions)
+		assert.NotContains(t, got, "prefer watch over action")
+	})
+
+	t.Run("whitespace-only instructions uses generic matcher", func(t *testing.T) {
+		m := config.LabelMap{
+			Multi:        false,
+			Instructions: "   \n",
+			Labels: []config.LabelSpec{
+				{Label: "watch", Description: "Look again if it persists."},
+			},
+		}
+		got := FormatSessionLabelLayers(m)
+		assert.Contains(t, got, sessionLabelLayer2Generic)
+		assert.NotContains(t, got, "prefer watch over action")
+	})
+}
+
 func TestIntegration_Compose(t *testing.T) {
 	builder := newIntegrationBuilder()
 

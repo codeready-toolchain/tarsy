@@ -1,0 +1,16 @@
+Encode the session using only labels from the map below. Do not invent labels or a new verdict. The 1-4 line executive summary body stays facts-only.
+
+Apply the label(s) whose descriptions best match the analysis. If none match, omit the LABELS line.
+
+Labels (in order):
+- watch:
+  Subject still looks off; look again if it persists.
+- page:
+  Page the on-call; human intervention needed now.
+- modify_detection_rules:
+  Detection should be tuned; does not imply paging.
+
+If any labels apply, last line exactly:
+LABELS: <comma-separated unique labels from the list>
+Only labels from the list. Nothing after that line.
+If none apply, do not add a LABELS line.

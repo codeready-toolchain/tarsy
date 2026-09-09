@@ -10,6 +10,10 @@ type Config struct {
 	// not the YAML struct. Omitted catalog is nil.
 	FallbackLists map[string][]FallbackProviderEntry
 
+	// Named label maps (catalog). After load(), always non-nil and contains
+	// builtin (Go-injected or a full YAML replace).
+	LabelMaps map[string]LabelMap
+
 	// System-wide defaults
 	Defaults *Defaults
 

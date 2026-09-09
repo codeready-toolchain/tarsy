@@ -201,6 +201,17 @@ export interface CatalogFallbackEntryView {
   llm_backend: string;
 }
 
+export interface LabelSpecView {
+  label: string;
+  description: string;
+}
+
+export interface LabelMapView {
+  multi: boolean;
+  instructions: string;
+  labels: LabelSpecView[];
+}
+
 export interface FallbackProviderView {
   provider: string;
   backend: string;
@@ -288,6 +299,7 @@ export interface ChainConfigView {
   compose?: JobPairingView | null;
   llm_backend?: string;
   fallback_list?: string;
+  label_map?: string;
   fallback_providers?: FallbackProviderView[];
   max_iterations?: number | null;
   mcp_servers?: string[];
@@ -337,6 +349,7 @@ export interface DefaultsView {
   max_iterations?: number | null;
   llm_backend?: string;
   fallback_list?: string;
+  label_map?: string;
   fallback_providers?: FallbackProviderView[];
   scoring?: ScoringView | null;
   summarization?: SummarizationView | null;
@@ -418,6 +431,7 @@ export interface SystemConfigResponse {
   queue: QueueView | null;
   system: SystemSettingsView;
   fallback_lists: Record<string, CatalogFallbackEntryView[]>;
+  label_maps: Record<string, LabelMapView>;
   agents: Record<string, AgentConfigView>;
   chains: Record<string, ChainConfigView>;
   mcp_servers: Record<string, MCPServerConfigView>;

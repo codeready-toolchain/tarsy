@@ -5970,3 +5970,198 @@ func TestValidateAll_NamedFallbackLists(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestValidateLabelMaps(t *testing.T) {
+	one := func(label string) LabelMap {
+		return LabelMap{Labels: []LabelSpec{{Label: label, Description: "desc"}}}
+	}
+
+	tests := []struct {
+		name    string
+		cfg     *Config
+		wantErr string
+	}{
+		{
+			name: "nil catalog and empty selectors pass",
+			cfg:  &Config{Defaults: &Defaults{}},
+		},
+		{
+			name: "valid custom map and selectors",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{
+					LabelMapBuiltin:    BuiltinLabelMap(),
+					"ops-attention": one("page"),
+				},
+				Defaults: &Defaults{LabelMap: "ops-attention"},
+				ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+					"c1": {LabelMap: LabelMapBuiltin},
+				}),
+			},
+		},
+		{
+			name: "empty catalog key",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"": one("page")},
+			},
+			wantErr: "label_maps '': label map name must be non-empty",
+		},
+		{
+			name: "bad catalog key",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"bad name": one("page")},
+			},
+			wantErr: "label map name must match",
+		},
+		{
+			name: "empty labels",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"ops": {}},
+			},
+			wantErr: "at least one label is required",
+		},
+		{
+			name: "empty label token",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{
+					"ops": {Labels: []LabelSpec{{Label: "", Description: "desc"}}},
+				},
+			},
+			wantErr: "label must be non-empty",
+		},
+		{
+			name: "empty description",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{
+					"ops": {Labels: []LabelSpec{{Label: "page", Description: ""}}},
+				},
+			},
+			wantErr: "description must be non-empty",
+		},
+		{
+			name: "bad label token starts with digit",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"ops": one("2fa")},
+			},
+			wantErr: "label must match",
+		},
+		{
+			name: "bad label token comma",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"ops": one("page,watch")},
+			},
+			wantErr: "label must match",
+		},
+		{
+			name: "duplicate labels case-insensitive",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{
+					"ops": {Labels: []LabelSpec{
+						{Label: "watch", Description: "a"},
+						{Label: "Watch", Description: "b"},
+					}},
+				},
+			},
+			wantErr: `duplicate label "Watch"`,
+		},
+		{
+			name: "duplicate labels identical",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{
+					"ops": {Labels: []LabelSpec{
+						{Label: "page", Description: "a"},
+						{Label: "page", Description: "b"},
+					}},
+				},
+			},
+			wantErr: `duplicate label "page"`,
+		},
+		{
+			name: "catalog key starts with digit",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"2maps": one("page")},
+			},
+			wantErr: "label map name must match",
+		},
+		{
+			name: "unknown defaults selector",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"ops": one("page")},
+				Defaults:  &Defaults{LabelMap: "ghost"},
+			},
+			wantErr: `unknown label map "ghost"`,
+		},
+		{
+			name: "unknown chain selector",
+			cfg: &Config{
+				LabelMaps: map[string]LabelMap{"ops": one("page")},
+				ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+					"c1": {LabelMap: "ghost"},
+				}),
+			},
+			wantErr: `unknown label map "ghost"`,
+		},
+		{
+			name: "builtin selector without catalog key",
+			cfg: &Config{
+				Defaults: &Defaults{LabelMap: LabelMapBuiltin},
+			},
+			wantErr: `unknown label map "builtin"`,
+		},
+		{
+			name: "empty selector does not require builtin on hand-built config",
+			cfg: &Config{
+				Defaults: &Defaults{LabelMap: ""},
+				ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+					"c1": {LabelMap: ""},
+				}),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewValidator(tt.cfg).validateLabelMaps()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+func TestValidateAll_LabelMaps(t *testing.T) {
+	minimal := func(selector string, maps map[string]LabelMap) *Config {
+		return &Config{
+			Queue:     DefaultQueueConfig(),
+			Defaults:  &Defaults{LabelMap: selector},
+			LabelMaps: maps,
+			AgentRegistry: NewAgentRegistry(map[string]*AgentConfig{
+				"TestAgent": {},
+			}),
+			LLMProviderRegistry: NewLLMProviderRegistry(map[string]*LLMProviderConfig{}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			ChainRegistry: NewChainRegistry(map[string]*ChainConfig{
+				"chain1": {
+					AlertTypes: []string{"test"},
+					Stages:     []StageConfig{{Name: "s1", Agents: []StageAgentConfig{{Name: "TestAgent"}}}},
+				},
+			}),
+		}
+	}
+
+	t.Run("unknown selector fails ValidateAll", func(t *testing.T) {
+		err := NewValidator(minimal("ghost", map[string]LabelMap{})).ValidateAll()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "label map validation failed")
+		assert.Contains(t, err.Error(), `unknown label map "ghost"`)
+	})
+
+	t.Run("valid catalog passes ValidateAll", func(t *testing.T) {
+		err := NewValidator(minimal("ops-attention", map[string]LabelMap{
+			"ops-attention": {Labels: []LabelSpec{{Label: "page", Description: "Page the on-call."}}},
+		})).ValidateAll()
+		require.NoError(t, err)
+	})
+}

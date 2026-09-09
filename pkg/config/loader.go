@@ -21,6 +21,7 @@ type TarsyYAMLConfig struct {
 	Agents        map[string]AgentConfig             `yaml:"agents"`
 	AgentChains   map[string]ChainConfig             `yaml:"agent_chains"`
 	FallbackLists map[string][]FallbackProviderEntry `yaml:"-"`
+	LabelMaps     map[string]LabelMap                `yaml:"label_maps"`
 	Defaults      *Defaults                          `yaml:"defaults"`
 	Queue         *QueueConfig                       `yaml:"queue"`
 }
@@ -251,9 +252,15 @@ func load(_ context.Context, configDir string) (*Config, error) {
 	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
 	holidays := resolveHolidays(tarsyConfig.System)
 
+	labelMaps, yamlReplacedBuiltin := injectBuiltinLabelMap(tarsyConfig.LabelMaps)
+	if yamlReplacedBuiltin {
+		slog.Warn("label_maps.builtin in YAML fully replaces the built-in watch/action/noise map")
+	}
+
 	return &Config{
 		configDir:           configDir,
 		FallbackLists:       maps.Clone(tarsyConfig.FallbackLists),
+		LabelMaps:           labelMaps,
 		Defaults:            defaults,
 		Queue:               queueConfig,
 		GitHub:              githubCfg,

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -23,7 +24,7 @@ func NewValidator(cfg *Config) *Validator {
 // ValidateAll performs comprehensive validation (fail-fast - stops at first error)
 func (v *Validator) ValidateAll() error {
 	// Validate in order: queue → agents → MCP servers → fallback lists →
-	// LLM providers → chains. Dependencies are validated before dependents.
+	// label maps → LLM providers → chains. Dependencies are validated before dependents.
 
 	if err := v.validateQueue(); err != nil {
 		return fmt.Errorf("queue validation failed: %w", err)
@@ -43,6 +44,10 @@ func (v *Validator) ValidateAll() error {
 
 	if err := v.validateNamedFallbackLists(); err != nil {
 		return fmt.Errorf("fallback list validation failed: %w", err)
+	}
+
+	if err := v.validateLabelMaps(); err != nil {
+		return fmt.Errorf("label map validation failed: %w", err)
 	}
 
 	if err := v.validateLLMProviders(); err != nil {
@@ -1262,6 +1267,78 @@ func (v *Validator) validateFallbackSelector(listName string, inline []FallbackP
 	if _, ok := v.cfg.FallbackLists[listName]; !ok {
 		return NewValidationError(section, name, field,
 			fmt.Errorf("unknown fallback list %q", listName))
+	}
+	return nil
+}
+
+func (v *Validator) validateLabelMaps() error {
+	for name, m := range v.cfg.LabelMaps {
+		if err := v.validateLabelMapEntry(name, m); err != nil {
+			return err
+		}
+	}
+	if v.cfg.Defaults != nil {
+		if err := v.validateLabelMapSelector(v.cfg.Defaults.LabelMap, "defaults", "", "label_map"); err != nil {
+			return err
+		}
+	}
+	if v.cfg.ChainRegistry == nil {
+		return nil
+	}
+	for chainID, chain := range v.cfg.ChainRegistry.GetAll() {
+		if err := v.validateLabelMapSelector(chain.LabelMap, "chain", chainID, "label_map"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *Validator) validateLabelMapEntry(name string, m LabelMap) error {
+	if name == "" {
+		return NewValidationError("label_maps", "", "",
+			fmt.Errorf("label map name must be non-empty"))
+	}
+	if !ValidLabelToken(name) {
+		return NewValidationError("label_maps", name, "",
+			fmt.Errorf("label map name must match [A-Za-z][A-Za-z0-9_-]*"))
+	}
+	if len(m.Labels) == 0 {
+		return NewValidationError("label_maps", name, "labels",
+			fmt.Errorf("at least one label is required"))
+	}
+	seen := make(map[string]int, len(m.Labels))
+	for i, spec := range m.Labels {
+		field := fmt.Sprintf("labels[%d].label", i)
+		if spec.Label == "" {
+			return NewValidationError("label_maps", name, field,
+				fmt.Errorf("label must be non-empty"))
+		}
+		if !ValidLabelToken(spec.Label) {
+			return NewValidationError("label_maps", name, field,
+				fmt.Errorf("label must match [A-Za-z][A-Za-z0-9_-]*"))
+		}
+		key := strings.ToLower(spec.Label)
+		if prev, ok := seen[key]; ok {
+			return NewValidationError("label_maps", name, field,
+				fmt.Errorf("duplicate label %q (same as labels[%d])", spec.Label, prev))
+		}
+		seen[key] = i
+		descField := fmt.Sprintf("labels[%d].description", i)
+		if spec.Description == "" {
+			return NewValidationError("label_maps", name, descField,
+				fmt.Errorf("description must be non-empty"))
+		}
+	}
+	return nil
+}
+
+func (v *Validator) validateLabelMapSelector(selector, section, name, field string) error {
+	if selector == "" {
+		return nil
+	}
+	if _, ok := v.cfg.LabelMaps[selector]; !ok {
+		return NewValidationError(section, name, field,
+			fmt.Errorf("unknown label map %q", selector))
 	}
 	return nil
 }
