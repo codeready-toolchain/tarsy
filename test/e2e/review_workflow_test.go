@@ -81,6 +81,8 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 		return e.Type == "review.status" && e.Parsed["review_status"] == "in_progress"
 	}, 5*time.Second, "expected review.status in_progress WS event after claim")
 
+	assertSessionStatusReview(t, app.GetSessionStatus(t, sessionID), "in_progress", "api-client", nil, nil, nil)
+
 	// ── PATCH complete ──
 	completeResp := app.PatchReview(t, sessionID, map[string]interface{}{
 		"action":         "complete",
@@ -112,6 +114,9 @@ func TestE2E_ReviewWorkflow_CompletedSession(t *testing.T) {
 	require.NotNil(t, session.ActionTaken)
 	assert.Equal(t, "Verified and closed.", *session.ActionTaken)
 	assert.NotNil(t, session.ReviewedAt)
+
+	assertSessionStatusReview(t, app.GetSessionStatus(t, sessionID),
+		"reviewed", "api-client", "accurate", "Verified and closed.", nil)
 
 	// ── Review activity ──
 	activityResp := app.GetReviewActivity(t, sessionID)
@@ -212,6 +217,10 @@ func TestE2E_ReviewWorkflow_DirectComplete(t *testing.T) {
 	assert.Equal(t, "Good initial response, missed edge case.", *session.InvestigationFeedback)
 	assert.NotNil(t, session.ReviewedAt)
 	assert.NotNil(t, session.Assignee, "direct-complete should auto-assign")
+
+	assertSessionStatusReview(t, app.GetSessionStatus(t, sessionID),
+		"reviewed", "api-client", "partially_accurate",
+		"Acknowledged but needs follow-up.", "Good initial response, missed edge case.")
 
 	// ── Review activity: should have implicit claim + complete ──
 	activityResp := app.GetReviewActivity(t, sessionID)
@@ -403,6 +412,9 @@ func TestE2E_ReviewWorkflow_AcknowledgeSession(t *testing.T) {
 	assert.Nil(t, session.QualityRating, "acknowledge must not set quality_rating")
 	assert.NotNil(t, session.ReviewedAt)
 	assert.NotNil(t, session.Assignee, "acknowledge from needs_review should auto-assign")
+
+	assertSessionStatusReview(t, app.GetSessionStatus(t, sessionID),
+		"reviewed", "api-client", nil, nil, nil)
 
 	// ── Review activity: implicit claim + acknowledge ──
 	activityResp := app.GetReviewActivity(t, sessionID)

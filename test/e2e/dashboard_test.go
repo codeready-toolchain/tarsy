@@ -446,6 +446,7 @@ func TestDashboardEndpoints(t *testing.T) {
 		assert.Equal(t, expA.summaryText, status["executive_summary"])
 		assert.Equal(t, jsonStringSlice(expA.labels), status["labels"])
 		assert.Nil(t, status["error_message"])
+		assertSessionStatusReview(t, status, "needs_review", nil, nil, nil, nil)
 	})
 
 	// ── Session Status 404 ──

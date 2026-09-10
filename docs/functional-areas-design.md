@@ -1023,7 +1023,7 @@ AlertSession (session metadata, status, alert data)
 
 | Service | File | Purpose |
 |---------|------|---------|
-| `SessionService` | `pkg/services/session_service.go` | Session CRUD, status updates, pagination, FTS search across timeline content |
+| `SessionService` | `pkg/services/session_service.go` | Session CRUD, status poll (includes review columns), pagination, FTS search across timeline content |
 | `StageService` | `pkg/services/stage_service.go` | Stage lifecycle, parallel status aggregation, fallback metadata updates |
 | `TimelineService` | `pkg/services/timeline_service.go` | Timeline event CRUD, streaming updates |
 | `MessageService` | `pkg/services/message_service.go` | LLM conversation message storage |
@@ -1039,7 +1039,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types, chain IDs, and stored labels |
 | GET | `/api/v1/sessions/:id` | Session details (includes `labels`) |
 | GET | `/api/v1/sessions/:id/summary` | Final analysis + executive summary |
-| GET | `/api/v1/sessions/:id/status` | Lightweight polling status (id, status, final_analysis, executive_summary, labels, error_message) |
+| GET | `/api/v1/sessions/:id/status` | Lightweight poll (single `AlertSession` PK lookup): status, summaries, labels, `error_message`, and review fields |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
 | POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
 | GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, failure tags, tool improvement report) |
@@ -1055,6 +1055,8 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/triage/:group` | Per-group paginated triage view (investigating/needs_review/in_progress/reviewed) |
 | GET | `/api/v1/usage/summary` | Fleet usage aggregates for a date window (tokens + estimated cost when enabled) |
 | GET | `/health` | Health check (DB, worker pool) |
+
+`GET /sessions/:id/status` (`SessionStatusResponse`) is a single PK lookup on `AlertSession` — no stages, chat, token aggregates, or review-activity joins. Review columns on that row (`review_status`, `assignee`, `quality_rating`, `action_taken`, `investigation_feedback`) are copied onto the poll DTO so clients do not need `GET /sessions/:id`. Unset review fields marshal as `null`; the keys are always present.
 
 ---
 

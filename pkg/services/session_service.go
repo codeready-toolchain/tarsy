@@ -802,12 +802,17 @@ func (s *SessionService) GetSessionStatus(ctx context.Context, sessionID string)
 	}
 
 	return &models.SessionStatusResponse{
-		ID:               session.ID,
-		Status:           string(session.Status),
-		FinalAnalysis:    session.FinalAnalysis,
-		ExecutiveSummary: session.ExecutiveSummary,
-		ErrorMessage:     session.ErrorMessage,
-		Labels:           session.Labels,
+		ID:                    session.ID,
+		Status:                string(session.Status),
+		FinalAnalysis:         session.FinalAnalysis,
+		ExecutiveSummary:      session.ExecutiveSummary,
+		ErrorMessage:          session.ErrorMessage,
+		Labels:                session.Labels,
+		ReviewStatus:          ptrStringFromReviewStatus(session.ReviewStatus),
+		Assignee:              session.Assignee,
+		QualityRating:         ptrStringFromQualityRating(session.QualityRating),
+		ActionTaken:           session.ActionTaken,
+		InvestigationFeedback: session.InvestigationFeedback,
 	}, nil
 }
 
