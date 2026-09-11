@@ -1,10 +1,10 @@
 /**
- * FilterPanel — search, status, alert type, agent chain, time range filters.
+ * FilterPanel — search, status, alert type, label, time range filters.
  *
  * Ported from old dashboard's FilterPanel.tsx.
- * Adapted for new TARSy: no agent_type, alert_type/chain_id are single-select
- * strings (not multi-select arrays). Uses TimeRangeModal for date selection
- * matching old dashboard UX (single "Time Range" button + modal with presets).
+ * alert_type/chain_id are single-select strings; status and label are
+ * multi-select. Uses TimeRangeModal for date selection (single "Time Range"
+ * button + modal with presets).
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -26,6 +26,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import { Search, Clear, FilterList } from '@mui/icons-material';
 import { parseISO } from 'date-fns';
 import { StatusFilter } from './StatusFilter.tsx';
+import { LabelFilter } from './LabelFilter.tsx';
 import { TimeRangeModal, formatAppliedRange } from './TimeRangeModal.tsx';
 import type { SessionFilter } from '../../types/dashboard.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
@@ -86,14 +87,20 @@ export function FilterPanel({
     filters.chain_id ? 1 : 0,
     filters.start_date || filters.end_date || filters.date_preset ? 1 : 0,
     filters.scoring_status ? 1 : 0,
-    filters.label ? 1 : 0,
+    filters.label.length > 0 ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
+  const typeOptions = filterOptions?.alert_types ?? [];
+  const typeMenuItems =
+    filters.alert_type && !typeOptions.includes(filters.alert_type)
+      ? [filters.alert_type, ...typeOptions]
+      : typeOptions;
+
   const labelOptions = filterOptions?.labels ?? [];
-  const labelMenuItems =
-    filters.label && !labelOptions.includes(filters.label)
-      ? [filters.label, ...labelOptions]
-      : labelOptions;
+  const labelMenuItems = [
+    ...filters.label.filter((label) => !labelOptions.includes(label)),
+    ...labelOptions,
+  ];
 
   // ── Handlers ──
 
@@ -193,47 +200,35 @@ export function FilterPanel({
             />
           </Box>
 
-          {/* Scoring Status */}
+          {/* Alert Type */}
           <Box sx={{ flex: '1 1 160px', minWidth: 140 }}>
             <FormControl size="small" fullWidth>
-              <InputLabel id="scoring-status-label">Scoring</InputLabel>
+              <InputLabel id="alert-type-label">Type</InputLabel>
               <Select
-                labelId="scoring-status-label"
-                value={filters.scoring_status}
-                label="Scoring"
+                labelId="alert-type-label"
+                value={filters.alert_type}
+                label="Type"
                 onChange={(e: SelectChangeEvent) =>
-                  onFiltersChange({ ...filters, scoring_status: e.target.value })
+                  onFiltersChange({ ...filters, alert_type: e.target.value })
                 }
               >
                 <MenuItem value="">All</MenuItem>
-                <MenuItem value="scored">Scored</MenuItem>
-                <MenuItem value="not_scored">Not Scored</MenuItem>
-                <MenuItem value="scoring_in_progress">In Progress</MenuItem>
-                <MenuItem value="scoring_failed">Failed</MenuItem>
+                {typeMenuItems.map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
           </Box>
 
           {/* Label */}
           <Box sx={{ flex: '1 1 160px', minWidth: 140 }}>
-            <FormControl size="small" fullWidth>
-              <InputLabel id="label-filter-label">Label</InputLabel>
-              <Select
-                labelId="label-filter-label"
-                value={filters.label}
-                label="Label"
-                onChange={(e: SelectChangeEvent) =>
-                  onFiltersChange({ ...filters, label: e.target.value })
-                }
-              >
-                <MenuItem value="">All</MenuItem>
-                {labelMenuItems.map((label) => (
-                  <MenuItem key={label} value={label}>
-                    {label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <LabelFilter
+              value={filters.label}
+              onChange={(label) => onFiltersChange({ ...filters, label })}
+              options={labelMenuItems}
+            />
           </Box>
 
           {/* Time Range Button — single button opens modal (matches old dashboard) */}
@@ -293,7 +288,7 @@ export function FilterPanel({
               ))}
               {filters.alert_type && (
                 <Chip
-                  label={`Alert: ${filters.alert_type}`}
+                  label={`Type: ${filters.alert_type}`}
                   onDelete={() => onFiltersChange({ ...filters, alert_type: '' })}
                   size="small"
                   color="info"
@@ -318,15 +313,21 @@ export function FilterPanel({
                   variant="outlined"
                 />
               )}
-              {filters.label && (
+              {filters.label.map((l) => (
                 <Chip
-                  label={`Label: ${filters.label}`}
-                  onDelete={() => onFiltersChange({ ...filters, label: '' })}
+                  key={l}
+                  label={`Label: ${l}`}
+                  onDelete={() =>
+                    onFiltersChange({
+                      ...filters,
+                      label: filters.label.filter((x) => x !== l),
+                    })
+                  }
                   size="small"
                   color="secondary"
                   variant="outlined"
                 />
-              )}
+              ))}
               {appliedRangeLabel && (
                 <Chip
                   label={`Range: ${appliedRangeLabel}`}

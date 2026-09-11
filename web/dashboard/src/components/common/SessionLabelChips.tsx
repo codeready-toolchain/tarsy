@@ -28,6 +28,42 @@ function isQuietLabel(label: string): boolean {
   return QUIET_LABELS.has(label.toLowerCase());
 }
 
+interface LabelChipProps {
+  label: string;
+  variant?: ChipProps['variant'];
+  onDelete?: ChipProps['onDelete'];
+  onMouseDown?: ChipProps['onMouseDown'];
+}
+
+/** Colored chip for a session label — used in lists and the dashboard Label filter. */
+export function LabelChip({ label, variant = 'outlined', onDelete, onMouseDown }: LabelChipProps) {
+  const color = labelChipColor(label);
+  const quiet = isQuietLabel(label);
+
+  return (
+    <Chip
+      size="small"
+      label={label}
+      variant={variant}
+      color={color}
+      data-muted={quiet ? 'true' : undefined}
+      onDelete={onDelete}
+      onMouseDown={onMouseDown}
+      sx={(theme) => ({
+        ...chipSx,
+        ...(quiet && {
+          borderColor: theme.palette.grey[400],
+          color: theme.palette.grey[400],
+        }),
+        ...(!quiet && color !== 'default' && variant === 'outlined' && {
+          backgroundColor: alpha(theme.palette[color].main, 0.1),
+          borderColor: alpha(theme.palette[color].main, 0.4),
+        }),
+      })}
+    />
+  );
+}
+
 interface SessionLabelChipsProps {
   labels: string[] | null | undefined;
 }
@@ -38,31 +74,9 @@ export function SessionLabelChips({ labels }: SessionLabelChipsProps) {
 
   return (
     <Box sx={{ display: 'inline-flex', flexWrap: 'wrap', gap: 0.375, alignItems: 'center', flexShrink: 0 }}>
-      {labels.map((label) => {
-        const color = labelChipColor(label);
-        const quiet = isQuietLabel(label);
-        return (
-          <Chip
-            key={label}
-            size="small"
-            label={label}
-            variant="outlined"
-            color={color}
-            data-muted={quiet ? 'true' : undefined}
-            sx={(theme) => ({
-              ...chipSx,
-              ...(quiet && {
-                borderColor: theme.palette.grey[400],
-                color: theme.palette.grey[400],
-              }),
-              ...(!quiet && color !== 'default' && {
-                backgroundColor: alpha(theme.palette[color].main, 0.1),
-                borderColor: alpha(theme.palette[color].main, 0.4),
-              }),
-            })}
-          />
-        );
-      })}
+      {labels.map((label) => (
+        <LabelChip key={label} label={label} />
+      ))}
     </Box>
   );
 }

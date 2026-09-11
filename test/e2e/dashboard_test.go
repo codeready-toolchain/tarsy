@@ -317,8 +317,21 @@ func TestDashboardEndpoints(t *testing.T) {
 		items = list["sessions"].([]interface{})
 		assert.Empty(t, items)
 
+		list = app.GetSessionList(t, "label=action,noise")
+		items = list["sessions"].([]interface{})
+		require.Len(t, items, 2)
+		gotIDs := []string{
+			items[0].(map[string]interface{})["id"].(string),
+			items[1].(map[string]interface{})["id"].(string),
+		}
+		assert.ElementsMatch(t, []string{ids[0], ids[1]}, gotIDs)
+
 		resp := app.getJSON(t, "/api/v1/sessions?label=1bad", http.StatusBadRequest)
 		msg, _ := resp["message"].(string)
+		assert.Equal(t, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*", msg)
+
+		resp = app.getJSON(t, "/api/v1/sessions?label=action,1bad", http.StatusBadRequest)
+		msg, _ = resp["message"].(string)
 		assert.Equal(t, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*", msg)
 	})
 

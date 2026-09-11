@@ -7,8 +7,14 @@
 import { FormControl, InputLabel, Select, MenuItem, Chip, Box } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import { SESSION_STATUS, getStatusDisplayName, getStatusColor } from '../../constants/sessionStatus.ts';
+import type { SessionStatus } from '../../constants/sessionStatus.ts';
 
 const ALL_STATUSES = Object.values(SESSION_STATUS);
+const CLEAR_VALUE = '';
+
+function asStatus(status: string): SessionStatus {
+  return status as SessionStatus;
+}
 
 interface StatusFilterProps {
   value: string[];
@@ -25,7 +31,15 @@ export function StatusFilter({ value, onChange, options = ALL_STATUSES }: Status
       typeof raw === 'string'
         ? raw.split(',').map((s) => s.trim()).filter(Boolean)
         : raw;
+    if (normalized.includes(CLEAR_VALUE)) {
+      onChange([]);
+      return;
+    }
     onChange(normalized);
+  };
+
+  const removeStatus = (status: string) => {
+    onChange(value.filter((s) => s !== status));
   };
 
   return (
@@ -42,10 +56,12 @@ export function StatusFilter({ value, onChange, options = ALL_STATUSES }: Status
             {selected.map((s) => (
               <Chip
                 key={s}
-                label={getStatusDisplayName(s as typeof SESSION_STATUS[keyof typeof SESSION_STATUS])}
+                label={getStatusDisplayName(asStatus(s))}
                 size="small"
-                color={getStatusColor(s as typeof SESSION_STATUS[keyof typeof SESSION_STATUS])}
+                color={getStatusColor(asStatus(s))}
                 variant="outlined"
+                onDelete={() => removeStatus(s)}
+                onMouseDown={(event) => event.stopPropagation()}
               />
             ))}
           </Box>
@@ -54,16 +70,17 @@ export function StatusFilter({ value, onChange, options = ALL_STATUSES }: Status
           PaperProps: { style: { maxHeight: 48 * 4.5 + 8, width: 250 } },
         }}
       >
+        <MenuItem value={CLEAR_VALUE}>All</MenuItem>
         {options.map((status) => (
-          <MenuItem key={status} value={status}>
+          <MenuItem key={status} value={status} sx={{ gap: 1 }}>
             <Chip
-              label={getStatusDisplayName(status as typeof SESSION_STATUS[keyof typeof SESSION_STATUS])}
+              label={getStatusDisplayName(asStatus(status))}
               size="small"
-              color={getStatusColor(status as typeof SESSION_STATUS[keyof typeof SESSION_STATUS])}
+              color={getStatusColor(asStatus(status))}
               variant={value.includes(status) ? 'filled' : 'outlined'}
-              sx={{ mr: 1 }}
+              sx={{ pointerEvents: 'none' }}
             />
-            {getStatusDisplayName(status as typeof SESSION_STATUS[keyof typeof SESSION_STATUS])}
+            {getStatusDisplayName(asStatus(status))}
           </MenuItem>
         ))}
       </Select>

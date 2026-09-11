@@ -15,7 +15,7 @@ export interface SessionFilter {
   end_date: string | null; // RFC3339
   date_preset: string | null; // '10m' | '1h' | '12h' | '1d' | '7d' | '30d' | null (custom)
   scoring_status: string;
-  label: string;
+  label: string[];
 }
 
 /** Pagination state tracking both local page and backend totals. */

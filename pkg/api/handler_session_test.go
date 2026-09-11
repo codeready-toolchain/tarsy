@@ -84,8 +84,15 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			exact:   true,
 		},
 		{
-			name:    "invalid label contains comma",
-			query:   "label=page,watch",
+			name:    "comma-separated labels with one invalid",
+			query:   "label=page,1bad",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label: must match [A-Za-z][A-Za-z0-9_-]*",
+			exact:   true,
+		},
+		{
+			name:    "empty label token in comma list",
+			query:   "label=page,",
 			wantErr: http.StatusBadRequest,
 			errMsg:  "invalid label: must match [A-Za-z][A-Za-z0-9_-]*",
 			exact:   true,
@@ -140,7 +147,7 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 	})
 
 	t.Run("valid label values pass validation", func(t *testing.T) {
-		validValues := []string{"page", "false_positive", "Watch"}
+		validValues := []string{"page", "false_positive", "Watch", "page,watch"}
 		for _, v := range validValues {
 			t.Run(v, func(t *testing.T) {
 				e := echo.New()

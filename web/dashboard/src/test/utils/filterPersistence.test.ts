@@ -64,7 +64,7 @@ describe('getDefaultFilters', () => {
       end_date: null,
       date_preset: null,
       scoring_status: '',
-      label: '',
+      label: [],
     });
   });
 });
@@ -131,7 +131,7 @@ describe('filter persistence', () => {
       end_date: null,
       date_preset: '1d',
       scoring_status: '',
-      label: '',
+      label: ['page'],
     };
     saveFiltersToStorage(filters);
     const loaded = loadFiltersFromStorage();
@@ -146,6 +146,14 @@ describe('filter persistence', () => {
     localStorageMock.setItem('tarsy-filters', '{invalid json');
     // loadFiltersFromStorage catches parse errors
     expect(loadFiltersFromStorage()).toBeNull();
+  });
+
+  it('coerces a legacy string label to an array', () => {
+    localStorageMock.setItem(
+      'tarsy-filters',
+      JSON.stringify({ search: '', status: [], label: 'page' }),
+    );
+    expect(loadFiltersFromStorage()?.label).toEqual(['page']);
   });
 
   it('clears filters', () => {

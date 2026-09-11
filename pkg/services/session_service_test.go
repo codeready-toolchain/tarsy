@@ -2936,6 +2936,28 @@ func TestSessionService_ListSessionsForDashboard_LabelFilter(t *testing.T) {
 		assert.Equal(t, 0, result.Pagination.TotalItems)
 	})
 
+	t.Run("comma-separated labels match any selected token", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label: "watch,noise",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, idMulti, result.Sessions[0].ID)
+	})
+
+	t.Run("comma-separated labels are OR not AND", func(t *testing.T) {
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc",
+			Label: "page,watch",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 2)
+		assert.Equal(t, 2, result.Pagination.TotalItems)
+		ids := map[string]bool{result.Sessions[0].ID: true, result.Sessions[1].ID: true}
+		assert.True(t, ids[idPage] && ids[idMulti])
+	})
+
 	t.Run("list json null vs empty vs populated", func(t *testing.T) {
 		result, err := service.ListSessionsForDashboard(ctx, listParams)
 		require.NoError(t, err)

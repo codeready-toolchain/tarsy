@@ -90,8 +90,10 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		}
 	}
 	if v := c.QueryParam("label"); v != "" {
-		if !config.ValidLabelToken(v) {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*")
+		for label := range strings.SplitSeq(v, ",") {
+			if !config.ValidLabelToken(label) {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*")
+			}
 		}
 		params.Label = v
 	}

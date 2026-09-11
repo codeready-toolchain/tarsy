@@ -26,7 +26,7 @@ export function getDefaultFilters(): SessionFilter {
     end_date: null,
     date_preset: null,
     scoring_status: '',
-    label: '',
+    label: [],
   };
 }
 
@@ -74,7 +74,15 @@ export function saveFiltersToStorage(filters: SessionFilter): void {
 export function loadFiltersFromStorage(): SessionFilter | null {
   try {
     const raw = localStorage.getItem(FILTER_KEY);
-    if (raw) return JSON.parse(raw) as SessionFilter;
+    if (raw) {
+      const parsed = JSON.parse(raw) as SessionFilter & { label?: string | string[] };
+      if (typeof parsed.label === 'string') {
+        parsed.label = parsed.label ? [parsed.label] : [];
+      } else if (!Array.isArray(parsed.label)) {
+        parsed.label = [];
+      }
+      return parsed as SessionFilter;
+    }
   } catch {
     // corrupted data — ignore
   }
