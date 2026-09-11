@@ -72,6 +72,19 @@ export const theme = createTheme({
         },
       }),
     },
+    // Overlays lock body overflow while open, which hides the page scrollbar
+    // and shifts the layout. Select menus (Popover) pass disableScrollLock
+    // explicitly, so Modal defaults alone are not enough.
+    MuiPopover: {
+      defaultProps: {
+        disableScrollLock: true,
+      },
+    },
+    MuiModal: {
+      defaultProps: {
+        disableScrollLock: true,
+      },
+    },
     MuiChip: {
       styleOverrides: {
         root: { fontWeight: 500 },

@@ -1033,17 +1033,26 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		query = query.Where(alertsession.QualityRatingEQ(alertsession.QualityRating(params.QualityRating)))
 	}
 	if params.Label != "" {
-		payload, err := json.Marshal([]string{params.Label})
-		if err != nil {
-			return nil, fmt.Errorf("marshal label filter: %w", err)
+		payloads := make([]string, 0)
+		for label := range strings.SplitSeq(params.Label, ",") {
+			payload, err := json.Marshal([]string{label})
+			if err != nil {
+				return nil, fmt.Errorf("marshal label filter: %w", err)
+			}
+			payloads = append(payloads, string(payload))
 		}
 		query = query.Where(func(sel *sql.Selector) {
 			t := sel.TableName()
-			sel.Where(sql.P(func(b *sql.Builder) {
-				b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
-				b.Arg(string(payload))
-				b.WriteString("::jsonb")
-			}))
+			preds := make([]*sql.Predicate, 0, len(payloads))
+			for _, payload := range payloads {
+				p := payload
+				preds = append(preds, sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
+					b.Arg(p)
+					b.WriteString("::jsonb")
+				}))
+			}
+			sel.Where(sql.Or(preds...))
 		})
 	}
 

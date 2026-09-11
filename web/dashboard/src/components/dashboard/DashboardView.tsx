@@ -109,8 +109,8 @@ function buildQueryParams(
   if (filters.scoring_status) {
     params.scoring_status = filters.scoring_status;
   }
-  if (filters.label) {
-    params.label = filters.label;
+  if (filters.label.length > 0) {
+    params.label = filters.label.join(',');
   }
 
   return params;

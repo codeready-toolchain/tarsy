@@ -66,7 +66,7 @@ type DashboardListParams struct {
 	ReviewStatus  string     `json:"review_status"`  // comma-separated: needs_review, in_progress, reviewed
 	Assignee      string     `json:"assignee"`       // exact match filter
 	QualityRating string     `json:"quality_rating"` // accurate, partially_accurate, inaccurate
-	Label         string     `json:"label"`          // exact canonical name; labels JSON contains
+	Label         string     `json:"label"`          // comma-separated; session labels JSON contains any
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
