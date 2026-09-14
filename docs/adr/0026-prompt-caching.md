@@ -237,7 +237,7 @@ Tier 0 wall-clock time is injected **first** in the system prompt. Memory briefi
 
 ### Prompt cache (provider)
 
-A hashed prefix of tools + messages the provider keeps for a TTL. TARSy does not name or delete entries. Hits require identical bytes up to the provider's cache prefix, same model, and the provider-specific fields (Claude/Vertex `cache_control` on the last tool schema, or GPT-5.6+ OpenAI `prompt_cache_options` + key with no `prompt_cache_breakpoint`).
+A hashed prefix of tools + messages the provider keeps for a TTL. TARSy does not name or delete entries. Hits require identical bytes up to the provider's cache prefix and the same model. Claude/Vertex and GPT-5.6+ OpenAI also require TARSy-managed fields (`cache_control` on the last tool schema, or `prompt_cache_options` + key with no `prompt_cache_breakpoint`); Gemini 2.5+ and GPT-5.5-and-older OpenAI cache automatically without those fields.
 
 ### `prompt_cache` flag
 
