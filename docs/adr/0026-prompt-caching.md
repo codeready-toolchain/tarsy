@@ -19,12 +19,12 @@ This is **not** a TARSy-side cache of completions, tokens, or thought signatures
 
 [ADR-0020](0020-session-usage-cost.md) left cache tokens out of persistence and pricing. Cost estimates therefore **overcounted** models that discount cached input (Gemini `prompt_token_count` was stored as `input_tokens` and priced at the full input rate). Gemini 2.5+ implicit caching may already have been saving money; TARSy never looked at `cached_content_token_count`. Claude (Anthropic API and Vertex) does not cache unless `cache_control` is set. GPT-5.6+ OpenAI caches by default in implicit mode; looping calls keep that mode so later turns can reuse earlier eligible message endings. Ineligible GPT-5.6+ calls send explicit mode with no breakpoints so one-shots do not pay a 1.25× write tax.
 
-Python now normalizes `input_tokens` to **uncached** input. Shipping that without pricing cache tokens would **undercount**. v1 therefore ships observe + looping-call breakpoints + cache pricing + scoped operator UI together.
+Python now normalizes `input_tokens` to **uncached** input. Shipping that without pricing cache tokens would **undercount**. v1 therefore ships observe + looping-call Claude `cache_control` / GPT-5.6+ OpenAI `prompt_cache_options` + cache pricing + scoped operator UI together.
 
 This decision:
 
 1. Surfaces provider cache usage through proto → DB → Prometheus → trace LLM interactions → Usage totals / by-model, and prices those tokens.
-2. Turns on Anthropic/Vertex Claude `cache_control` and GPT-5.6+ OpenAI implicit looping cache on investigation-style iterating loops and forced conclusion (not action, scoring, or one-shots). GPT-5.6+ ineligible calls send explicit mode with no breakpoints.
+2. Turns on Anthropic/Vertex Claude `cache_control` (last tool schema) and GPT-5.6+ OpenAI per-request `prompt_cache_options` (implicit looping; no `prompt_cache_breakpoint`) on `AgentTypeDefault` iterating loops and forced conclusion (not action, scoring, or one-shots). GPT-5.6+ ineligible calls send explicit mode with no breakpoints.
 3. Leaves Gemini implicit caching alone except to measure and price it.
 4. Does **not** introduce Gemini explicit `CachedContent` objects, a local prompt store, or response caching.
 
@@ -32,12 +32,12 @@ This decision:
 
 ## Design Principles
 
-1. **Provider-side only.** TARSy marks breakpoints and records usage. The provider owns TTL, hashing, and storage. Python stays stateless aside from the existing thought-signature cache.
+1. **Provider-side only.** TARSy stamps Claude/Vertex `cache_control` or GPT-5.6+ OpenAI `prompt_cache_options` (no `prompt_cache_breakpoint`) and records usage. The provider owns TTL, hashing, and storage. Python stays stateless aside from the existing thought-signature cache.
 2. **Pay for reads, not writes-with-no-read.** One-shots, scoring, and **action** agents must not pay a cache-write surcharge. Those paths are usually one or two Generates; the last write is never read.
 3. **TTL matches the loop.** Claude looping calls use 1h (orchestrator and sub-agent waits exceed 5m). OpenAI only supports `30m`; that is what we send on GPT-5.6+.
 4. **Measure Gemini; do not manage it.** Implicit caching is already on for Gemini 2.5+. Explicit `CachedContent` is a later, stateful follow-up if hit rate is proven poor. The cluster kill switch does **not** disable Gemini implicit caching.
 5. **Honest estimates.** Cache tokens are priced (catalog rates, or derived 0.1× / 1.25× / 2× from the resolved input rate). Never silent undercount.
-6. **Surgical surface.** One proto flag, cache usage fields, LangChain cache markers on Claude/Vertex and GPT-5.6+ OpenAI, Google usage extraction. No new LLM client, no new RPC.
+6. **Surgical surface.** One proto flag, cache usage fields, LangChain Claude `cache_control` and GPT-5.6+ OpenAI `prompt_cache_options`, Google usage extraction. No new LLM client, no new RPC.
 
 ## Decisions
 
@@ -237,11 +237,11 @@ Tier 0 wall-clock time is injected **first** in the system prompt. Memory briefi
 
 ### Prompt cache (provider)
 
-A hashed prefix of tools + messages the provider keeps for a TTL. TARSy does not name or delete entries. Hits require identical bytes up to the breakpoint, same model, and the provider-specific markers (`cache_control` or OpenAI `prompt_cache_options` + key).
+A hashed prefix of tools + messages the provider keeps for a TTL. TARSy does not name or delete entries. Hits require identical bytes up to the provider's cache prefix, same model, and the provider-specific fields (Claude/Vertex `cache_control` on the last tool schema, or GPT-5.6+ OpenAI `prompt_cache_options` + key with no `prompt_cache_breakpoint`).
 
 ### `prompt_cache` flag
 
-Per-Generate boolean meaning **this call is an investigation-style iterating loop** (`AgentTypeDefault`: investigation, chat, sub-agent, orchestrator). Scoring and `AgentTypeAction` are ineligible even when they call Generate more than once. Python never reads `tarsy.yaml`. It applies Claude `cache_control` / OpenAI 5.6+ cache options only when the proto field is true.
+Per-Generate boolean meaning **this call is an `AgentTypeDefault` iterating loop or forced conclusion** (investigation, chat, sub-agent, orchestrator). Scoring and `AgentTypeAction` are ineligible even when they call Generate more than once (including action forced conclusion). Python never reads `tarsy.yaml`. It applies Claude `cache_control` / OpenAI 5.6+ `prompt_cache_options` only when the proto field is true.
 
 ### Cache read / cache creation tokens
 
@@ -249,7 +249,7 @@ Provider-reported counts for discounted prefix reuse vs the write that populated
 
 ### Eligible vs ineligible calls
 
-Eligible = `AgentTypeDefault` iterating **loop** only (investigation, chat, sub-agent, orchestrator). Ineligible = one-shot, scoring, **action**, and forced conclusion (the last still lives in the iterating controller).
+Eligible = `AgentTypeDefault` iterating **loop** and **forced conclusion** (investigation, chat, sub-agent, orchestrator). Ineligible = one-shot, scoring, and **action** (including action forced conclusion, which still lives in the iterating controller).
 
 ## Configuration
 
