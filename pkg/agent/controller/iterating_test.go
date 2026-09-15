@@ -1325,6 +1325,8 @@ func TestIteratingController_FallbackOnMaxRetries(t *testing.T) {
 	require.Len(t, llm.capturedInputs, 2)
 	require.Equal(t, "fallback-model", llm.capturedInputs[1].Config.Model)
 	require.True(t, llm.capturedInputs[1].ClearCache, "second call should have ClearCache set")
+	assert.True(t, llm.capturedInputs[0].PromptCache, "primary loop should request prompt cache")
+	assert.True(t, llm.capturedInputs[1].PromptCache, "fallback loop should still request prompt cache")
 
 	for _, msg := range llm.capturedInputs[1].Messages {
 		assert.NotContains(t, msg.Content, "Publisher Model")
@@ -1377,6 +1379,7 @@ func TestIteratingController_FallbackReplaysToolHistory(t *testing.T) {
 	fallback := llm.capturedInputs[2]
 	assert.Equal(t, "fallback-model", fallback.Config.Model)
 	assert.True(t, fallback.ClearCache)
+	assert.True(t, fallback.PromptCache, "fallback after a tool turn should still request prompt cache")
 	requireAssistantToolHistory(t, fallback.Messages, "test.tool", "call-1")
 }
 
@@ -1564,6 +1567,9 @@ func TestIteratingController_FallbackInForcedConclusion(t *testing.T) {
 	// Third call should use fallback provider with ClearCache
 	require.Equal(t, "fallback-model", llm.capturedInputs[2].Config.Model)
 	require.True(t, llm.capturedInputs[2].ClearCache)
+	assert.True(t, llm.capturedInputs[0].PromptCache, "loop should request prompt cache")
+	assert.True(t, llm.capturedInputs[1].PromptCache, "failed conclusion should request prompt cache")
+	assert.True(t, llm.capturedInputs[2].PromptCache, "fallback conclusion should still request prompt cache")
 }
 
 func TestIteratingController_ForcedConclusionEmptyRetry(t *testing.T) {

@@ -102,11 +102,13 @@ class LangChainProvider(LLMProvider):
                     is_anthropic=prompt_cache.is_anthropic_claude(config),
                 )
         if cache_kind in (
-            prompt_cache.OPENAI_EXPLICIT,
+            prompt_cache.OPENAI_IMPLICIT,
             prompt_cache.OPENAI_EXPLICIT_DISABLE,
         ):
             bind_kwargs = {
-                "prompt_cache_options": prompt_cache.openai_prompt_cache_options(strip_ttl),
+                "prompt_cache_options": prompt_cache.openai_prompt_cache_options(
+                    strip_ttl, prompt_cache.openai_cache_mode(cache_kind),
+                ),
             }
             if execution_id:
                 bind_kwargs["prompt_cache_key"] = execution_id
@@ -271,15 +273,9 @@ class LangChainProvider(LLMProvider):
     def _convert_messages(
         self,
         messages: List[pb.ConversationMessage],
-        cache_kind: str = prompt_cache.NONE,
     ) -> List[BaseMessage]:
         """Convert proto messages to LangChain message objects."""
-        result: List[BaseMessage] = []
-        for idx, msg in enumerate(messages):
-            result.append(self._convert_one_message(idx, msg))
-        if cache_kind == prompt_cache.OPENAI_EXPLICIT:
-            return self._mark_openai_cache(result, messages)
-        return result
+        return [self._convert_one_message(idx, msg) for idx, msg in enumerate(messages)]
 
     def _convert_one_message(self, idx: int, msg: pb.ConversationMessage) -> BaseMessage:
         if msg.role == "system":
@@ -316,53 +312,6 @@ class LangChainProvider(LLMProvider):
         )
 
     @staticmethod
-    def _with_cache_marker(msg: BaseMessage, key: str, value: dict) -> BaseMessage:
-        text = msg.content if isinstance(msg.content, str) else str(msg.content or "")
-        block = {"type": "text", "text": text, key: value}
-        extra = dict(getattr(msg, "additional_kwargs", None) or {})
-        extra[key] = value
-        if isinstance(msg, SystemMessage):
-            return SystemMessage(content=[block])
-        if isinstance(msg, HumanMessage):
-            return HumanMessage(content=[block])
-        if isinstance(msg, AIMessage):
-            return AIMessage(
-                content=[block],
-                tool_calls=msg.tool_calls,
-                additional_kwargs=extra,
-            )
-        if isinstance(msg, ToolMessage):
-            return ToolMessage(
-                content=[block],
-                tool_call_id=msg.tool_call_id,
-                name=msg.name,
-                additional_kwargs=extra,
-            )
-        return msg
-
-    def _mark_openai_cache(
-        self,
-        converted: List[BaseMessage],
-        proto_messages: List[pb.ConversationMessage],
-    ) -> List[BaseMessage]:
-        out = list(converted)
-        breakpoint = dict(prompt_cache.PROMPT_CACHE_BREAKPOINT)
-        for i, proto in enumerate(proto_messages):
-            if proto.role == "system":
-                out[i] = self._with_cache_marker(out[i], "prompt_cache_breakpoint", breakpoint)
-        user_idx = prompt_cache.first_user_index(proto_messages)
-        if user_idx >= 0:
-            out[user_idx] = self._with_cache_marker(
-                out[user_idx], "prompt_cache_breakpoint", breakpoint,
-            )
-        tool_idx = prompt_cache.last_tool_index(proto_messages)
-        if tool_idx >= 0:
-            out[tool_idx] = self._with_cache_marker(
-                out[tool_idx], "prompt_cache_breakpoint", breakpoint,
-            )
-        return out
-
-    @staticmethod
     def _bind_tools(
         model,
         tools: List[pb.ToolDefinition],
@@ -389,17 +338,14 @@ class LangChainProvider(LLMProvider):
                     item["cache_control"] = prompt_cache.cache_control(strip_ttl)
                 langchain_tools.append(item)
             else:
-                item = {
+                langchain_tools.append({
                     "type": "function",
                     "function": {
                         "name": tool_name_to_api(tool.name),
                         "description": tool.description,
                         "parameters": schema,
                     },
-                }
-                if cache_kind == prompt_cache.OPENAI_EXPLICIT and last:
-                    item["prompt_cache_breakpoint"] = dict(prompt_cache.PROMPT_CACHE_BREAKPOINT)
-                langchain_tools.append(item)
+                })
         if langchain_tools:
             bind_kwargs = {}
             # "none" is an OpenAI-only tool_choice value. Anthropic's schema only
@@ -439,7 +385,7 @@ class LangChainProvider(LLMProvider):
                     config, list(request.tools), kind, strip_ttl, request.execution_id,
                     disable_tool_calls=request.disable_tool_calls,
                 )
-                messages = self._convert_messages(list(request.messages), kind)
+                messages = self._convert_messages(list(request.messages))
             except (ValueError, ImportError) as e:
                 code = "credentials" if "not set" in str(e) else "invalid_request"
                 yield pb.GenerateResponse(

@@ -13,14 +13,13 @@ from llm_proto import llm_service_pb2 as pb
 
 NONE = "none"
 ANTHROPIC = "anthropic"
-OPENAI_EXPLICIT = "openai_explicit"
+OPENAI_IMPLICIT = "openai_implicit"
 OPENAI_EXPLICIT_DISABLE = "openai_explicit_disable"
 
 _GPT56_RE = re.compile(r"^gpt-5\.(\d+)", re.IGNORECASE)
 
 CACHE_CONTROL_1H = {"type": "ephemeral", "ttl": "1h"}
 CACHE_CONTROL_NO_TTL = {"type": "ephemeral"}
-PROMPT_CACHE_BREAKPOINT = {"mode": "explicit"}
 
 
 def is_anthropic_claude(config: pb.LLMConfig) -> bool:
@@ -43,7 +42,7 @@ def classify_cache(config: pb.LLMConfig, prompt_cache: bool, execution_id: str) 
     provider = (config.provider or "").lower()
     if provider == "openai" and is_openai_explicit_cache_model(config.model):
         if prompt_cache and execution_id:
-            return OPENAI_EXPLICIT
+            return OPENAI_IMPLICIT
         return OPENAI_EXPLICIT_DISABLE
     if not prompt_cache:
         return NONE
@@ -56,27 +55,16 @@ def cache_control(strip_ttl: bool) -> dict:
     return dict(CACHE_CONTROL_NO_TTL) if strip_ttl else dict(CACHE_CONTROL_1H)
 
 
-def openai_prompt_cache_options(strip_ttl: bool) -> dict:
-    options = {"mode": "explicit"}
+def openai_prompt_cache_options(strip_ttl: bool, mode: str) -> dict:
+    options = {"mode": mode}
     if not strip_ttl:
         options["ttl"] = "30m"
     return options
 
 
-def first_user_index(messages: List[pb.ConversationMessage]) -> int:
-    """Index of the first user message, or -1 if none."""
-    for i, msg in enumerate(messages):
-        if msg.role == "user":
-            return i
-    return -1
-
-
-def last_tool_index(messages: List[pb.ConversationMessage]) -> int:
-    """Index of the last tool-result message, or -1 if none."""
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].role == "tool":
-            return i
-    return -1
+def openai_cache_mode(kind: str) -> str:
+    """GPT-5.6+ request-level cache mode: implicit looping vs explicit-off."""
+    return "implicit" if kind == OPENAI_IMPLICIT else "explicit"
 
 
 def cache_degrade_sequence(kind: str) -> List[Tuple[str, bool]]:

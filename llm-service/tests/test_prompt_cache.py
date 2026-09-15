@@ -41,7 +41,7 @@ class TestClassifyCache:
 
     def test_openai_gpt56_requires_execution_id(self):
         cfg = pb.LLMConfig(provider="openai", model="gpt-5.6")
-        assert prompt_cache.classify_cache(cfg, True, "exec-1") == prompt_cache.OPENAI_EXPLICIT
+        assert prompt_cache.classify_cache(cfg, True, "exec-1") == prompt_cache.OPENAI_IMPLICIT
         assert prompt_cache.classify_cache(cfg, True, "") == prompt_cache.OPENAI_EXPLICIT_DISABLE
 
     def test_openai_gpt56_prompt_cache_off_is_disable(self):
@@ -79,19 +79,24 @@ class TestDegradeAndWalkBack:
             (prompt_cache.OPENAI_EXPLICIT_DISABLE, True),
             (prompt_cache.NONE, False),
         ]
-
-    def test_first_user_and_last_tool_indexes(self):
-        messages = [
-            pb.ConversationMessage(role="system", content="sys"),
-            pb.ConversationMessage(role="user", content="go"),
-            pb.ConversationMessage(role="assistant", content=""),
-            pb.ConversationMessage(role="tool", content="result", tool_call_id="1"),
-            pb.ConversationMessage(role="user", content="conclude"),
+        assert prompt_cache.cache_degrade_sequence(prompt_cache.OPENAI_IMPLICIT) == [
+            (prompt_cache.OPENAI_IMPLICIT, False),
+            (prompt_cache.OPENAI_IMPLICIT, True),
+            (prompt_cache.NONE, False),
         ]
-        assert prompt_cache.first_user_index(messages) == 1
-        assert prompt_cache.last_tool_index(messages) == 3
-        assert prompt_cache.first_user_index(messages[:1]) == -1
-        assert prompt_cache.last_tool_index(messages[:3]) == -1
+
+    def test_openai_cache_mode_and_options(self):
+        assert prompt_cache.openai_cache_mode(prompt_cache.OPENAI_IMPLICIT) == "implicit"
+        assert prompt_cache.openai_cache_mode(prompt_cache.OPENAI_EXPLICIT_DISABLE) == "explicit"
+        assert prompt_cache.openai_prompt_cache_options(False, "implicit") == {
+            "mode": "implicit", "ttl": "30m",
+        }
+        assert prompt_cache.openai_prompt_cache_options(True, "implicit") == {
+            "mode": "implicit",
+        }
+        assert prompt_cache.openai_prompt_cache_options(False, "explicit") == {
+            "mode": "explicit", "ttl": "30m",
+        }
 
     def test_is_bad_request(self):
         class Fake400(Exception):

@@ -67,7 +67,7 @@ Main configuration file containing:
 
 LLM usage cost estimation (`system.cost_estimation`) is enabled by default. See [Session Usage Cost](../../docs/session-usage-cost.md), [ADR-0020](../../docs/adr/0020-session-usage-cost.md), and [ADR-0023](../../docs/adr/0023-cost-promotions.md) for overrides, promotions, catalog/snapshot behavior, and estimate caveats.
 
-Provider prompt caching (`system.prompt_caching`) is enabled by default. When on, looping investigation-style agents send Claude `cache_control` / GPT-5.6+ OpenAI explicit breakpoints. Setting `enabled: false` is a GitOps kill switch and does **not** disable Gemini implicit caching. See [ADR-0026: Prompt Caching](../../docs/adr/0026-prompt-caching.md).
+Provider prompt caching (`system.prompt_caching`) is enabled by default. When on, looping investigation-style agents send Claude `cache_control` / GPT-5.6+ OpenAI implicit cache options. Setting `enabled: false` is a GitOps kill switch and does **not** disable Gemini implicit caching. See [ADR-0026: Prompt Caching](../../docs/adr/0026-prompt-caching.md).
 
 Named LLM fallback lists (`fallback_lists` + `fallback_list`) let each job bind a cost/quality preference instead of sharing one global walk. Deprecated inline `fallback_providers` still loads. See [ADR-0030: Named Fallback Lists](../../docs/adr/0030-named-fallback-lists.md).
 

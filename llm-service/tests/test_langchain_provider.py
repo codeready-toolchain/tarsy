@@ -1300,9 +1300,7 @@ class TestLangChainPromptCacheBreakpoints:
         assert "cache_control" not in bound[0]
         assert bound[-1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
 
-        converted = provider._convert_messages(
-            _looping_tool_history(), prompt_cache.ANTHROPIC,
-        )
+        converted = provider._convert_messages(_looping_tool_history())
         for msg in converted:
             assert not _has_anthropic_cache(msg)
         last = converted[-1]
@@ -1311,20 +1309,16 @@ class TestLangChainPromptCacheBreakpoints:
         assert last.content == "pod-1 Running"
 
     def test_anthropic_messages_unmarked_including_forced_conclusion(self, provider):
-        converted = provider._convert_messages(
-            _looping_tool_history(), prompt_cache.ANTHROPIC,
-        )
+        converted = provider._convert_messages(_looping_tool_history())
         assert all(not _has_anthropic_cache(m) for m in converted)
 
-        turn1 = provider._convert_messages(
-            _looping_tool_history()[:-1], prompt_cache.ANTHROPIC,
-        )
+        turn1 = provider._convert_messages(_looping_tool_history()[:-1])
         assert all(not _has_anthropic_cache(m) for m in turn1)
 
         history = _looping_tool_history() + [
             pb.ConversationMessage(role="user", content="Conclude now."),
         ]
-        converted = provider._convert_messages(history, prompt_cache.ANTHROPIC)
+        converted = provider._convert_messages(history)
         assert all(not _has_anthropic_cache(m) for m in converted)
         last_user = converted[-1]
         assert isinstance(last_user, HumanMessage)
@@ -1333,9 +1327,7 @@ class TestLangChainPromptCacheBreakpoints:
     def test_vertex_messages_have_no_cache_control(self, provider):
         from langchain_google_vertexai._anthropic_utils import _format_messages_anthropic
 
-        converted = provider._convert_messages(
-            _looping_tool_history(), prompt_cache.ANTHROPIC,
-        )
+        converted = provider._convert_messages(_looping_tool_history())
         system, formatted = _format_messages_anthropic(converted, project=None)
         for block in system:
             assert "cache_control" not in block
@@ -1379,35 +1371,30 @@ class TestLangChainPromptCacheBreakpoints:
         assert "cache_control" not in bound[-1]
         assert "prompt_cache_breakpoint" not in bound[-1]
 
-    def test_openai_sticky_breakpoints_not_assistant(self, provider):
-        converted = provider._convert_messages(
-            _looping_tool_history(), prompt_cache.OPENAI_EXPLICIT,
-        )
-        assert _has_openai_breakpoint(converted[0])  # system
-        assert _has_openai_breakpoint(converted[1])  # first user
-        assert not _has_openai_breakpoint(converted[2])  # assistant
-        assert _has_openai_breakpoint(converted[3])  # last tool
+    def test_openai_looping_messages_and_tools_unmarked(self, provider):
+        converted = provider._convert_messages(_looping_tool_history())
+        assert all(not _has_openai_breakpoint(m) for m in converted)
+        assert isinstance(converted[0].content, str)
         assert isinstance(converted[3], ToolMessage)
+        assert isinstance(converted[3].content, str)
 
         mock_model = MagicMock()
         mock_model.bind_tools.return_value = mock_model
         LangChainProvider._bind_tools(
-            mock_model, _sample_tools(), cache_kind=prompt_cache.OPENAI_EXPLICIT,
+            mock_model, _sample_tools(), cache_kind=prompt_cache.OPENAI_IMPLICIT,
         )
         bound = mock_model.bind_tools.call_args[0][0]
-        assert bound[-1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        assert "prompt_cache_breakpoint" not in bound[-1]
         assert "prompt_cache_breakpoint" not in bound[0]
 
-    def test_openai_forced_conclusion_user_unmarked(self, provider):
+    def test_openai_forced_conclusion_unmarked(self, provider):
         history = _looping_tool_history() + [
             pb.ConversationMessage(role="user", content="Conclude now."),
         ]
-        converted = provider._convert_messages(history, prompt_cache.OPENAI_EXPLICIT)
-        assert _has_openai_breakpoint(converted[0])
-        assert _has_openai_breakpoint(converted[1])
-        assert not _has_openai_breakpoint(converted[2])
-        assert _has_openai_breakpoint(converted[3])
-        assert not _has_openai_breakpoint(converted[4])
+        converted = provider._convert_messages(history)
+        assert all(not _has_openai_breakpoint(m) for m in converted)
+        assert isinstance(converted[-1], HumanMessage)
+        assert isinstance(converted[-1].content, str)
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
     def test_openai_options_not_on_constructor(self, provider):
@@ -1430,7 +1417,7 @@ class TestLangChainPromptCacheBreakpoints:
                 provider="openai", model="gpt-5.6", api_key_env="OPENAI_API_KEY",
             )
             provider._get_or_create_model(
-                config, _sample_tools(), prompt_cache.OPENAI_EXPLICIT, False, "exec-99",
+                config, _sample_tools(), prompt_cache.OPENAI_IMPLICIT, False, "exec-99",
             )
 
         assert "prompt_cache_options" not in captured["ctor"]
@@ -1438,9 +1425,10 @@ class TestLangChainPromptCacheBreakpoints:
         assert captured["ctor"]["max_retries"] == 0
         assert captured["bind"]["prompt_cache_key"] == "exec-99"
         assert captured["bind"]["prompt_cache_options"] == {
-            "mode": "explicit", "ttl": "30m",
+            "mode": "implicit", "ttl": "30m",
         }
         assert "max_retries" not in captured["bind"]
+        assert "prompt_cache_breakpoint" not in captured["tools"][-1]
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
     def test_openai_disable_binds_options_without_breakpoints(self, provider):
@@ -1475,9 +1463,7 @@ class TestLangChainPromptCacheBreakpoints:
             "mode": "explicit", "ttl": "30m",
         }
         assert "prompt_cache_breakpoint" not in captured["tools"][-1]
-        converted = provider._convert_messages(
-            _looping_tool_history(), prompt_cache.OPENAI_EXPLICIT_DISABLE,
-        )
+        converted = provider._convert_messages(_looping_tool_history())
         assert isinstance(converted[0].content, str)
         assert not any(_has_openai_breakpoint(m) for m in converted)
 
@@ -1503,7 +1489,7 @@ class TestLangChainPromptCacheBreakpoints:
                 provider="openai", model="gpt-5.6", api_key_env="OPENAI_API_KEY",
             )
             provider._get_or_create_model(
-                config, _sample_tools(), prompt_cache.OPENAI_EXPLICIT, False, "exec-99",
+                config, _sample_tools(), prompt_cache.OPENAI_IMPLICIT, False, "exec-99",
                 disable_tool_calls=True,
             )
 
@@ -1740,12 +1726,10 @@ class TestLangChainPromptCacheBreakpoints:
                 last = messages[-1]
                 if idx == 0:
                     assert not _has_openai_breakpoint(last)
-                    assert _has_openai_breakpoint(messages[0])
-                    assert _has_openai_breakpoint(messages[1])
+                    assert all(not _has_openai_breakpoint(m) for m in messages)
                 if idx == 1:
                     assert isinstance(last, ToolMessage)
-                    assert _has_openai_breakpoint(last)
-                    assert not _has_openai_breakpoint(messages[2])
+                    assert all(not _has_openai_breakpoint(m) for m in messages)
 
                 async def gen():
                     chunk = AIMessageChunk(content="ok")
