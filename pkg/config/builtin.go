@@ -168,11 +168,11 @@ func initBuiltinMCPServers() map[string]MCPServerConfig {
 				Command: "npx",
 				Args: []string{
 					"-y",
-					"kubernetes-mcp-server@0.0.54",
+					"kubernetes-mcp-server@0.0.67",
 					"--read-only",
 					"--disable-destructive",
-					"--kubeconfig",
-					"{{.KUBECONFIG}}",
+					"--log-file",
+					"stderr",
 				},
 			},
 			Instructions: `For Kubernetes operations:
