@@ -333,11 +333,9 @@ mcp_servers:
       command: "npx"
       args:
         - "-y"
-        - "kubernetes-mcp-server@0.0.54"
+        - "kubernetes-mcp-server@0.0.67"
         - "--read-only"
         - "--disable-destructive"
-        - "--kubeconfig"
-        - "{{.KUBECONFIG}}"
     
     instructions: |
       For Kubernetes operations:

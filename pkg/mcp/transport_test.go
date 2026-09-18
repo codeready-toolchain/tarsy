@@ -18,7 +18,7 @@ func TestCreateTransport_Stdio(t *testing.T) {
 	cfg := config.TransportConfig{
 		Type:    config.TransportTypeStdio,
 		Command: "npx",
-		Args:    []string{"-y", "kubernetes-mcp-server@0.0.54"},
+		Args:    []string{"-y", "kubernetes-mcp-server@0.0.67"},
 		Env:     map[string]string{"KUBECONFIG": "/home/test/.kube/config"},
 	}
 
@@ -30,7 +30,7 @@ func TestCreateTransport_Stdio(t *testing.T) {
 	// exec.Command resolves the full path, so check Args[0] for the basename
 	assert.Contains(t, cmdTransport.Command.Path, "npx")
 	assert.Contains(t, cmdTransport.Command.Args, "-y")
-	assert.Contains(t, cmdTransport.Command.Args, "kubernetes-mcp-server@0.0.54")
+	assert.Contains(t, cmdTransport.Command.Args, "kubernetes-mcp-server@0.0.67")
 
 	// Check env override is present
 	found := false
