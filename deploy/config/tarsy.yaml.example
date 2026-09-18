@@ -336,6 +336,8 @@ mcp_servers:
         - "kubernetes-mcp-server@0.0.67"
         - "--read-only"
         - "--disable-destructive"
+        - "--log-file"
+        - "stderr"
     
     instructions: |
       For Kubernetes operations:

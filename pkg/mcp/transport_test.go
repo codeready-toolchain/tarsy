@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 
@@ -31,6 +32,7 @@ func TestCreateTransport_Stdio(t *testing.T) {
 	assert.Contains(t, cmdTransport.Command.Path, "npx")
 	assert.Contains(t, cmdTransport.Command.Args, "-y")
 	assert.Contains(t, cmdTransport.Command.Args, "kubernetes-mcp-server@0.0.67")
+	assert.Equal(t, os.Stderr, cmdTransport.Command.Stderr)
 
 	// Check env override is present
 	found := false
