@@ -136,6 +136,12 @@ func TestEstimate_ClaudeSnapshotRates(t *testing.T) {
 			wantUSD:  5.0 + 25.0, // 1M input @ $5 + 1M output @ $25
 			wantProv: Provenance("snapshot:claude-opus-5"),
 		},
+		{
+			name:     "opus-5-5",
+			model:    "claude-opus-5-5",
+			wantUSD:  4.0 + 20.0, // 1M input @ $4 + 1M output @ $20
+			wantProv: Provenance("snapshot:claude-opus-5-5"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -709,6 +715,18 @@ func TestEstimate_ClaudeSnapshotUses1hCreateNot5m(t *testing.T) {
 	assert.Equal(t, Provenance("snapshot:claude-sonnet-5"), prov)
 	// 5m catalog create would be $2.50; 1h field is $4.00.
 	assert.InDelta(t, 4.0, *costUSD, 1e-9)
+
+	opus55, opusProv := book.Estimate("claude-opus-5-5", Tokens{CacheCreation: 1_000_000})
+	require.NotNil(t, opus55)
+	assert.Equal(t, Provenance("snapshot:claude-opus-5-5"), opusProv)
+	// 5m create is $5.00; 1h field is $8.00.
+	assert.InDelta(t, 8.0, *opus55, 1e-9)
+
+	read, readProv := book.Estimate("claude-opus-5-5", Tokens{CacheRead: 1_000_000})
+	require.NotNil(t, read)
+	assert.Equal(t, Provenance("snapshot:claude-opus-5-5"), readProv)
+	// Catalog cache read is $0.20/MTok (5% of $4 input), not derived 10% ($0.40).
+	assert.InDelta(t, 0.20, *read, 1e-9)
 }
 
 func TestEstimate_GeminiCacheReadPricedNotFullInput(t *testing.T) {
@@ -748,6 +766,85 @@ func TestEstimate_GPT56SnapshotRates(t *testing.T) {
 	require.NotNil(t, sol)
 	assert.Equal(t, Provenance("snapshot:gpt-5.6-sol"), solProv)
 	assert.InDelta(t, *below, *sol, 1e-9)
+}
+
+func TestEstimate_GPT6AndGrokSnapshotRates(t *testing.T) {
+	book, err := NewBook(&Config{Enabled: true})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		model    string
+		tokens   Tokens
+		wantUSD  float64
+		wantProv Provenance
+	}{
+		{
+			name:     "sol short context",
+			model:    "gpt-6-sol",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*2e-6 + 1000*1e-5,
+			wantProv: Provenance("snapshot:gpt-6-sol"),
+		},
+		{
+			name:     "sol long context",
+			model:    "gpt-6-sol",
+			tokens:   Tokens{Input: 272_000, Output: 1000},
+			wantUSD:  272_000*4e-6 + 1000*1.5e-5,
+			wantProv: Provenance("snapshot:gpt-6-sol"),
+		},
+		{
+			name:     "sol cache write",
+			model:    "gpt-6-sol",
+			tokens:   Tokens{CacheCreation: 1_000_000},
+			wantUSD:  2.5,
+			wantProv: Provenance("snapshot:gpt-6-sol"),
+		},
+		{
+			name:     "luna short context",
+			model:    "gpt-6-luna",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*1e-7 + 1000*5e-7,
+			wantProv: Provenance("snapshot:gpt-6-luna"),
+		},
+		{
+			name:     "luna long context",
+			model:    "gpt-6-luna",
+			tokens:   Tokens{Input: 1_000_000, Output: 1_000_000},
+			wantUSD:  1_000_000*2e-7 + 1_000_000*7.5e-7,
+			wantProv: Provenance("snapshot:gpt-6-luna"),
+		},
+		{
+			name:     "grok-4.7 short context",
+			model:    "grok-4.7",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*2e-6 + 1000*6e-6,
+			wantProv: Provenance("snapshot:grok-4.7"),
+		},
+		{
+			name:     "grok-4.7 long context",
+			model:    "grok-4.7",
+			tokens:   Tokens{Input: 200_000, Output: 1000},
+			wantUSD:  200_000*4e-6 + 1000*1.2e-5,
+			wantProv: Provenance("snapshot:grok-4.7"),
+		},
+		{
+			name:     "grok-4.6 matches 4.7 short context",
+			model:    "grok-4.6",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*2e-6 + 1000*6e-6,
+			wantProv: Provenance("snapshot:grok-4.6"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, prov := book.Estimate(tt.model, tt.tokens)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantProv, prov)
+			assert.InDelta(t, tt.wantUSD, *got, 1e-9)
+		})
+	}
 }
 
 func TestEstimate_GeminiFlashSnapshotIntroExpiresWhenCatalogUnavailable(t *testing.T) {

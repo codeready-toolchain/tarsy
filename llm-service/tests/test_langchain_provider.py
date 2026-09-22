@@ -180,7 +180,7 @@ class TestLangChainProviderReasoningConfig:
     # --- OpenAI: reasoning enabled by default ---
     @pytest.mark.parametrize("model", [
         "o3", "o4-mini", "gpt-5", "gpt-5-mini", "gpt-5-nano",
-        "gpt-5-thinking", "gpt-6-turbo",
+        "gpt-5-thinking", "gpt-6-turbo", "gpt-6-sol", "gpt-6-luna",
     ])
     def test_openai_reasoning(self, model):
         result = LangChainProvider._get_openai_reasoning_kwargs(model)
@@ -208,7 +208,7 @@ class TestLangChainProviderReasoningConfig:
     # budget_tokens returns a 400 error on these) ---
     @pytest.mark.parametrize("model", [
         "claude-sonnet-5", "claude-sonnet-5-20260101",
-        "claude-opus-5", "claude-fable-5",
+        "claude-opus-5", "claude-opus-5-5", "claude-fable-5",
     ])
     def test_anthropic_adaptive_thinking(self, model):
         result = LangChainProvider._get_anthropic_thinking_kwargs(model)

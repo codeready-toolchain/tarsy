@@ -279,12 +279,12 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- OpenAI ---
 		"openai-default": {
 			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-5.6",
+			Model:     "gpt-6-sol",
 			APIKeyEnv: "OPENAI_API_KEY",
 		},
 		"gpt-5.6": {
 			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-5.6",
+			Model:     "gpt-5.6", // unsuffixed alias of gpt-5.6-sol
 			APIKeyEnv: "OPENAI_API_KEY",
 		},
 		"gpt-5.6-sol": {
@@ -302,6 +302,16 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			Model:     "gpt-5.6-luna",
 			APIKeyEnv: "OPENAI_API_KEY",
 		},
+		"gpt-6-sol": {
+			Type:      LLMProviderTypeOpenAI,
+			Model:     "gpt-6-sol",
+			APIKeyEnv: "OPENAI_API_KEY",
+		},
+		"gpt-6-luna": {
+			Type:      LLMProviderTypeOpenAI,
+			Model:     "gpt-6-luna",
+			APIKeyEnv: "OPENAI_API_KEY",
+		},
 		"gpt-5.2": {
 			Type:      LLMProviderTypeOpenAI,
 			Model:     "gpt-5.2",
@@ -314,9 +324,24 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			Model:     "claude-sonnet-5", // Dateless canonical model ID
 			APIKeyEnv: "ANTHROPIC_API_KEY",
 		},
+		"claude-opus-5-5": {
+			Type:      LLMProviderTypeAnthropic,
+			Model:     "claude-opus-5-5",
+			APIKeyEnv: "ANTHROPIC_API_KEY",
+		},
 
 		// --- xAI ---
 		"xai-default": {
+			Type:      LLMProviderTypeXAI,
+			Model:     "grok-4.7",
+			APIKeyEnv: "XAI_API_KEY",
+		},
+		"grok-4.7": {
+			Type:      LLMProviderTypeXAI,
+			Model:     "grok-4.7",
+			APIKeyEnv: "XAI_API_KEY",
+		},
+		"grok-4.6": {
 			Type:      LLMProviderTypeXAI,
 			Model:     "grok-4.6",
 			APIKeyEnv: "XAI_API_KEY",

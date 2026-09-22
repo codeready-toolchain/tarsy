@@ -17,6 +17,7 @@ OPENAI_IMPLICIT = "openai_implicit"
 OPENAI_EXPLICIT_DISABLE = "openai_explicit_disable"
 
 _GPT56_RE = re.compile(r"^gpt-5\.(\d+)", re.IGNORECASE)
+_GPT6PLUS_RE = re.compile(r"^gpt-(?:[6-9]|\d{2,})", re.IGNORECASE)
 
 CACHE_CONTROL_1H = {"type": "ephemeral", "ttl": "1h"}
 CACHE_CONTROL_NO_TTL = {"type": "ephemeral"}
@@ -33,9 +34,12 @@ def is_anthropic_claude(config: pb.LLMConfig) -> bool:
 
 
 def is_openai_explicit_cache_model(model: str) -> bool:
-    """GPT-5.6+ (gpt-5. with integer minor >= 6), including dated/variant suffixes."""
-    match = _GPT56_RE.match(model or "")
-    return match is not None and int(match.group(1)) >= 6
+    """GPT-5.6+ and GPT-6+ (including dated/variant suffixes such as gpt-6-sol)."""
+    name = model or ""
+    match = _GPT56_RE.match(name)
+    if match is not None and int(match.group(1)) >= 6:
+        return True
+    return _GPT6PLUS_RE.match(name) is not None
 
 
 def classify_cache(config: pb.LLMConfig, prompt_cache: bool, execution_id: str) -> str:

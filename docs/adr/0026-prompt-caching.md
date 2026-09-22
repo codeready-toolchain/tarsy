@@ -147,7 +147,7 @@ Keep the LangChain model-instance cache keyed by `(provider, model, api_key_env)
 
 **GPT-5.5 and older** (anything that does not match `gpt-5.` with integer minor ≥ 6, including `gpt-5.2`, `gpt-5`, `gpt-5-mini`): automatic prefix cache. Extract `cached_tokens` / `cache_write_tokens` if present. Send no `prompt_cache_options`.
 
-**GPT-5.6 and later** (model id matches `gpt-5.` with integer minor **≥ 6**, case-insensitive, including dated/variant suffixes such as `gpt-5.6-sol`). Built-in `openai-default` is GPT-5.6.
+**GPT-5.6 and later** (model id matches `gpt-5.` with integer minor **≥ 6**, or `gpt-6` and later major versions, case-insensitive, including dated/variant suffixes such as `gpt-5.6-sol` and `gpt-6-sol`). Built-in `openai-default` is `gpt-6-sol`.
 
 When `prompt_cache` is false (action, scoring, one-shots, empty `execution_id`, cluster kill switch): bind `prompt_cache_options: {mode: "explicit", ttl: "30m"}` with **no** breakpoints. That is caching off for GPT-5.6+ — no implicit last-message write tax. Include `prompt_cache_key` when `execution_id` is non-empty.
 
@@ -291,6 +291,10 @@ When this ADR shipped, the Python retryable-error loop was timeout / empty respo
 ## Amendments (GPT-5.6+ looping implicit cache, 2026-09-14)
 
 Q11 originally used explicit mode plus sticky breakpoints on last tool schema, system, first user, and current last tool result. That layout only looked up the explicit markers on the current request, restyled last-tool bytes between turns, and billed growing history as 1.25× cache writes. Looping GPT-5.6+ calls now send `prompt_cache_options.mode=implicit` with no `prompt_cache_breakpoint`. Ineligible GPT-5.6+ calls still use explicit mode with no breakpoints. Rejected: restoring sticky last-tool markers; implicit mode on one-shots.
+
+## Amendments (GPT-6+ cache eligibility, 2026-09-22)
+
+The GPT-5.6+ OpenAI cache-options gate originally matched only `gpt-5.` with integer minor ≥ 6. GPT-6 family ids (`gpt-6-sol`, `gpt-6-luna`, …) now use the same implicit/explicit `prompt_cache_options` path.
 
 ## References
 

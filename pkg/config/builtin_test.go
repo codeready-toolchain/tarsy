@@ -303,7 +303,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:        "openai-default",
 			providerID:  "openai-default",
 			wantType:    LLMProviderTypeOpenAI,
-			wantModel:   "gpt-5.6",
+			wantModel:   "gpt-6-sol",
 			checkAPIKey: true,
 		},
 		{
@@ -335,6 +335,20 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey: true,
 		},
 		{
+			name:        "gpt-6-sol",
+			providerID:  "gpt-6-sol",
+			wantType:    LLMProviderTypeOpenAI,
+			wantModel:   "gpt-6-sol",
+			checkAPIKey: true,
+		},
+		{
+			name:        "gpt-6-luna",
+			providerID:  "gpt-6-luna",
+			wantType:    LLMProviderTypeOpenAI,
+			wantModel:   "gpt-6-luna",
+			checkAPIKey: true,
+		},
+		{
 			name:        "gpt-5.2",
 			providerID:  "gpt-5.2",
 			wantType:    LLMProviderTypeOpenAI,
@@ -346,6 +360,13 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "anthropic-default",
 			wantType:    LLMProviderTypeAnthropic,
 			wantModel:   "claude-sonnet-5",
+			checkAPIKey: true,
+		},
+		{
+			name:        "claude-opus-5-5",
+			providerID:  "claude-opus-5-5",
+			wantType:    LLMProviderTypeAnthropic,
+			wantModel:   "claude-opus-5-5",
 			checkAPIKey: true,
 		},
 		{
@@ -396,6 +417,20 @@ func TestBuiltinLLMProviders(t *testing.T) {
 		{
 			name:        "xai-default",
 			providerID:  "xai-default",
+			wantType:    LLMProviderTypeXAI,
+			wantModel:   "grok-4.7",
+			checkAPIKey: true,
+		},
+		{
+			name:        "grok-4.7",
+			providerID:  "grok-4.7",
+			wantType:    LLMProviderTypeXAI,
+			wantModel:   "grok-4.7",
+			checkAPIKey: true,
+		},
+		{
+			name:        "grok-4.6",
+			providerID:  "grok-4.6",
 			wantType:    LLMProviderTypeXAI,
 			wantModel:   "grok-4.6",
 			checkAPIKey: true,
