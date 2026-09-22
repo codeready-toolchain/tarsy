@@ -272,11 +272,14 @@ agent_chains:
 ### Built-in LLM Providers
 
 - **google-default** - Gemini 3.8 Flash
-- **openai-default** - GPT-5.6 (Sol)
+- **openai-default** - GPT-6 Sol
 - **gpt-5.6**, **gpt-5.6-sol**, **gpt-5.6-terra**, **gpt-5.6-luna** - GPT-5.6 family
+- **gpt-6-sol**, **gpt-6-luna** - GPT-6 family
 - **gpt-5.2** - previous generation (OpenAI recommends GPT-5.6)
 - **anthropic-default** - Claude Sonnet 5
-- **xai-default** - Grok 4.6
+- **claude-opus-5-5** - Claude Opus 5.5
+- **xai-default**, **grok-4.7** - Grok 4.7
+- **grok-4.6** - previous Grok generation
 - **vertexai-default** - Claude Sonnet 5 on Vertex AI
 
 ### Built-in Chains

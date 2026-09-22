@@ -230,6 +230,11 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	require.Contains(t, entries, "gpt-5.6-sol")
 	require.Contains(t, entries, "gpt-5.6-terra")
 	require.Contains(t, entries, "gpt-5.6-luna")
+	require.Contains(t, entries, "gpt-6-sol")
+	require.Contains(t, entries, "gpt-6-luna")
+	require.Contains(t, entries, "claude-opus-5-5")
+	require.Contains(t, entries, "grok-4.7")
+	require.Contains(t, entries, "grok-4.6")
 	gpt5 := entries["gpt-5"]
 	assert.True(t, gpt5.HasCacheRead)
 	assert.InDelta(t, 1.25e-07, gpt5.CacheReadCost, 1e-15)
@@ -251,6 +256,53 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	require.NotNil(t, sol.RatesValidUntil)
 	assert.True(t, sol.RatesValidUntil.Equal(wantUntil))
 	assert.Nil(t, entries["gpt-5.6-terra"].RatesValidUntil)
+	assert.Nil(t, entries["gpt-6-sol"].RatesValidUntil)
+	assert.Nil(t, entries["gpt-6-luna"].RatesValidUntil)
+
+	gpt6sol := entries["gpt-6-sol"]
+	assert.True(t, gpt6sol.HasCacheRead)
+	assert.True(t, gpt6sol.HasCacheCreate)
+	assert.InDelta(t, 2e-07, gpt6sol.CacheReadCost, 1e-15)
+	assert.InDelta(t, 2.5e-06, gpt6sol.CacheCreateCost, 1e-15)
+	assert.InDelta(t, 4e-06, gpt6sol.InputCostAbove[272_000], 1e-15)
+	assert.InDelta(t, 1.5e-05, gpt6sol.OutputCostAbove[272_000], 1e-15)
+
+	gpt6luna := entries["gpt-6-luna"]
+	assert.True(t, gpt6luna.HasCacheRead)
+	assert.True(t, gpt6luna.HasCacheCreate)
+	assert.InDelta(t, 1e-07, gpt6luna.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 5e-07, gpt6luna.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, 2e-07, gpt6luna.InputCostAbove[272_000], 1e-15)
+	assert.InDelta(t, 1e-08, gpt6luna.CacheReadCost, 1e-15)
+	assert.InDelta(t, 1.25e-07, gpt6luna.CacheCreateCost, 1e-15)
+
+	opus55 := entries["claude-opus-5-5"]
+	assert.True(t, opus55.HasCacheRead)
+	assert.True(t, opus55.HasCacheCreate)
+	assert.True(t, opus55.HasCacheCreateAbove1hr)
+	assert.InDelta(t, 4e-06, opus55.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 2e-05, opus55.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, 2e-07, opus55.CacheReadCost, 1e-15)
+	assert.InDelta(t, 5e-06, opus55.CacheCreateCost, 1e-15)
+	assert.InDelta(t, 8e-06, opus55.CacheCreateAbove1hr, 1e-15)
+	assert.Nil(t, opus55.RatesValidUntil)
+
+	grok47 := entries["grok-4.7"]
+	assert.True(t, grok47.HasCacheRead)
+	assert.False(t, grok47.HasCacheCreate)
+	assert.InDelta(t, 2e-06, grok47.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 6e-06, grok47.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, 5e-07, grok47.CacheReadCost, 1e-15)
+	assert.InDelta(t, 4e-06, grok47.InputCostAbove[200_000], 1e-15)
+	assert.InDelta(t, 1.2e-05, grok47.OutputCostAbove[200_000], 1e-15)
+	assert.Nil(t, grok47.RatesValidUntil)
+
+	grok46 := entries["grok-4.6"]
+	assert.InDelta(t, grok47.InputCostPerToken, grok46.InputCostPerToken, 1e-15)
+	assert.InDelta(t, grok47.OutputCostPerToken, grok46.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, grok47.CacheReadCost, grok46.CacheReadCost, 1e-15)
+	assert.InDelta(t, grok47.InputCostAbove[200_000], grok46.InputCostAbove[200_000], 1e-15)
+	assert.Nil(t, grok46.RatesValidUntil)
 
 	require.Contains(t, entries, "gemini-3.8-flash")
 	require.Contains(t, entries, "gemini/gemini-3.8-flash")
