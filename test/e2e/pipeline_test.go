@@ -572,15 +572,12 @@ func TestE2E_Pipeline(t *testing.T) {
 					ServerName: serverName,
 				})
 			}
-			// Sort within execution by created_at (deterministic for single agent).
-			// Tiebreak by server_name so same-millisecond tool_list interactions
-			// (created in a tight loop) always land in a consistent order.
+			// Sort within execution by created_at. Compare parsed instants:
+			// RFC3339Nano omits trailing zeros, so string order is not time order.
+			// Tiebreak by server_name so same-instant tool_list rows stay stable.
 			sort.Slice(execInteractions, func(i, j int) bool {
 				a, b := execInteractions[i], execInteractions[j]
-				if a.CreatedAt != b.CreatedAt {
-					return a.CreatedAt < b.CreatedAt
-				}
-				return a.ServerName < b.ServerName
+				return lessByCreatedAt(a.CreatedAt, b.CreatedAt, a.ServerName, b.ServerName)
 			})
 			allInteractions = append(allInteractions, execInteractions...)
 		}
