@@ -412,30 +412,28 @@ func (s *StageService) WriteCancelAttribution(stageID, message string) error {
 	)
 	defer cancel()
 
-	if err := s.client.Stage.UpdateOneID(stageID).
+	n, err := s.client.Stage.Update().
+		Where(
+			stage.IDEQ(stageID),
+			stage.StatusIn(stage.StatusPending, stage.StatusActive),
+		).
 		SetErrorMessage(message).
-		Exec(writeCtx); err != nil {
-		if ent.IsNotFound(err) {
-			return ErrNotFound
-		}
+		Save(writeCtx)
+	if err != nil {
 		return fmt.Errorf("failed to write stage cancel attribution: %w", err)
 	}
+	if n == 0 {
+		return ErrNotFound
+	}
 
-	executions, err := s.client.AgentExecution.Query().
+	if _, err := s.client.AgentExecution.Update().
 		Where(
 			agentexecution.StageIDEQ(stageID),
 			agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
 		).
-		All(writeCtx)
-	if err != nil {
-		return fmt.Errorf("failed to query executions for cancel attribution: %w", err)
-	}
-	for _, exec := range executions {
-		if err := s.client.AgentExecution.UpdateOneID(exec.ID).
-			SetErrorMessage(message).
-			Exec(writeCtx); err != nil {
-			return fmt.Errorf("failed to write execution cancel attribution: %w", err)
-		}
+		SetErrorMessage(message).
+		Save(writeCtx); err != nil {
+		return fmt.Errorf("failed to write execution cancel attribution: %w", err)
 	}
 	return nil
 }

@@ -2,11 +2,14 @@ package slack
 
 import (
 	"fmt"
+	"strings"
 
 	goslack "github.com/slack-go/slack"
 )
 
 const maxBlockTextLength = 2900
+
+var slackMrkdwnEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
 var statusEmoji = map[string]string{
 	"completed": ":white_check_mark:",
@@ -107,8 +110,9 @@ func formatCancelAttribution(cancelledBy, cancelReason string) string {
 	if cancelledBy == "" {
 		return ""
 	}
+	cancelledBy = slackMrkdwnEscaper.Replace(cancelledBy)
 	if cancelReason != "" {
-		return fmt.Sprintf("Cancelled by %s: %s", cancelledBy, cancelReason)
+		return fmt.Sprintf("Cancelled by %s: %s", cancelledBy, slackMrkdwnEscaper.Replace(cancelReason))
 	}
 	return fmt.Sprintf("Cancelled by %s", cancelledBy)
 }

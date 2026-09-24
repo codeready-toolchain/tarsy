@@ -156,6 +156,19 @@ func TestBuildTerminalMessage_Cancelled(t *testing.T) {
 			wantContains: []string{"Cancelled by alice@example.com"},
 			wantAbsent:   []string{"*Error:*", "context canceled"},
 		},
+		{
+			name: "escapes mrkdwn in actor and reason",
+			input: SessionCompletedInput{
+				SessionID:    "sess-6",
+				Status:       "cancelled",
+				CancelledBy:  "alice & ops <oncall>",
+				CancelReason: "dup of <https://evil.example|click> & y",
+			},
+			wantContains: []string{
+				"Cancelled by alice &amp; ops &lt;oncall&gt;: dup of &lt;https://evil.example|click&gt; &amp; y",
+			},
+			wantAbsent: []string{"*Error:*", "<https://evil.example|click>"},
+		},
 	}
 
 	for _, tt := range tests {
