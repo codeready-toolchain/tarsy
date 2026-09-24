@@ -19,7 +19,6 @@ import { Error as ErrorIcon, Refresh as RefreshIcon } from '@mui/icons-material'
 import {
   EXECUTION_STATUS,
   SESSION_STATUS,
-  FAILED_EXECUTION_STATUSES,
 } from '../../constants/sessionStatus.ts';
 
 type ScoreColor = 'success' | 'warning' | 'error';
@@ -46,6 +45,13 @@ const IN_PROGRESS_STATUSES = new Set<string>([
   EXECUTION_STATUS.PENDING,
   EXECUTION_STATUS.STARTED,
   SESSION_STATUS.IN_PROGRESS,
+]);
+
+/** Scoring cancelled (shutdown) is still a failed eval locally — not timeline cancelled. */
+const FAILED_SCORING_STATUSES = new Set<string>([
+  EXECUTION_STATUS.FAILED,
+  EXECUTION_STATUS.TIMED_OUT,
+  EXECUTION_STATUS.CANCELLED,
 ]);
 
 function PillBadge({
@@ -190,7 +196,7 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
   }
 
   // --- Scoring failed / timed out ---
-  if (scoringStatus != null && FAILED_EXECUTION_STATUSES.has(scoringStatus)) {
+  if (scoringStatus != null && FAILED_SCORING_STATUSES.has(scoringStatus)) {
     const actionable = !!onClick;
     const icon = actionable ? <RefreshIcon /> : <ErrorIcon />;
     const tooltip = actionable ? 'Click to re-score' : 'Scoring failed';

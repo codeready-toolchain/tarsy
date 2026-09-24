@@ -10,6 +10,7 @@ import {
   formatTokens,
   formatTokensCompact,
   formatEstimatedCostUsd,
+  formatCancelAttribution,
   compactTimeAgo,
   timeAgo,
   liveDuration,
@@ -308,5 +309,29 @@ describe('formatEstimatedCostUsd', () => {
   it('formats mid-range and dollar amounts', () => {
     expect(formatEstimatedCostUsd(0.123)).toBe('$0.123');
     expect(formatEstimatedCostUsd(1.234)).toBe('$1.23');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatCancelAttribution
+// ---------------------------------------------------------------------------
+
+describe('formatCancelAttribution', () => {
+  it('returns empty when actor is missing', () => {
+    expect(formatCancelAttribution(null, 'duplicate')).toBe('');
+    expect(formatCancelAttribution(undefined, 'duplicate')).toBe('');
+    expect(formatCancelAttribution('  ', 'duplicate')).toBe('');
+  });
+
+  it('formats actor only', () => {
+    expect(formatCancelAttribution('alice@example.com', null)).toBe(
+      'Cancelled by alice@example.com',
+    );
+  });
+
+  it('formats actor and reason', () => {
+    expect(formatCancelAttribution('alice@example.com', 'duplicate alert')).toBe(
+      'Cancelled by alice@example.com: duplicate alert',
+    );
   });
 });

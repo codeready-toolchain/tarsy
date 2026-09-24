@@ -49,6 +49,7 @@ import type { ReviewModalMode, ReviewSelection } from '../types/api.ts';
 import { parseTimelineToFlow } from '../utils/timelineParser.ts';
 import type { FlowItem } from '../utils/timelineParser.ts';
 import { resolveDeepLink } from '../utils/deepLink.ts';
+import { formatCancelAttribution } from '../utils/format.ts';
 import type { SessionDetailResponse, TimelineEvent, StageOverview } from '../types/session.ts';
 import type { TimelineFocusRequest } from '../components/session/ConversationTimeline.tsx';
 import type { StreamingItem } from '../components/streaming/StreamingContentRenderer.tsx';
@@ -1595,7 +1596,9 @@ export function SessionDetailPage() {
   // Render
   // ────────────────────────────────────────────────────────────
 
-  const hasFinalContent = session?.final_analysis || session?.executive_summary || session?.error_message;
+  const hasFinalContent = session?.final_analysis || session?.executive_summary
+    || (session?.status !== SESSION_STATUS.CANCELLED && session?.error_message);
+  const cancelAttribution = formatCancelAttribution(session?.cancelled_by, session?.cancel_reason);
 
   // Memoized so the header (subscribed via PageHeaderContext) doesn't
   // re-render on every SessionDetailPage render — only when something the
@@ -1800,6 +1803,7 @@ export function SessionDetailPage() {
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
                   This session was cancelled before processing started.
+                  {cancelAttribution ? ` ${cancelAttribution}.` : ''}
                 </Typography>
               </Alert>
             ) : (
@@ -1842,6 +1846,8 @@ export function SessionDetailPage() {
                 summary={session.executive_summary}
                 sessionStatus={session.status}
                 errorMessage={session.error_message}
+                cancelledBy={session.cancelled_by}
+                cancelReason={session.cancel_reason}
                 expandCounter={expandCounter}
                 collapseCounter={cardsCollapseCounter}
                 sessionId={session.id}

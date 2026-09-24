@@ -26,8 +26,9 @@ import { ScoreCell } from './ScoreCell.tsx';
 import { ReviewCell } from './ReviewCell.tsx';
 import { qualityEvalScoreBodySx } from './qualityGroupSx.ts';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
-import { formatTimestamp } from '../../utils/format.ts';
+import { formatTimestamp, formatCancelAttribution } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
+import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
 
@@ -109,7 +110,15 @@ export function TriageSessionRow({
       )}
       <TableCell sx={{ width: '1%', whiteSpace: 'nowrap', pr: 3 }}>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-          <StatusBadge status={session.status} size="small" />
+          <StatusBadge
+            status={session.status}
+            size="small"
+            tooltip={
+              session.status === SESSION_STATUS.CANCELLED
+                ? formatCancelAttribution(session.cancelled_by, session.cancel_reason) || undefined
+                : undefined
+            }
+          />
           <SummaryTooltip summary={session.executive_summary ?? ''} />
         </Box>
       </TableCell>

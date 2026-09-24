@@ -10,6 +10,7 @@ import CopyLinkButton from '../shared/CopyLinkButton';
 import ErrorCard from '../timeline/ErrorCard';
 import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
+import { formatCancelAttribution } from '../../utils/format';
 import { QUALITY_RATING, REVIEW_SELECTION, REVIEW_STATUS } from '../../types/api';
 import { sessionScoringPath } from '../../constants/routes';
 import { sessionDeepLinkUrl } from '../../utils/deepLink';
@@ -21,6 +22,8 @@ interface FinalAnalysisCardProps {
   summary: string | null;
   sessionStatus: string;
   errorMessage: string | null;
+  cancelledBy?: string | null;
+  cancelReason?: string | null;
   /** Increment to collapse the card externally (e.g. Jump to Chat) */
   collapseCounter?: number;
   /** Increment to expand the card externally (e.g. Jump to Summary) */
@@ -42,10 +45,18 @@ interface FinalAnalysisCardProps {
 /**
  * Generate a placeholder analysis for terminal sessions with no real analysis.
  */
-function generateFakeAnalysis(status: string, errorMessage?: string | null): string {
+function generateFakeAnalysis(
+  status: string,
+  errorMessage?: string | null,
+  cancelledBy?: string | null,
+  cancelReason?: string | null,
+): string {
   switch (status) {
-    case SESSION_STATUS.CANCELLED:
-      return '# Session Cancelled\n\n**Status:** Session was terminated before the AI could complete its analysis.\n\nThis analysis session was cancelled before completion. No final analysis is available.\n\nIf you need to investigate this alert, please submit a new analysis session.';
+    case SESSION_STATUS.CANCELLED: {
+      const attribution = formatCancelAttribution(cancelledBy, cancelReason);
+      const attributionBlock = attribution ? `\n\n${attribution}` : '';
+      return `# Session Cancelled\n\n**Status:** Session was terminated before the AI could complete its analysis.${attributionBlock}\n\nThis analysis session was cancelled before completion. No final analysis is available.\n\nIf you need to investigate this alert, please submit a new analysis session.`;
+    }
     case SESSION_STATUS.FAILED:
       return `# Session Failed\n\nThis analysis session failed before completion.\n\n**Error Details:**\n${errorMessage ? `\`\`\`\n${errorMessage}\n\`\`\`` : '_No error details available_'}\n\nPlease review the session logs or submit a new analysis session.`;
     case SESSION_STATUS.COMPLETED:
@@ -61,7 +72,7 @@ function generateFakeAnalysis(status: string, errorMessage?: string | null): str
  * Supports counter-based expand/collapse from parent.
  */
 const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
-  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, reviewStatus, onReviewClick }, ref) => {
+  ({ analysis, summary, sessionStatus, errorMessage, cancelledBy, cancelReason, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, reviewStatus, onReviewClick }, ref) => {
     const navigate = useNavigate();
     const [analysisExpanded, setAnalysisExpanded] = useState(false);
     const [prevAnalysis, setPrevAnalysis] = useState<string | null>(null);
@@ -100,7 +111,9 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
       }
     }, [analysis, prevAnalysis, sessionStatus]);
 
-    const displayAnalysis = analysis || (isTerminalStatus(sessionStatus as SessionStatus) ? generateFakeAnalysis(sessionStatus, errorMessage) : null);
+    const displayAnalysis = analysis || (isTerminalStatus(sessionStatus as SessionStatus)
+      ? generateFakeAnalysis(sessionStatus, errorMessage, cancelledBy, cancelReason)
+      : null);
     const isFakeAnalysis = !analysis && isTerminalStatus(sessionStatus as SessionStatus);
 
     const getCombinedDocument = () => {

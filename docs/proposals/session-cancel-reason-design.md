@@ -255,7 +255,7 @@ Each PR leaves the product working. New behavior lands incrementally.
 
 **Temporary gap:** API accepts a reason; dashboard still sends none. Cancelled chats/sub-agents can still show failed chrome until PR2. Existing clients unchanged.
 
-### PR2 — Dashboard reason, tooltip, non-error cancelled chrome
+### PR2 — Dashboard reason, tooltip, non-error cancelled chrome - DONE
 
 **Lands:**
 

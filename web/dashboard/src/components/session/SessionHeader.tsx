@@ -26,9 +26,10 @@ import {
 import CopyButton from '../shared/CopyButton';
 import { AlertDataContent } from './OriginalAlertCard';
 import { StatusBadge } from '../common/StatusBadge';
+import { CancelReasonField } from '../common/CancelReasonField';
 import { SessionLabelChips } from '../common/SessionLabelChips';
 import ProgressIndicator from '../common/ProgressIndicator';
-import { formatTimestamp, formatTokensCompact } from '../../utils/format';
+import { formatTimestamp, formatTokensCompact, formatCancelAttribution } from '../../utils/format';
 import EstimatedCostDisplay from '../shared/EstimatedCostDisplay';
 import { cancelSession, triggerScoring, handleAPIError } from '../../services/api';
 import {
@@ -36,6 +37,7 @@ import {
   SCORING_STATUS,
   isTerminalStatus,
   canCancelSession,
+  isCancelReasonOverLimit,
   type SessionStatus,
   ACTIVE_STATUSES,
 } from '../../constants/sessionStatus';
@@ -102,31 +104,36 @@ export default function SessionHeader({
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   const handleCancelClick = useCallback(() => {
     setShowCancelDialog(true);
     setCancelError(null);
+    setCancelReason('');
   }, []);
 
   const handleDialogClose = useCallback(() => {
     if (!isCanceling) {
       setShowCancelDialog(false);
       setCancelError(null);
+      setCancelReason('');
     }
   }, [isCanceling]);
 
   const handleConfirmCancel = useCallback(async () => {
+    if (isCancelReasonOverLimit(cancelReason)) return;
     setIsCanceling(true);
     setCancelError(null);
     try {
-      await cancelSession(session.id);
+      await cancelSession(session.id, cancelReason);
       setShowCancelDialog(false);
+      setCancelReason('');
       setIsCanceling(false);
     } catch (error) {
       setCancelError(handleAPIError(error));
       setIsCanceling(false);
     }
-  }, [session.id]);
+  }, [session.id, cancelReason]);
 
   const showCanceling =
     (isCanceling || session.status === SESSION_STATUS.CANCELLING) &&
@@ -198,7 +205,14 @@ export default function SessionHeader({
               {session.alert_type || 'Alert Processing'}
             </Typography>
             <SessionLabelChips labels={session.labels} />
-            <StatusBadge status={session.status} />
+            <StatusBadge
+              status={session.status}
+              tooltip={
+                session.status === SESSION_STATUS.CANCELLED
+                  ? formatCancelAttribution(session.cancelled_by, session.cancel_reason) || undefined
+                  : undefined
+              }
+            />
             <Typography variant="body2" color="text.disabled">·</Typography>
             <ProgressIndicator
               status={session.status}
@@ -214,6 +228,7 @@ export default function SessionHeader({
               <Tooltip title={showCanceling ? 'Canceling…' : 'Cancel session'}>
                 <span>
                   <IconButton
+                    aria-label="Cancel session"
                     onClick={handleCancelClick}
                     disabled={showCanceling}
                     sx={{
@@ -449,6 +464,11 @@ export default function SessionHeader({
             undone. The session will be marked as cancelled and any ongoing
             processing will be stopped.
           </DialogContentText>
+          <CancelReasonField
+            value={cancelReason}
+            onChange={setCancelReason}
+            disabled={isCanceling}
+          />
           {cancelError && (
             <Box
               sx={(theme) => ({
@@ -478,7 +498,7 @@ export default function SessionHeader({
             onClick={handleConfirmCancel}
             variant="contained"
             color="warning"
-            disabled={isCanceling}
+            disabled={isCanceling || isCancelReasonOverLimit(cancelReason)}
             startIcon={
               isCanceling ? (
                 <CircularProgress size={16} color="inherit" />

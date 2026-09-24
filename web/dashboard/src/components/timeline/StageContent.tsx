@@ -143,9 +143,13 @@ const getStatusLabel = (status: string) => {
 function deriveExecutionStatus(items: FlowItem[]): string {
   if (items.length === 0) return EXECUTION_STATUS.STARTED;
   const hasError = items.some(
-    i => i.type === FLOW_ITEM.ERROR || FAILED_EXECUTION_STATUSES.has(i.status || ''),
+    i => i.type === FLOW_ITEM.ERROR
+      || i.status === EXECUTION_STATUS.FAILED
+      || i.status === EXECUTION_STATUS.TIMED_OUT,
   );
   if (hasError) return EXECUTION_STATUS.FAILED;
+  const hasCancelled = items.some(i => CANCELLED_EXECUTION_STATUSES.has(i.status || ''));
+  if (hasCancelled) return EXECUTION_STATUS.CANCELLED;
   // A final_analysis item is the definitive signal that the agent finished.
   const hasFinalAnalysis = items.some(i => i.type === FLOW_ITEM.FINAL_ANALYSIS);
   if (hasFinalAnalysis) return EXECUTION_STATUS.COMPLETED;

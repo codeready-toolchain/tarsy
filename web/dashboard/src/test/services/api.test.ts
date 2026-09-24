@@ -160,6 +160,21 @@ describe('API methods', () => {
       expect(client.post).toHaveBeenCalledWith('/api/v1/sessions/s1/cancel');
       expect(result.message).toBe('cancelling');
     });
+
+    it('posts reason only when non-empty after trim', async () => {
+      client.post.mockResolvedValue({ data: { session_id: 's1', message: 'cancelling' } });
+      await cancelSession('s1', '  duplicate alert  ');
+      expect(client.post).toHaveBeenCalledWith('/api/v1/sessions/s1/cancel', {
+        reason: 'duplicate alert',
+      });
+    });
+
+    it('omits body for whitespace-only reason', async () => {
+      client.post.mockResolvedValue({ data: { session_id: 's1', message: 'cancelling' } });
+      await cancelSession('s1', '   ');
+      expect(client.post).toHaveBeenCalledWith('/api/v1/sessions/s1/cancel');
+      expect(client.post.mock.calls[0].length).toBe(1);
+    });
   });
 
   describe('submitAlert', () => {

@@ -34,6 +34,8 @@ import { useNavigate } from 'react-router-dom';
 import { cancelSession, handleAPIError } from '../../services/api.ts';
 import { liveDuration } from '../../utils/format.ts';
 import { sessionDetailPath } from '../../constants/routes.ts';
+import { isCancelReasonOverLimit } from '../../constants/sessionStatus.ts';
+import { CancelReasonField } from '../common/CancelReasonField.tsx';
 import type { QueuedSessionItem } from '../../types/session.ts';
 
 interface QueuedAlertsSectionProps {
@@ -48,6 +50,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
   const [sessionToCancel, setSessionToCancel] = useState<string | null>(null);
   const [isCanceling, setIsCanceling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [, forceUpdate] = useState(0);
 
   // Clean up timeout on unmount
@@ -69,6 +72,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
     setSessionToCancel(sessionId);
     setCancelDialogOpen(true);
     setCancelError(null);
+    setCancelReason('');
   };
 
   const handleDialogClose = () => {
@@ -76,17 +80,20 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
       setCancelDialogOpen(false);
       setSessionToCancel(null);
       setCancelError(null);
+      setCancelReason('');
     }
   };
 
   const handleConfirmCancel = async () => {
     if (!sessionToCancel) return;
+    if (isCancelReasonOverLimit(cancelReason)) return;
     setIsCanceling(true);
     setCancelError(null);
     try {
-      await cancelSession(sessionToCancel);
+      await cancelSession(sessionToCancel, cancelReason);
       setCancelDialogOpen(false);
       setSessionToCancel(null);
+      setCancelReason('');
       setIsCanceling(false);
       if (onRefresh) {
         timeoutRef.current = setTimeout(onRefresh, 500);
@@ -218,6 +225,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
                       <IconButton
                         size="small"
                         color="error"
+                        aria-label="Cancel this queued session"
                         onClick={(e) => handleCancelClick(session.id, e)}
                         sx={{
                           '&:hover': {
@@ -244,6 +252,11 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
             Are you sure you want to cancel this queued session? It will be removed from the queue
             and will not be processed.
           </DialogContentText>
+          <CancelReasonField
+            value={cancelReason}
+            onChange={setCancelReason}
+            disabled={isCanceling}
+          />
           {cancelError && (
             <Box
               sx={{
@@ -269,7 +282,7 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
             onClick={handleConfirmCancel}
             variant="contained"
             color="error"
-            disabled={isCanceling}
+            disabled={isCanceling || isCancelReasonOverLimit(cancelReason)}
             startIcon={isCanceling ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
             {isCanceling ? 'Canceling...' : 'Yes, Cancel Session'}
