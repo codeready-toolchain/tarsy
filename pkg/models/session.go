@@ -76,6 +76,8 @@ type DashboardSessionItem struct {
 	ChainID               string           `json:"chain_id"`
 	Status                string           `json:"status"`
 	Author                *string          `json:"author"`
+	CancelledBy           *string          `json:"cancelled_by"`
+	CancelReason          *string          `json:"cancel_reason"`
 	CreatedAt             time.Time        `json:"created_at"`
 	StartedAt             *time.Time       `json:"started_at"`
 	CompletedAt           *time.Time       `json:"completed_at"`
@@ -169,6 +171,8 @@ type SessionDetailResponse struct {
 	Status                  string         `json:"status"`
 	ChainID                 string         `json:"chain_id"`
 	Author                  *string        `json:"author"`
+	CancelledBy             *string        `json:"cancelled_by"`
+	CancelReason            *string        `json:"cancel_reason"`
 	ErrorMessage            *string        `json:"error_message"`
 	FinalAnalysis           *string        `json:"final_analysis"`
 	ExecutiveSummary        *string        `json:"executive_summary"`
@@ -298,6 +302,8 @@ type SessionStatusResponse struct {
 	FinalAnalysis         *string  `json:"final_analysis"`
 	ExecutiveSummary      *string  `json:"executive_summary"`
 	ErrorMessage          *string  `json:"error_message"`
+	CancelledBy           *string  `json:"cancelled_by"`
+	CancelReason          *string  `json:"cancel_reason"`
 	Labels                []string `json:"labels"`
 	ReviewStatus          *string  `json:"review_status"`
 	Assignee              *string  `json:"assignee"`

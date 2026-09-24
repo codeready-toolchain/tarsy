@@ -2,7 +2,10 @@ package queue
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +14,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	tarsyslack "github.com/codeready-toolchain/tarsy/pkg/slack"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -728,6 +732,36 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 		assert.Equal(t, alertsession.ReviewStatusReviewed, *updated.ReviewStatus)
 		assert.NotNil(t, updated.ReviewedAt)
 		assert.Nil(t, updated.QualityRating)
+		assert.Nil(t, updated.ErrorMessage)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, systemCancelledBy, *updated.CancelledBy)
+		require.NotNil(t, updated.CancelReason)
+		assert.Equal(t, systemCancelReason, *updated.CancelReason)
+	})
+
+	t.Run("cancelled does not clobber existing cancel metadata", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusCancelling).
+			SetStartedAt(time.Now()).
+			SetCancelledBy("alice@example.com").
+			SetCancelReason("duplicate alert").
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		_, _, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status: alertsession.StatusCancelled,
+			Error:  context.Canceled,
+		})
+		require.NoError(t, err)
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
+		assert.Nil(t, updated.ErrorMessage)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, "alice@example.com", *updated.CancelledBy)
+		require.NotNil(t, updated.CancelReason)
+		assert.Equal(t, "duplicate alert", *updated.CancelReason)
 	})
 
 	t.Run("idempotent: skips if review_status already set", func(t *testing.T) {
@@ -751,6 +785,29 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 		updated := client.AlertSession.GetX(ctx, session.ID)
 		require.NotNil(t, updated.ReviewStatus)
 		assert.Equal(t, alertsession.ReviewStatusInProgress, *updated.ReviewStatus, "existing review_status should be preserved")
+		assert.Nil(t, updated.CancelledBy)
+	})
+
+	t.Run("timed_out is not attributed as a cancel", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusInProgress).
+			SetStartedAt(time.Now()).
+			ExecX(ctx)
+
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, nil)
+		_, _, err := w.updateSessionTerminalStatus(ctx, session, &ExecutionResult{
+			Status: alertsession.StatusTimedOut,
+			Error:  fmt.Errorf("session timed out"),
+		})
+		require.NoError(t, err)
+
+		updated := client.AlertSession.GetX(ctx, session.ID)
+		assert.Equal(t, alertsession.StatusTimedOut, updated.Status)
+		require.NotNil(t, updated.ErrorMessage)
+		assert.Equal(t, "session timed out", *updated.ErrorMessage)
+		assert.Nil(t, updated.CancelledBy)
+		assert.Nil(t, updated.CancelReason)
 	})
 
 	t.Run("no-op when session not in active state", func(t *testing.T) {
@@ -769,4 +826,88 @@ func TestUpdateSessionTerminalStatus_ReviewInit(t *testing.T) {
 		assert.False(t, statusUpdated, "status CAS should fail for already-terminal session")
 		assert.False(t, reviewInit)
 	})
+}
+
+func TestWorker_NotifySlackTerminal_ReloadsCancelMetadata(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	client := dbClient.Client
+	ctx := t.Context()
+	cfg := intTestQueueConfig()
+
+	t.Run("reloads actor from db and omits ErrorMessage", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusCancelling).
+			SetCancelledBy("alice@example.com").
+			SetCancelReason("duplicate alert").
+			ExecX(ctx)
+
+		stale := *session
+		require.Nil(t, stale.CancelledBy)
+
+		svc, posts := newCapturingSlackService(t)
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, svc)
+		w.notifySlackTerminal(ctx, &stale, &ExecutionResult{
+			Status: alertsession.StatusCancelled,
+			Error:  context.Canceled,
+		}, "1700000000.000001")
+
+		require.Len(t, posts(), 1)
+		body := posts()[0]
+		assert.Contains(t, body, "Analysis Cancelled")
+		assert.Contains(t, body, "Cancelled by alice@example.com: duplicate alert")
+		assert.NotContains(t, body, "*Error:*")
+		assert.NotContains(t, body, "context canceled")
+	})
+
+	t.Run("failed still posts ErrorMessage", func(t *testing.T) {
+		session := createTestSession(ctx, t, client)
+		svc, posts := newCapturingSlackService(t)
+		w := NewWorker("test-worker", "test-pod", client, cfg, nil, nil, nil, nil, svc)
+		w.notifySlackTerminal(ctx, session, &ExecutionResult{
+			Status: alertsession.StatusFailed,
+			Error:  fmt.Errorf("timeout waiting for LLM"),
+		}, "1700000000.000001")
+
+		require.Len(t, posts(), 1)
+		body := posts()[0]
+		assert.Contains(t, body, "Analysis Failed")
+		assert.Contains(t, body, "*Error:*")
+		assert.Contains(t, body, "timeout waiting for LLM")
+	})
+}
+
+func newCapturingSlackService(t *testing.T) (*tarsyslack.Service, func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var posts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat.postMessage" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		posts = append(posts, r.FormValue("blocks"))
+		n := len(posts)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"ts": fmt.Sprintf("1234567890.%06d", n),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	apiClient := tarsyslack.NewClientWithAPIURL("xoxb-test", "C99TEST", srv.URL+"/")
+	return tarsyslack.NewServiceWithClient(apiClient, "https://dash.example.com"), func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]string, len(posts))
+		copy(out, posts)
+		return out
+	}
 }

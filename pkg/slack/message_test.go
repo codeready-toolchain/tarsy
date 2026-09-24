@@ -105,15 +105,84 @@ func TestBuildTerminalMessage_TimedOut(t *testing.T) {
 }
 
 func TestBuildTerminalMessage_Cancelled(t *testing.T) {
-	input := SessionCompletedInput{
-		SessionID: "sess-6",
-		Status:    "cancelled",
+	tests := []struct {
+		name         string
+		input        SessionCompletedInput
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "header only when both fields empty",
+			input: SessionCompletedInput{
+				SessionID: "sess-6",
+				Status:    "cancelled",
+			},
+			wantContains: []string{":no_entry_sign:", "Analysis Cancelled"},
+			wantAbsent:   []string{"*Error:*", "Cancelled by"},
+		},
+		{
+			name: "actor only",
+			input: SessionCompletedInput{
+				SessionID:   "sess-6",
+				Status:      "cancelled",
+				CancelledBy: "alice@example.com",
+			},
+			wantContains: []string{":no_entry_sign:", "Analysis Cancelled", "Cancelled by alice@example.com"},
+			wantAbsent:   []string{"*Error:*", "Cancelled by alice@example.com:"},
+		},
+		{
+			name: "actor and reason",
+			input: SessionCompletedInput{
+				SessionID:    "sess-6",
+				Status:       "cancelled",
+				CancelledBy:  "alice@example.com",
+				CancelReason: "duplicate alert",
+			},
+			wantContains: []string{
+				":no_entry_sign:",
+				"Analysis Cancelled",
+				"Cancelled by alice@example.com: duplicate alert",
+			},
+			wantAbsent: []string{"*Error:*"},
+		},
+		{
+			name: "does not render ErrorMessage as Error",
+			input: SessionCompletedInput{
+				SessionID:    "sess-6",
+				Status:       "cancelled",
+				CancelledBy:  "alice@example.com",
+				ErrorMessage: "context canceled",
+			},
+			wantContains: []string{"Cancelled by alice@example.com"},
+			wantAbsent:   []string{"*Error:*", "context canceled"},
+		},
+		{
+			name: "escapes mrkdwn in actor and reason",
+			input: SessionCompletedInput{
+				SessionID:    "sess-6",
+				Status:       "cancelled",
+				CancelledBy:  "alice & ops <oncall>",
+				CancelReason: "dup of <https://evil.example|click> & y",
+			},
+			wantContains: []string{
+				"Cancelled by alice &amp; ops &lt;oncall&gt;: dup of &lt;https://evil.example|click&gt; &amp; y",
+			},
+			wantAbsent: []string{"*Error:*", "<https://evil.example|click>"},
+		},
 	}
-	blocks := BuildTerminalMessage(input, "https://dash.example.com")
 
-	header := blocks[0].(*goslack.SectionBlock)
-	assert.Contains(t, header.Text.Text, ":no_entry_sign:")
-	assert.Contains(t, header.Text.Text, "Analysis Cancelled")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			blocks := BuildTerminalMessage(tt.input, "https://dash.example.com")
+			header := blocks[0].(*goslack.SectionBlock)
+			for _, want := range tt.wantContains {
+				assert.Contains(t, header.Text.Text, want)
+			}
+			for _, absent := range tt.wantAbsent {
+				assert.NotContains(t, header.Text.Text, absent)
+			}
+		})
+	}
 }
 
 func TestTruncateForSlack(t *testing.T) {

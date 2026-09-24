@@ -1,12 +1,24 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	echo "github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
+	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
+	testdb "github.com/codeready-toolchain/tarsy/test/database"
+	"github.com/google/uuid"
 )
 
 func TestListSessionsHandler_Validation(t *testing.T) {
@@ -205,5 +217,293 @@ func TestSessionStatusHandler_Validation(t *testing.T) {
 				assert.Contains(t, he.Message, "session id")
 			}
 		}
+	})
+}
+
+type cancelTestPublisher struct {
+	sessionStatus []events.SessionStatusPayload
+	reviewStatus  []events.ReviewStatusPayload
+}
+
+func (p *cancelTestPublisher) PublishTimelineCreated(context.Context, string, events.TimelineCreatedPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishTimelineCompleted(context.Context, string, events.TimelineCompletedPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishStreamChunk(context.Context, string, events.StreamChunkPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishSessionStatus(_ context.Context, _ string, payload events.SessionStatusPayload) error {
+	p.sessionStatus = append(p.sessionStatus, payload)
+	return nil
+}
+func (p *cancelTestPublisher) PublishStageStatus(context.Context, string, events.StageStatusPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishChatCreated(context.Context, string, events.ChatCreatedPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishInteractionCreated(context.Context, string, events.InteractionCreatedPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishSessionProgress(context.Context, events.SessionProgressPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishExecutionProgress(context.Context, string, events.ExecutionProgressPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishExecutionStatus(context.Context, string, events.ExecutionStatusPayload) error {
+	return nil
+}
+func (p *cancelTestPublisher) PublishReviewStatus(_ context.Context, _ string, payload events.ReviewStatusPayload) error {
+	p.reviewStatus = append(p.reviewStatus, payload)
+	return nil
+}
+func (p *cancelTestPublisher) PublishSessionScoreUpdated(context.Context, string, events.SessionScoreUpdatedPayload) error {
+	return nil
+}
+
+func TestCancelSessionHandler_Validation(t *testing.T) {
+	s := &Server{}
+	e := echo.New()
+	e.POST("/api/v1/sessions/:id/cancel", s.cancelSessionHandler)
+
+	t.Run("invalid json", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/sess-1/cancel",
+			strings.NewReader("{bad"))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("over cap reason", func(t *testing.T) {
+		body := `{"reason":"` + strings.Repeat("a", services.MaxCancelReasonLength+1) + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/sess-1/cancel",
+			strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "must not exceed 500 characters")
+	})
+}
+
+func TestCancelSessionHandler_PendingAndInProgress(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	sessionService := newUsageTestSessionService(client.Client)
+	pub := &cancelTestPublisher{}
+	s := &Server{
+		sessionService: sessionService,
+		eventPublisher: pub,
+	}
+	e := echo.New()
+	e.POST("/api/v1/sessions/:id/cancel", s.cancelSessionHandler)
+	ctx := t.Context()
+
+	createPending := func(t *testing.T) string {
+		t.Helper()
+		sess, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+		return sess.ID
+	}
+
+	t.Run("empty body cancels pending as api-client", func(t *testing.T) {
+		id := createPending(t)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel", nil)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, sess.Status)
+		require.NotNil(t, sess.CancelledBy)
+		assert.Equal(t, "api-client", *sess.CancelledBy)
+		assert.Nil(t, sess.CancelReason)
+	})
+
+	t.Run("empty json object omits reason", func(t *testing.T) {
+		id := createPending(t)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel",
+			strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Nil(t, sess.CancelReason)
+	})
+
+	t.Run("trims whitespace-only reason to omitted", func(t *testing.T) {
+		id := createPending(t)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel",
+			strings.NewReader(`{"reason":"   "}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Nil(t, sess.CancelReason)
+	})
+
+	t.Run("extracts author and reason and publishes events", func(t *testing.T) {
+		id := createPending(t)
+		pub.sessionStatus = nil
+		pub.reviewStatus = nil
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel",
+			strings.NewReader(`{"reason":"duplicate of session abc"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-User", "alice@example.com")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, sess.Status)
+		require.NotNil(t, sess.CancelledBy)
+		assert.Equal(t, "alice@example.com", *sess.CancelledBy)
+		require.NotNil(t, sess.CancelReason)
+		assert.Equal(t, "duplicate of session abc", *sess.CancelReason)
+		require.NotNil(t, sess.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *sess.ReviewStatus)
+
+		require.Len(t, pub.sessionStatus, 1)
+		assert.Equal(t, events.EventTypeSessionStatus, pub.sessionStatus[0].Type)
+		assert.Equal(t, alertsession.StatusCancelled, pub.sessionStatus[0].Status)
+		require.Len(t, pub.reviewStatus, 1)
+		assert.Equal(t, events.EventTypeReviewStatus, pub.reviewStatus[0].Type)
+		assert.Equal(t, "system", pub.reviewStatus[0].Actor)
+		require.NotNil(t, pub.reviewStatus[0].ReviewStatus)
+		assert.Equal(t, string(alertsession.ReviewStatusReviewed), *pub.reviewStatus[0].ReviewStatus)
+	})
+
+	t.Run("in_progress does not publish terminal events from handler", func(t *testing.T) {
+		id := createPending(t)
+		require.NoError(t, sessionService.UpdateSessionStatus(ctx, id, alertsession.StatusInProgress))
+		pub.sessionStatus = nil
+		pub.reviewStatus = nil
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel", nil)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelling, sess.Status)
+		assert.Empty(t, pub.sessionStatus)
+		assert.Empty(t, pub.reviewStatus)
+	})
+}
+
+func TestCancelSessionHandler_ChatOnlyAttribution(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	sessionService := newUsageTestSessionService(client.Client)
+	chatService := services.NewChatService(client.Client)
+	stageService := services.NewStageService(client.Client)
+	s := &Server{
+		sessionService: sessionService,
+		chatService:    chatService,
+		stageService:   stageService,
+	}
+	e := echo.New()
+	e.POST("/api/v1/sessions/:id/cancel", s.cancelSessionHandler)
+	ctx := t.Context()
+
+	createCompleted := func(t *testing.T) string {
+		t.Helper()
+		sess, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+		require.NoError(t, sessionService.UpdateSessionStatus(ctx, sess.ID, alertsession.StatusCompleted))
+		return sess.ID
+	}
+
+	t.Run("completed session without chat does not set cancel fields", func(t *testing.T) {
+		id := createCompleted(t)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel", nil)
+		req.Header.Set("X-Forwarded-User", "alice@example.com")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCompleted, sess.Status)
+		assert.Nil(t, sess.CancelledBy)
+		assert.Nil(t, sess.CancelReason)
+	})
+
+	t.Run("records actor on chat stage without touching session fields", func(t *testing.T) {
+		id := createCompleted(t)
+		chatObj, err := chatService.CreateChat(ctx, models.CreateChatRequest{
+			SessionID: id,
+			CreatedBy: "alice@example.com",
+		})
+		require.NoError(t, err)
+
+		chatID := chatObj.ID
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          id,
+			StageName:          "Chat",
+			StageIndex:         1,
+			ExpectedAgentCount: 1,
+			ChatID:             &chatID,
+		})
+		require.NoError(t, err)
+
+		exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+			StageID:    stg.ID,
+			SessionID:  id,
+			AgentName:  "ChatAgent",
+			AgentIndex: 1,
+			LLMBackend: config.LLMBackendLangChain,
+		})
+		require.NoError(t, err)
+		require.NoError(t, stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusActive, ""))
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+id+"/cancel",
+			strings.NewReader(`{"reason":"should not land on session"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-User", "alice@example.com")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		// chatExecutor is unset, so HTTP is 409; attribution is written first.
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		sess, err := sessionService.GetSession(ctx, id, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCompleted, sess.Status)
+		assert.Nil(t, sess.CancelledBy)
+		assert.Nil(t, sess.CancelReason)
+
+		stgAfter, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		require.NotNil(t, stgAfter.ErrorMessage)
+		assert.Equal(t, "Cancelled by alice@example.com", *stgAfter.ErrorMessage)
+
+		execAfter, err := stageService.GetAgentExecutionByID(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, execAfter.ErrorMessage)
+		assert.Equal(t, "Cancelled by alice@example.com", *execAfter.ErrorMessage)
 	})
 }

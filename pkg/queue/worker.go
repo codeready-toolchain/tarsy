@@ -27,6 +27,9 @@ type WorkerStatus string
 const (
 	WorkerStatusIdle    WorkerStatus = "idle"
 	WorkerStatusWorking WorkerStatus = "working"
+
+	systemCancelledBy  = "system"
+	systemCancelReason = "worker context cancelled"
 )
 
 // Worker is a single queue worker that polls for and processes sessions.
@@ -389,7 +392,7 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 	if result.Labels != nil {
 		update = update.SetLabels(*result.Labels)
 	}
-	if result.Error != nil {
+	if result.Error != nil && result.Status != alertsession.StatusCancelled {
 		update = update.SetErrorMessage(result.Error.Error())
 	}
 
@@ -399,6 +402,19 @@ func (w *Worker) updateSessionTerminalStatus(ctx context.Context, session *ent.A
 	}
 	if statusAffected == 0 {
 		return false, false, nil
+	}
+
+	if result.Status == alertsession.StatusCancelled {
+		if _, err := tx.AlertSession.Update().
+			Where(
+				alertsession.IDEQ(session.ID),
+				alertsession.CancelledByIsNil(),
+			).
+			SetCancelledBy(systemCancelledBy).
+			SetCancelReason(systemCancelReason).
+			Save(ctx); err != nil {
+			return false, false, fmt.Errorf("failed to set system cancel attribution: %w", err)
+		}
 	}
 
 	// 2. Initialize review_status (conditional on review_status IS NULL to avoid TOCTOU).
@@ -531,7 +547,22 @@ func (w *Worker) notifySlackTerminal(ctx context.Context, session *ent.AlertSess
 	}
 
 	var errMsg string
-	if result.Error != nil {
+	var cancelledBy, cancelReason string
+	if result.Status == alertsession.StatusCancelled {
+		reloaded, err := w.client.AlertSession.Get(ctx, session.ID)
+		if err != nil {
+			slog.Warn("Failed to reload session for Slack cancel attribution",
+				"session_id", session.ID, "error", err)
+		} else {
+			session = reloaded
+		}
+		if session.CancelledBy != nil {
+			cancelledBy = *session.CancelledBy
+		}
+		if session.CancelReason != nil {
+			cancelReason = *session.CancelReason
+		}
+	} else if result.Error != nil {
 		errMsg = result.Error.Error()
 	}
 
@@ -542,6 +573,8 @@ func (w *Worker) notifySlackTerminal(ctx context.Context, session *ent.AlertSess
 		ExecutiveSummary:        result.ExecutiveSummary,
 		FinalAnalysis:           result.FinalAnalysis,
 		ErrorMessage:            errMsg,
+		CancelledBy:             cancelledBy,
+		CancelReason:            cancelReason,
 		SlackMessageFingerprint: fingerprint,
 		ThreadTS:                threadTS,
 	})

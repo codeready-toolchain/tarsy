@@ -205,7 +205,11 @@ func (s *StageService) UpdateAgentExecutionStatus(ctx context.Context, execution
 	}
 
 	if errorMsg != "" {
-		update = update.SetErrorMessage(errorMsg)
+		skip := status == agentexecution.StatusCancelled &&
+			exec.ErrorMessage != nil && *exec.ErrorMessage != ""
+		if !skip {
+			update = update.SetErrorMessage(errorMsg)
+		}
 	}
 
 	err = update.Exec(writeCtx)
@@ -388,10 +392,50 @@ func (s *StageService) UpdateStageStatus(ctx context.Context, stageID string) er
 		update = update.SetDurationMs(durationMs)
 	}
 	if errorMessage != "" {
-		update = update.SetErrorMessage(errorMessage)
+		skip := finalStatus == stage.StatusCancelled &&
+			stg.ErrorMessage != nil && *stg.ErrorMessage != ""
+		if !skip {
+			update = update.SetErrorMessage(errorMessage)
+		}
 	}
 
 	return update.Exec(writeCtx)
+}
+
+// WriteCancelAttribution records who cancelled a chat stage and its in-flight
+// executions. Uses a background write context so the string survives even if
+// the HTTP request is cancelled. Best-effort: callers should log and continue.
+func (s *StageService) WriteCancelAttribution(stageID, message string) error {
+	writeCtx, cancel := context.WithTimeoutCause(
+		context.Background(), 5*time.Second,
+		fmt.Errorf("write cancel attribution for stage %s: db write timed out", stageID),
+	)
+	defer cancel()
+
+	n, err := s.client.Stage.Update().
+		Where(
+			stage.IDEQ(stageID),
+			stage.StatusIn(stage.StatusPending, stage.StatusActive),
+		).
+		SetErrorMessage(message).
+		Save(writeCtx)
+	if err != nil {
+		return fmt.Errorf("failed to write stage cancel attribution: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+
+	if _, err := s.client.AgentExecution.Update().
+		Where(
+			agentexecution.StageIDEQ(stageID),
+			agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
+		).
+		SetErrorMessage(message).
+		Save(writeCtx); err != nil {
+		return fmt.Errorf("failed to write execution cancel attribution: %w", err)
+	}
+	return nil
 }
 
 // ForceStageFailure directly sets a stage to terminal failed state.

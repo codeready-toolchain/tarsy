@@ -5,6 +5,8 @@
   "alert_type": "test-alert",
   "assignee": null,
   "author": "api-client",
+  "cancel_reason": null,
+  "cancelled_by": null,
   "chain_id": "test-chain",
   "chat_enabled": true,
   "chat_id": "{UUID}",

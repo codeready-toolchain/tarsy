@@ -47,6 +47,10 @@ type AlertSession struct {
 	SessionMetadata map[string]interface{} `json:"session_metadata,omitempty"`
 	// From oauth2-proxy
 	Author *string `json:"author,omitempty"`
+	// Who requested cancel: extractAuthor, or system safety net
+	CancelledBy *string `json:"cancelled_by,omitempty"`
+	// Optional cancel reason; NULL if omitted
+	CancelReason *string `json:"cancel_reason,omitempty"`
 	// RunbookURL holds the value of the "runbook_url" field.
 	RunbookURL *string `json:"runbook_url,omitempty"`
 	// MCP override config
@@ -235,7 +239,7 @@ func (*AlertSession) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case alertsession.FieldCurrentStageIndex:
 			values[i] = new(sql.NullInt64)
-		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint, alertsession.FieldReviewStatus, alertsession.FieldAssignee, alertsession.FieldQualityRating, alertsession.FieldActionTaken, alertsession.FieldInvestigationFeedback:
+		case alertsession.FieldID, alertsession.FieldAlertData, alertsession.FieldAgentType, alertsession.FieldAlertType, alertsession.FieldStatus, alertsession.FieldErrorMessage, alertsession.FieldFinalAnalysis, alertsession.FieldExecutiveSummary, alertsession.FieldExecutiveSummaryError, alertsession.FieldAuthor, alertsession.FieldCancelledBy, alertsession.FieldCancelReason, alertsession.FieldRunbookURL, alertsession.FieldChainID, alertsession.FieldCurrentStageID, alertsession.FieldPodID, alertsession.FieldSlackMessageFingerprint, alertsession.FieldReviewStatus, alertsession.FieldAssignee, alertsession.FieldQualityRating, alertsession.FieldActionTaken, alertsession.FieldInvestigationFeedback:
 			values[i] = new(sql.NullString)
 		case alertsession.FieldCreatedAt, alertsession.FieldStartedAt, alertsession.FieldCompletedAt, alertsession.FieldLastInteractionAt, alertsession.FieldDeletedAt, alertsession.FieldAssignedAt, alertsession.FieldReviewedAt:
 			values[i] = new(sql.NullTime)
@@ -354,6 +358,20 @@ func (_m *AlertSession) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Author = new(string)
 				*_m.Author = value.String
+			}
+		case alertsession.FieldCancelledBy:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field cancelled_by", values[i])
+			} else if value.Valid {
+				_m.CancelledBy = new(string)
+				*_m.CancelledBy = value.String
+			}
+		case alertsession.FieldCancelReason:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field cancel_reason", values[i])
+			} else if value.Valid {
+				_m.CancelReason = new(string)
+				*_m.CancelReason = value.String
 			}
 		case alertsession.FieldRunbookURL:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -616,6 +634,16 @@ func (_m *AlertSession) String() string {
 	builder.WriteString(", ")
 	if v := _m.Author; v != nil {
 		builder.WriteString("author=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.CancelledBy; v != nil {
+		builder.WriteString("cancelled_by=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.CancelReason; v != nil {
+		builder.WriteString("cancel_reason=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

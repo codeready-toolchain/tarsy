@@ -1133,6 +1133,37 @@ func collectIDs(items []models.DashboardSessionItem) []string {
 	return ids
 }
 
+func TestGetTriageGroup_CancelMetadata(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	id := seedReviewSession(t, service, "reviewed", "alice@example.com")
+	reason := "duplicate alert"
+	client.AlertSession.UpdateOneID(id).
+		SetStatus(alertsession.StatusCancelled).
+		SetCancelledBy("alice@example.com").
+		SetCancelReason(reason).
+		ExecX(ctx)
+
+	result, err := service.GetTriageGroup(ctx, models.TriageGroupReviewed,
+		models.TriageGroupParams{Page: 1, PageSize: 20})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Sessions)
+	var item *models.DashboardSessionItem
+	for i := range result.Sessions {
+		if result.Sessions[i].ID == id {
+			item = &result.Sessions[i]
+			break
+		}
+	}
+	require.NotNil(t, item)
+	require.NotNil(t, item.CancelledBy)
+	assert.Equal(t, "alice@example.com", *item.CancelledBy)
+	require.NotNil(t, item.CancelReason)
+	assert.Equal(t, reason, *item.CancelReason)
+}
+
 func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)

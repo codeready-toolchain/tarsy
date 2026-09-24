@@ -663,6 +663,8 @@ type triageRow struct {
 	ChainID               string     `sql:"chain_id"`
 	Status                string     `sql:"status"`
 	Author                *string    `sql:"author"`
+	CancelledBy           *string    `sql:"cancelled_by"`
+	CancelReason          *string    `sql:"cancel_reason"`
 	CreatedAt             time.Time  `sql:"created_at"`
 	StartedAt             *time.Time `sql:"started_at"`
 	CompletedAt           *time.Time `sql:"completed_at"`
@@ -738,6 +740,8 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				sel.C(alertsession.FieldChainID),
 				sel.C(alertsession.FieldStatus),
 				sel.C(alertsession.FieldAuthor),
+				sel.C(alertsession.FieldCancelledBy),
+				sel.C(alertsession.FieldCancelReason),
 				sel.C(alertsession.FieldCreatedAt),
 				sel.C(alertsession.FieldStartedAt),
 				sel.C(alertsession.FieldCompletedAt),
@@ -816,6 +820,8 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			ChainID:               row.ChainID,
 			Status:                row.Status,
 			Author:                row.Author,
+			CancelledBy:           row.CancelledBy,
+			CancelReason:          row.CancelReason,
 			CreatedAt:             row.CreatedAt,
 			StartedAt:             row.StartedAt,
 			CompletedAt:           row.CompletedAt,

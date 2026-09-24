@@ -71,6 +71,14 @@ func (AlertSession) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("From oauth2-proxy"),
+		field.String("cancelled_by").
+			Optional().
+			Nillable().
+			Comment("Who requested cancel: extractAuthor, or system safety net"),
+		field.Text("cancel_reason").
+			Optional().
+			Nillable().
+			Comment("Optional cancel reason; NULL if omitted"),
 		field.String("runbook_url").
 			Optional().
 			Nillable(),

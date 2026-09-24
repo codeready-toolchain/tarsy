@@ -85,6 +85,8 @@ var (
 		{Name: "labels", Type: field.TypeJSON, Nullable: true},
 		{Name: "session_metadata", Type: field.TypeJSON, Nullable: true},
 		{Name: "author", Type: field.TypeString, Nullable: true},
+		{Name: "cancelled_by", Type: field.TypeString, Nullable: true},
+		{Name: "cancel_reason", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "runbook_url", Type: field.TypeString, Nullable: true},
 		{Name: "mcp_selection", Type: field.TypeJSON, Nullable: true},
 		{Name: "chain_id", Type: field.TypeString},
@@ -126,7 +128,7 @@ var (
 			{
 				Name:    "alertsession_chain_id",
 				Unique:  false,
-				Columns: []*schema.Column{AlertSessionsColumns[17]},
+				Columns: []*schema.Column{AlertSessionsColumns[19]},
 			},
 			{
 				Name:    "alertsession_status_created_at",
@@ -141,12 +143,12 @@ var (
 			{
 				Name:    "alertsession_status_last_interaction_at",
 				Unique:  false,
-				Columns: []*schema.Column{AlertSessionsColumns[4], AlertSessionsColumns[21]},
+				Columns: []*schema.Column{AlertSessionsColumns[4], AlertSessionsColumns[23]},
 			},
 			{
 				Name:    "alertsession_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{AlertSessionsColumns[23]},
+				Columns: []*schema.Column{AlertSessionsColumns[25]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "deleted_at IS NOT NULL",
 				},
@@ -154,17 +156,17 @@ var (
 			{
 				Name:    "alertsession_review_status",
 				Unique:  false,
-				Columns: []*schema.Column{AlertSessionsColumns[24]},
+				Columns: []*schema.Column{AlertSessionsColumns[26]},
 			},
 			{
 				Name:    "alertsession_review_status_assignee",
 				Unique:  false,
-				Columns: []*schema.Column{AlertSessionsColumns[24], AlertSessionsColumns[25]},
+				Columns: []*schema.Column{AlertSessionsColumns[26], AlertSessionsColumns[27]},
 			},
 			{
 				Name:    "alertsession_assignee",
 				Unique:  false,
-				Columns: []*schema.Column{AlertSessionsColumns[25]},
+				Columns: []*schema.Column{AlertSessionsColumns[27]},
 			},
 		},
 	}

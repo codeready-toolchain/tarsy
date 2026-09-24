@@ -43,6 +43,10 @@ const (
 	FieldSessionMetadata = "session_metadata"
 	// FieldAuthor holds the string denoting the author field in the database.
 	FieldAuthor = "author"
+	// FieldCancelledBy holds the string denoting the cancelled_by field in the database.
+	FieldCancelledBy = "cancelled_by"
+	// FieldCancelReason holds the string denoting the cancel_reason field in the database.
+	FieldCancelReason = "cancel_reason"
 	// FieldRunbookURL holds the string denoting the runbook_url field in the database.
 	FieldRunbookURL = "runbook_url"
 	// FieldMcpSelection holds the string denoting the mcp_selection field in the database.
@@ -224,6 +228,8 @@ var Columns = []string{
 	FieldLabels,
 	FieldSessionMetadata,
 	FieldAuthor,
+	FieldCancelledBy,
+	FieldCancelReason,
 	FieldRunbookURL,
 	FieldMcpSelection,
 	FieldChainID,
@@ -408,6 +414,16 @@ func ByExecutiveSummaryError(opts ...sql.OrderTermOption) OrderOption {
 // ByAuthor orders the results by the author field.
 func ByAuthor(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAuthor, opts...).ToFunc()
+}
+
+// ByCancelledBy orders the results by the cancelled_by field.
+func ByCancelledBy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCancelledBy, opts...).ToFunc()
+}
+
+// ByCancelReason orders the results by the cancel_reason field.
+func ByCancelReason(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCancelReason, opts...).ToFunc()
 }
 
 // ByRunbookURL orders the results by the runbook_url field.
