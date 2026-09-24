@@ -412,6 +412,28 @@ func (app *TestApp) CancelSession(t *testing.T, sessionID string) map[string]int
 	return app.postJSON(t, "/api/v1/sessions/"+sessionID+"/cancel", nil, http.StatusOK)
 }
 
+// CancelSessionWith posts cancel with an optional reason and X-Forwarded-User.
+func (app *TestApp) CancelSessionWith(t *testing.T, sessionID, reason, author string) map[string]interface{} {
+	t.Helper()
+	body := map[string]string{"reason": reason}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		app.BaseURL+"/api/v1/sessions/"+sessionID+"/cancel", bytes.NewReader(data))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	if author != "" {
+		req.Header.Set("X-Forwarded-User", author)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode, "POST cancel: unexpected status")
+	var result map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	return result
+}
+
 // WaitForStageStatus polls the DB until the stage reaches a terminal status.
 // Returns the terminal status string.
 func (app *TestApp) WaitForStageStatus(t *testing.T, stageID string, expected ...string) string {

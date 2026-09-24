@@ -318,43 +318,63 @@ func (s *SessionService) FindOrphanedSessions(ctx context.Context, timeoutDurati
 	return sessions, nil
 }
 
-// CancelSession requests cancellation of an in-progress session.
-// Sets the DB status to "cancelling" (intermediate state).
-// The owning worker detects this and propagates cancellation.
-func (s *SessionService) CancelSession(_ context.Context, sessionID string) error {
-	// Use background context with timeout for critical write
-	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// CancelSession requests cancellation of a pending or in-progress session.
+// pending → cancelled immediately (with completed_at and auto-review).
+// in_progress → cancelling; the owning worker observes the cancelled context
+// and writes terminal cancelled. Returns the status written on success.
+func (s *SessionService) CancelSession(_ context.Context, sessionID, cancelledBy string, cancelReason *string) (alertsession.Status, error) {
+	bgCtx, cancel := context.WithTimeoutCause(
+		context.Background(), 5*time.Second,
+		fmt.Errorf("cancel session %s: db write timed out", sessionID),
+	)
 	defer cancel()
 
-	// Conditional update: only update if session exists and is in_progress
-	// This prevents TOCTOU race conditions
-	count, err := s.client.AlertSession.Update().
+	now := time.Now()
+	pendingCount, err := s.client.AlertSession.Update().
+		Where(
+			alertsession.IDEQ(sessionID),
+			alertsession.StatusEQ(alertsession.StatusPending),
+		).
+		SetStatus(alertsession.StatusCancelled).
+		SetCancelledBy(cancelledBy).
+		SetNillableCancelReason(cancelReason).
+		SetCompletedAt(now).
+		SetReviewStatus(alertsession.ReviewStatusReviewed).
+		SetReviewedAt(now).
+		Save(bgCtx)
+	if err != nil {
+		return "", fmt.Errorf("failed to cancel pending session: %w", err)
+	}
+	if pendingCount > 0 {
+		return alertsession.StatusCancelled, nil
+	}
+
+	inProgressCount, err := s.client.AlertSession.Update().
 		Where(
 			alertsession.IDEQ(sessionID),
 			alertsession.StatusEQ(alertsession.StatusInProgress),
 		).
 		SetStatus(alertsession.StatusCancelling).
+		SetCancelledBy(cancelledBy).
+		SetNillableCancelReason(cancelReason).
 		Save(bgCtx)
 	if err != nil {
-		return fmt.Errorf("failed to cancel session: %w", err)
+		return "", fmt.Errorf("failed to cancel session: %w", err)
+	}
+	if inProgressCount > 0 {
+		return alertsession.StatusCancelling, nil
 	}
 
-	// Check if the update actually modified a row
-	if count == 0 {
-		// Distinguish "not found" from "not in cancellable state"
-		exists, err := s.client.AlertSession.Query().
-			Where(alertsession.IDEQ(sessionID)).
-			Exist(bgCtx)
-		if err != nil {
-			return fmt.Errorf("failed to check session existence: %w", err)
-		}
-		if !exists {
-			return ErrNotFound
-		}
-		return ErrNotCancellable
+	exists, err := s.client.AlertSession.Query().
+		Where(alertsession.IDEQ(sessionID)).
+		Exist(bgCtx)
+	if err != nil {
+		return "", fmt.Errorf("failed to check session existence: %w", err)
 	}
-
-	return nil
+	if !exists {
+		return "", ErrNotFound
+	}
+	return "", ErrNotCancellable
 }
 
 // SoftDeleteOldSessions soft deletes sessions older than retention period.
@@ -655,6 +675,8 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		Status:                  string(session.Status),
 		ChainID:                 session.ChainID,
 		Author:                  session.Author,
+		CancelledBy:             session.CancelledBy,
+		CancelReason:            session.CancelReason,
 		ErrorMessage:            session.ErrorMessage,
 		FinalAnalysis:           session.FinalAnalysis,
 		ExecutiveSummary:        session.ExecutiveSummary,
@@ -807,6 +829,8 @@ func (s *SessionService) GetSessionStatus(ctx context.Context, sessionID string)
 		FinalAnalysis:         session.FinalAnalysis,
 		ExecutiveSummary:      session.ExecutiveSummary,
 		ErrorMessage:          session.ErrorMessage,
+		CancelledBy:           session.CancelledBy,
+		CancelReason:          session.CancelReason,
 		Labels:                session.Labels,
 		ReviewStatus:          ptrStringFromReviewStatus(session.ReviewStatus),
 		Assignee:              session.Assignee,
@@ -895,6 +919,8 @@ type dashboardRow struct {
 	ChainID           string     `sql:"chain_id"`
 	Status            string     `sql:"status"`
 	Author            *string    `sql:"author"`
+	CancelledBy       *string    `sql:"cancelled_by"`
+	CancelReason      *string    `sql:"cancel_reason"`
 	CreatedAt         time.Time  `sql:"created_at"`
 	StartedAt         *time.Time `sql:"started_at"`
 	CompletedAt       *time.Time `sql:"completed_at"`
@@ -1130,6 +1156,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldChainID),
 				sel.C(alertsession.FieldStatus),
 				sel.C(alertsession.FieldAuthor),
+				sel.C(alertsession.FieldCancelledBy),
+				sel.C(alertsession.FieldCancelReason),
 				sel.C(alertsession.FieldCreatedAt),
 				sel.C(alertsession.FieldStartedAt),
 				sel.C(alertsession.FieldCompletedAt),
@@ -1301,6 +1329,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ChainID:               row.ChainID,
 			Status:                row.Status,
 			Author:                row.Author,
+			CancelledBy:           row.CancelledBy,
+			CancelReason:          row.CancelReason,
 			CreatedAt:             row.CreatedAt,
 			StartedAt:             row.StartedAt,
 			CompletedAt:           row.CompletedAt,

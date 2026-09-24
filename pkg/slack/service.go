@@ -28,6 +28,8 @@ type SessionCompletedInput struct {
 	ExecutiveSummary        string
 	FinalAnalysis           string
 	ErrorMessage            string
+	CancelledBy             string
+	CancelReason            string
 	SlackMessageFingerprint string
 	ThreadTS                string // Cached from start notification
 }

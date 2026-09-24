@@ -401,9 +401,9 @@ func TestSessionService_FindOrphanedSessions(t *testing.T) {
 func TestSessionService_CancelSession(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	t.Run("cancels in-progress session", func(t *testing.T) {
+	t.Run("cancels in-progress session with reason", func(t *testing.T) {
 		req := models.CreateSessionRequest{
 			SessionID: uuid.New().String(),
 			AlertData: "test alert",
@@ -413,31 +413,112 @@ func TestSessionService_CancelSession(t *testing.T) {
 		session, err := service.CreateSession(ctx, req)
 		require.NoError(t, err)
 
-		// Set to in_progress
 		err = service.UpdateSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
 		require.NoError(t, err)
 
-		err = service.CancelSession(ctx, session.ID)
+		reason := "duplicate of session abc"
+		status, err := service.CancelSession(ctx, session.ID, "alice@example.com", &reason)
 		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelling, status)
 
-		// Verify status is now cancelling
 		updated, err := service.GetSession(ctx, session.ID, false)
 		require.NoError(t, err)
 		assert.Equal(t, alertsession.StatusCancelling, updated.Status)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, "alice@example.com", *updated.CancelledBy)
+		require.NotNil(t, updated.CancelReason)
+		assert.Equal(t, reason, *updated.CancelReason)
+	})
+
+	t.Run("cancels in-progress session without reason", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		err = service.UpdateSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
+		require.NoError(t, err)
+
+		status, err := service.CancelSession(ctx, session.ID, "alice@example.com", nil)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelling, status)
+
+		updated, err := service.GetSession(ctx, session.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelling, updated.Status)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, "alice@example.com", *updated.CancelledBy)
+		assert.Nil(t, updated.CancelReason)
+	})
+
+	t.Run("cancels pending session immediately", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		reason := "queued duplicate"
+		status, err := service.CancelSession(ctx, session.ID, "bob@example.com", &reason)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, status)
+
+		updated, err := service.GetSession(ctx, session.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, "bob@example.com", *updated.CancelledBy)
+		require.NotNil(t, updated.CancelReason)
+		assert.Equal(t, reason, *updated.CancelReason)
+		require.NotNil(t, updated.CompletedAt)
+		require.NotNil(t, updated.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *updated.ReviewStatus)
+		require.NotNil(t, updated.ReviewedAt)
+	})
+
+	t.Run("cancels pending session without reason", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		status, err := service.CancelSession(ctx, session.ID, "bob@example.com", nil)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, status)
+
+		updated, err := service.GetSession(ctx, session.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, alertsession.StatusCancelled, updated.Status)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, "bob@example.com", *updated.CancelledBy)
+		assert.Nil(t, updated.CancelReason)
+		require.NotNil(t, updated.CompletedAt)
+		require.NotNil(t, updated.ReviewStatus)
+		assert.Equal(t, alertsession.ReviewStatusReviewed, *updated.ReviewStatus)
 	})
 
 	t.Run("returns ErrNotFound for missing session", func(t *testing.T) {
-		err := service.CancelSession(ctx, "nonexistent")
+		_, err := service.CancelSession(ctx, "nonexistent", "alice@example.com", nil)
 		require.Error(t, err)
 		assert.Equal(t, ErrNotFound, err)
 	})
 
-	t.Run("returns ErrNotCancellable for non-in-progress session", func(t *testing.T) {
+	t.Run("returns ErrNotCancellable for non-cancellable session", func(t *testing.T) {
 		tests := []struct {
 			name   string
 			status alertsession.Status
 		}{
-			{name: "pending", status: alertsession.StatusPending},
 			{name: "completed", status: alertsession.StatusCompleted},
 			{name: "failed", status: alertsession.StatusFailed},
 			{name: "cancelled", status: alertsession.StatusCancelled},
@@ -456,19 +537,46 @@ func TestSessionService_CancelSession(t *testing.T) {
 				session, err := service.CreateSession(ctx, req)
 				require.NoError(t, err)
 
-				// For non-pending states, explicitly set the status
-				if tt.status != alertsession.StatusPending {
-					err = client.AlertSession.UpdateOneID(session.ID).
-						SetStatus(tt.status).
-						Exec(ctx)
-					require.NoError(t, err)
-				}
+				err = client.AlertSession.UpdateOneID(session.ID).
+					SetStatus(tt.status).
+					Exec(ctx)
+				require.NoError(t, err)
 
-				err = service.CancelSession(ctx, session.ID)
+				_, err = service.CancelSession(ctx, session.ID, "alice@example.com", nil)
 				require.Error(t, err)
 				assert.Equal(t, ErrNotCancellable, err)
 			})
 		}
+	})
+
+	t.Run("does not overwrite actor on already-cancelling session", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "test alert",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		err = service.UpdateSessionStatus(ctx, session.ID, alertsession.StatusInProgress)
+		require.NoError(t, err)
+
+		firstReason := "first cancel"
+		_, err = service.CancelSession(ctx, session.ID, "alice@example.com", &firstReason)
+		require.NoError(t, err)
+
+		secondReason := "second cancel"
+		_, err = service.CancelSession(ctx, session.ID, "eve@example.com", &secondReason)
+		require.Error(t, err)
+		assert.Equal(t, ErrNotCancellable, err)
+
+		updated, err := service.GetSession(ctx, session.ID, false)
+		require.NoError(t, err)
+		require.NotNil(t, updated.CancelledBy)
+		assert.Equal(t, "alice@example.com", *updated.CancelledBy)
+		require.NotNil(t, updated.CancelReason)
+		assert.Equal(t, firstReason, *updated.CancelReason)
 	})
 }
 
@@ -788,6 +896,8 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, "k8s-analysis", detail.ChainID)
 		require.NotNil(t, detail.Author)
 		assert.Equal(t, "test-author", *detail.Author)
+		assert.Nil(t, detail.CancelledBy)
+		assert.Nil(t, detail.CancelReason)
 
 		// Analysis results.
 		require.NotNil(t, detail.FinalAnalysis)
@@ -3276,6 +3386,56 @@ func TestSessionService_GetSessionStatus(t *testing.T) {
 
 		_, err = service.GetSessionStatus(ctx, session.ID)
 		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("copies cancel metadata onto status and detail", func(t *testing.T) {
+		req := models.CreateSessionRequest{
+			SessionID: uuid.New().String(),
+			AlertData: "cancelled session",
+			AgentType: "kubernetes",
+			ChainID:   "k8s-analysis",
+		}
+		session, err := service.CreateSession(ctx, req)
+		require.NoError(t, err)
+
+		reason := "duplicate alert"
+		err = client.AlertSession.UpdateOneID(session.ID).
+			SetStatus(alertsession.StatusCancelled).
+			SetCancelledBy("alice@example.com").
+			SetCancelReason(reason).
+			Exec(ctx)
+		require.NoError(t, err)
+
+		status, err := service.GetSessionStatus(ctx, session.ID)
+		require.NoError(t, err)
+		require.NotNil(t, status.CancelledBy)
+		assert.Equal(t, "alice@example.com", *status.CancelledBy)
+		require.NotNil(t, status.CancelReason)
+		assert.Equal(t, reason, *status.CancelReason)
+
+		detail, err := service.GetSessionDetail(ctx, session.ID)
+		require.NoError(t, err)
+		require.NotNil(t, detail.CancelledBy)
+		assert.Equal(t, "alice@example.com", *detail.CancelledBy)
+		require.NotNil(t, detail.CancelReason)
+		assert.Equal(t, reason, *detail.CancelReason)
+
+		list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc",
+		})
+		require.NoError(t, err)
+		var item *models.DashboardSessionItem
+		for i := range list.Sessions {
+			if list.Sessions[i].ID == session.ID {
+				item = &list.Sessions[i]
+				break
+			}
+		}
+		require.NotNil(t, item)
+		require.NotNil(t, item.CancelledBy)
+		assert.Equal(t, "alice@example.com", *item.CancelledBy)
+		require.NotNil(t, item.CancelReason)
+		assert.Equal(t, reason, *item.CancelReason)
 	})
 }
 

@@ -1747,3 +1747,183 @@ func TestStageService_SubAgentCascadeDelete(t *testing.T) {
 		assert.True(t, ent.IsNotFound(err), "sub-agent %s should be cascade-deleted", id)
 	}
 }
+
+func TestStageService_CancelAttributionAndSkipClobber(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Chat",
+		StageIndex:         1,
+		ExpectedAgentCount: 2,
+		StageType:          string(stage.StageTypeChat),
+	})
+	require.NoError(t, err)
+
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "ChatAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	priorExec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "PriorChatAgent",
+		AgentIndex: 2,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, priorExec.ID, agentexecution.StatusActive, "")
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, priorExec.ID, agentexecution.StatusCancelled, "already done")
+	require.NoError(t, err)
+
+	err = stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusActive, "")
+	require.NoError(t, err)
+
+	const msg = "Cancelled by alice@example.com"
+	require.NoError(t, stageService.WriteCancelAttribution(stg.ID, msg))
+
+	stgAfterWrite, err := stageService.GetStageByID(ctx, stg.ID, false)
+	require.NoError(t, err)
+	require.NotNil(t, stgAfterWrite.ErrorMessage)
+	assert.Equal(t, msg, *stgAfterWrite.ErrorMessage)
+
+	execAfterWrite, err := stageService.GetAgentExecutionByID(ctx, exec.ID)
+	require.NoError(t, err)
+	require.NotNil(t, execAfterWrite.ErrorMessage)
+	assert.Equal(t, msg, *execAfterWrite.ErrorMessage)
+
+	priorAfterWrite, err := stageService.GetAgentExecutionByID(ctx, priorExec.ID)
+	require.NoError(t, err)
+	require.NotNil(t, priorAfterWrite.ErrorMessage)
+	assert.Equal(t, "already done", *priorAfterWrite.ErrorMessage)
+
+	t.Run("execution skip clobber on cancelled", func(t *testing.T) {
+		err := stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusCancelled, "context canceled")
+		require.NoError(t, err)
+
+		updated, err := stageService.GetAgentExecutionByID(ctx, exec.ID)
+		require.NoError(t, err)
+		require.NotNil(t, updated.ErrorMessage)
+		assert.Equal(t, msg, *updated.ErrorMessage)
+		assert.Equal(t, agentexecution.StatusCancelled, updated.Status)
+	})
+
+	t.Run("stage skip clobber on cancelled", func(t *testing.T) {
+		err := stageService.UpdateStageStatus(ctx, stg.ID)
+		require.NoError(t, err)
+
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		assert.Equal(t, stage.StatusCancelled, updated.Status)
+		require.NotNil(t, updated.ErrorMessage)
+		assert.Equal(t, msg, *updated.ErrorMessage)
+	})
+}
+
+func TestStageService_UpdateStageStatus_AllCancelledWritesDefaultMessage(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	err = stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusActive, "")
+	require.NoError(t, err)
+	err = stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusCancelled, "")
+	require.NoError(t, err)
+
+	err = stageService.UpdateStageStatus(ctx, stg.ID)
+	require.NoError(t, err)
+
+	updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusCancelled, updated.Status)
+	require.NotNil(t, updated.ErrorMessage)
+	assert.Equal(t, "all agents cancelled", *updated.ErrorMessage)
+}
+
+func TestStageService_FailedStatusOverwritesErrorMessage(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	stageService := NewStageService(client.Client)
+	sessionService := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	session, err := sessionService.CreateSession(ctx, models.CreateSessionRequest{
+		SessionID: uuid.New().String(),
+		AlertData: "test",
+		AgentType: "kubernetes",
+		ChainID:   "k8s-analysis",
+	})
+	require.NoError(t, err)
+
+	stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+		SessionID:          session.ID,
+		StageName:          "Test",
+		StageIndex:         1,
+		ExpectedAgentCount: 1,
+	})
+	require.NoError(t, err)
+
+	exec, err := stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
+		StageID:    stg.ID,
+		SessionID:  session.ID,
+		AgentName:  "TestAgent",
+		AgentIndex: 1,
+		LLMBackend: config.LLMBackendLangChain,
+	})
+	require.NoError(t, err)
+
+	err = stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusActive, "")
+	require.NoError(t, err)
+	require.NoError(t, stageService.WriteCancelAttribution(stg.ID, "Cancelled by alice@example.com"))
+
+	err = stageService.UpdateAgentExecutionStatus(ctx, exec.ID, agentexecution.StatusFailed, "llm error")
+	require.NoError(t, err)
+
+	updated, err := stageService.GetAgentExecutionByID(ctx, exec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, agentexecution.StatusFailed, updated.Status)
+	require.NotNil(t, updated.ErrorMessage)
+	assert.Equal(t, "llm error", *updated.ErrorMessage)
+}

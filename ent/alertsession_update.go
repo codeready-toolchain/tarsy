@@ -287,6 +287,46 @@ func (_u *AlertSessionUpdate) ClearAuthor() *AlertSessionUpdate {
 	return _u
 }
 
+// SetCancelledBy sets the "cancelled_by" field.
+func (_u *AlertSessionUpdate) SetCancelledBy(v string) *AlertSessionUpdate {
+	_u.mutation.SetCancelledBy(v)
+	return _u
+}
+
+// SetNillableCancelledBy sets the "cancelled_by" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableCancelledBy(v *string) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetCancelledBy(*v)
+	}
+	return _u
+}
+
+// ClearCancelledBy clears the value of the "cancelled_by" field.
+func (_u *AlertSessionUpdate) ClearCancelledBy() *AlertSessionUpdate {
+	_u.mutation.ClearCancelledBy()
+	return _u
+}
+
+// SetCancelReason sets the "cancel_reason" field.
+func (_u *AlertSessionUpdate) SetCancelReason(v string) *AlertSessionUpdate {
+	_u.mutation.SetCancelReason(v)
+	return _u
+}
+
+// SetNillableCancelReason sets the "cancel_reason" field if the given value is not nil.
+func (_u *AlertSessionUpdate) SetNillableCancelReason(v *string) *AlertSessionUpdate {
+	if v != nil {
+		_u.SetCancelReason(*v)
+	}
+	return _u
+}
+
+// ClearCancelReason clears the value of the "cancel_reason" field.
+func (_u *AlertSessionUpdate) ClearCancelReason() *AlertSessionUpdate {
+	_u.mutation.ClearCancelReason()
+	return _u
+}
+
 // SetRunbookURL sets the "runbook_url" field.
 func (_u *AlertSessionUpdate) SetRunbookURL(v string) *AlertSessionUpdate {
 	_u.mutation.SetRunbookURL(v)
@@ -1167,6 +1207,18 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.AuthorCleared() {
 		_spec.ClearField(alertsession.FieldAuthor, field.TypeString)
+	}
+	if value, ok := _u.mutation.CancelledBy(); ok {
+		_spec.SetField(alertsession.FieldCancelledBy, field.TypeString, value)
+	}
+	if _u.mutation.CancelledByCleared() {
+		_spec.ClearField(alertsession.FieldCancelledBy, field.TypeString)
+	}
+	if value, ok := _u.mutation.CancelReason(); ok {
+		_spec.SetField(alertsession.FieldCancelReason, field.TypeString, value)
+	}
+	if _u.mutation.CancelReasonCleared() {
+		_spec.ClearField(alertsession.FieldCancelReason, field.TypeString)
 	}
 	if value, ok := _u.mutation.RunbookURL(); ok {
 		_spec.SetField(alertsession.FieldRunbookURL, field.TypeString, value)
@@ -2053,6 +2105,46 @@ func (_u *AlertSessionUpdateOne) SetNillableAuthor(v *string) *AlertSessionUpdat
 // ClearAuthor clears the value of the "author" field.
 func (_u *AlertSessionUpdateOne) ClearAuthor() *AlertSessionUpdateOne {
 	_u.mutation.ClearAuthor()
+	return _u
+}
+
+// SetCancelledBy sets the "cancelled_by" field.
+func (_u *AlertSessionUpdateOne) SetCancelledBy(v string) *AlertSessionUpdateOne {
+	_u.mutation.SetCancelledBy(v)
+	return _u
+}
+
+// SetNillableCancelledBy sets the "cancelled_by" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableCancelledBy(v *string) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetCancelledBy(*v)
+	}
+	return _u
+}
+
+// ClearCancelledBy clears the value of the "cancelled_by" field.
+func (_u *AlertSessionUpdateOne) ClearCancelledBy() *AlertSessionUpdateOne {
+	_u.mutation.ClearCancelledBy()
+	return _u
+}
+
+// SetCancelReason sets the "cancel_reason" field.
+func (_u *AlertSessionUpdateOne) SetCancelReason(v string) *AlertSessionUpdateOne {
+	_u.mutation.SetCancelReason(v)
+	return _u
+}
+
+// SetNillableCancelReason sets the "cancel_reason" field if the given value is not nil.
+func (_u *AlertSessionUpdateOne) SetNillableCancelReason(v *string) *AlertSessionUpdateOne {
+	if v != nil {
+		_u.SetCancelReason(*v)
+	}
+	return _u
+}
+
+// ClearCancelReason clears the value of the "cancel_reason" field.
+func (_u *AlertSessionUpdateOne) ClearCancelReason() *AlertSessionUpdateOne {
+	_u.mutation.ClearCancelReason()
 	return _u
 }
 
@@ -2966,6 +3058,18 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 	}
 	if _u.mutation.AuthorCleared() {
 		_spec.ClearField(alertsession.FieldAuthor, field.TypeString)
+	}
+	if value, ok := _u.mutation.CancelledBy(); ok {
+		_spec.SetField(alertsession.FieldCancelledBy, field.TypeString, value)
+	}
+	if _u.mutation.CancelledByCleared() {
+		_spec.ClearField(alertsession.FieldCancelledBy, field.TypeString)
+	}
+	if value, ok := _u.mutation.CancelReason(); ok {
+		_spec.SetField(alertsession.FieldCancelReason, field.TypeString, value)
+	}
+	if _u.mutation.CancelReasonCleared() {
+		_spec.ClearField(alertsession.FieldCancelReason, field.TypeString)
 	}
 	if value, ok := _u.mutation.RunbookURL(); ok {
 		_spec.SetField(alertsession.FieldRunbookURL, field.TypeString, value)

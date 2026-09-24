@@ -77,7 +77,11 @@ func BuildTerminalMessage(input SessionCompletedInput, dashboardURL string) []go
 		}
 	} else {
 		headerText := fmt.Sprintf("%s *%s*", emoji, label)
-		if input.ErrorMessage != "" {
+		if input.Status == "cancelled" {
+			if attr := formatCancelAttribution(input.CancelledBy, input.CancelReason); attr != "" {
+				headerText += "\n\n" + attr
+			}
+		} else if input.ErrorMessage != "" {
 			headerText += fmt.Sprintf("\n\n*Error:*\n%s", truncateForSlack(input.ErrorMessage))
 		}
 		blocks = append(blocks, goslack.NewSectionBlock(
@@ -97,6 +101,16 @@ func BuildTerminalMessage(input SessionCompletedInput, dashboardURL string) []go
 	blocks = append(blocks, goslack.NewActionBlock("", btn))
 
 	return blocks
+}
+
+func formatCancelAttribution(cancelledBy, cancelReason string) string {
+	if cancelledBy == "" {
+		return ""
+	}
+	if cancelReason != "" {
+		return fmt.Sprintf("Cancelled by %s: %s", cancelledBy, cancelReason)
+	}
+	return fmt.Sprintf("Cancelled by %s", cancelledBy)
 }
 
 func truncateForSlack(text string) string {

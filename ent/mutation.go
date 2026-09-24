@@ -2210,6 +2210,8 @@ type AlertSessionMutation struct {
 	appendlabels              []string
 	session_metadata          *map[string]interface{}
 	author                    *string
+	cancelled_by              *string
+	cancel_reason             *string
 	runbook_url               *string
 	mcp_selection             *map[string]interface{}
 	chain_id                  *string
@@ -3020,6 +3022,104 @@ func (m *AlertSessionMutation) AuthorCleared() bool {
 func (m *AlertSessionMutation) ResetAuthor() {
 	m.author = nil
 	delete(m.clearedFields, alertsession.FieldAuthor)
+}
+
+// SetCancelledBy sets the "cancelled_by" field.
+func (m *AlertSessionMutation) SetCancelledBy(s string) {
+	m.cancelled_by = &s
+}
+
+// CancelledBy returns the value of the "cancelled_by" field in the mutation.
+func (m *AlertSessionMutation) CancelledBy() (r string, exists bool) {
+	v := m.cancelled_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCancelledBy returns the old "cancelled_by" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldCancelledBy(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCancelledBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCancelledBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCancelledBy: %w", err)
+	}
+	return oldValue.CancelledBy, nil
+}
+
+// ClearCancelledBy clears the value of the "cancelled_by" field.
+func (m *AlertSessionMutation) ClearCancelledBy() {
+	m.cancelled_by = nil
+	m.clearedFields[alertsession.FieldCancelledBy] = struct{}{}
+}
+
+// CancelledByCleared returns if the "cancelled_by" field was cleared in this mutation.
+func (m *AlertSessionMutation) CancelledByCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldCancelledBy]
+	return ok
+}
+
+// ResetCancelledBy resets all changes to the "cancelled_by" field.
+func (m *AlertSessionMutation) ResetCancelledBy() {
+	m.cancelled_by = nil
+	delete(m.clearedFields, alertsession.FieldCancelledBy)
+}
+
+// SetCancelReason sets the "cancel_reason" field.
+func (m *AlertSessionMutation) SetCancelReason(s string) {
+	m.cancel_reason = &s
+}
+
+// CancelReason returns the value of the "cancel_reason" field in the mutation.
+func (m *AlertSessionMutation) CancelReason() (r string, exists bool) {
+	v := m.cancel_reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCancelReason returns the old "cancel_reason" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldCancelReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCancelReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCancelReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCancelReason: %w", err)
+	}
+	return oldValue.CancelReason, nil
+}
+
+// ClearCancelReason clears the value of the "cancel_reason" field.
+func (m *AlertSessionMutation) ClearCancelReason() {
+	m.cancel_reason = nil
+	m.clearedFields[alertsession.FieldCancelReason] = struct{}{}
+}
+
+// CancelReasonCleared returns if the "cancel_reason" field was cleared in this mutation.
+func (m *AlertSessionMutation) CancelReasonCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldCancelReason]
+	return ok
+}
+
+// ResetCancelReason resets all changes to the "cancel_reason" field.
+func (m *AlertSessionMutation) ResetCancelReason() {
+	m.cancel_reason = nil
+	delete(m.clearedFields, alertsession.FieldCancelReason)
 }
 
 // SetRunbookURL sets the "runbook_url" field.
@@ -4481,7 +4581,7 @@ func (m *AlertSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AlertSessionMutation) Fields() []string {
-	fields := make([]string, 0, 30)
+	fields := make([]string, 0, 32)
 	if m.alert_data != nil {
 		fields = append(fields, alertsession.FieldAlertData)
 	}
@@ -4523,6 +4623,12 @@ func (m *AlertSessionMutation) Fields() []string {
 	}
 	if m.author != nil {
 		fields = append(fields, alertsession.FieldAuthor)
+	}
+	if m.cancelled_by != nil {
+		fields = append(fields, alertsession.FieldCancelledBy)
+	}
+	if m.cancel_reason != nil {
+		fields = append(fields, alertsession.FieldCancelReason)
 	}
 	if m.runbook_url != nil {
 		fields = append(fields, alertsession.FieldRunbookURL)
@@ -4608,6 +4714,10 @@ func (m *AlertSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.SessionMetadata()
 	case alertsession.FieldAuthor:
 		return m.Author()
+	case alertsession.FieldCancelledBy:
+		return m.CancelledBy()
+	case alertsession.FieldCancelReason:
+		return m.CancelReason()
 	case alertsession.FieldRunbookURL:
 		return m.RunbookURL()
 	case alertsession.FieldMcpSelection:
@@ -4677,6 +4787,10 @@ func (m *AlertSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldSessionMetadata(ctx)
 	case alertsession.FieldAuthor:
 		return m.OldAuthor(ctx)
+	case alertsession.FieldCancelledBy:
+		return m.OldCancelledBy(ctx)
+	case alertsession.FieldCancelReason:
+		return m.OldCancelReason(ctx)
 	case alertsession.FieldRunbookURL:
 		return m.OldRunbookURL(ctx)
 	case alertsession.FieldMcpSelection:
@@ -4815,6 +4929,20 @@ func (m *AlertSessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAuthor(v)
+		return nil
+	case alertsession.FieldCancelledBy:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCancelledBy(v)
+		return nil
+	case alertsession.FieldCancelReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCancelReason(v)
 		return nil
 	case alertsession.FieldRunbookURL:
 		v, ok := value.(string)
@@ -5003,6 +5131,12 @@ func (m *AlertSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(alertsession.FieldAuthor) {
 		fields = append(fields, alertsession.FieldAuthor)
 	}
+	if m.FieldCleared(alertsession.FieldCancelledBy) {
+		fields = append(fields, alertsession.FieldCancelledBy)
+	}
+	if m.FieldCleared(alertsession.FieldCancelReason) {
+		fields = append(fields, alertsession.FieldCancelReason)
+	}
 	if m.FieldCleared(alertsession.FieldRunbookURL) {
 		fields = append(fields, alertsession.FieldRunbookURL)
 	}
@@ -5091,6 +5225,12 @@ func (m *AlertSessionMutation) ClearField(name string) error {
 		return nil
 	case alertsession.FieldAuthor:
 		m.ClearAuthor()
+		return nil
+	case alertsession.FieldCancelledBy:
+		m.ClearCancelledBy()
+		return nil
+	case alertsession.FieldCancelReason:
+		m.ClearCancelReason()
 		return nil
 	case alertsession.FieldRunbookURL:
 		m.ClearRunbookURL()
@@ -5186,6 +5326,12 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 		return nil
 	case alertsession.FieldAuthor:
 		m.ResetAuthor()
+		return nil
+	case alertsession.FieldCancelledBy:
+		m.ResetCancelledBy()
+		return nil
+	case alertsession.FieldCancelReason:
+		m.ResetCancelReason()
 		return nil
 	case alertsession.FieldRunbookURL:
 		m.ResetRunbookURL()

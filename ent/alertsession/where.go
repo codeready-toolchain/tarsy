@@ -120,6 +120,16 @@ func Author(v string) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldAuthor, v))
 }
 
+// CancelledBy applies equality check predicate on the "cancelled_by" field. It's identical to CancelledByEQ.
+func CancelledBy(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldCancelledBy, v))
+}
+
+// CancelReason applies equality check predicate on the "cancel_reason" field. It's identical to CancelReasonEQ.
+func CancelReason(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldCancelReason, v))
+}
+
 // RunbookURL applies equality check predicate on the "runbook_url" field. It's identical to RunbookURLEQ.
 func RunbookURL(v string) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldEQ(FieldRunbookURL, v))
@@ -943,6 +953,156 @@ func AuthorEqualFold(v string) predicate.AlertSession {
 // AuthorContainsFold applies the ContainsFold predicate on the "author" field.
 func AuthorContainsFold(v string) predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldContainsFold(FieldAuthor, v))
+}
+
+// CancelledByEQ applies the EQ predicate on the "cancelled_by" field.
+func CancelledByEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldCancelledBy, v))
+}
+
+// CancelledByNEQ applies the NEQ predicate on the "cancelled_by" field.
+func CancelledByNEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldCancelledBy, v))
+}
+
+// CancelledByIn applies the In predicate on the "cancelled_by" field.
+func CancelledByIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldCancelledBy, vs...))
+}
+
+// CancelledByNotIn applies the NotIn predicate on the "cancelled_by" field.
+func CancelledByNotIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldCancelledBy, vs...))
+}
+
+// CancelledByGT applies the GT predicate on the "cancelled_by" field.
+func CancelledByGT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldCancelledBy, v))
+}
+
+// CancelledByGTE applies the GTE predicate on the "cancelled_by" field.
+func CancelledByGTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldCancelledBy, v))
+}
+
+// CancelledByLT applies the LT predicate on the "cancelled_by" field.
+func CancelledByLT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldCancelledBy, v))
+}
+
+// CancelledByLTE applies the LTE predicate on the "cancelled_by" field.
+func CancelledByLTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldCancelledBy, v))
+}
+
+// CancelledByContains applies the Contains predicate on the "cancelled_by" field.
+func CancelledByContains(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContains(FieldCancelledBy, v))
+}
+
+// CancelledByHasPrefix applies the HasPrefix predicate on the "cancelled_by" field.
+func CancelledByHasPrefix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasPrefix(FieldCancelledBy, v))
+}
+
+// CancelledByHasSuffix applies the HasSuffix predicate on the "cancelled_by" field.
+func CancelledByHasSuffix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasSuffix(FieldCancelledBy, v))
+}
+
+// CancelledByIsNil applies the IsNil predicate on the "cancelled_by" field.
+func CancelledByIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldCancelledBy))
+}
+
+// CancelledByNotNil applies the NotNil predicate on the "cancelled_by" field.
+func CancelledByNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldCancelledBy))
+}
+
+// CancelledByEqualFold applies the EqualFold predicate on the "cancelled_by" field.
+func CancelledByEqualFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEqualFold(FieldCancelledBy, v))
+}
+
+// CancelledByContainsFold applies the ContainsFold predicate on the "cancelled_by" field.
+func CancelledByContainsFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContainsFold(FieldCancelledBy, v))
+}
+
+// CancelReasonEQ applies the EQ predicate on the "cancel_reason" field.
+func CancelReasonEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEQ(FieldCancelReason, v))
+}
+
+// CancelReasonNEQ applies the NEQ predicate on the "cancel_reason" field.
+func CancelReasonNEQ(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNEQ(FieldCancelReason, v))
+}
+
+// CancelReasonIn applies the In predicate on the "cancel_reason" field.
+func CancelReasonIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIn(FieldCancelReason, vs...))
+}
+
+// CancelReasonNotIn applies the NotIn predicate on the "cancel_reason" field.
+func CancelReasonNotIn(vs ...string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotIn(FieldCancelReason, vs...))
+}
+
+// CancelReasonGT applies the GT predicate on the "cancel_reason" field.
+func CancelReasonGT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGT(FieldCancelReason, v))
+}
+
+// CancelReasonGTE applies the GTE predicate on the "cancel_reason" field.
+func CancelReasonGTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldGTE(FieldCancelReason, v))
+}
+
+// CancelReasonLT applies the LT predicate on the "cancel_reason" field.
+func CancelReasonLT(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLT(FieldCancelReason, v))
+}
+
+// CancelReasonLTE applies the LTE predicate on the "cancel_reason" field.
+func CancelReasonLTE(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldLTE(FieldCancelReason, v))
+}
+
+// CancelReasonContains applies the Contains predicate on the "cancel_reason" field.
+func CancelReasonContains(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContains(FieldCancelReason, v))
+}
+
+// CancelReasonHasPrefix applies the HasPrefix predicate on the "cancel_reason" field.
+func CancelReasonHasPrefix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasPrefix(FieldCancelReason, v))
+}
+
+// CancelReasonHasSuffix applies the HasSuffix predicate on the "cancel_reason" field.
+func CancelReasonHasSuffix(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldHasSuffix(FieldCancelReason, v))
+}
+
+// CancelReasonIsNil applies the IsNil predicate on the "cancel_reason" field.
+func CancelReasonIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldCancelReason))
+}
+
+// CancelReasonNotNil applies the NotNil predicate on the "cancel_reason" field.
+func CancelReasonNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldCancelReason))
+}
+
+// CancelReasonEqualFold applies the EqualFold predicate on the "cancel_reason" field.
+func CancelReasonEqualFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldEqualFold(FieldCancelReason, v))
+}
+
+// CancelReasonContainsFold applies the ContainsFold predicate on the "cancel_reason" field.
+func CancelReasonContainsFold(v string) predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldContainsFold(FieldCancelReason, v))
 }
 
 // RunbookURLEQ applies the EQ predicate on the "runbook_url" field.

@@ -1,4 +1,4 @@
-h1:xpquhP9Mkvl7lktbneiXWP4rdf2kZIwYic4pMz1fqUM=
+h1:J6fPvRBTRT7ohgPddKKLG7BAaqkCJsmFe+HdMqxH0Uo=
 20260209015211_initial_schema.up.sql h1:BNZPcBZlJWvzJPXR63PmUeO5O6j4T/Hh+LpKyHT2Sxw=
 20260211041222_optional_stage_execution_on_timeline.up.sql h1:+h7vYATBxceFqqGwjYSCfcnQDJ+QicHkSWG/rSprdtU=
 20260214053406_add_llm_provider_to_agent_executions.up.sql h1:jLGeQixypPjJnbC0StmO5X7sovplIl9FxHjAi8NKlA4=
@@ -23,3 +23,4 @@ h1:xpquhP9Mkvl7lktbneiXWP4rdf2kZIwYic4pMz1fqUM=
 20260819213825_add_agent_execution_model_name.up.sql h1:fXcOibvDfMw39CBWug3cX9z4W5NsXPFwIUaWUdiWZ6o=
 20260827015211_add_llm_interaction_cache_tokens.up.sql h1:xAS4ZRYChro05m9cTmuyWeGzARSbUGWdRJP+zRn9Yxc=
 20260909161630_add_session_labels.up.sql h1:j7JDkuZYl00xhC/mXhtrHyIT96Eb2hti4+wTwgTjQ1k=
+20260923231007_add_session_cancel_metadata.up.sql h1:ziNu9BxCUSIE25BMgi7Fop74iZfxDQPMkOQ4c3c0CXs=

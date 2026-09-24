@@ -195,6 +195,34 @@ func (_c *AlertSessionCreate) SetNillableAuthor(v *string) *AlertSessionCreate {
 	return _c
 }
 
+// SetCancelledBy sets the "cancelled_by" field.
+func (_c *AlertSessionCreate) SetCancelledBy(v string) *AlertSessionCreate {
+	_c.mutation.SetCancelledBy(v)
+	return _c
+}
+
+// SetNillableCancelledBy sets the "cancelled_by" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableCancelledBy(v *string) *AlertSessionCreate {
+	if v != nil {
+		_c.SetCancelledBy(*v)
+	}
+	return _c
+}
+
+// SetCancelReason sets the "cancel_reason" field.
+func (_c *AlertSessionCreate) SetCancelReason(v string) *AlertSessionCreate {
+	_c.mutation.SetCancelReason(v)
+	return _c
+}
+
+// SetNillableCancelReason sets the "cancel_reason" field if the given value is not nil.
+func (_c *AlertSessionCreate) SetNillableCancelReason(v *string) *AlertSessionCreate {
+	if v != nil {
+		_c.SetCancelReason(*v)
+	}
+	return _c
+}
+
 // SetRunbookURL sets the "runbook_url" field.
 func (_c *AlertSessionCreate) SetRunbookURL(v string) *AlertSessionCreate {
 	_c.mutation.SetRunbookURL(v)
@@ -760,6 +788,14 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Author(); ok {
 		_spec.SetField(alertsession.FieldAuthor, field.TypeString, value)
 		_node.Author = &value
+	}
+	if value, ok := _c.mutation.CancelledBy(); ok {
+		_spec.SetField(alertsession.FieldCancelledBy, field.TypeString, value)
+		_node.CancelledBy = &value
+	}
+	if value, ok := _c.mutation.CancelReason(); ok {
+		_spec.SetField(alertsession.FieldCancelReason, field.TypeString, value)
+		_node.CancelReason = &value
 	}
 	if value, ok := _c.mutation.RunbookURL(); ok {
 		_spec.SetField(alertsession.FieldRunbookURL, field.TypeString, value)

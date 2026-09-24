@@ -136,6 +136,11 @@ func TestE2E_Cancellation(t *testing.T) {
 	// ── Session 1 assertions ──
 	session1 := app.GetSession(t, session1ID)
 	assert.Equal(t, "cancelled", session1["status"])
+	assert.Equal(t, "api-client", session1["cancelled_by"],
+		"empty-body cancel should still record extractAuthor")
+	assert.Nil(t, session1["cancel_reason"])
+	assert.Nil(t, session1["error_message"],
+		"worker must not write context canceled onto a cancelled session")
 
 	// Stage assertions: single "investigation" stage, cancelled.
 	stages1 := app.QueryStages(t, session1ID)
@@ -209,6 +214,9 @@ func TestE2E_Cancellation(t *testing.T) {
 	session2 := app.GetSession(t, session2ID)
 	assert.Equal(t, "completed", session2["status"],
 		"session 2 should remain completed after chat cancellation")
+	assert.Nil(t, session2["cancelled_by"],
+		"chat Stop must not write session cancel metadata")
+	assert.Nil(t, session2["cancel_reason"])
 
 	// ── Send Chat 2 (follow-up — should succeed) ──
 	chat2Resp := app.SendChatMessage(t, session2ID, "Follow-up question")
@@ -237,6 +245,8 @@ func TestE2E_Cancellation(t *testing.T) {
 
 	assert.Equal(t, "Chat", stages2[2].StageName)
 	assert.Equal(t, "cancelled", string(stages2[2].Status))
+	require.NotNil(t, stages2[2].ErrorMessage)
+	assert.Equal(t, "Cancelled by api-client", *stages2[2].ErrorMessage)
 
 	assert.Equal(t, "Chat", stages2[3].StageName)
 	assert.Equal(t, "completed", string(stages2[3].Status))
@@ -255,6 +265,8 @@ func TestE2E_Cancellation(t *testing.T) {
 	// Chat executions — both use the built-in ChatAgent.
 	assert.Equal(t, config.AgentNameChat, execs2[2].AgentName)
 	assert.Equal(t, "cancelled", string(execs2[2].Status))
+	require.NotNil(t, execs2[2].ErrorMessage)
+	assert.Equal(t, "Cancelled by api-client", *execs2[2].ErrorMessage)
 
 	assert.Equal(t, config.AgentNameChat, execs2[3].AgentName)
 	assert.Equal(t, "completed", string(execs2[3].Status))
@@ -292,4 +304,52 @@ func TestE2E_Cancellation(t *testing.T) {
 	// Session 2: QuickInvestigator (1) + exec summary (1) + chat1 BlockUntilCancelled (1) + chat2 (1) = 4
 	// Total: 6
 	assert.Equal(t, 6, llm.CallCount())
+}
+
+func TestE2E_PendingCancellation(t *testing.T) {
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "cancellation")),
+		WithWorkerCount(0),
+	)
+
+	ctx := t.Context()
+	ws, err := WSConnect(ctx, app.WSURL)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	resp := app.SubmitAlert(t, "test-cancel", "Queued duplicate cancel")
+	sessionID := resp["session_id"].(string)
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, ws.Subscribe("session:"+sessionID))
+
+	pending := app.GetSession(t, sessionID)
+	assert.Equal(t, "pending", pending["status"])
+
+	app.CancelSessionWith(t, sessionID, "queued duplicate", "alice@example.com")
+
+	app.WaitForSessionStatus(t, sessionID, "cancelled")
+
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "session.status" && e.Parsed["status"] == "cancelled"
+	}, 5*time.Second, "pending cancel: expected session.status cancelled")
+	ws.WaitForEvent(t, func(e WSEvent) bool {
+		return e.Type == "review.status" && e.Parsed["review_status"] == "reviewed"
+	}, 5*time.Second, "pending cancel: expected review.status reviewed")
+
+	session := app.GetSession(t, sessionID)
+	assert.Equal(t, "cancelled", session["status"])
+	assert.Equal(t, "alice@example.com", session["cancelled_by"])
+	assert.Equal(t, "queued duplicate", session["cancel_reason"])
+	assert.Equal(t, "reviewed", session["review_status"])
+
+	row, err := app.EntClient.AlertSession.Get(context.Background(), sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, "cancelled", string(row.Status))
+	require.NotNil(t, row.CancelledBy)
+	assert.Equal(t, "alice@example.com", *row.CancelledBy)
+	require.NotNil(t, row.CancelReason)
+	assert.Equal(t, "queued duplicate", *row.CancelReason)
+	require.NotNil(t, row.CompletedAt)
+	require.NotNil(t, row.ReviewStatus)
+	assert.Equal(t, "reviewed", string(*row.ReviewStatus))
 }
