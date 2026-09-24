@@ -330,7 +330,7 @@ The override hierarchy (`defaults → agentDef → chain → stage → stage-age
 Three tools registered via the composite executor. There is no `get_result` tool — results are pushed automatically.
 
 - **`dispatch_agent(name, task)`** — fire-and-forget. Spawns a sub-agent with a task, returns an execution ID immediately. Results are delivered automatically when the sub-agent finishes.
-- **`cancel_agent(execution_id, reason?)`** — cancel a running sub-agent. Returns `cancelled`, `already_completed`, or `not_found`. **Amendment ([ADR-0032](0032-session-cancel-reason.md)):** `reason` is optional (max 500 runes). The sub-agent’s persisted message is `Cancelled by {parent agent}`, not `context canceled`.
+- **`cancel_agent(execution_id, reason?)`** — cancel a running sub-agent. An active execution returns `cancellation requested`; an inactive one returns `already <status>`; an unknown execution ID is an `IsError` result. **Amendment ([ADR-0032](0032-session-cancel-reason.md)):** `reason` is optional (max 500 runes). The sub-agent’s persisted message is `Cancelled by {parent agent}`, not `context canceled`.
 - **`list_agents()`** — list all dispatched sub-agents and their current status.
 
 MCP tools use `server.tool` naming (e.g., `kubernetes-server.get_pod`). Orchestration tools use plain names without dots — natural namespace separation. When recorded as MCP interaction records, they use a dedicated server name so dashboards can distinguish them from real MCP calls.
