@@ -361,10 +361,7 @@ func TestE2E_MemoryInjectionAndRecall(t *testing.T) {
 			}
 			sort.SliceStable(execInteractions, func(i, j int) bool {
 				a, b := execInteractions[i], execInteractions[j]
-				if a.CreatedAt != b.CreatedAt {
-					return a.CreatedAt < b.CreatedAt
-				}
-				return a.ServerName < b.ServerName
+				return lessByCreatedAt(a.CreatedAt, b.CreatedAt, a.ServerName, b.ServerName)
 			})
 			allInteractions = append(allInteractions, execInteractions...)
 		}
@@ -787,10 +784,7 @@ func TestE2E_MemoryFeedbackReflector(t *testing.T) {
 			}
 			sort.SliceStable(execInteractions, func(i, j int) bool {
 				a, b := execInteractions[i], execInteractions[j]
-				if a.CreatedAt != b.CreatedAt {
-					return a.CreatedAt < b.CreatedAt
-				}
-				return a.ServerName < b.ServerName
+				return lessByCreatedAt(a.CreatedAt, b.CreatedAt, a.ServerName, b.ServerName)
 			})
 			allInteractions = append(allInteractions, execInteractions...)
 		}

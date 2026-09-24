@@ -337,10 +337,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 			})
 		}
 		sort.Slice(entries, func(i, j int) bool {
-			if entries[i].CreatedAt != entries[j].CreatedAt {
-				return entries[i].CreatedAt < entries[j].CreatedAt
-			}
-			return entries[i].ID < entries[j].ID
+			return lessByCreatedAt(entries[i].CreatedAt, entries[j].CreatedAt, entries[i].ID, entries[j].ID)
 		})
 		allInteractions = append(allInteractions, entries...)
 	}
@@ -369,10 +366,7 @@ func TestE2E_Orchestrator(t *testing.T) {
 			})
 		}
 		sort.Slice(entries, func(i, j int) bool {
-			if entries[i].CreatedAt != entries[j].CreatedAt {
-				return entries[i].CreatedAt < entries[j].CreatedAt
-			}
-			return entries[i].ID < entries[j].ID
+			return lessByCreatedAt(entries[i].CreatedAt, entries[j].CreatedAt, entries[i].ID, entries[j].ID)
 		})
 		allInteractions = append(allInteractions, entries...)
 	}

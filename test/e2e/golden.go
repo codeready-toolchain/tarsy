@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -192,6 +193,20 @@ func AssertGoldenMCPInteraction(t *testing.T, goldenPath string, detail map[stri
 	AssertGolden(t, goldenPath, data)
 }
 
+// lessByCreatedAt orders trace interactions by instant, then by tieBreak.
+// created_at is RFC3339Nano, which omits trailing zeros, so string order is not time order.
+func lessByCreatedAt(a, b, tieA, tieB string) bool {
+	ta, errA := time.Parse(time.RFC3339Nano, a)
+	tb, errB := time.Parse(time.RFC3339Nano, b)
+	if errA == nil && errB == nil && !ta.Equal(tb) {
+		return ta.Before(tb)
+	}
+	if (errA != nil || errB != nil) && a != b {
+		return a < b
+	}
+	return tieA < tieB
+}
+
 // AssertSessionTraceGoldens performs the full golden file assertion sequence
 // for a session: normalizer registration, timeline projection, trace list,
 // and per-interaction golden files. Extracts the pattern shared across
@@ -287,10 +302,7 @@ func AssertSessionTraceGoldens(t *testing.T, app *TestApp, sessionID, goldenScen
 			}
 			sort.SliceStable(execInteractions, func(i, j int) bool {
 				a, b := execInteractions[i], execInteractions[j]
-				if a.CreatedAt != b.CreatedAt {
-					return a.CreatedAt < b.CreatedAt
-				}
-				return a.ServerName < b.ServerName
+				return lessByCreatedAt(a.CreatedAt, b.CreatedAt, a.ServerName, b.ServerName)
 			})
 			allInteractions = append(allInteractions, execInteractions...)
 		}
