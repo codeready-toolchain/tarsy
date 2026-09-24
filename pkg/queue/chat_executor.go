@@ -397,7 +397,7 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 				RunbookContent:     runbookContent,
 				WrapToolExecutor:   MemorySubAgentWrap(e.memoryService, e.memoryConfig, input.Session.ID),
 			}
-			runner := orchestrator.NewSubAgentRunner(execCtx, deps, exec.ID, input.Session.ID, stageID, reg, guardrails, subAgentRefs)
+			runner := orchestrator.NewSubAgentRunner(execCtx, deps, exec.ID, resolvedConfig.AgentName, input.Session.ID, stageID, reg, guardrails, subAgentRefs)
 			toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, reg)
 			chatSubCollector = orchestrator.NewResultCollector(runner)
 			chatSubCatalog = applyCatalogOverrides(reg.Entries(), subAgentRefs)

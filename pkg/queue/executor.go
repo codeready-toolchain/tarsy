@@ -834,7 +834,7 @@ func (e *RealSessionExecutor) executeResolvedAgent(
 				WrapToolExecutor:   e.memoryToolWrapper(input.session),
 			}
 
-			runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
+			runner := orchestrator.NewSubAgentRunner(ctx, deps, exec.ID, displayName, input.session.ID, stg.ID, registry, guardrails, subAgentRefs)
 			toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, registry)
 			execCtx.SubAgentCollector = orchestrator.NewResultCollector(runner)
 			execCtx.SubAgentCatalog = applyCatalogOverrides(registry.Entries(), subAgentRefs)

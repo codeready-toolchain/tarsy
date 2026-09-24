@@ -11,6 +11,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
 // Compile-time check that CompositeToolExecutor implements agent.ToolExecutor.
@@ -171,6 +172,7 @@ func (c *CompositeToolExecutor) handleDispatch(ctx context.Context, call agent.T
 func (c *CompositeToolExecutor) handleCancel(ctx context.Context, call agent.ToolCall) (*agent.ToolResult, error) {
 	var args struct {
 		ExecutionID string `json:"execution_id"`
+		Reason      string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
 		return &agent.ToolResult{
@@ -189,7 +191,17 @@ func (c *CompositeToolExecutor) handleCancel(ctx context.Context, call agent.Too
 		}, nil
 	}
 
-	status, err := c.runner.Cancel(args.ExecutionID)
+	reason, err := services.NormalizeCancelReason(args.Reason)
+	if err != nil {
+		return &agent.ToolResult{
+			CallID:  call.ID,
+			Name:    call.Name,
+			Content: err.Error(),
+			IsError: true,
+		}, nil
+	}
+
+	status, err := c.runner.Cancel(args.ExecutionID, reason)
 	if err != nil {
 		return &agent.ToolResult{
 			CallID:  call.ID,

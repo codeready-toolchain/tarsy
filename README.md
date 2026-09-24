@@ -164,8 +164,8 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 - `GET /api/v1/sessions/:id` -- Session detail with chronological timeline
 - `GET /api/v1/sessions/:id/summary` -- Session statistics, token usage, estimated cost (when enabled), chain stats, and score (if available)
 - `GET /api/v1/usage/summary` -- Fleet usage aggregates for a date window (tokens + estimated cost when enabled)
-- `GET /api/v1/sessions/:id/status` -- Lightweight poll (single session-row lookup): status, summaries, labels, `error_message`, and review fields (`review_status`, `assignee`, `quality_rating`, `action_taken`, `investigation_feedback`)
-- `POST /api/v1/sessions/:id/cancel` -- Cancel an active or paused session
+- `GET /api/v1/sessions/:id/status` -- Lightweight poll (single session-row lookup): status, summaries, labels, `error_message`, cancel attribution (`cancelled_by`, `cancel_reason`), and review fields (`review_status`, `assignee`, `quality_rating`, `action_taken`, `investigation_feedback`)
+- `POST /api/v1/sessions/:id/cancel` -- Cancel a queued (`pending`) or in-progress session, or stop an in-flight follow-up chat. Optional JSON body `{ "reason": "..." }` (max 500 characters).
 
 ### Chat
 - `POST /api/v1/sessions/:id/chat/messages` -- Send message (AI response streams via WebSocket)

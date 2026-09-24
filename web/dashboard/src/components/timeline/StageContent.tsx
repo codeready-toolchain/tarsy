@@ -11,6 +11,7 @@ import {
 import { FLOW_ITEM, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
 import { sessionDeepLinkUrl } from '../../utils/deepLink';
 import type { ExecutionOverview } from '../../types/session';
+import type { LiveExecutionStatus } from '../../types/events';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
@@ -44,11 +45,11 @@ interface StageContentProps {
    *  Higher priority than REST ExecutionOverview for immediate UI updates.
    *  stageId is used to filter out executions belonging to other stages.
    *  agentIndex (1-based) preserves chain config ordering for deterministic tab order. */
-  executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  executionStatuses?: Map<string, LiveExecutionStatus>;
   /** Sub-agent streaming events (events with parent_execution_id) */
   subAgentStreamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Sub-agent execution statuses (events with parent_execution_id) */
-  subAgentExecutionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  subAgentExecutionStatuses?: Map<string, LiveExecutionStatus>;
   /** Sub-agent progress statuses (events with parent_execution_id) */
   subAgentProgressStatuses?: Map<string, string>;
   onSelectedAgentChange?: (executionId: string | null) => void;
@@ -328,8 +329,11 @@ const StageContent: React.FC<StageContentProps> = ({
     }
     // WS execution statuses for sub-agents
     if (subAgentExecutionStatuses) {
-      for (const execId of subAgentExecutionStatuses.keys()) {
+      for (const [execId, status] of subAgentExecutionStatuses) {
         ids.add(execId);
+        if (status.parentExecutionId) {
+          parentMap.set(execId, status.parentExecutionId);
+        }
       }
     }
     return { subAgentIds: ids, subAgentOverviewMap: overviews, subAgentParentMap: parentMap };
@@ -580,7 +584,9 @@ const StageContent: React.FC<StageContentProps> = ({
     const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
     const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
     const isExecutionActive = !TERMINAL_EXECUTION_STATUSES.has(effectiveStatus);
-    const errorMessage = eo?.error_message || getExecutionErrorMessage(execution.items);
+    const errorMessage = executionStatuses?.get(execution.executionId)?.errorMessage
+      || eo?.error_message
+      || getExecutionErrorMessage(execution.items);
 
     // Track which sub-agents have been rendered inline (anchored to dispatch tool results)
     const renderedSubAgents = new Set<string>();
@@ -633,6 +639,7 @@ const StageContent: React.FC<StageContentProps> = ({
       ...subAgentOverviewMap.keys(),
       ...subAgentItemsByExec.keys(),
       ...subAgentStreamingByExec.keys(),
+      ...(subAgentExecutionStatuses?.keys() ?? []),
     ]);
     for (const subExecId of allSubAgentExecIds) {
       if (renderedSubAgents.has(subExecId)) continue;

@@ -32,7 +32,7 @@ All notifications use Slack Block Kit for rich formatting with emoji status indi
    - Analysis summary (completed -- green)
    - Error message (failed -- red)
    - Timeout message (timed out -- hourglass)
-   - Cancelled attribution (cancelled -- no entry): `Cancelled by {actor}` plus optional `: {reason}`. Not an error body; historical rows with no actor/reason show the header only.
+   - Cancelled attribution (cancelled -- no entry): `Cancelled by {actor}` plus optional `: {reason}`. Not an error body; historical rows with no actor/reason show the header only. A queued-only cancel sends no Slack message. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
    - Link to full analysis in dashboard (`<dashboard-url>/sessions/<session-id>`)
 
 **Note**: Start notifications are NOT sent for standard (non-threaded) alerts to avoid unnecessary noise.

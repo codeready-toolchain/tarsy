@@ -18,6 +18,7 @@ func TestFormatAgentCatalog_MCPAgent(t *testing.T) {
 
 	assert.Contains(t, result, "## Available Sub-Agents")
 	assert.Contains(t, result, "dispatch_agent")
+	assert.Contains(t, result, "A short reason is optional")
 	assert.Contains(t, result, "**LogAnalyzer**: Analyzes logs")
 	assert.Contains(t, result, "MCP tools: loki")
 }
