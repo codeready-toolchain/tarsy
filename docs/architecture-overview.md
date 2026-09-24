@@ -134,7 +134,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 TARSy supports **dynamic, LLM-driven workflow orchestration** as an additive capability on any agent. When an agent resolves a non-empty sub-agent catalog at runtime, it automatically receives three orchestration tools and orchestrator prompt sections injected into its existing system prompt:
 
 - **`dispatch_agent`** — fire-and-forget sub-agent dispatch, returns immediately
-- **`cancel_agent`** — cancel a running sub-agent
+- **`cancel_agent`** — cancel a running sub-agent, with an optional short reason. The sub-agent stays `cancelled` (not failed) and records who stopped it. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md)
 - **`list_agents`** — check status of all dispatched sub-agents
 
 Sub-agent results are **pushed automatically** into the orchestrator's conversation — no polling. The controller drains available results before each LLM call and waits when the LLM is idle but sub-agents are pending, enabling multi-phase investigation flows.
@@ -143,7 +143,7 @@ Orchestration is triggered by configuration, not agent type — any investigatio
 
 Chat agents can also become orchestrators via `chat.sub_agents` (overrides chain-level) or by inheriting chain-level `sub_agents`.
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics), [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger and prompt model), and [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md) (timeouts, wrap-up, `max_iterations` default)
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics), [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger and prompt model), [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md) (timeouts, wrap-up, `max_iterations` default), and [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md) (`cancel_agent` reason)
 
 ### 6. Automated Actions
 
@@ -186,7 +186,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 ### 9. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
-- **Session list** with filtering by status, alert type, chain, date range, session labels (`label=` JSON contains), and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index). Historical list and triage show stored `labels` in a Labels column (chips); session detail shows them next to the alert type. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- **Session list** with filtering by status, alert type, chain, date range, session labels (`label=` JSON contains), and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index). Historical list and triage show stored `labels` in a Labels column (chips); session detail shows them next to the alert type. See [ADR-0031: Session Labels](adr/0031-session-labels.md). Cancelled sessions show who cancelled and an optional reason on the status tooltip (list, triage, session header); cancelled work is not rendered as a failure. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 - **In-session search** for terminated sessions — client-side substring matching with highlight, auto-expand of collapsed stages, and match navigation
 - **Session deep links** — shareable `/sessions/:id?stage=…[&event=…]` URLs that expand the target stage/event and scroll to it (copy-link affordances on the timeline; no backend API changes). See [ADR-0021: Session Deep Links](adr/0021-session-deep-links.md)
 - **Conversation timeline** with real-time LLM streaming (thinking, tool calls, final answers)
@@ -210,7 +210,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 
 ### 11. Slack Notifications
 
-TARSy can automatically send Slack notifications when alert processing starts (for Slack-originated alerts) and reaches a terminal status (completed, failed, timed out, cancelled). The system supports both standard channel notifications and threaded replies to alert messages via fingerprint correlation.
+TARSy can automatically send Slack notifications when alert processing starts (for Slack-originated alerts) and reaches a terminal status (completed, failed, timed out, cancelled). Cancelled notifications attribute the actor and optional reason; they are not an error body. The system supports both standard channel notifications and threaded replies to alert messages via fingerprint correlation. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 
 **For complete Slack setup guide**: See [Slack Integration Documentation](slack-integration.md)
 

@@ -3,7 +3,7 @@
 **Status:** Implemented  
 **Date:** 2026-02-26  
 **Superseded in part by:** [ADR-0015: Implicit Orchestrator](0015-implicit-orchestrator.md) — trigger and identity (`type: orchestrator`, `AgentTypeOrchestrator`, built-in `Orchestrator` agent are removed; any agent with a non-empty sub-agent catalog orchestrates)  
-**Amended by:** [ADR-0029: Sub-Agent Execution Limits](0029-sub-agent-execution-limits.md) (2026-09-02) — `agent_timeout` optional (remaining parent); `max_budget` removed; iterating wrap-up on deadline
+**Amended by:** [ADR-0029: Sub-Agent Execution Limits](0029-sub-agent-execution-limits.md) (2026-09-02) — `agent_timeout` optional (remaining parent); `max_budget` removed; iterating wrap-up on deadline. [ADR-0032: Session Cancel Reason and Actor](0032-session-cancel-reason.md) (2026-09-24) — optional `cancel_agent` reason and friendly sub-agent attribution
 
 ## Overview
 
@@ -330,7 +330,7 @@ The override hierarchy (`defaults → agentDef → chain → stage → stage-age
 Three tools registered via the composite executor. There is no `get_result` tool — results are pushed automatically.
 
 - **`dispatch_agent(name, task)`** — fire-and-forget. Spawns a sub-agent with a task, returns an execution ID immediately. Results are delivered automatically when the sub-agent finishes.
-- **`cancel_agent(execution_id)`** — cancel a running sub-agent. Returns `cancelled`, `already_completed`, or `not_found`.
+- **`cancel_agent(execution_id, reason?)`** — cancel a running sub-agent. Returns `cancelled`, `already_completed`, or `not_found`. **Amendment ([ADR-0032](0032-session-cancel-reason.md)):** `reason` is optional (max 500 runes). The sub-agent’s persisted message is `Cancelled by {parent agent}`, not `context canceled`.
 - **`list_agents()`** — list all dispatched sub-agents and their current status.
 
 MCP tools use `server.tool` naming (e.g., `kubernetes-server.get_pod`). Orchestration tools use plain names without dots — natural namespace separation. When recorded as MCP interaction records, they use a dedicated server name so dashboards can distinguish them from real MCP calls.
@@ -543,3 +543,7 @@ The orchestrator runtime (composite executor, sub-agent runner, push-based resul
 - **`max_budget`.** Originally listed as “total orchestrator budget” (600s here; 900s in the later resolver). It was never applied. Removed from config, API, and this table.
 - **Forced conclusion.** Originally only `max_iterations`. Approaching a real deadline now wraps up with reason `time_budget` (all iterating agents). Operator cancel stays fail-fast. See ADR-0029.
 - **Identity / trigger (not owned here).** This ADR originally specified `type: orchestrator`, `AgentTypeOrchestrator`, and a built-in `Orchestrator` agent. Those are removed. [ADR-0015](0015-implicit-orchestrator.md) owns trigger and identity: operators set `sub_agents` on any agent (including `type: action`). Do not configure the removed type or built-in. Runtime mechanics in this ADR remain valid.
+
+## Amendments ([ADR-0032](0032-session-cancel-reason.md), 2026-09-24)
+
+`cancel_agent` originally took only `execution_id`, and a cancelled sub-agent usually persisted `context canceled`. [ADR-0032](0032-session-cancel-reason.md) adds an optional `reason` and stores friendly attribution on the execution. Session-level actor and reason (`cancelled_by`, `cancel_reason`) are owned by that ADR, not by this one.

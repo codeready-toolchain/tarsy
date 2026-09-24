@@ -154,7 +154,7 @@ queue:
 - Resolves chain config, downloads runbook, iterates stages
 - After each successful action stage with an upstream investigation/synthesis/compose report, inserts an automatic `compose` sibling (fail-open; mechanical concat on LLM failure)
 - Extracts final analysis (last non-empty investigation/synthesis/action/compose), runs executive summary as a typed `exec_summary` stage via SingleShotController (fail-open). The exec-summary controller parses a last-line `LABELS:` trailer, strips it on success, and the worker writes canonical `session.labels`. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
-- Maps context errors to session status (timed_out / cancelled)
+- Maps context errors to session status (timed_out / cancelled). A cancelled session with no prior actor is attributed to `system` (`worker context cancelled`). User cancel actor and reason are already stored and are not overwritten. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 
 **Key Implementation Files**:
 - `pkg/queue/worker.go` -- Worker poll loop and session lifecycle
@@ -519,7 +519,7 @@ Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestra
 **Key components**:
 
 - **`CompositeToolExecutor`** (`pkg/agent/orchestrator/composite_executor.go`) — wraps MCP tools + orchestration tools (`dispatch_agent`, `cancel_agent`, `list_agents`) into a single `ToolExecutor`. Routes by name: orchestration tools go to `SubAgentRunner`, everything else delegates to MCP.
-- **`SubAgentRunner`** (`pkg/agent/orchestrator/runner.go`) — manages sub-agent goroutine lifecycle. Push-based result delivery via buffered channel. Sub-agent contexts derive from session-level context (survive across orchestrator iterations). Omitted `agent_timeout` uses remaining parent time; if set, `min(configured, remaining parent)` with `WithTimeoutCause`.
+- **`SubAgentRunner`** (`pkg/agent/orchestrator/runner.go`) — manages sub-agent goroutine lifecycle. Push-based result delivery via buffered channel. Sub-agent contexts derive from session-level context (survive across orchestrator iterations). `cancel_agent` takes an optional reason and records `Cancelled by {parent agent}` on the execution. Omitted `agent_timeout` uses remaining parent time; if set, `min(configured, remaining parent)` with `WithTimeoutCause`. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 - **`SubAgentRegistry`** (`pkg/config/sub_agent_registry.go`) — agents with a `description` field, filtered by optional `sub_agents` override at chain/stage/agent level.
 
 **Result flow**: `dispatch_agent` returns immediately → sub-agent runs in goroutine → result sent to channel → controller drains before next LLM call → injected as user-role message (injection format is internal to `FormatSubAgentResult` and intentionally not disclosed in the orchestrator prompt).
@@ -530,7 +530,7 @@ Any agent that resolves a non-empty sub-agent catalog at runtime gains orchestra
 
 **Chat orchestrator**: `ChatConfig.SubAgents` enables chat agents to gain orchestration. Resolution follows: `chat.sub_agents` > `chain.sub_agents` > none.
 
-**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics), [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger, prompt injection, stage-level skills), and [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md) (timeouts, wrap-up, `max_iterations` default)
+**For detailed design**: See [ADR-0002: Orchestrator Agent](adr/0002-orchestrator-impl.md) (runtime mechanics), [ADR-0015: Implicit Orchestrator](adr/0015-implicit-orchestrator.md) (trigger, prompt injection, stage-level skills), [ADR-0029: Sub-Agent Execution Limits](adr/0029-sub-agent-execution-limits.md) (timeouts, wrap-up, `max_iterations` default), and [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md) (`cancel_agent` reason)
 
 #### Instruction Composition
 
@@ -973,7 +973,7 @@ Event Published -> DB (INSERT + NOTIFY) -> All Backend Pods (LISTEN) -> WebSocke
 
 **Auto-catchup**: New channel subscriptions automatically receive prior events. On reconnect, clients send `catchup` with `last_event_id` for fine-grained replay. Server returns missed events (limit: 200). Overflow triggers `catchup.overflow` signaling the client to do a full REST reload.
 
-**Cross-Pod Cancellation**: Uses a dedicated `cancellations` NOTIFY channel. Cancel handler sets DB status to `cancelling`, cancels locally, publishes session ID to the channel. All pods LISTEN and cancel the session context on the owning pod.
+**Cross-Pod Cancellation**: Uses a dedicated `cancellations` NOTIFY channel. The cancel handler writes actor and optional reason with the status transition (`pending` → `cancelled` immediately, or `in_progress` → `cancelling`), cancels locally, and publishes the session ID. All pods LISTEN and cancel the session context on the owning pod. The notification does not carry who or why. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 
 **Key Implementation Files**:
 - `pkg/events/publisher.go` -- EventPublisher (persistent + transient)
@@ -1007,7 +1007,7 @@ AlertSession (session metadata, status, alert data)
 #### Key Entity Fields
 
 **AlertSession** (`ent/schema/alertsession.go`):
-`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels; GIN `idx_alert_sessions_labels_gin` for `label=` contains), `mcp_selection`, `author`, `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps
+`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels; GIN `idx_alert_sessions_labels_gin` for `label=` contains), `mcp_selection`, `author`, `cancelled_by` (optional — proxy identity, or `system`), `cancel_reason` (optional text, max 500 runes), `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 
 **Stage** (`ent/schema/stage.go`):
 `id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
@@ -1044,9 +1044,9 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types, chain IDs, and stored labels |
 | GET | `/api/v1/sessions/:id` | Session details (includes `labels`) |
 | GET | `/api/v1/sessions/:id/summary` | Final analysis + executive summary |
-| GET | `/api/v1/sessions/:id/status` | Lightweight poll (single `AlertSession` PK lookup): status, summaries, labels, `error_message`, and review fields |
+| GET | `/api/v1/sessions/:id/status` | Lightweight poll (single `AlertSession` PK lookup): status, summaries, labels, `error_message`, `cancelled_by`, `cancel_reason`, and review fields |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
-| POST | `/api/v1/sessions/:id/cancel` | Cancel running session or chat |
+| POST | `/api/v1/sessions/:id/cancel` | Cancel a queued or in-progress session, or stop an in-flight chat. Optional `{ "reason" }` (max 500 runes). See [ADR-0032](adr/0032-session-cancel-reason.md) |
 | GET | `/api/v1/sessions/:id/score` | Latest scoring result (total score, analysis, failure tags, tool improvement report) |
 | POST | `/api/v1/sessions/:id/score` | Trigger on-demand re-scoring (202 Accepted, 409 if in-progress) |
 | GET | `/api/v1/sessions/:id/memories` | Memories extracted from this session |
@@ -1061,7 +1061,7 @@ AlertSession (session metadata, status, alert data)
 | GET | `/api/v1/usage/summary` | Fleet usage aggregates for a date window (tokens + estimated cost when enabled) |
 | GET | `/health` | Health check (DB, worker pool) |
 
-`GET /sessions/:id/status` (`SessionStatusResponse`) is a single PK lookup on `AlertSession` — no stages, chat, token aggregates, or review-activity joins. Review columns on that row (`review_status`, `assignee`, `quality_rating`, `action_taken`, `investigation_feedback`) are copied onto the poll DTO so clients do not need `GET /sessions/:id`. Unset review fields marshal as `null`; the keys are always present.
+`GET /sessions/:id/status` (`SessionStatusResponse`) is a single PK lookup on `AlertSession` — no stages, chat, token aggregates, or review-activity joins. Review columns on that row (`review_status`, `assignee`, `quality_rating`, `action_taken`, `investigation_feedback`) and cancel attribution (`cancelled_by`, `cancel_reason`) are copied onto the poll DTO so clients do not need `GET /sessions/:id`. Unset review and cancel fields marshal as `null`; the keys are always present.
 
 ---
 
@@ -1168,6 +1168,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component).
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
 - **Session labels**: Historical list and triage have a Labels column between Type and Submitted by. Session detail shows stored `labels` as chips next to the alert type. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. Triage has no label query param. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- **Cancel attribution**: Session and queued-alert cancel dialogs take an optional reason. Cancelled status tooltips (list, triage, header) and Slack show `Cancelled by {actor}` plus an optional reason. Timeline, trace, chat, and sub-agent cards render `cancelled` as cancelled, not failed. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 - **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`. Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). Usage totals and by-model include cache-read / cache-creation SUMs (session list / header / `ExecutionOverview` do not). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 - **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status), `system.prompt_caching.enabled`, the `fallback_lists` catalog, the `label_maps` catalog (including injected `builtin`), `defaults.agents` pairing, nested `compose` / `executive_summary` job blocks, and raw `fallback_list` / `label_map` selectors (no per-agent expanded walks). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md), and [ADR-0031: Session Labels](adr/0031-session-labels.md).
@@ -1226,7 +1227,7 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 **Purpose**: External notification integration for alert processing outcomes
 **Key Responsibility**: Delivering analysis results to Slack channels
 
-TARSy provides optional Slack integration for automatic notifications at two lifecycle points: session start (for Slack-originated alerts) and terminal status (completed, failed, timed out, cancelled). Supports threaded replies via fingerprint correlation.
+TARSy provides optional Slack integration for automatic notifications at two lifecycle points: session start (for Slack-originated alerts) and terminal status (completed, failed, timed out, cancelled). Cancelled messages attribute the actor and optional reason instead of an error body. Supports threaded replies via fingerprint correlation. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 
 **For complete setup guide**: See [Slack Integration Documentation](slack-integration.md)
 
