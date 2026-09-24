@@ -68,7 +68,7 @@ func formatAgentCatalog(entries []config.SubAgentEntry) string {
 	var sb strings.Builder
 	sb.WriteString("## Available Sub-Agents\n\n")
 	sb.WriteString(fmt.Sprintf("You can dispatch these agents using the %s tool.\n", builtintools.DispatchAgent))
-	sb.WriteString(fmt.Sprintf("Use %s to stop unnecessary work.\n", builtintools.CancelAgent))
+	sb.WriteString(fmt.Sprintf("Use %s to stop unnecessary work. A short reason is optional.\n", builtintools.CancelAgent))
 
 	for _, e := range entries {
 		sb.WriteString(fmt.Sprintf("\n- **%s**: %s\n", e.Name, e.Description))

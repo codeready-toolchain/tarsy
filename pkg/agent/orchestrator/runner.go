@@ -1,9 +1,12 @@
 package orchestrator
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,10 +47,11 @@ type SubAgentRunner struct {
 	// executeToolCall (which is cancelled at the end of each iteration).
 	parentCtx context.Context
 
-	deps         *SubAgentDeps
-	parentExecID string
-	sessionID    string
-	stageID      string
+	deps            *SubAgentDeps
+	parentExecID    string
+	parentAgentName string
+	sessionID       string
+	stageID         string
 
 	// Atomic counter for sub-agent agent_index (starts at 1).
 	nextSubAgentIndex int32
@@ -65,6 +69,7 @@ func NewSubAgentRunner(
 	parentCtx context.Context,
 	deps *SubAgentDeps,
 	parentExecID string,
+	parentAgentName string,
 	sessionID string,
 	stageID string,
 	registry *config.SubAgentRegistry,
@@ -76,17 +81,18 @@ func NewSubAgentRunner(
 		overrides[ref.Name] = ref
 	}
 	return &SubAgentRunner{
-		executions:   make(map[string]*subAgentExecution),
-		resultsCh:    make(chan *SubAgentResult, guardrails.MaxConcurrentAgents),
-		closeCh:      make(chan struct{}),
-		parentCtx:    parentCtx,
-		deps:         deps,
-		parentExecID: parentExecID,
-		sessionID:    sessionID,
-		stageID:      stageID,
-		registry:     registry,
-		guardrails:   guardrails,
-		overrides:    overrides,
+		executions:      make(map[string]*subAgentExecution),
+		resultsCh:       make(chan *SubAgentResult, guardrails.MaxConcurrentAgents),
+		closeCh:         make(chan struct{}),
+		parentCtx:       parentCtx,
+		deps:            deps,
+		parentExecID:    parentExecID,
+		parentAgentName: parentAgentName,
+		sessionID:       sessionID,
+		stageID:         stageID,
+		registry:        registry,
+		guardrails:      guardrails,
+		overrides:       overrides,
 	}
 }
 
@@ -211,7 +217,8 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		}
 	}
 
-	subCtx, cancel := subAgentContext(r.parentCtx, r.guardrails.AgentTimeout, name)
+	timeoutCtx, timeoutCancel := subAgentContext(r.parentCtx, r.guardrails.AgentTimeout, name)
+	subCtx, causeCancel := context.WithCancelCause(timeoutCtx)
 
 	subExec := &subAgentExecution{
 		executionID: executionID,
@@ -219,7 +226,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 		task:        task,
 		agentIndex:  agentIndex,
 		status:      agent.ExecutionStatusActive,
-		cancel:      cancel,
+		cancel:      causeCancel,
 		done:        make(chan struct{}),
 	}
 
@@ -234,7 +241,7 @@ func (r *SubAgentRunner) Dispatch(ctx context.Context, name, task string) (strin
 
 	atomic.AddInt32(&r.pending, 1)
 
-	go r.runSubAgent(subCtx, cancel, subExec, resolvedConfig, agentIndex)
+	go r.runSubAgent(subCtx, timeoutCancel, subExec, resolvedConfig, agentIndex)
 
 	return executionID, nil
 }
@@ -305,7 +312,11 @@ func (r *SubAgentRunner) runSubAgent(
 	if err != nil {
 		status := agent.StatusFromErr(ctx.Err())
 		logger.Error("Sub-agent execution error", "error", err, "resolved_status", status)
-		r.completeSubAgent(exec, status, "", err.Error(), "")
+		errMsg := err.Error()
+		if msg := attributedCancelMessage(ctx); msg != "" {
+			errMsg = msg
+		}
+		r.completeSubAgent(exec, status, "", errMsg, "")
 		return
 	}
 
@@ -313,6 +324,9 @@ func (r *SubAgentRunner) runSubAgent(
 	var errMsg string
 	if result.Error != nil {
 		errMsg = result.Error.Error()
+	}
+	if msg := attributedCancelMessage(ctx); msg != "" {
+		errMsg = msg
 	}
 	r.completeSubAgent(exec, result.Status, result.FinalAnalysis, errMsg, result.WrapUpReason)
 }
@@ -463,7 +477,7 @@ func (r *SubAgentRunner) HasPending() bool {
 
 // Cancel cancels a specific sub-agent by execution ID.
 // Returns a human-readable status string.
-func (r *SubAgentRunner) Cancel(executionID string) (string, error) {
+func (r *SubAgentRunner) Cancel(executionID string, reason *string) (string, error) {
 	r.mu.Lock()
 	exec, ok := r.executions[executionID]
 	if !ok {
@@ -477,8 +491,32 @@ func (r *SubAgentRunner) Cancel(executionID string) (string, error) {
 	}
 	r.mu.Unlock()
 
-	exec.cancel()
+	exec.cancel(&attributedCancel{msg: formatSubAgentCancelMessage(r.parentAgentName, reason)})
 	return "cancellation requested", nil
+}
+
+// attributedCancel is the context cause set by cancel_agent so persist can
+// store the friendly attribution instead of "context canceled".
+type attributedCancel struct {
+	msg string
+}
+
+func (e *attributedCancel) Error() string { return e.msg }
+
+func formatSubAgentCancelMessage(parentAgentName string, reason *string) string {
+	actor := cmp.Or(strings.TrimSpace(parentAgentName), "orchestrator")
+	if reason != nil {
+		return fmt.Sprintf("Cancelled by %s: %s", actor, *reason)
+	}
+	return fmt.Sprintf("Cancelled by %s", actor)
+}
+
+func attributedCancelMessage(ctx context.Context) string {
+	var ac *attributedCancel
+	if errors.As(context.Cause(ctx), &ac) {
+		return ac.Error()
+	}
+	return ""
 }
 
 // List returns a snapshot of all dispatched sub-agents and their statuses.
@@ -513,7 +551,7 @@ func (r *SubAgentRunner) CancelAll() {
 
 	for _, exec := range r.executions {
 		if exec.status == agent.ExecutionStatusActive && exec.cancel != nil {
-			exec.cancel()
+			exec.cancel(nil)
 		}
 	}
 }

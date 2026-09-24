@@ -77,7 +77,7 @@ Principles:
 ## Available Sub-Agents
 
 You can dispatch these agents using the dispatch_agent tool.
-Use cancel_agent to stop unnecessary work.
+Use cancel_agent to stop unnecessary work. A short reason is optional.
 
 - **GeneralWorker**: General-purpose agent for analysis, summarization, reasoning, and other tasks
   Tools: none (pure reasoning)

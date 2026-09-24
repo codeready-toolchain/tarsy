@@ -62,6 +62,7 @@ import type {
   SessionProgressPayload,
   ExecutionProgressPayload,
   ExecutionStatusPayload,
+  LiveExecutionStatus,
   ChatCreatedPayload,
   SessionScoreUpdatedPayload,
 } from '../types/events.ts';
@@ -208,7 +209,7 @@ export function SessionDetailPage() {
   // stageId is included so StageContent can filter out executions from other stages,
   // preventing phantom agent cards from appearing.
   // agentIndex (1-based) preserves chain config ordering for deterministic tab order.
-  const [executionStatuses, setExecutionStatuses] = useState<Map<string, { status: string; stageId: string; agentIndex: number }>>(
+  const [executionStatuses, setExecutionStatuses] = useState<Map<string, LiveExecutionStatus>>(
     () => new Map(),
   );
 
@@ -217,7 +218,7 @@ export function SessionDetailPage() {
   const [subAgentStreamingEvents, setSubAgentStreamingEvents] = useState<Map<string, ExtendedStreamingItem>>(
     () => new Map(),
   );
-  const [subAgentExecutionStatuses, setSubAgentExecutionStatuses] = useState<Map<string, { status: string; stageId: string; agentIndex: number }>>(
+  const [subAgentExecutionStatuses, setSubAgentExecutionStatuses] = useState<Map<string, LiveExecutionStatus>>(
     () => new Map(),
   );
   const [subAgentProgressStatuses, setSubAgentProgressStatuses] = useState<Map<string, string>>(
@@ -1192,7 +1193,12 @@ export function SessionDetailPage() {
         // agent terminal status without waiting for the entire stage to complete.
         if (eventType === EVENT_EXECUTION_STATUS) {
           const payload = data as unknown as ExecutionStatusPayload;
-          const entry = { status: payload.status, stageId: payload.stage_id, agentIndex: payload.agent_index };
+          const entry: LiveExecutionStatus = {
+            status: payload.status,
+            stageId: payload.stage_id,
+            agentIndex: payload.agent_index,
+            errorMessage: payload.error_message,
+          };
           if (payload.parent_execution_id) {
             setSubAgentExecutionStatuses((prev) => {
               const next = new Map(prev);

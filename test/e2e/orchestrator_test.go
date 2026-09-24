@@ -1304,6 +1304,16 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 // ────────────────────────────────────────────────────────────
 
 func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
+	runOrchestratorCancelSpecific(t, "", "Cancelled by SREOrchestrator")
+}
+
+func TestE2E_OrchestratorCancelSpecific_WithReason(t *testing.T) {
+	runOrchestratorCancelSpecific(t, "too slow", "Cancelled by SREOrchestrator: too slow")
+}
+
+func runOrchestratorCancelSpecific(t *testing.T, reason, wantErrMsg string) {
+	t.Helper()
+
 	llm := NewScriptedLLMClient()
 
 	subAgentGate := make(chan struct{})
@@ -1334,7 +1344,7 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 				Arguments: `{"execution_id":"PLACEHOLDER"}`},
 			&agent.UsageChunk{InputTokens: 400, OutputTokens: 20, TotalTokens: 420},
 		},
-		RewriteChunks: cancelAgentRewriter("LogAnalyzer"),
+		RewriteChunks: cancelAgentRewriter("LogAnalyzer", reason),
 	})
 	// Buffer entries for timing after cancel result + cancelled sub-agent result.
 	for i := range 2 {
@@ -1410,6 +1420,8 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 		case "LogAnalyzer":
 			assert.Equal(t, "cancelled", string(e.Status),
 				"LogAnalyzer should be cancelled via cancel_agent tool")
+			require.NotNil(t, e.ErrorMessage)
+			assert.Equal(t, wantErrMsg, *e.ErrorMessage)
 		case "GeneralWorker":
 			assert.Equal(t, "completed", string(e.Status))
 		}
@@ -1422,6 +1434,11 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 		if string(te.EventType) == "llm_tool_call" && te.Metadata != nil {
 			if tn, ok := te.Metadata["tool_name"]; ok && tn == "cancel_agent" {
 				cancelAgentFound = true
+				if reason != "" {
+					args, ok := te.Metadata["arguments"].(string)
+					require.True(t, ok, "cancel_agent timeline should store arguments as a string")
+					assert.Contains(t, args, reason)
+				}
 				break
 			}
 		}
@@ -1444,10 +1461,19 @@ func TestE2E_OrchestratorCancelSpecific(t *testing.T) {
 // cancelAgentRewriter returns a RewriteChunks function that patches
 // cancel_agent ToolCallChunk arguments with the real execution_id of the
 // named agent, extracted from dispatch_agent results in the conversation.
-func cancelAgentRewriter(targetAgent string) func([]agent.ConversationMessage, []agent.Chunk) []agent.Chunk {
+func cancelAgentRewriter(targetAgent, reason string) func([]agent.ConversationMessage, []agent.Chunk) []agent.Chunk {
 	return func(messages []agent.ConversationMessage, chunks []agent.Chunk) []agent.Chunk {
 		execID := findDispatchedExecID(messages, targetAgent)
 		if execID == "" {
+			return chunks
+		}
+
+		args := map[string]string{"execution_id": execID}
+		if reason != "" {
+			args["reason"] = reason
+		}
+		raw, err := json.Marshal(args)
+		if err != nil {
 			return chunks
 		}
 
@@ -1456,7 +1482,7 @@ func cancelAgentRewriter(targetAgent string) func([]agent.ConversationMessage, [
 		for i, ch := range rewritten {
 			if tc, ok := ch.(*agent.ToolCallChunk); ok && tc.Name == "cancel_agent" {
 				clone := *tc
-				clone.Arguments = fmt.Sprintf(`{"execution_id":"%s"}`, execID)
+				clone.Arguments = string(raw)
 				rewritten[i] = &clone
 			}
 		}

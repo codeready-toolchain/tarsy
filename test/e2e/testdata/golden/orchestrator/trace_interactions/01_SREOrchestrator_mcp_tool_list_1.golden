@@ -8,7 +8,7 @@
 === AVAILABLE_TOOLS ===
 [
   {
-    "description": "Cancel a running sub-agent.",
+    "description": "Cancel a running sub-agent. A short reason is optional.",
     "name": "cancel_agent"
   },
   {

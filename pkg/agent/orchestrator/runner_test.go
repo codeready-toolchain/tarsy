@@ -102,7 +102,7 @@ func TestSubAgentRunner_CancelAll_WaitAll(t *testing.T) {
 	exec1 := &subAgentExecution{
 		executionID: "exec-1",
 		status:      agent.ExecutionStatusActive,
-		cancel: func() {
+		cancel: func(error) {
 			close(cancelled)
 		},
 		done: make(chan struct{}),
@@ -135,7 +135,7 @@ func TestSubAgentRunner_WaitAll_ContextTimeout(t *testing.T) {
 	exec := &subAgentExecution{
 		executionID: "stuck",
 		status:      agent.ExecutionStatusActive,
-		cancel:      func() {},
+		cancel:      func(error) {},
 		done:        make(chan struct{}), // never closes
 	}
 	r.mu.Lock()
@@ -185,7 +185,7 @@ func TestSubAgentRunner_OverridesMap(t *testing.T) {
 	t.Run("nil refs produces empty overrides", func(t *testing.T) {
 		runner := NewSubAgentRunner(
 			context.Background(), &SubAgentDeps{},
-			"parent", "sess", "stg", registry,
+			"parent", "TestOrchestrator", "sess", "stg", registry,
 			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute},
 			nil,
 		)
@@ -199,7 +199,7 @@ func TestSubAgentRunner_OverridesMap(t *testing.T) {
 		}
 		runner := NewSubAgentRunner(
 			context.Background(), &SubAgentDeps{},
-			"parent", "sess", "stg", registry,
+			"parent", "TestOrchestrator", "sess", "stg", registry,
 			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute},
 			refs,
 		)
@@ -213,7 +213,7 @@ func TestSubAgentRunner_OverridesMap(t *testing.T) {
 	t.Run("dispatch without override uses zero-value ref", func(t *testing.T) {
 		runner := NewSubAgentRunner(
 			context.Background(), &SubAgentDeps{},
-			"parent", "sess", "stg", registry,
+			"parent", "TestOrchestrator", "sess", "stg", registry,
 			&OrchestratorGuardrails{MaxConcurrentAgents: 5, AgentTimeout: time.Minute},
 			nil,
 		)
@@ -524,41 +524,137 @@ func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
 }
 
 func TestSubAgentRunner_Cancel_RunningAgent(t *testing.T) {
-	ctx := context.Background()
-	started := make(chan struct{})
-	runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
-		close(started)
-		<-runCtx.Done()
-		return nil, runCtx.Err()
-	})
-	defer cleanup()
-
-	execID, err := runner.Dispatch(ctx, "TestAgent", "cancellable task")
-	require.NoError(t, err)
-
-	// Wait for the agent to start
-	select {
-	case <-started:
-	case <-time.After(5 * time.Second):
-		t.Fatal("agent did not start in time")
+	reason := "too slow"
+	tests := []struct {
+		name              string
+		reason            *string
+		wantMsg           string
+		returnInterrupted bool
+	}{
+		{name: "without reason", wantMsg: "Cancelled by TestOrchestrator"},
+		{name: "with reason", reason: &reason, wantMsg: "Cancelled by TestOrchestrator: too slow"},
+		{
+			name:              "strips execution interrupted prefix",
+			reason:            &reason,
+			wantMsg:           "Cancelled by TestOrchestrator: too slow",
+			returnInterrupted: true,
+		},
 	}
 
-	status, err := runner.Cancel(execID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			started := make(chan struct{})
+			var gotCause atomic.Value
+			runner, cleanup := setupIntegrationRunner(t, func(runCtx context.Context) (*agent.ExecutionResult, error) {
+				close(started)
+				<-runCtx.Done()
+				gotCause.Store(context.Cause(runCtx))
+				if tt.returnInterrupted {
+					// Production iterating/single-shot agents return (result, nil)
+					// with Error wrapping "execution interrupted: {cause}".
+					return &agent.ExecutionResult{
+						Status: agent.ExecutionStatusCancelled,
+						Error:  fmt.Errorf("execution interrupted: %w", context.Cause(runCtx)),
+					}, nil
+				}
+				return nil, runCtx.Err()
+			})
+			defer cleanup()
+
+			publisher := &recordingEventPublisher{}
+			runner.deps.EventPublisher = publisher
+
+			execID, err := runner.Dispatch(ctx, "TestAgent", "cancellable task")
+			require.NoError(t, err)
+
+			select {
+			case <-started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("agent did not start in time")
+			}
+
+			status, err := runner.Cancel(execID, tt.reason)
+			require.NoError(t, err)
+			assert.Equal(t, "cancellation requested", status)
+
+			result, err := runner.WaitForNext(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, execID, result.ExecutionID)
+			assert.Equal(t, agent.ExecutionStatusCancelled, result.Status)
+			assert.Equal(t, tt.wantMsg, result.Error)
+			assert.NotContains(t, result.Error, "execution interrupted")
+
+			cause, ok := gotCause.Load().(error)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantMsg, cause.Error())
+
+			statuses := publisher.executionStatuses()
+			require.NotEmpty(t, statuses)
+			terminal := statuses[len(statuses)-1]
+			assert.Equal(t, string(agentexecution.StatusCancelled), terminal.Status)
+			assert.Equal(t, tt.wantMsg, terminal.ErrorMessage)
+
+			execs, err := runner.deps.StageService.GetAgentExecutions(ctx, runner.stageID)
+			require.NoError(t, err)
+			var found bool
+			for _, e := range execs {
+				if e.ID != execID {
+					continue
+				}
+				found = true
+				require.NotNil(t, e.ErrorMessage)
+				assert.Equal(t, tt.wantMsg, *e.ErrorMessage)
+				assert.Equal(t, agentexecution.StatusCancelled, e.Status)
+			}
+			assert.True(t, found, "cancelled execution should be in the stage")
+		})
+	}
+}
+
+func TestFormatSubAgentCancelMessage(t *testing.T) {
+	reason := "too slow"
+	tests := []struct {
+		name   string
+		parent string
+		reason *string
+		want   string
+	}{
+		{name: "actor only", parent: "SREOrchestrator", want: "Cancelled by SREOrchestrator"},
+		{name: "actor and reason", parent: "SREOrchestrator", reason: &reason, want: "Cancelled by SREOrchestrator: too slow"},
+		{name: "empty parent", parent: "", want: "Cancelled by orchestrator"},
+		{name: "whitespace parent", parent: "  ", want: "Cancelled by orchestrator"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, formatSubAgentCancelMessage(tt.parent, tt.reason))
+		})
+	}
+}
+
+func TestSubAgentRunner_Cancel_EmptyParentName(t *testing.T) {
+	r := newMinimalRunner(5)
+	r.parentAgentName = ""
+	var got error
+	r.mu.Lock()
+	r.executions["exec-42"] = &subAgentExecution{
+		executionID: "exec-42",
+		status:      agent.ExecutionStatusActive,
+		cancel:      func(err error) { got = err },
+		done:        make(chan struct{}),
+	}
+	r.mu.Unlock()
+
+	status, err := r.Cancel("exec-42", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "cancellation requested", status)
-
-	result, err := runner.WaitForNext(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, execID, result.ExecutionID)
-	assert.Contains(t, []agent.ExecutionStatus{
-		agent.ExecutionStatusCancelled,
-		agent.ExecutionStatusFailed,
-	}, result.Status)
+	require.Error(t, got)
+	assert.Equal(t, "Cancelled by orchestrator", got.Error())
 }
 
 func TestSubAgentRunner_Cancel_NotFound(t *testing.T) {
 	r := newMinimalRunner(5)
-	_, err := r.Cancel("nonexistent")
+	_, err := r.Cancel("nonexistent", nil)
 	assert.ErrorIs(t, err, ErrExecutionNotFound)
 }
 
@@ -568,12 +664,12 @@ func TestSubAgentRunner_Cancel_AlreadyCompleted(t *testing.T) {
 	r.executions["done-exec"] = &subAgentExecution{
 		executionID: "done-exec",
 		status:      agent.ExecutionStatusCompleted,
-		cancel:      func() {},
+		cancel:      func(error) {},
 		done:        make(chan struct{}),
 	}
 	r.mu.Unlock()
 
-	status, err := r.Cancel("done-exec")
+	status, err := r.Cancel("done-exec", nil)
 	require.NoError(t, err)
 	assert.Contains(t, status, "already completed")
 }
@@ -868,7 +964,7 @@ func TestSubAgentRunner_CancelAll_Idempotent(t *testing.T) {
 	r.executions["e1"] = &subAgentExecution{
 		executionID: "e1",
 		status:      agent.ExecutionStatusActive,
-		cancel:      func() {},
+		cancel:      func(error) {},
 		done:        make(chan struct{}),
 	}
 	r.mu.Unlock()
@@ -1004,6 +1100,20 @@ func TestFormatSubAgentResult_Failed(t *testing.T) {
 	assert.Contains(t, msg.Content, "connection refused")
 }
 
+func TestFormatSubAgentResult_Cancelled(t *testing.T) {
+	msg := FormatSubAgentResult(&SubAgentResult{
+		ExecutionID: "exec-3",
+		AgentName:   "LogAnalyzer",
+		Status:      agent.ExecutionStatusCancelled,
+		Error:       "Cancelled by SREOrchestrator: too slow",
+	})
+	assert.Equal(t, agent.RoleUser, msg.Role)
+	assert.Equal(t,
+		"[Sub-agent cancelled] LogAnalyzer (exec exec-3): Cancelled by SREOrchestrator: too slow",
+		msg.Content,
+	)
+}
+
 // ─── Test helpers ───────────────────────────────────────────────────────────
 
 // newMinimalRunner creates a SubAgentRunner with a test registry (containing
@@ -1016,7 +1126,7 @@ func newMinimalRunner(maxConcurrent int) *SubAgentRunner {
 	return NewSubAgentRunner(
 		context.Background(),
 		&SubAgentDeps{},
-		"parent-exec", "session-1", "stage-1",
+		"parent-exec", "TestOrchestrator", "session-1", "stage-1",
 		registry,
 		&OrchestratorGuardrails{
 			MaxConcurrentAgents: maxConcurrent,
@@ -1285,6 +1395,7 @@ func setupIntegrationRunner(
 		context.Background(),
 		deps,
 		parentExecID,
+		"TestOrchestrator",
 		session.ID,
 		stageID,
 		registry,

@@ -119,6 +119,14 @@ export interface ExecutionStatusPayload {
   timestamp: string;
 }
 
+/** Live per-execution status kept from execution.status WS events. */
+export interface LiveExecutionStatus {
+  status: string;
+  stageId: string;
+  agentIndex: number;
+  errorMessage?: string;
+}
+
 /** review.status payload. */
 export interface ReviewStatusPayload {
   type: 'review.status';

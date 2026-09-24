@@ -272,7 +272,7 @@ Each PR leaves the product working. New behavior lands incrementally.
 
 **Temporary gap:** `cancel_agent` still stores `context canceled` until PR3; after PR2 that string shows on the cancelled banner, not as an error.
 
-### PR3 — `cancel_agent` optional `reason`
+### PR3 — `cancel_agent` optional `reason` - DONE
 
 Required. Sequenced after PR2 so the friendly execution string lands on cancelled chrome, not `ErrorCard`. Reuses PR1’s 500-rune validation helper (tool `IsError` mapping, not HTTP).
 

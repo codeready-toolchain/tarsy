@@ -9,6 +9,7 @@ import {
 } from '@mui/icons-material';
 import { flowItemsToPlainText, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
 import type { ExecutionOverview } from '../../types/session';
+import type { LiveExecutionStatus } from '../../types/events';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import StreamingContentRenderer from '../streaming/StreamingContentRenderer';
 import ProcessingIndicator from '../streaming/ProcessingIndicator';
@@ -35,7 +36,7 @@ interface SubAgentCardProps {
   executionOverview?: ExecutionOverview;
   items: FlowItem[];
   streamingEvents?: Array<[string, StreamingItem]>;
-  executionStatus?: { status: string; stageId: string; agentIndex: number };
+  executionStatus?: LiveExecutionStatus;
   progressStatus?: string;
   fallbackAgentName?: string;
   shouldAutoCollapse?: (item: FlowItem) => boolean;
@@ -92,6 +93,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
   const eo = executionOverview;
   const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;
+  const errorMessage = executionStatus?.errorMessage || eo?.error_message;
   const agentName = eo?.agent_name || fallbackAgentName || 'Sub-Agent';
   const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
@@ -268,7 +270,7 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
               <Alert severity="info" sx={{ mt: 1, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
                 <Typography variant="body2" color="text.secondary">
                   <strong>Cancelled</strong>
-                  {eo?.error_message ? `: ${eo.error_message}` : ''}
+                  {errorMessage ? `: ${errorMessage}` : ''}
                 </Typography>
               </Alert>
             )}

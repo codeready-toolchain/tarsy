@@ -3,12 +3,14 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +31,8 @@ func TestCompositeToolExecutor_ListTools_CombinesMCPAndOrchestration(t *testing.
 	assert.Len(t, tools, len(orchestrationTools)+2)
 	assert.Equal(t, ToolDispatchAgent, tools[0].Name)
 	assert.Equal(t, ToolCancelAgent, tools[1].Name)
+	assert.Contains(t, tools[1].ParametersSchema, `"reason"`)
+	assert.Contains(t, tools[1].ParametersSchema, `"required": ["execution_id"]`)
 	assert.Equal(t, ToolListAgents, tools[2].Name)
 	assert.Equal(t, "server1.read_file", tools[3].Name)
 	assert.Equal(t, "server1.write_file", tools[4].Name)
@@ -119,7 +123,7 @@ func TestCompositeToolExecutor_Execute_CancelAgent(t *testing.T) {
 		executionID: "exec-42",
 		agentName:   "TestAgent",
 		status:      agent.ExecutionStatusActive,
-		cancel:      func() {},
+		cancel:      func(error) {},
 		done:        make(chan struct{}),
 	}
 	runner.mu.Unlock()
@@ -134,6 +138,46 @@ func TestCompositeToolExecutor_Execute_CancelAgent(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	assert.Contains(t, result.Content, "cancellation requested")
+}
+
+func TestCompositeToolExecutor_Execute_CancelAgent_WithReason(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+		want   string
+	}{
+		{name: "with reason", reason: "too slow", want: "Cancelled by TestOrchestrator: too slow"},
+		{name: "padded reason trimmed", reason: "  too slow  ", want: "Cancelled by TestOrchestrator: too slow"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got error
+			runner := newMinimalRunner(5)
+			runner.mu.Lock()
+			runner.executions["exec-42"] = &subAgentExecution{
+				executionID: "exec-42",
+				status:      agent.ExecutionStatusActive,
+				cancel:      func(err error) { got = err },
+				done:        make(chan struct{}),
+			}
+			runner.mu.Unlock()
+
+			c := NewCompositeToolExecutor(nil, runner, config.BuildSubAgentRegistry(nil))
+			args, err := json.Marshal(map[string]string{
+				"execution_id": "exec-42",
+				"reason":       tt.reason,
+			})
+			require.NoError(t, err)
+			result, err := c.Execute(t.Context(), agent.ToolCall{
+				ID: "call-r", Name: ToolCancelAgent, Arguments: string(args),
+			})
+			require.NoError(t, err)
+			assert.False(t, result.IsError)
+			require.Error(t, got)
+			assert.Equal(t, tt.want, got.Error())
+		})
+	}
 }
 
 func TestCompositeToolExecutor_Execute_CancelAgent_ValidationError(t *testing.T) {
@@ -157,6 +201,58 @@ func TestCompositeToolExecutor_Execute_CancelAgent_ValidationError(t *testing.T)
 		require.NoError(t, err)
 		assert.True(t, result.IsError)
 		assert.Contains(t, result.Content, "invalid arguments")
+	})
+
+	t.Run("over cap reason", func(t *testing.T) {
+		called := false
+		runner := newMinimalRunner(5)
+		runner.mu.Lock()
+		runner.executions["exec-42"] = &subAgentExecution{
+			executionID: "exec-42",
+			status:      agent.ExecutionStatusActive,
+			cancel:      func(error) { called = true },
+			done:        make(chan struct{}),
+		}
+		runner.mu.Unlock()
+		c := NewCompositeToolExecutor(nil, runner, config.BuildSubAgentRegistry(nil))
+
+		args, _ := json.Marshal(map[string]string{
+			"execution_id": "exec-42",
+			"reason":       strings.Repeat("a", services.MaxCancelReasonLength+1),
+		})
+		result, err := c.Execute(t.Context(), agent.ToolCall{
+			ID: "call-v3", Name: ToolCancelAgent, Arguments: string(args),
+		})
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		assert.Equal(t, "validation error on field 'reason': must not exceed 500 characters", result.Content)
+		assert.False(t, called)
+	})
+
+	t.Run("whitespace reason omitted", func(t *testing.T) {
+		var got error
+		runner := newMinimalRunner(5)
+		runner.mu.Lock()
+		runner.executions["exec-42"] = &subAgentExecution{
+			executionID: "exec-42",
+			status:      agent.ExecutionStatusActive,
+			cancel:      func(err error) { got = err },
+			done:        make(chan struct{}),
+		}
+		runner.mu.Unlock()
+		c := NewCompositeToolExecutor(nil, runner, config.BuildSubAgentRegistry(nil))
+
+		args, _ := json.Marshal(map[string]string{
+			"execution_id": "exec-42",
+			"reason":       "   ",
+		})
+		result, err := c.Execute(t.Context(), agent.ToolCall{
+			ID: "call-v4", Name: ToolCancelAgent, Arguments: string(args),
+		})
+		require.NoError(t, err)
+		assert.False(t, result.IsError)
+		require.Error(t, got)
+		assert.Equal(t, "Cancelled by TestOrchestrator", got.Error())
 	})
 }
 
@@ -246,7 +342,7 @@ func TestCompositeToolExecutor_Close_CancelsAndWaits(t *testing.T) {
 	runner.executions["e1"] = &subAgentExecution{
 		executionID: "e1",
 		status:      agent.ExecutionStatusActive,
-		cancel: func() {
+		cancel: func(error) {
 			atomic.AddInt32(&cancelled, 1)
 			close(doneCh)
 		},
@@ -283,7 +379,7 @@ func TestCompositeToolExecutor_Close_Timeout(t *testing.T) {
 	runner.executions["stuck"] = &subAgentExecution{
 		executionID: "stuck",
 		status:      agent.ExecutionStatusActive,
-		cancel:      func() {},
+		cancel:      func(error) {},
 		done:        make(chan struct{}), // never closed
 	}
 	runner.mu.Unlock()

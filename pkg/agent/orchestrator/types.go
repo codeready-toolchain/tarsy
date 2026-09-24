@@ -3,6 +3,7 @@
 package orchestrator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -84,7 +85,7 @@ type subAgentExecution struct {
 	task        string
 	agentIndex  int
 	status      agent.ExecutionStatus
-	cancel      func()
+	cancel      context.CancelCauseFunc
 	done        chan struct{}
 }
 
@@ -121,11 +122,12 @@ var orchestrationTools = []agent.ToolDefinition{
 	},
 	{
 		Name:        ToolCancelAgent,
-		Description: "Cancel a running sub-agent.",
+		Description: "Cancel a running sub-agent. A short reason is optional.",
 		ParametersSchema: fmt.Sprintf(`{
 			"type": "object",
 			"properties": {
-				"execution_id": {"type": "string", "description": "Execution ID from %s"}
+				"execution_id": {"type": "string", "description": "Execution ID from %s"},
+				"reason": {"type": "string", "description": "Optional short reason (max 500 characters)"}
 			},
 			"required": ["execution_id"]
 		}`, builtintools.DispatchAgent),

@@ -21,6 +21,7 @@ import {
 } from '@mui/icons-material';
 import type { FlowItem, StageGroup } from '../../utils/timelineParser';
 import type { StageOverview } from '../../types/session';
+import type { LiveExecutionStatus } from '../../types/events';
 import type { StreamingItem } from '../streaming/StreamingContentRenderer';
 import {
   FLOW_ITEM,
@@ -81,11 +82,11 @@ interface ConversationTimelineProps {
   /** Per-agent progress statuses */
   agentProgressStatuses?: Map<string, string>;
   /** Real-time execution statuses from execution.status WS events (executionId → {status, stageId, agentIndex}) */
-  executionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  executionStatuses?: Map<string, LiveExecutionStatus>;
   /** Sub-agent streaming events (events with parent_execution_id) */
   subAgentStreamingEvents?: Map<string, StreamingItem & { stageId?: string; executionId?: string }>;
   /** Sub-agent execution statuses (events with parent_execution_id) */
-  subAgentExecutionStatuses?: Map<string, { status: string; stageId: string; agentIndex: number }>;
+  subAgentExecutionStatuses?: Map<string, LiveExecutionStatus>;
   /** Sub-agent progress statuses (events with parent_execution_id) */
   subAgentProgressStatuses?: Map<string, string>;
   /** Search bar props (only rendered when onSearchChange is provided, i.e. terminal sessions) */
