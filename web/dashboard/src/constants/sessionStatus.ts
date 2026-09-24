@@ -53,12 +53,12 @@ export const TERMINAL_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.TIMED_OUT,
 ]);
 
-/** Failed-family statuses (for error display logic). Includes cancelled
- *  so that scoring evaluations cancelled by shutdown also show the error badge. */
+/** Failed-family statuses (for error display logic). Scoring cancelled is
+ *  handled by a local set in ScoreBadge — do not treat timeline/trace
+ *  cancelled rows as failures. */
 export const FAILED_EXECUTION_STATUSES = new Set<string>([
   EXECUTION_STATUS.FAILED,
   EXECUTION_STATUS.TIMED_OUT,
-  EXECUTION_STATUS.CANCELLED,
 ]);
 
 /** Cancelled statuses (terminal but not an error — user-initiated).
@@ -91,6 +91,18 @@ export function isTerminalStatus(status: SessionStatus): boolean {
 /** Check if a session can be cancelled. */
 export function canCancelSession(status: SessionStatus): boolean {
   return status === SESSION_STATUS.IN_PROGRESS || status === SESSION_STATUS.PENDING;
+}
+
+/** Max length of an optional session cancel reason (Unicode runes; matches Go MaxCancelReasonLength). */
+export const MAX_CANCEL_REASON_LENGTH = 500;
+
+/** Unicode code-point count (matches Go utf8.RuneCountInString). Not UTF-16 string.length. */
+export function cancelReasonRuneCount(text: string): number {
+  return Array.from(text).length;
+}
+
+export function isCancelReasonOverLimit(text: string): boolean {
+  return cancelReasonRuneCount(text) > MAX_CANCEL_REASON_LENGTH;
 }
 
 /** Human-readable display name for a status. */

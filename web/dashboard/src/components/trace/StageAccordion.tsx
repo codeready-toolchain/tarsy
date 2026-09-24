@@ -44,6 +44,7 @@ import ParallelExecutionTabs from './ParallelExecutionTabs';
 import SubAgentTabs from './SubAgentTabs';
 import InteractionCard from './InteractionCard';
 import ProviderFallbackIndicator from './ProviderFallbackIndicator';
+import { CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 
 interface StageAccordionProps {
   stage: TraceStageGroup;
@@ -280,11 +281,18 @@ export default function StageAccordion({
             )}
 
             {/* Error */}
-            {singleOverview?.error_message && (
+            {CANCELLED_EXECUTION_STATUSES.has(singleOverview?.status ?? '') ? (
+              <Alert severity="info" sx={{ mb: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Cancelled</strong>
+                  {singleOverview?.error_message ? `: ${singleOverview.error_message}` : ''}
+                </Typography>
+              </Alert>
+            ) : singleOverview?.error_message ? (
               <Alert severity="error" sx={{ mb: 2 }}>
                 <Typography variant="body2">{singleOverview.error_message}</Typography>
               </Alert>
-            )}
+            ) : null}
 
             {/* Interaction list */}
             {singleInteractions.length > 0 ? (

@@ -10,6 +10,7 @@ import CopyLinkButton from '../shared/CopyLinkButton';
 import ErrorCard from '../timeline/ErrorCard';
 import { ScoreBadge } from '../common/ScoreBadge';
 import { isTerminalStatus, SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatus';
+import { formatCancelAttribution } from '../../utils/format';
 import { QUALITY_RATING, REVIEW_SELECTION, REVIEW_STATUS } from '../../types/api';
 import { sessionScoringPath } from '../../constants/routes';
 import { sessionDeepLinkUrl } from '../../utils/deepLink';
@@ -21,6 +22,8 @@ interface FinalAnalysisCardProps {
   summary: string | null;
   sessionStatus: string;
   errorMessage: string | null;
+  cancelledBy?: string | null;
+  cancelReason?: string | null;
   /** Increment to collapse the card externally (e.g. Jump to Chat) */
   collapseCounter?: number;
   /** Increment to expand the card externally (e.g. Jump to Summary) */
@@ -61,7 +64,7 @@ function generateFakeAnalysis(status: string, errorMessage?: string | null): str
  * Supports counter-based expand/collapse from parent.
  */
 const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
-  ({ analysis, summary, sessionStatus, errorMessage, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, reviewStatus, onReviewClick }, ref) => {
+  ({ analysis, summary, sessionStatus, errorMessage, cancelledBy, cancelReason, collapseCounter = 0, expandCounter = 0, sessionId, latestScore, scoringStatus, qualityRating, reviewStatus, onReviewClick }, ref) => {
     const navigate = useNavigate();
     const [analysisExpanded, setAnalysisExpanded] = useState(false);
     const [prevAnalysis, setPrevAnalysis] = useState<string | null>(null);
@@ -100,15 +103,23 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
       }
     }, [analysis, prevAnalysis, sessionStatus]);
 
-    const displayAnalysis = analysis || (isTerminalStatus(sessionStatus as SessionStatus) ? generateFakeAnalysis(sessionStatus, errorMessage) : null);
+    const displayAnalysis = analysis || (isTerminalStatus(sessionStatus as SessionStatus)
+      ? generateFakeAnalysis(sessionStatus, errorMessage)
+      : null);
     const isFakeAnalysis = !analysis && isTerminalStatus(sessionStatus as SessionStatus);
+    const cancelAttribution = isFakeAnalysis && sessionStatus === SESSION_STATUS.CANCELLED
+      ? formatCancelAttribution(cancelledBy, cancelReason)
+      : '';
+    const analysisCopyText = cancelAttribution
+      ? `${displayAnalysis ?? ''}\n\n${cancelAttribution}`
+      : (displayAnalysis ?? '');
 
     const getCombinedDocument = () => {
       let doc = '';
       if (summary) doc += `# Executive Summary\n\n${summary}\n\n`;
-      if (displayAnalysis) {
+      if (analysisCopyText) {
         if (summary) doc += '# Full Detailed Analysis\n\n';
-        doc += displayAnalysis;
+        doc += analysisCopyText;
       }
       return doc;
     };
@@ -271,11 +282,16 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
 
             <Paper variant="outlined" sx={{ p: 3, bgcolor: 'action.hover' }}>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                <CopyButton text={displayAnalysis} variant="icon" size="small" tooltip="Copy analysis" />
+                <CopyButton text={analysisCopyText} variant="icon" size="small" tooltip="Copy analysis" />
               </Box>
               <ReactMarkdown remarkPlugins={remarkPlugins} urlTransform={defaultUrlTransform} components={finalAnswerMarkdownComponents}>
                 {displayAnalysis}
               </ReactMarkdown>
+              {cancelAttribution && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
+                  {cancelAttribution}
+                </Typography>
+              )}
             </Paper>
 
             {sessionStatus === SESSION_STATUS.FAILED && errorMessage && !isFakeAnalysis && (

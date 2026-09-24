@@ -38,6 +38,7 @@ import {
 import InteractionCard from './InteractionCard';
 import SubAgentTabs from './SubAgentTabs';
 import ProviderFallbackIndicator from './ProviderFallbackIndicator';
+import { CANCELLED_EXECUTION_STATUSES } from '../../constants/sessionStatus';
 
 interface ParallelExecutionTabsProps {
   stage: TraceStageGroup;
@@ -282,11 +283,18 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
         )}
 
         {/* Error alert */}
-        {currentOverview?.error_message && (
+        {CANCELLED_EXECUTION_STATUSES.has(currentOverview?.status ?? '') ? (
+          <Alert severity="info" sx={{ mb: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Cancelled</strong>
+              {currentOverview?.error_message ? `: ${currentOverview.error_message}` : ''}
+            </Typography>
+          </Alert>
+        ) : currentOverview?.error_message ? (
           <Alert severity="error" sx={{ mb: 2 }}>
             <Typography variant="body2">{currentOverview.error_message}</Typography>
           </Alert>
-        )}
+        ) : null}
 
         {/* Interaction list */}
         {interactions.length > 0 ? (

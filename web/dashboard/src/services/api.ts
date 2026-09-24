@@ -171,8 +171,11 @@ export async function getTimeline(id: string): Promise<TimelineEvent[]> {
   return response.data;
 }
 
-export async function cancelSession(id: string): Promise<CancelResponse> {
-  const response = await client.post<CancelResponse>(`/api/v1/sessions/${id}/cancel`);
+export async function cancelSession(id: string, reason?: string): Promise<CancelResponse> {
+  const trimmed = reason?.trim();
+  const response = trimmed
+    ? await client.post<CancelResponse>(`/api/v1/sessions/${id}/cancel`, { reason: trimmed })
+    : await client.post<CancelResponse>(`/api/v1/sessions/${id}/cancel`);
   return response.data;
 }
 

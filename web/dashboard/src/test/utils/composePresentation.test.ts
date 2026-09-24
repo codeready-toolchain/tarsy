@@ -26,5 +26,7 @@ describe('compose stage presentation', () => {
 
   it('treats failed compose chrome as a failed execution status', () => {
     expect(FAILED_EXECUTION_STATUSES.has('failed')).toBe(true);
+    expect(FAILED_EXECUTION_STATUSES.has('timed_out')).toBe(true);
+    expect(FAILED_EXECUTION_STATUSES.has('cancelled')).toBe(false);
   });
 });

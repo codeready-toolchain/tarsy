@@ -5,7 +5,7 @@
  * (no paused/canceling; uses cancelling).
  */
 
-import { Chip, alpha, type ChipProps } from '@mui/material';
+import { Chip, Tooltip, alpha, type ChipProps } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import {
   CheckCircle,
@@ -21,6 +21,8 @@ import { SESSION_STATUS, type SessionStatus } from '../../constants/sessionStatu
 interface StatusBadgeProps {
   status: string;
   size?: 'small' | 'medium';
+  /** Optional hover text (e.g. cancel attribution). Omitted when empty. */
+  tooltip?: string;
 }
 
 interface StatusConfig {
@@ -54,7 +56,7 @@ function getStatusConfig(status: string): StatusConfig {
   }
 }
 
-export function StatusBadge({ status, size = 'small' }: StatusBadgeProps) {
+export function StatusBadge({ status, size = 'small', tooltip }: StatusBadgeProps) {
   const { color, icon, label } = getStatusConfig(status as SessionStatus);
 
   // Base styling shared across all statuses (ported from old dashboard)
@@ -88,7 +90,7 @@ export function StatusBadge({ status, size = 'small' }: StatusBadgeProps) {
         }
       : {};
 
-  return (
+  const chip = (
     <Chip
       size={size}
       color={color}
@@ -97,5 +99,12 @@ export function StatusBadge({ status, size = 'small' }: StatusBadgeProps) {
       variant="filled"
       sx={{ ...baseSx, ...cancelledSx }}
     />
+  );
+
+  if (!tooltip) return chip;
+  return (
+    <Tooltip title={tooltip} enterDelay={0}>
+      <span>{chip}</span>
+    </Tooltip>
   );
 }

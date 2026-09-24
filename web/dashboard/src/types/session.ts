@@ -17,6 +17,8 @@ export interface DashboardSessionItem {
   completed_at: string | null;
   duration_ms: number | null;
   error_message: string | null;
+  cancelled_by?: string | null;
+  cancel_reason?: string | null;
   executive_summary: string | null;
   labels: string[] | null;
   llm_interaction_count: number;
@@ -83,6 +85,8 @@ export interface SessionDetailResponse {
   chain_id: string;
   author: string | null;
   error_message: string | null;
+  cancelled_by?: string | null;
+  cancel_reason?: string | null;
   final_analysis: string | null;
   executive_summary: string | null;
   executive_summary_error: string | null;
@@ -136,6 +140,23 @@ export interface SessionDetailResponse {
 
   // Stage list
   stages: StageOverview[];
+}
+
+/** Session status poll response (GET /api/v1/sessions/:id/status). */
+export interface SessionStatusResponse {
+  id: string;
+  status: string;
+  final_analysis: string | null;
+  executive_summary: string | null;
+  error_message: string | null;
+  cancelled_by?: string | null;
+  cancel_reason?: string | null;
+  labels: string[] | null;
+  review_status?: string | null;
+  assignee?: string | null;
+  quality_rating?: string | null;
+  action_taken?: string | null;
+  investigation_feedback?: string | null;
 }
 
 /** Summary of a stage within the session detail. */

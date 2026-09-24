@@ -31,10 +31,11 @@ import { ReviewCell } from './ReviewCell.tsx';
 import { qualityEvalScoreBodySx } from './qualityGroupSx.ts';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
-import { formatTimestamp, formatDurationMs } from '../../utils/format.ts';
+import { formatTimestamp, formatDurationMs, formatCancelAttribution } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import EstimatedCostDisplay from '../shared/EstimatedCostDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
+import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
 
@@ -79,7 +80,14 @@ export function SessionListItem({
       {/* Status + Summary hover */}
       <TableCell sx={{ width: '1%', whiteSpace: 'nowrap', pr: 3 }}>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-          <StatusBadge status={session.status} />
+          <StatusBadge
+            status={session.status}
+            tooltip={
+              session.status === SESSION_STATUS.CANCELLED
+                ? formatCancelAttribution(session.cancelled_by, session.cancel_reason) || undefined
+                : undefined
+            }
+          />
           <SummaryTooltip summary={session.executive_summary ?? ''} />
         </Box>
       </TableCell>

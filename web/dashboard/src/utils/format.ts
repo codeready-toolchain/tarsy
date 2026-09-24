@@ -186,3 +186,22 @@ export function formatEstimatedCostUsd(usd: number | null | undefined): string {
   }
   return `$${usd.toFixed(fractionDigits)}`;
 }
+
+// ────────────────────────────────────────────────────────────
+// Cancel attribution
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Who cancelled a session and why. Empty when there is no actor (historical rows).
+ * Matches Slack copy without mrkdwn escaping.
+ */
+export function formatCancelAttribution(
+  cancelledBy?: string | null,
+  cancelReason?: string | null,
+): string {
+  const actor = cancelledBy?.trim() ?? '';
+  if (!actor) return '';
+  const reason = cancelReason?.trim() ?? '';
+  if (reason) return `Cancelled by ${actor}: ${reason}`;
+  return `Cancelled by ${actor}`;
+}
