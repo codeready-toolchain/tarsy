@@ -79,7 +79,14 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const containsForceExpandedItem =
     !!forceExpandedItemId &&
     (forceExpandedItemId === anchorEventId || items.some((i) => i.id === forceExpandedItemId));
-  const [expanded, setExpanded] = useState(containsForceExpandedItem);
+  // No timeline items means the header is not clickable, so a cancel reason
+  // would stay inside a closed collapse. Open it so the attribution is visible.
+  const openForCancelReason =
+    items.length === 0 &&
+    streamingEvents.length === 0 &&
+    CANCELLED_EXECUTION_STATUSES.has(executionStatus?.status ?? '') &&
+    !!executionStatus?.errorMessage;
+  const [expanded, setExpanded] = useState(containsForceExpandedItem || openForCancelReason);
   const [prevExpandAllToolCalls, setPrevExpandAllToolCalls] = useState(expandAllToolCalls);
   if (expandAllToolCalls !== prevExpandAllToolCalls) {
     setPrevExpandAllToolCalls(expandAllToolCalls);

@@ -59,6 +59,33 @@ function makeExecOverview(
   };
 }
 
+describe('StageContent live sub-agent status', () => {
+  it('renders a status-only sub-agent under its parent', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <StageContent
+          items={[
+            makeItem({ id: 'parent-thought', executionId: 'parent-1', content: 'orchestrator thought' }),
+          ]}
+          stageId="stage-1"
+          subAgentExecutionStatuses={new Map([
+            ['sub-1', {
+              status: EXECUTION_STATUS.CANCELLED,
+              stageId: 'stage-1',
+              agentIndex: 1,
+              errorMessage: 'Cancelled by SREOrchestrator: too slow',
+              parentExecutionId: 'parent-1',
+            }],
+          ])}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText('Sub-Agent')).toBeInTheDocument();
+    expect(screen.getByText(/Cancelled by SREOrchestrator: too slow/)).toBeInTheDocument();
+  });
+});
+
 describe('StageContent deep-link tab selection', () => {
   it('selects the execution tab that owns the deep-linked event', async () => {
     const items: FlowItem[] = [

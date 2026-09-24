@@ -125,6 +125,7 @@ export interface LiveExecutionStatus {
   stageId: string;
   agentIndex: number;
   errorMessage?: string;
+  parentExecutionId?: string;
 }
 
 /** review.status payload. */

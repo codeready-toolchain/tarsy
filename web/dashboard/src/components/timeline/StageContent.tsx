@@ -329,8 +329,11 @@ const StageContent: React.FC<StageContentProps> = ({
     }
     // WS execution statuses for sub-agents
     if (subAgentExecutionStatuses) {
-      for (const execId of subAgentExecutionStatuses.keys()) {
+      for (const [execId, status] of subAgentExecutionStatuses) {
         ids.add(execId);
+        if (status.parentExecutionId) {
+          parentMap.set(execId, status.parentExecutionId);
+        }
       }
     }
     return { subAgentIds: ids, subAgentOverviewMap: overviews, subAgentParentMap: parentMap };
@@ -636,6 +639,7 @@ const StageContent: React.FC<StageContentProps> = ({
       ...subAgentOverviewMap.keys(),
       ...subAgentItemsByExec.keys(),
       ...subAgentStreamingByExec.keys(),
+      ...(subAgentExecutionStatuses?.keys() ?? []),
     ]);
     for (const subExecId of allSubAgentExecIds) {
       if (renderedSubAgents.has(subExecId)) continue;

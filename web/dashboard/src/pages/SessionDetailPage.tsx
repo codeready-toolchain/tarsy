@@ -1198,6 +1198,7 @@ export function SessionDetailPage() {
             stageId: payload.stage_id,
             agentIndex: payload.agent_index,
             errorMessage: payload.error_message,
+            parentExecutionId: payload.parent_execution_id,
           };
           if (payload.parent_execution_id) {
             setSubAgentExecutionStatuses((prev) => {
