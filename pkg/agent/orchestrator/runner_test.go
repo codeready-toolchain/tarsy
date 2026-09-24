@@ -526,18 +526,51 @@ func TestSubAgentRunner_Dispatch_ParentDeadlineWins(t *testing.T) {
 func TestSubAgentRunner_Cancel_RunningAgent(t *testing.T) {
 	reason := "too slow"
 	tests := []struct {
-		name              string
-		reason            *string
-		wantMsg           string
-		returnInterrupted bool
+		name       string
+		reason     *string
+		wantStatus agent.ExecutionStatus
+		wantMsg    string
+		// execute overrides the default (nil, ctx.Err()) return after cancel.
+		execute func(runCtx context.Context) (*agent.ExecutionResult, error)
 	}{
-		{name: "without reason", wantMsg: "Cancelled by TestOrchestrator"},
-		{name: "with reason", reason: &reason, wantMsg: "Cancelled by TestOrchestrator: too slow"},
+		{name: "without reason", wantStatus: agent.ExecutionStatusCancelled, wantMsg: "Cancelled by TestOrchestrator"},
+		{name: "with reason", reason: &reason, wantStatus: agent.ExecutionStatusCancelled, wantMsg: "Cancelled by TestOrchestrator: too slow"},
 		{
-			name:              "strips execution interrupted prefix",
-			reason:            &reason,
-			wantMsg:           "Cancelled by TestOrchestrator: too slow",
-			returnInterrupted: true,
+			name:       "strips execution interrupted prefix",
+			reason:     &reason,
+			wantStatus: agent.ExecutionStatusCancelled,
+			wantMsg:    "Cancelled by TestOrchestrator: too slow",
+			execute: func(runCtx context.Context) (*agent.ExecutionResult, error) {
+				// Production iterating/single-shot agents return (result, nil)
+				// with Error wrapping "execution interrupted: {cause}".
+				return &agent.ExecutionResult{
+					Status: agent.ExecutionStatusCancelled,
+					Error:  fmt.Errorf("execution interrupted: %w", context.Cause(runCtx)),
+				}, nil
+			},
+		},
+		{
+			name:       "keeps failed error",
+			reason:     &reason,
+			wantStatus: agent.ExecutionStatusFailed,
+			wantMsg:    "connection refused",
+			execute: func(context.Context) (*agent.ExecutionResult, error) {
+				return &agent.ExecutionResult{
+					Status: agent.ExecutionStatusFailed,
+					Error:  fmt.Errorf("connection refused"),
+				}, nil
+			},
+		},
+		{
+			name:       "keeps completed result",
+			reason:     &reason,
+			wantStatus: agent.ExecutionStatusCompleted,
+			execute: func(context.Context) (*agent.ExecutionResult, error) {
+				return &agent.ExecutionResult{
+					Status:        agent.ExecutionStatusCompleted,
+					FinalAnalysis: "done",
+				}, nil
+			},
 		},
 	}
 
@@ -550,13 +583,8 @@ func TestSubAgentRunner_Cancel_RunningAgent(t *testing.T) {
 				close(started)
 				<-runCtx.Done()
 				gotCause.Store(context.Cause(runCtx))
-				if tt.returnInterrupted {
-					// Production iterating/single-shot agents return (result, nil)
-					// with Error wrapping "execution interrupted: {cause}".
-					return &agent.ExecutionResult{
-						Status: agent.ExecutionStatusCancelled,
-						Error:  fmt.Errorf("execution interrupted: %w", context.Cause(runCtx)),
-					}, nil
+				if tt.execute != nil {
+					return tt.execute(runCtx)
 				}
 				return nil, runCtx.Err()
 			})
@@ -581,18 +609,22 @@ func TestSubAgentRunner_Cancel_RunningAgent(t *testing.T) {
 			result, err := runner.WaitForNext(ctx)
 			require.NoError(t, err)
 			assert.Equal(t, execID, result.ExecutionID)
-			assert.Equal(t, agent.ExecutionStatusCancelled, result.Status)
+			assert.Equal(t, tt.wantStatus, result.Status)
 			assert.Equal(t, tt.wantMsg, result.Error)
 			assert.NotContains(t, result.Error, "execution interrupted")
 
+			wantCause := "Cancelled by TestOrchestrator"
+			if tt.reason != nil {
+				wantCause += ": too slow"
+			}
 			cause, ok := gotCause.Load().(error)
 			require.True(t, ok)
-			assert.Equal(t, tt.wantMsg, cause.Error())
+			assert.Equal(t, wantCause, cause.Error())
 
 			statuses := publisher.executionStatuses()
 			require.NotEmpty(t, statuses)
 			terminal := statuses[len(statuses)-1]
-			assert.Equal(t, string(agentexecution.StatusCancelled), terminal.Status)
+			assert.Equal(t, string(mapToEntStatus(tt.wantStatus)), terminal.Status)
 			assert.Equal(t, tt.wantMsg, terminal.ErrorMessage)
 
 			execs, err := runner.deps.StageService.GetAgentExecutions(ctx, runner.stageID)
@@ -603,11 +635,15 @@ func TestSubAgentRunner_Cancel_RunningAgent(t *testing.T) {
 					continue
 				}
 				found = true
-				require.NotNil(t, e.ErrorMessage)
-				assert.Equal(t, tt.wantMsg, *e.ErrorMessage)
-				assert.Equal(t, agentexecution.StatusCancelled, e.Status)
+				if tt.wantMsg == "" {
+					assert.Nil(t, e.ErrorMessage)
+				} else {
+					require.NotNil(t, e.ErrorMessage)
+					assert.Equal(t, tt.wantMsg, *e.ErrorMessage)
+				}
+				assert.Equal(t, mapToEntStatus(tt.wantStatus), e.Status)
 			}
-			assert.True(t, found, "cancelled execution should be in the stage")
+			assert.True(t, found, "execution should be in the stage")
 		})
 	}
 }

@@ -325,8 +325,12 @@ func (r *SubAgentRunner) runSubAgent(
 	if result.Error != nil {
 		errMsg = result.Error.Error()
 	}
-	if msg := attributedCancelMessage(ctx); msg != "" {
-		errMsg = msg
+	// Only replace the message when this result is itself a cancel. A completed
+	// or failed result can race with cancel_agent and must keep its own error.
+	if result.Status == agent.ExecutionStatusCancelled {
+		if msg := attributedCancelMessage(ctx); msg != "" {
+			errMsg = msg
+		}
 	}
 	r.completeSubAgent(exec, result.Status, result.FinalAnalysis, errMsg, result.WrapUpReason)
 }
