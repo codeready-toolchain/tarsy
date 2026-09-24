@@ -45,18 +45,10 @@ interface FinalAnalysisCardProps {
 /**
  * Generate a placeholder analysis for terminal sessions with no real analysis.
  */
-function generateFakeAnalysis(
-  status: string,
-  errorMessage?: string | null,
-  cancelledBy?: string | null,
-  cancelReason?: string | null,
-): string {
+function generateFakeAnalysis(status: string, errorMessage?: string | null): string {
   switch (status) {
-    case SESSION_STATUS.CANCELLED: {
-      const attribution = formatCancelAttribution(cancelledBy, cancelReason);
-      const attributionBlock = attribution ? `\n\n${attribution}` : '';
-      return `# Session Cancelled\n\n**Status:** Session was terminated before the AI could complete its analysis.${attributionBlock}\n\nThis analysis session was cancelled before completion. No final analysis is available.\n\nIf you need to investigate this alert, please submit a new analysis session.`;
-    }
+    case SESSION_STATUS.CANCELLED:
+      return '# Session Cancelled\n\n**Status:** Session was terminated before the AI could complete its analysis.\n\nThis analysis session was cancelled before completion. No final analysis is available.\n\nIf you need to investigate this alert, please submit a new analysis session.';
     case SESSION_STATUS.FAILED:
       return `# Session Failed\n\nThis analysis session failed before completion.\n\n**Error Details:**\n${errorMessage ? `\`\`\`\n${errorMessage}\n\`\`\`` : '_No error details available_'}\n\nPlease review the session logs or submit a new analysis session.`;
     case SESSION_STATUS.COMPLETED:
@@ -112,16 +104,22 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
     }, [analysis, prevAnalysis, sessionStatus]);
 
     const displayAnalysis = analysis || (isTerminalStatus(sessionStatus as SessionStatus)
-      ? generateFakeAnalysis(sessionStatus, errorMessage, cancelledBy, cancelReason)
+      ? generateFakeAnalysis(sessionStatus, errorMessage)
       : null);
     const isFakeAnalysis = !analysis && isTerminalStatus(sessionStatus as SessionStatus);
+    const cancelAttribution = isFakeAnalysis && sessionStatus === SESSION_STATUS.CANCELLED
+      ? formatCancelAttribution(cancelledBy, cancelReason)
+      : '';
+    const analysisCopyText = cancelAttribution
+      ? `${displayAnalysis ?? ''}\n\n${cancelAttribution}`
+      : (displayAnalysis ?? '');
 
     const getCombinedDocument = () => {
       let doc = '';
       if (summary) doc += `# Executive Summary\n\n${summary}\n\n`;
-      if (displayAnalysis) {
+      if (analysisCopyText) {
         if (summary) doc += '# Full Detailed Analysis\n\n';
-        doc += displayAnalysis;
+        doc += analysisCopyText;
       }
       return doc;
     };
@@ -284,11 +282,16 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
 
             <Paper variant="outlined" sx={{ p: 3, bgcolor: 'action.hover' }}>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                <CopyButton text={displayAnalysis} variant="icon" size="small" tooltip="Copy analysis" />
+                <CopyButton text={analysisCopyText} variant="icon" size="small" tooltip="Copy analysis" />
               </Box>
               <ReactMarkdown remarkPlugins={remarkPlugins} urlTransform={defaultUrlTransform} components={finalAnswerMarkdownComponents}>
                 {displayAnalysis}
               </ReactMarkdown>
+              {cancelAttribution && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
+                  {cancelAttribution}
+                </Typography>
+              )}
             </Paper>
 
             {sessionStatus === SESSION_STATUS.FAILED && errorMessage && !isFakeAnalysis && (
