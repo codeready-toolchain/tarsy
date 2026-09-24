@@ -76,6 +76,9 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   linkUrl,
   anchorEventId,
 }) => {
+  const eo = executionOverview;
+  const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;
+  const errorMessage = executionStatus?.errorMessage || eo?.error_message;
   const containsForceExpandedItem =
     !!forceExpandedItemId &&
     (forceExpandedItemId === anchorEventId || items.some((i) => i.id === forceExpandedItemId));
@@ -84,9 +87,14 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const openForCancelReason =
     items.length === 0 &&
     streamingEvents.length === 0 &&
-    CANCELLED_EXECUTION_STATUSES.has(executionStatus?.status ?? '') &&
-    !!executionStatus?.errorMessage;
+    CANCELLED_EXECUTION_STATUSES.has(effectiveStatus) &&
+    !!errorMessage;
   const [expanded, setExpanded] = useState(containsForceExpandedItem || openForCancelReason);
+  const [prevOpenForCancelReason, setPrevOpenForCancelReason] = useState(openForCancelReason);
+  if (openForCancelReason !== prevOpenForCancelReason) {
+    setPrevOpenForCancelReason(openForCancelReason);
+    if (openForCancelReason) setExpanded(true);
+  }
   const [prevExpandAllToolCalls, setPrevExpandAllToolCalls] = useState(expandAllToolCalls);
   if (expandAllToolCalls !== prevExpandAllToolCalls) {
     setPrevExpandAllToolCalls(expandAllToolCalls);
@@ -98,9 +106,6 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
     if (containsForceExpandedItem) setExpanded(true);
   }
 
-  const eo = executionOverview;
-  const effectiveStatus = executionStatus?.status || eo?.status || EXECUTION_STATUS.STARTED;
-  const errorMessage = executionStatus?.errorMessage || eo?.error_message;
   const agentName = eo?.agent_name || fallbackAgentName || 'Sub-Agent';
   const isFailed = FAILED_EXECUTION_STATUSES.has(effectiveStatus);
   const isCancelled = CANCELLED_EXECUTION_STATUSES.has(effectiveStatus);
