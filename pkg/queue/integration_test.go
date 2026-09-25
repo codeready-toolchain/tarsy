@@ -273,7 +273,7 @@ type stuckScoringIDs struct {
 	eventID   string
 }
 
-func seedStuckScoring(t *testing.T, ctx context.Context, client *ent.Client, podID string, scoreStatus sessionscore.Status, startedAt time.Time) stuckScoringIDs {
+func seedStuckScoring(ctx context.Context, t *testing.T, client *ent.Client, podID string, scoreStatus sessionscore.Status, startedAt time.Time) stuckScoringIDs {
 	t.Helper()
 
 	ids := stuckScoringIDs{
@@ -347,7 +347,7 @@ func seedStuckScoring(t *testing.T, ctx context.Context, client *ent.Client, pod
 	return ids
 }
 
-func assertOrphanedScoringClosed(t *testing.T, ctx context.Context, client *ent.Client, ids stuckScoringIDs) {
+func assertOrphanedScoringClosed(ctx context.Context, t *testing.T, client *ent.Client, ids stuckScoringIDs) {
 	t.Helper()
 
 	score, err := client.SessionScore.Get(ctx, ids.scoreID)
@@ -382,11 +382,11 @@ func TestStartupScoringOrphanCleanup(t *testing.T) {
 	podID := "startup-scoring-pod"
 	startedAt := time.Now().Add(-time.Minute)
 
-	stuck := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusInProgress, startedAt)
-	pending := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusPending, startedAt)
-	otherPod := seedStuckScoring(t, ctx, client, "other-pod", sessionscore.StatusInProgress, startedAt)
-	completed := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusCompleted, startedAt)
-	deleted := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusInProgress, startedAt)
+	stuck := seedStuckScoring(ctx, t, client, podID, sessionscore.StatusInProgress, startedAt)
+	pending := seedStuckScoring(ctx, t, client, podID, sessionscore.StatusPending, startedAt)
+	otherPod := seedStuckScoring(ctx, t, client, "other-pod", sessionscore.StatusInProgress, startedAt)
+	completed := seedStuckScoring(ctx, t, client, podID, sessionscore.StatusCompleted, startedAt)
+	deleted := seedStuckScoring(ctx, t, client, podID, sessionscore.StatusInProgress, startedAt)
 	_, err := client.AlertSession.UpdateOneID(deleted.sessionID).
 		SetDeletedAt(time.Now()).
 		Save(ctx)
@@ -478,7 +478,7 @@ func TestStartupScoringOrphanCleanup(t *testing.T) {
 	require.NoError(t, err)
 
 	// Stage already terminal: fail the score, leave the stage and execution alone.
-	finishedStage := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusInProgress, startedAt)
+	finishedStage := seedStuckScoring(ctx, t, client, podID, sessionscore.StatusInProgress, startedAt)
 	_, err = client.Stage.UpdateOneID(finishedStage.stageID).
 		SetStatus(stage.StatusCompleted).
 		SetCompletedAt(startedAt).
@@ -493,8 +493,8 @@ func TestStartupScoringOrphanCleanup(t *testing.T) {
 	err = CleanupStartupScoringOrphans(ctx, client, podID)
 	require.NoError(t, err)
 
-	assertOrphanedScoringClosed(t, ctx, client, stuck)
-	assertOrphanedScoringClosed(t, ctx, client, pending)
+	assertOrphanedScoringClosed(ctx, t, client, stuck)
+	assertOrphanedScoringClosed(ctx, t, client, pending)
 
 	pendingExec, err := client.AgentExecution.Get(ctx, pendingExecID)
 	require.NoError(t, err)
@@ -554,10 +554,10 @@ func TestStaleScoringRecovery(t *testing.T) {
 	ctx := context.Background()
 
 	staleAt := time.Now().Add(-scoringTimeout - time.Minute)
-	stale := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusInProgress, staleAt)
-	stalePending := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusPending, staleAt)
-	fresh := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusInProgress, time.Now())
-	deleted := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusInProgress, staleAt)
+	stale := seedStuckScoring(ctx, t, client, "any-pod", sessionscore.StatusInProgress, staleAt)
+	stalePending := seedStuckScoring(ctx, t, client, "any-pod", sessionscore.StatusPending, staleAt)
+	fresh := seedStuckScoring(ctx, t, client, "any-pod", sessionscore.StatusInProgress, time.Now())
+	deleted := seedStuckScoring(ctx, t, client, "any-pod", sessionscore.StatusInProgress, staleAt)
 	_, err := client.AlertSession.UpdateOneID(deleted.sessionID).
 		SetDeletedAt(time.Now()).
 		Save(ctx)
@@ -572,8 +572,8 @@ func TestStaleScoringRecovery(t *testing.T) {
 	err = pool.detectAndRecoverOrphans(ctx)
 	require.NoError(t, err)
 
-	assertOrphanedScoringClosed(t, ctx, client, stale)
-	assertOrphanedScoringClosed(t, ctx, client, stalePending)
+	assertOrphanedScoringClosed(ctx, t, client, stale)
+	assertOrphanedScoringClosed(ctx, t, client, stalePending)
 
 	freshScore, err := client.SessionScore.Get(ctx, fresh.scoreID)
 	require.NoError(t, err)
@@ -593,7 +593,7 @@ func TestMarkOrphanedScoringFailedLeavesTerminalScore(t *testing.T) {
 	client := dbClient.Client
 	ctx := context.Background()
 
-	ids := seedStuckScoring(t, ctx, client, "pod", sessionscore.StatusInProgress, time.Now().Add(-time.Minute))
+	ids := seedStuckScoring(ctx, t, client, "pod", sessionscore.StatusInProgress, time.Now().Add(-time.Minute))
 	loaded, err := client.SessionScore.Get(ctx, ids.scoreID)
 	require.NoError(t, err)
 
