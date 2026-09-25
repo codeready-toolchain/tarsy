@@ -75,6 +75,20 @@ function extractDisplayName(author: string): string {
   return author;
 }
 
+function SecondaryTokenStat({ value, label }: { value: number; label: string }) {
+  if (value <= 0) return null;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+      <Typography variant="caption" color="text.disabled">
+        {formatTokensCompact(value)}
+      </Typography>
+      <Typography variant="caption" color="text.disabled">
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
 interface SessionHeaderProps {
   session: SessionDetailResponse;
   /** Raw alert_data string — rendered as a collapsible section inside the header card */
@@ -173,6 +187,16 @@ export default function SessionHeader({
     session.scoring_status === SCORING_STATUS.COMPLETED ||
     session.scoring_status === SCORING_STATUS.FAILED;
   const showScoringInProgress = scoringTriggered && !scoringDone;
+
+  const hasTokenBreakdown =
+    session.cache_read_tokens > 0 ||
+    session.cache_creation_tokens > 0 ||
+    session.thinking_tokens > 0;
+  const showEstimatedCost =
+    session.cost_estimation_enabled === true &&
+    session.estimated_cost_usd != null &&
+    session.cost_completeness != null &&
+    session.cost_completeness !== 'none';
 
   return (
     <Paper
@@ -367,7 +391,7 @@ export default function SessionHeader({
             >
               {/* Left: tokens + Est. cost */}
               {session.total_tokens > 0 ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Used tokens
                   </Typography>
@@ -393,12 +417,40 @@ export default function SessionHeader({
                       <Typography variant="caption" color="text.disabled">out</Typography>
                     </Box>
                   )}
-                  <EstimatedCostDisplay
-                    enabled={session.cost_estimation_enabled === true}
-                    estimatedCostUsd={session.estimated_cost_usd}
-                    costCompleteness={session.cost_completeness}
-                    variant="labeled"
-                  />
+                  {hasTokenBreakdown && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: 2,
+                        pl: 2,
+                        borderLeft: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <SecondaryTokenStat value={session.cache_read_tokens} label="cache read" />
+                      <SecondaryTokenStat value={session.cache_creation_tokens} label="cache create" />
+                      <SecondaryTokenStat value={session.thinking_tokens} label="thinking" />
+                    </Box>
+                  )}
+                  {showEstimatedCost && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        pl: 2,
+                        borderLeft: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <EstimatedCostDisplay
+                        enabled
+                        estimatedCostUsd={session.estimated_cost_usd}
+                        costCompleteness={session.cost_completeness}
+                        variant="labeled"
+                      />
+                    </Box>
+                  )}
                 </Box>
               ) : <Box />}
 

@@ -215,7 +215,7 @@ Resolve order stays promotion → `model_rates` → catalog → snapshot.
 - Missing cache rates does not mark the row unpriced if base input/output resolved.
 - 400-retry Claude 5m fallback is not reported to Go; overlay/derived Claude create stays 2×. That rare write is slightly overestimated. Acceptable.
 - Token-bearing completeness includes cache columns: any of input / output / thinking / cache_read / cache_creation > 0. Estimate must run when cache pointers are set even if uncached input is 0.
-- Prometheus records cache directions. Do **not** SUM cache on session-list / `ExecutionOverview` APIs.
+- Prometheus records cache directions. Do **not** SUM cache on `ExecutionOverview`. Session detail and the dashboard list do: detail for the header, list in one per-row aggregate so a tooltip can show the breakdown. The list row itself still shows uncached input, output, and total.
 
 ### Prefix stability
 
@@ -231,7 +231,9 @@ Tier 0 wall-clock time is injected **first** in the system prompt. Memory briefi
 | Trace LLM list + detail | yes — per-`Generate` hit/miss |
 | Usage totals + by-model (StatCards + by-model columns; **Input tokens** = uncached) | yes |
 | Usage by-alert-type, by-chain, top-sessions, Usage *charts* | **no** |
-| Session list, session header, `ExecutionOverview` | **no** (same as thinking tokens) |
+| Session header | yes — uncached in, out, total, plus cache read / cache create / thinking when > 0 |
+| Session list | yes — same sums, shown in a tooltip; the row stays uncached in, out, and total |
+| `ExecutionOverview` | **no** |
 
 ## Core Concepts
 

@@ -167,7 +167,7 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 		assert.Contains(t, string(raw), `"cache_creation_tokens":0`)
 	})
 
-	t.Run("cache tokens are omitted outside totals and by_model", func(t *testing.T) {
+	t.Run("cache tokens are on session list and detail", func(t *testing.T) {
 		alertRaw, err := json.Marshal(UsageAlertBreakdown{AlertType: "oom", TotalTokens: 10})
 		require.NoError(t, err)
 		assert.NotContains(t, string(alertRaw), "cache_read")
@@ -185,13 +185,15 @@ func TestUsageSummaryResponseJSON(t *testing.T) {
 
 		listRaw, err := json.Marshal(DashboardSessionItem{ID: "s1", InputTokens: 10})
 		require.NoError(t, err)
-		assert.NotContains(t, string(listRaw), "cache_read")
-		assert.NotContains(t, string(listRaw), "cache_creation")
+		assert.Contains(t, string(listRaw), `"cache_read_tokens":0`)
+		assert.Contains(t, string(listRaw), `"cache_creation_tokens":0`)
+		assert.Contains(t, string(listRaw), `"thinking_tokens":0`)
 
 		detailRaw, err := json.Marshal(SessionDetailResponse{ID: "s1", InputTokens: 10})
 		require.NoError(t, err)
-		assert.NotContains(t, string(detailRaw), "cache_read")
-		assert.NotContains(t, string(detailRaw), "cache_creation")
+		assert.Contains(t, string(detailRaw), `"cache_read_tokens":0`)
+		assert.Contains(t, string(detailRaw), `"cache_creation_tokens":0`)
+		assert.Contains(t, string(detailRaw), `"thinking_tokens":0`)
 
 		eoRaw, err := json.Marshal(ExecutionOverview{ExecutionID: "e1", InputTokens: 10})
 		require.NoError(t, err)

@@ -915,6 +915,9 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, int64(100), detail.InputTokens)
 		assert.Equal(t, int64(50), detail.OutputTokens)
 		assert.Equal(t, int64(150), detail.TotalTokens)
+		assert.Equal(t, int64(0), detail.ThinkingTokens)
+		assert.Equal(t, int64(0), detail.CacheReadTokens)
+		assert.Equal(t, int64(0), detail.CacheCreationTokens)
 		assert.Equal(t, 1, detail.TotalStages)
 		assert.Equal(t, 1, detail.CompletedStages)
 		assert.Equal(t, 0, detail.FailedStages)
@@ -954,6 +957,115 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.Equal(t, int64(100), eo.InputTokens)
 		assert.Equal(t, int64(50), eo.OutputTokens)
 		assert.Equal(t, int64(150), eo.TotalTokens)
+	})
+
+	t.Run("sums cache and thinking tokens onto the session detail", func(t *testing.T) {
+		now := time.Now()
+		started := now.Add(-10 * time.Second)
+		completed := now
+		sessionID := uuid.New().String()
+
+		sess := client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("cache alert").
+			SetAlertType("test").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		stg := client.Stage.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageName("analysis").
+			SetStageIndex(1).
+			SetExpectedAgentCount(1).
+			SetStatus(stage.StatusCompleted).
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		exec := client.AgentExecution.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetAgentName("TestAgent").
+			SetAgentIndex(1).
+			SetLlmBackend(string(config.LLMBackendNativeGemini)).
+			SetStatus("completed").
+			SetStartedAt(started).
+			SetCompletedAt(completed).
+			SaveX(ctx)
+
+		client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("gemini-2.5-pro").
+			SetLlmRequest(map[string]interface{}{}).
+			SetLlmResponse(map[string]interface{}{}).
+			SetInputTokens(100).
+			SetOutputTokens(20).
+			SetTotalTokens(200).
+			SetThinkingTokens(30).
+			SetCacheReadTokens(40).
+			SetCacheCreationTokens(10).
+			SaveX(ctx)
+		client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sess.ID).
+			SetStageID(stg.ID).
+			SetExecutionID(exec.ID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("gemini-2.5-pro").
+			SetLlmRequest(map[string]interface{}{}).
+			SetLlmResponse(map[string]interface{}{}).
+			SetInputTokens(50).
+			SetOutputTokens(10).
+			SetTotalTokens(80).
+			SetThinkingTokens(5).
+			SetCacheReadTokens(15).
+			SaveX(ctx)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		assert.Equal(t, int64(150), detail.InputTokens)
+		assert.Equal(t, int64(30), detail.OutputTokens)
+		assert.Equal(t, int64(280), detail.TotalTokens)
+		assert.Equal(t, int64(35), detail.ThinkingTokens)
+		assert.Equal(t, int64(55), detail.CacheReadTokens)
+		assert.Equal(t, int64(10), detail.CacheCreationTokens)
+
+		require.Len(t, detail.Stages, 1)
+		require.Len(t, detail.Stages[0].Executions, 1)
+		eo := detail.Stages[0].Executions[0]
+		assert.Equal(t, int64(150), eo.InputTokens)
+		assert.Equal(t, int64(30), eo.OutputTokens)
+		assert.Equal(t, int64(280), eo.TotalTokens)
+
+		list, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc", Search: "cache alert",
+		})
+		require.NoError(t, err)
+		var item *models.DashboardSessionItem
+		for i := range list.Sessions {
+			if list.Sessions[i].ID == sessionID {
+				item = &list.Sessions[i]
+				break
+			}
+		}
+		require.NotNil(t, item)
+		assert.Equal(t, int64(150), item.InputTokens)
+		assert.Equal(t, int64(30), item.OutputTokens)
+		assert.Equal(t, int64(280), item.TotalTokens)
+		assert.Equal(t, int64(35), item.ThinkingTokens)
+		assert.Equal(t, int64(55), item.CacheReadTokens)
+		assert.Equal(t, int64(10), item.CacheCreationTokens)
+		assert.Equal(t, 2, item.LLMInteractionCount)
 	})
 
 	t.Run("returns execution overviews with parallel agents and per-execution tokens", func(t *testing.T) {
@@ -2355,6 +2467,44 @@ func TestSessionService_GetActiveSessions(t *testing.T) {
 	assert.Equal(t, 1, result.Queued[0].QueuePosition)
 }
 
+func TestParseLLMListTokenSums(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		raw     string
+		want    llmListTokenSums
+		wantErr bool
+	}{
+		{name: "empty", raw: "", want: llmListTokenSums{}},
+		{name: "null", raw: "null", want: llmListTokenSums{}},
+		{
+			name: "sums",
+			raw:  `{"count":2,"input":150,"output":30,"total":280,"thinking":35,"cache_read":55,"cache_creation":10,"cost":1.5,"token_bearing":2,"priced":1}`,
+			want: llmListTokenSums{
+				Count: 2, Input: 150, Output: 30, Total: 280,
+				Thinking: 35, CacheRead: 55, CacheCreation: 10,
+				Cost: 1.5, TokenBearing: 2, Priced: 1,
+			},
+		},
+		{name: "invalid", raw: `{`, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseLLMListTokenSums([]byte(tt.raw))
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "failed to parse session list token sums")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 	client := testdb.NewTestClient(t)
 	service := setupTestSessionService(t, client.Client)
@@ -2485,6 +2635,9 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 				assert.Equal(t, int64(200), s.InputTokens)
 				assert.Equal(t, int64(100), s.OutputTokens)
 				assert.Equal(t, int64(300), s.TotalTokens)
+				assert.Equal(t, int64(0), s.ThinkingTokens)
+				assert.Equal(t, int64(0), s.CacheReadTokens)
+				assert.Equal(t, int64(0), s.CacheCreationTokens)
 				assert.Equal(t, 1, s.TotalStages)
 				assert.Equal(t, 1, s.CompletedStages)
 				assert.Equal(t, false, s.HasParallelStages)
@@ -2494,6 +2647,33 @@ func TestSessionService_ListSessionsForDashboard(t *testing.T) {
 			}
 		}
 		t.Fatal("session B not found in list")
+	})
+
+	t.Run("session with no llm interactions has zero token sums", func(t *testing.T) {
+		sessionID := uuid.New().String()
+		client.AlertSession.Create().
+			SetID(sessionID).
+			SetAlertData("no llm rows").
+			SetAlertType("test").
+			SetChainID("k8s-analysis").
+			SetAgentType("kubernetes").
+			SetStatus(alertsession.StatusCompleted).
+			SaveX(ctx)
+
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc", Search: "no llm rows",
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		item := result.Sessions[0]
+		assert.Equal(t, sessionID, item.ID)
+		assert.Equal(t, 0, item.LLMInteractionCount)
+		assert.Equal(t, int64(0), item.InputTokens)
+		assert.Equal(t, int64(0), item.OutputTokens)
+		assert.Equal(t, int64(0), item.TotalTokens)
+		assert.Equal(t, int64(0), item.ThinkingTokens)
+		assert.Equal(t, int64(0), item.CacheReadTokens)
+		assert.Equal(t, int64(0), item.CacheCreationTokens)
 	})
 
 	t.Run("has_sub_agents flag", func(t *testing.T) {

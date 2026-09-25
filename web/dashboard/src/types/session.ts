@@ -26,6 +26,9 @@ export interface DashboardSessionItem {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  thinking_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   estimated_cost_usd?: number | null;
   cost_completeness?: CostCompleteness;
   total_stages: number;
@@ -114,6 +117,9 @@ export interface SessionDetailResponse {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  thinking_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_estimation_enabled?: boolean;
   estimated_cost_usd?: number | null;
   cost_completeness?: CostCompleteness;

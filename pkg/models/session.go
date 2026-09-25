@@ -90,6 +90,9 @@ type DashboardSessionItem struct {
 	InputTokens           int64            `json:"input_tokens"`
 	OutputTokens          int64            `json:"output_tokens"`
 	TotalTokens           int64            `json:"total_tokens"`
+	ThinkingTokens        int64            `json:"thinking_tokens"`
+	CacheReadTokens       int64            `json:"cache_read_tokens"`
+	CacheCreationTokens   int64            `json:"cache_creation_tokens"`
 	EstimatedCostUsd      *float64         `json:"estimated_cost_usd,omitempty"`
 	CostCompleteness      CostCompleteness `json:"cost_completeness,omitempty"`
 	TotalStages           int              `json:"total_stages"`
@@ -201,6 +204,9 @@ type SessionDetailResponse struct {
 	InputTokens              int64            `json:"input_tokens"`
 	OutputTokens             int64            `json:"output_tokens"`
 	TotalTokens              int64            `json:"total_tokens"`
+	ThinkingTokens           int64            `json:"thinking_tokens"`
+	CacheReadTokens          int64            `json:"cache_read_tokens"`
+	CacheCreationTokens      int64            `json:"cache_creation_tokens"`
 	CostEstimationEnabled    bool             `json:"cost_estimation_enabled"`
 	EstimatedCostUsd         *float64         `json:"estimated_cost_usd,omitempty"`
 	CostCompleteness         CostCompleteness `json:"cost_completeness,omitempty"`
