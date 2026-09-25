@@ -127,178 +127,186 @@ const FinalAnalysisCard = forwardRef<HTMLDivElement, FinalAnalysisCardProps>(
     if (!displayAnalysis) return null;
 
     return (
-        <Paper ref={ref} sx={{ p: 2.5 }}>
-          {/* Header */}
-          <Box
-            sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: analysisExpanded ? 2 : 0, cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
-            onClick={() => setAnalysisExpanded(!analysisExpanded)}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.15), border: '2px solid', borderColor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Psychology sx={{ fontSize: 24, color: 'primary.main' }} />
-              </Box>
-              <Typography variant="h6">Final AI Analysis</Typography>
-              {sessionId && (latestScore != null || scoringStatus) && (
-                <Box onClick={(e) => { e.stopPropagation(); navigate(sessionScoringPath(sessionId)); }}>
-                  <ScoreBadge score={latestScore} scoringStatus={scoringStatus} variant="pill" showLabel={false} size="medium" />
-                </Box>
-              )}
-              {onReviewClick && isTerminalStatus(sessionStatus as SessionStatus) && (() => {
-                const rating = getRatingConfig(qualityRating);
-                if (rating) {
-                  const Icon = rating.icon;
-                  return (
-                    <Tooltip title={`Reviewed as ${rating.label}`} arrow>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => { e.stopPropagation(); onReviewClick(qualityRating ?? undefined); }}
-                        sx={{ color: `${rating.color}.main`, p: 0.5 }}
-                      >
-                        <Icon sx={{ fontSize: 20 }} />
-                      </IconButton>
-                    </Tooltip>
-                  );
-                }
-                const acknowledged = !qualityRating && reviewStatus === REVIEW_STATUS.REVIEWED;
-                if (acknowledged) {
-                  return (
-                    <Tooltip title="Acknowledged — click to review" arrow>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => { e.stopPropagation(); onReviewClick(REVIEW_SELECTION.ACKNOWLEDGE); }}
-                        sx={{ color: 'text.secondary', p: 0.5 }}
-                      >
-                        <DoneAll sx={{ fontSize: 20 }} />
-                      </IconButton>
-                    </Tooltip>
-                  );
-                }
-                return (
-                  <Box
-                    sx={(theme) => ({
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 0.75,
-                      height: 32,
-                      boxSizing: 'border-box',
-                      bgcolor: alpha(theme.palette.warning.main, 0.08),
-                      border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
-                      borderRadius: '16px',
-                      px: 1,
-                    })}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
-                      Helpful?
-                    </Typography>
-                    <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.ACCURATE)} sx={{ color: 'success.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.success.main, 0.15) } }}>
-                      <ThumbUp sx={{ fontSize: 16 }} />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.PARTIALLY_ACCURATE)} sx={{ color: 'warning.dark', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.warning.main, 0.15) } }}>
-                      <ThumbsUpDown sx={{ fontSize: 16 }} />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.INACCURATE)} sx={{ color: 'error.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.15) } }}>
-                      <ThumbDown sx={{ fontSize: 16 }} />
-                    </IconButton>
-                    <Tooltip title="Acknowledge without rating" arrow>
-                      <IconButton size="small" onClick={() => onReviewClick(REVIEW_SELECTION.ACKNOWLEDGE)} sx={{ color: 'text.secondary', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.action.hover, 0.15) } }}>
-                        <DoneAll sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                );
-              })()}
-              {isNewlyUpdated && (
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'success.contrastText', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
-                  ✨ Updated
-                </Box>
-              )}
+      <Paper ref={ref} sx={{ p: 2.5 }}>
+        {/* Header */}
+        <Box
+          sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: analysisExpanded ? 2 : 0, cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
+          onClick={() => setAnalysisExpanded(!analysisExpanded)}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.15), border: '2px solid', borderColor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Psychology sx={{ fontSize: 24, color: 'primary.main' }} />
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {sessionId && (
-                <Box onClick={(e) => e.stopPropagation()} sx={{ color: 'text.secondary' }}>
-                  <CopyLinkButton
-                    url={sessionDeepLinkUrl(sessionId, {})}
-                    tooltip="Copy session link"
-                  />
-                </Box>
-              )}
-              <Box onClick={(e) => e.stopPropagation()}>
-                <CopyButton text={getCombinedDocument()} variant="icon" size="small" tooltip={`Copy ${isFakeAnalysis ? 'message' : 'analysis'}`} />
+            <Typography variant="h6">Final AI Analysis</Typography>
+            {sessionId && (latestScore != null || scoringStatus) && (
+              <Box onClick={(e) => { e.stopPropagation(); navigate(sessionScoringPath(sessionId)); }}>
+                <ScoreBadge score={latestScore} scoringStatus={scoringStatus} variant="pill" showLabel={false} size="medium" />
               </Box>
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnalysisExpanded(!analysisExpanded); }} sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12), '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) } }}>
-                {analysisExpanded ? <ExpandLess /> : <UnfoldMore />}
-              </IconButton>
+            )}
+            {onReviewClick && isTerminalStatus(sessionStatus as SessionStatus) && (() => {
+              const rating = getRatingConfig(qualityRating);
+              if (rating) {
+                const Icon = rating.icon;
+                return (
+                  <Tooltip title={`Reviewed as ${rating.label}`} arrow>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); onReviewClick(qualityRating ?? undefined); }}
+                      sx={{ color: `${rating.color}.main`, p: 0.5 }}
+                    >
+                      <Icon sx={{ fontSize: 20 }} />
+                    </IconButton>
+                  </Tooltip>
+                );
+              }
+              const acknowledged = !qualityRating && reviewStatus === REVIEW_STATUS.REVIEWED;
+              if (acknowledged) {
+                return (
+                  <Tooltip title="Acknowledged — click to review" arrow>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); onReviewClick(REVIEW_SELECTION.ACKNOWLEDGE); }}
+                      sx={{ color: 'text.secondary', p: 0.5 }}
+                    >
+                      <DoneAll sx={{ fontSize: 20 }} />
+                    </IconButton>
+                  </Tooltip>
+                );
+              }
+              return (
+                <Box
+                  sx={(theme) => ({
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                    height: 32,
+                    boxSizing: 'border-box',
+                    bgcolor: alpha(theme.palette.warning.main, 0.08),
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
+                    borderRadius: '16px',
+                    px: 1,
+                  })}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                    Helpful?
+                  </Typography>
+                  <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.ACCURATE)} sx={{ color: 'success.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.success.main, 0.15) } }}>
+                    <ThumbUp sx={{ fontSize: 16 }} />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.PARTIALLY_ACCURATE)} sx={{ color: 'warning.dark', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.warning.main, 0.15) } }}>
+                    <ThumbsUpDown sx={{ fontSize: 16 }} />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => onReviewClick(QUALITY_RATING.INACCURATE)} sx={{ color: 'error.main', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.error.main, 0.15) } }}>
+                    <ThumbDown sx={{ fontSize: 16 }} />
+                  </IconButton>
+                  <Tooltip title="Acknowledge without rating" arrow>
+                    <IconButton size="small" onClick={() => onReviewClick(REVIEW_SELECTION.ACKNOWLEDGE)} sx={{ color: 'text.secondary', p: 0.4, '&:hover': { bgcolor: (theme) => alpha(theme.palette.action.hover, 0.15) } }}>
+                      <DoneAll sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              );
+            })()}
+            {isNewlyUpdated && (
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: 'success.main', color: 'success.contrastText', px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'medium', animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.7 }, '100%': { opacity: 1 } } }}>
+                ✨ Updated
+              </Box>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {sessionId && (
+              <Box onClick={(e) => e.stopPropagation()} sx={{ color: 'text.secondary' }}>
+                <CopyLinkButton
+                  url={sessionDeepLinkUrl(sessionId, {})}
+                  tooltip="Copy session link"
+                />
+              </Box>
+            )}
+            <Box onClick={(e) => e.stopPropagation()}>
+              <CopyButton text={getCombinedDocument()} variant="icon" size="small" tooltip={`Copy ${isFakeAnalysis ? 'message' : 'analysis'}`} />
+            </Box>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnalysisExpanded(!analysisExpanded); }} sx={{ bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12), '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) } }}>
+              {analysisExpanded ? <ExpandLess /> : <UnfoldMore />}
+            </IconButton>
+          </Box>
+        </Box>
+
+        {/* AI Warning */}
+        {!isFakeAnalysis && (summary || displayAnalysis) && (
+          <Alert severity="info" icon={<AutoAwesome />} sx={{ mt: 2, bgcolor: (theme) => alpha(theme.palette.info.main, 0.04), border: '1px solid', borderColor: (theme) => alpha(theme.palette.info.main, 0.2), '& .MuiAlert-icon': { color: 'info.main' } }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>AI-Generated Content</Typography>
+              <Typography variant="body2" sx={{
+                color: 'text.secondary'
+              }}>Always review AI generated content prior to use.</Typography>
+            </Box>
+          </Alert>
+        )}
+
+        {/* Executive Summary — always visible */}
+        {summary && (
+          <Box sx={{ mt: 2 }} data-executive-summary>
+            <Box sx={{ bgcolor: (theme) => alpha(theme.palette.success.main, 0.10), border: '1px solid', borderColor: (theme) => alpha(theme.palette.success.main, 0.35), borderRadius: 2, p: 2.5, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, bgcolor: 'success.main', borderRadius: '4px 0 0 4px' } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AutoAwesome sx={{ color: 'success.main', fontSize: 20 }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'success.main', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.8rem' }}>
+                    Executive Summary
+                  </Typography>
+                </Box>
+                <CopyButton text={summary} variant="icon" size="small" tooltip="Copy summary" />
+              </Box>
+              <Box sx={executiveSummaryMarkdownStyles as SxProps<Theme>}>
+                <ReactMarkdown remarkPlugins={remarkPlugins}>{summary}</ReactMarkdown>
+              </Box>
             </Box>
           </Box>
+        )}
 
-          {/* AI Warning */}
-          {!isFakeAnalysis && (summary || displayAnalysis) && (
-            <Alert severity="info" icon={<AutoAwesome />} sx={{ mt: 2, bgcolor: (theme) => alpha(theme.palette.info.main, 0.04), border: '1px solid', borderColor: (theme) => alpha(theme.palette.info.main, 0.2), '& .MuiAlert-icon': { color: 'info.main' } }}>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>AI-Generated Content</Typography>
-                <Typography variant="body2" color="text.secondary">Always review AI generated content prior to use.</Typography>
-              </Box>
+        {/* Collapsible full analysis */}
+        <Collapse in={analysisExpanded} timeout={400}>
+          {summary && displayAnalysis && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 3, mb: 2, color: 'text.secondary' }}>
+              <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
+              <Typography variant="caption" sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, color: 'text.disabled' }}>
+                Full Detailed Analysis
+              </Typography>
+              <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
+            </Box>
+          )}
+
+          {isFakeAnalysis && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <Typography variant="body2">This session did not complete successfully.</Typography>
             </Alert>
           )}
 
-          {/* Executive Summary — always visible */}
-          {summary && (
-            <Box sx={{ mt: 2 }} data-executive-summary>
-              <Box sx={{ bgcolor: (theme) => alpha(theme.palette.success.main, 0.10), border: '1px solid', borderColor: (theme) => alpha(theme.palette.success.main, 0.35), borderRadius: 2, p: 2.5, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, bgcolor: 'success.main', borderRadius: '4px 0 0 4px' } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AutoAwesome sx={{ color: 'success.main', fontSize: 20 }} />
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'success.main', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.8rem' }}>
-                      Executive Summary
-                    </Typography>
-                  </Box>
-                  <CopyButton text={summary} variant="icon" size="small" tooltip="Copy summary" />
-                </Box>
-                <Box sx={executiveSummaryMarkdownStyles as SxProps<Theme>}>
-                  <ReactMarkdown remarkPlugins={remarkPlugins}>{summary}</ReactMarkdown>
-                </Box>
-              </Box>
+          <Paper variant="outlined" sx={{ p: 3, bgcolor: 'action.hover' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <CopyButton text={analysisCopyText} variant="icon" size="small" tooltip="Copy analysis" />
             </Box>
+            <ReactMarkdown remarkPlugins={remarkPlugins} urlTransform={defaultUrlTransform} components={finalAnswerMarkdownComponents}>
+              {displayAnalysis}
+            </ReactMarkdown>
+            {cancelAttribution && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  mt: 2,
+                  whiteSpace: 'pre-wrap'
+                }}>
+                {cancelAttribution}
+              </Typography>
+            )}
+          </Paper>
+
+          {sessionStatus === SESSION_STATUS.FAILED && errorMessage && !isFakeAnalysis && (
+            <ErrorCard label="Session Failed" message={errorMessage} sx={{ mt: 2 }} />
           )}
-
-          {/* Collapsible full analysis */}
-          <Collapse in={analysisExpanded} timeout={400}>
-            {summary && displayAnalysis && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 3, mb: 2, color: 'text.secondary' }}>
-                <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
-                <Typography variant="caption" sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, color: 'text.disabled' }}>
-                  Full Detailed Analysis
-                </Typography>
-                <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
-              </Box>
-            )}
-
-            {isFakeAnalysis && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body2">This session did not complete successfully.</Typography>
-              </Alert>
-            )}
-
-            <Paper variant="outlined" sx={{ p: 3, bgcolor: 'action.hover' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                <CopyButton text={analysisCopyText} variant="icon" size="small" tooltip="Copy analysis" />
-              </Box>
-              <ReactMarkdown remarkPlugins={remarkPlugins} urlTransform={defaultUrlTransform} components={finalAnswerMarkdownComponents}>
-                {displayAnalysis}
-              </ReactMarkdown>
-              {cancelAttribution && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
-                  {cancelAttribution}
-                </Typography>
-              )}
-            </Paper>
-
-            {sessionStatus === SESSION_STATUS.FAILED && errorMessage && !isFakeAnalysis && (
-              <ErrorCard label="Session Failed" message={errorMessage} sx={{ mt: 2 }} />
-            )}
-          </Collapse>
-        </Paper>
+        </Collapse>
+      </Paper>
     );
   }
 );

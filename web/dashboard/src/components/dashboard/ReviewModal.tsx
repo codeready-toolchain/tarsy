@@ -16,7 +16,7 @@ import {
   Alert,
   Collapse,
 } from '@mui/material';
-import { CheckCircleOutline, RateReview, ThumbUp, ThumbsUpDown, ThumbDown, DoneAll } from '@mui/icons-material';
+import { CheckCircleOutlined, RateReview, ThumbUp, ThumbsUpDown, ThumbDown, DoneAll } from '@mui/icons-material';
 import { ReviewModalHeader } from './ReviewModalHeader.tsx';
 import ReactMarkdown from 'react-markdown';
 import { remarkPlugins, executiveSummaryMarkdownStyles } from '../../utils/markdownComponents.tsx';
@@ -111,7 +111,7 @@ export function ReviewModal({
 
   const headerIcon = isEdit
     ? <RateReview color="primary" />
-    : <CheckCircleOutline color="success" />;
+    : <CheckCircleOutlined color="success" />;
   const headerTitle = isEdit
     ? 'Edit Review Feedback'
     : (title ?? 'Complete Review');
@@ -148,7 +148,14 @@ export function ReviewModal({
                 ...executiveSummaryMarkdownStyles(theme),
               })}
             >
-              <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontWeight: 600,
+                  mb: 0.5,
+                  display: 'block'
+                }}>
                 Executive Summary
               </Typography>
               <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml>{executiveSummary}</ReactMarkdown>
@@ -168,9 +175,13 @@ export function ReviewModal({
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <ThumbUp sx={{ fontSize: 16, color: 'success.main' }} />
-                    <Typography variant="body1" fontWeight={500}>Accurate</Typography>
+                    <Typography variant="body1" sx={{
+                      fontWeight: 500
+                    }}>Accurate</Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     The investigation correctly identified the issue and root cause
                   </Typography>
                 </Box>
@@ -184,9 +195,13 @@ export function ReviewModal({
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <ThumbsUpDown sx={{ fontSize: 16, color: 'warning.main' }} />
-                    <Typography variant="body1" fontWeight={500}>Partially Accurate</Typography>
+                    <Typography variant="body1" sx={{
+                      fontWeight: 500
+                    }}>Partially Accurate</Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     Some findings were correct but the investigation missed key aspects
                   </Typography>
                 </Box>
@@ -200,9 +215,13 @@ export function ReviewModal({
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <ThumbDown sx={{ fontSize: 16, color: 'error.main' }} />
-                    <Typography variant="body1" fontWeight={500}>Inaccurate</Typography>
+                    <Typography variant="body1" sx={{
+                      fontWeight: 500
+                    }}>Inaccurate</Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     The investigation was wrong or misleading
                   </Typography>
                 </Box>
@@ -216,9 +235,13 @@ export function ReviewModal({
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <DoneAll sx={{ fontSize: 16, color: 'text.secondary' }} />
-                    <Typography variant="body1" fontWeight={500}>Acknowledge</Typography>
+                    <Typography variant="body1" sx={{
+                      fontWeight: 500
+                    }}>Acknowledge</Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     I've reviewed this but won't judge investigation quality
                   </Typography>
                 </Box>

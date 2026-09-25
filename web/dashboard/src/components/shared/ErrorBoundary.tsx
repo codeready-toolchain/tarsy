@@ -111,24 +111,25 @@ class ErrorBoundary extends Component<Props, State> {
 
             <Collapse in={this.state.showDetails}>
               <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary" component="div">
+                <Typography variant="caption" component="div" sx={{
+                  color: 'text.secondary'
+                }}>
                   <strong>Error:</strong> {this.state.error?.message}
                 </Typography>
                 
                 {this.state.error?.stack && (
                   <Typography
                     variant="caption"
-                    color="text.secondary"
                     component="pre"
                     sx={{
+                      color: 'text.secondary',
                       mt: 1,
                       fontSize: '0.7rem',
                       overflow: 'auto',
                       maxHeight: '200px',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word'
-                    }}
-                  >
+                    }}>
                     {this.state.error.stack}
                   </Typography>
                 )}
@@ -136,17 +137,16 @@ class ErrorBoundary extends Component<Props, State> {
                 {this.state.errorInfo?.componentStack && (
                   <Typography
                     variant="caption"
-                    color="text.secondary"
                     component="pre"
                     sx={{
+                      color: 'text.secondary',
                       mt: 1,
                       fontSize: '0.7rem',
                       overflow: 'auto',
                       maxHeight: '200px',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word'
-                    }}
-                  >
+                    }}>
                     <strong>Component Stack:</strong>
                     {this.state.errorInfo.componentStack}
                   </Typography>

@@ -160,7 +160,9 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
                 sx={{ fontWeight: 500 }}
               />
               {session.chain_id && (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   {session.chain_id}
                 </Typography>
               )}
@@ -200,11 +202,18 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
           }}
         >
           {session.author && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               by {session.author}
             </Typography>
           )}
-          <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              fontFamily: 'monospace'
+            }}>
             {liveDuration(session.started_at)}
           </Typography>
         </Box>
@@ -212,7 +221,12 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
         {/* Activity indicator — animated indeterminate bar (from old dashboard ProgressIndicator) */}
         {(isActive || isCancelling) && (
           <Box sx={{ mb: 1.5 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'text.secondary',
+                mb: 0.5
+              }}>
               {isCancelling
                 ? 'Cancelling...'
                 : totalStages > 0
@@ -235,9 +249,11 @@ export function ActiveSessionCard({ session, progress }: ActiveSessionCardProps)
         {statusText && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ fontStyle: 'italic', display: 'block' }}
-          >
+            sx={{
+              color: 'text.secondary',
+              fontStyle: 'italic',
+              display: 'block'
+            }}>
             {statusText}
           </Typography>
         )}

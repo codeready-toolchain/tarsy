@@ -234,16 +234,14 @@ export function ScoreBadge({ score, scoringStatus, size = 'small', variant = 'ch
   return (
     <Typography
       variant="body2"
-      color="text.disabled"
       sx={{
+        color: 'text.disabled',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
         height: size === 'small' ? 24 : 32,
-        minWidth: 40,
-      }}
-    >
-      —
-    </Typography>
+        minWidth: 40
+      }}>—
+          </Typography>
   );
 }

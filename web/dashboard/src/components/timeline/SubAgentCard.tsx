@@ -210,7 +210,13 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
           />
         )}
         {!isRunning && eo?.duration_ms != null && (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', flexShrink: 0 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: '0.75rem',
+              flexShrink: 0
+            }}>
             {formatDurationMs(eo.duration_ms)}
           </Typography>
         )}
@@ -269,7 +275,13 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
             )}
 
             {!hasContent && !isRunning && (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  textAlign: 'center',
+                  py: 2
+                }}>
                 No reasoning steps available
               </Typography>
             )}
@@ -280,7 +292,9 @@ const SubAgentCard: React.FC<SubAgentCardProps> = ({
 
             {isCancelled && (
               <Alert severity="info" sx={{ mt: 1, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   <strong>Cancelled</strong>
                   {errorMessage ? `: ${errorMessage}` : ''}
                 </Typography>

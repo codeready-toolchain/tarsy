@@ -152,7 +152,9 @@ export default function StageAccordion({
 
           {/* Agent names (single agent) */}
           {!isParallel && agentNames.length === 1 && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               {agentNames[0]}
             </Typography>
           )}
@@ -228,27 +230,37 @@ export default function StageAccordion({
               >
                 <Stack spacing={1}>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary'
+                    }}>
                       <strong>Agent:</strong> {singleOverview.agent_name}
                     </Typography>
                     <ProviderFallbackIndicator overview={singleOverview} />
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{
+                      color: 'text.secondary'
+                    }}>
                       <strong>Interactions:</strong> {counts.total}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                     {singleOverview.started_at && (
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" sx={{
+                        color: 'text.secondary'
+                      }}>
                         <strong>Started:</strong> {formatTimestamp(singleOverview.started_at, 'short')}
                       </Typography>
                     )}
                     {singleOverview.completed_at && (
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" sx={{
+                        color: 'text.secondary'
+                      }}>
                         <strong>Completed:</strong> {formatTimestamp(singleOverview.completed_at, 'short')}
                       </Typography>
                     )}
                     {singleOverview.duration_ms != null && (
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" sx={{
+                        color: 'text.secondary'
+                      }}>
                         <strong>Duration:</strong> {formatDurationMs(singleOverview.duration_ms)}
                       </Typography>
                     )}
@@ -283,7 +295,9 @@ export default function StageAccordion({
             {/* Error */}
             {CANCELLED_EXECUTION_STATUSES.has(singleOverview?.status ?? '') ? (
               <Alert severity="info" sx={{ mb: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   <strong>Cancelled</strong>
                   {singleOverview?.error_message ? `: ${singleOverview.error_message}` : ''}
                 </Typography>
@@ -306,7 +320,13 @@ export default function StageAccordion({
                 ))}
               </Stack>
             ) : !hasSubAgents ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  py: 2,
+                  textAlign: 'center'
+                }}>
                 No interactions recorded for this stage
               </Typography>
             ) : null}

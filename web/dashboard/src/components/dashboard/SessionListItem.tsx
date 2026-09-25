@@ -230,7 +230,9 @@ export function SessionListItem({
 
       {/* Submitted by */}
       <TableCell>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           {session.author ?? '—'}
         </Typography>
       </TableCell>
@@ -238,7 +240,9 @@ export function SessionListItem({
       {/* Time */}
       <TableCell>
         <Tooltip title={formatTimestamp(session.created_at, 'absolute')}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             {formatTimestamp(session.created_at, 'short')}
           </Typography>
         </Tooltip>
@@ -246,7 +250,9 @@ export function SessionListItem({
 
       {/* Duration */}
       <TableCell>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           {formatDurationMs(session.duration_ms)}
         </Typography>
       </TableCell>
@@ -280,7 +286,9 @@ export function SessionListItem({
             </Box>
           </Tooltip>
         ) : (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             —
           </Typography>
         )}
@@ -297,7 +305,9 @@ export function SessionListItem({
               size="small"
             />
           ) : (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               —
             </Typography>
           )}

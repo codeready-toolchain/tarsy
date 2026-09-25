@@ -299,7 +299,12 @@ function DetailedView({ tools, toolUsage }: { tools: ToolKey[]; toolUsage: ToolU
             </AccordionSummary>
             <AccordionDetails>
               <Stack spacing={1}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    fontWeight: 600
+                  }}>
                   Queries:
                 </Typography>
                 {toolUsage.google_search.queries.map((query, idx) => (
@@ -390,7 +395,12 @@ function DetailedView({ tools, toolUsage }: { tools: ToolKey[]; toolUsage: ToolU
               </Box>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontStyle: 'italic'
+                }}>
                 Python code was executed during response generation
               </Typography>
             </AccordionDetails>

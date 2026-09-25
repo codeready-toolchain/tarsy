@@ -79,10 +79,14 @@ function SecondaryTokenStat({ value, label }: { value: number; label: string }) 
   if (value <= 0) return null;
   return (
     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-      <Typography variant="caption" color="text.disabled">
+      <Typography variant="caption" sx={{
+        color: 'text.disabled'
+      }}>
         {formatTokensCompact(value)}
       </Typography>
-      <Typography variant="caption" color="text.disabled">
+      <Typography variant="caption" sx={{
+        color: 'text.disabled'
+      }}>
         {label}
       </Typography>
     </Box>
@@ -237,7 +241,9 @@ export default function SessionHeader({
                   : undefined
               }
             />
-            <Typography variant="body2" color="text.disabled">·</Typography>
+            <Typography variant="body2" sx={{
+              color: 'text.disabled'
+            }}>·</Typography>
             <ProgressIndicator
               status={session.status}
               startedAt={session.started_at}
@@ -331,14 +337,20 @@ export default function SessionHeader({
 
         {/* Row 2: Metadata line */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             {formatTimestamp(session.started_at, 'absolute')}
           </Typography>
           {session.author && (
             <>
-              <Typography variant="body2" color="text.secondary">·</Typography>
+              <Typography variant="body2" sx={{
+                color: 'text.secondary'
+              }}>·</Typography>
               <Tooltip title={session.author}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   by <strong>{extractDisplayName(session.author)}</strong>
                 </Typography>
               </Tooltip>
@@ -355,8 +367,12 @@ export default function SessionHeader({
               : session.runbook_url;
             return (
               <>
-                <Typography variant="body2" color="text.secondary">·</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>·</Typography>
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   Runbook:{' '}
                   {isSafeUrl ? (
                     <a
@@ -392,21 +408,32 @@ export default function SessionHeader({
               {/* Left: tokens + Est. cost */}
               {session.total_tokens > 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Used tokens
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
                     <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.main' }}>
                       {formatTokensCompact(session.total_tokens)}
                     </Typography>
-                    <Typography variant="caption" color="text.disabled">total</Typography>
+                    <Typography variant="caption" sx={{
+                      color: 'text.disabled'
+                    }}>total</Typography>
                   </Box>
                   {session.input_tokens != null && (
                     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'info.main' }}>
                         {formatTokensCompact(session.input_tokens)}
                       </Typography>
-                      <Typography variant="caption" color="text.disabled">in</Typography>
+                      <Typography variant="caption" sx={{
+                        color: 'text.disabled'
+                      }}>in</Typography>
                     </Box>
                   )}
                   {session.output_tokens != null && (
@@ -414,7 +441,9 @@ export default function SessionHeader({
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
                         {formatTokensCompact(session.output_tokens)}
                       </Typography>
-                      <Typography variant="caption" color="text.disabled">out</Typography>
+                      <Typography variant="caption" sx={{
+                        color: 'text.disabled'
+                      }}>out</Typography>
                     </Box>
                   )}
                   {hasTokenBreakdown && (
@@ -472,7 +501,14 @@ export default function SessionHeader({
                   onClick={() => setAlertExpanded(!alertExpanded)}
                 >
                   <SubjectRounded sx={{ fontSize: '1rem', color: 'text.secondary' }} />
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5
+                    }}>
                     Alert data
                   </Typography>
                   <ExpandMore
@@ -532,7 +568,9 @@ export default function SessionHeader({
                 borderColor: 'error.main',
               })}
             >
-              <Typography variant="body2" color="error.main">
+              <Typography variant="body2" sx={{
+                color: 'error.main'
+              }}>
                 {cancelError}
               </Typography>
             </Box>

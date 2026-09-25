@@ -351,7 +351,13 @@ const StreamingContentRenderer = memo(({ item, stageType }: StreamingContentRend
             >
               {displayName}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.8rem',
+                flex: 1
+              }}>
               {statusLabel}
             </Typography>
           </Box>

@@ -307,8 +307,10 @@ export function TimeRangeModal({
         onClose={onClose}
         maxWidth="md"
         fullWidth
-        PaperProps={{
-          sx: { minHeight: 500 },
+        slotProps={{
+          paper: {
+            sx: { minHeight: 500 },
+          }
         }}
       >
         <DialogTitle
@@ -337,10 +339,18 @@ export function TimeRangeModal({
               flexWrap: 'wrap',
             }}
           >
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5
+              }}>
               Currently applied
             </Typography>
-            <Typography variant="body2" fontWeight={600}>
+            <Typography variant="body2" sx={{
+              fontWeight: 600
+            }}>
               {appliedRangeLabel ?? 'All time'}
             </Typography>
           </Box>
@@ -431,7 +441,9 @@ export function TimeRangeModal({
 
               <Stack spacing={3}>
                 <Box>
-                  <Typography variant="body2" gutterBottom color="text.secondary">
+                  <Typography variant="body2" gutterBottom sx={{
+                    color: 'text.secondary'
+                  }}>
                     Start Date & Time
                   </Typography>
                   <DateTimePicker
@@ -448,7 +460,9 @@ export function TimeRangeModal({
                 </Box>
 
                 <Box>
-                  <Typography variant="body2" gutterBottom color="text.secondary">
+                  <Typography variant="body2" gutterBottom sx={{
+                    color: 'text.secondary'
+                  }}>
                     End Date & Time
                   </Typography>
                   <DateTimePicker

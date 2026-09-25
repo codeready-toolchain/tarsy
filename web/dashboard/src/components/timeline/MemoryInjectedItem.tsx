@@ -61,7 +61,9 @@ function MemoryInjectedItem({ item, expandAll = false, searchTerm, forceExpanded
       forceExpanded={forceExpanded}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{
+          color: 'text.secondary'
+        }}>
           Lessons applied from previous investigations
         </Typography>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
@@ -75,7 +77,12 @@ function MemoryInjectedItem({ item, expandAll = false, searchTerm, forceExpanded
           renderContent={(content) => searchTerm ? highlightSearchTermNodes(content, searchTerm) : content}
         />
       ) : (
-        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            fontStyle: 'italic'
+          }}>
           No insights available
         </Typography>
       )}

@@ -110,7 +110,9 @@ export function MCPServerStatusView({ pollingEnabled = true }: MCPServerStatusVi
 
       {servers.length === 0 && (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">No MCP servers configured</Typography>
+          <Typography sx={{
+            color: 'text.secondary'
+          }}>No MCP servers configured</Typography>
         </Paper>
       )}
 
@@ -143,7 +145,9 @@ export function MCPServerStatusView({ pollingEnabled = true }: MCPServerStatusVi
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: 'text.secondary'
+              }}>
                 {timeAgo(server.last_check)}
               </Typography>
               {server.tools.length > 0 && (

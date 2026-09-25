@@ -1,5 +1,4 @@
-import { alpha, type Theme } from '@mui/material/styles';
-import type { SxProps } from '@mui/system';
+import { alpha, type SxProps, type Theme } from '@mui/material/styles';
 
 /** Edge-to-edge app header — spans the full viewport width above both the nav drawer and content, so it reads as one shell rather than a floating card. */
 export function appBarSx(theme: Theme) {

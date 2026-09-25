@@ -47,7 +47,12 @@ export default function MCPInteractionPreview({ interaction }: MCPInteractionPre
           </Typography>
         )}
         {isToolList && (
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              fontSize: '0.8rem'
+            }}>
             {getInteractionTypeLabel(MCP_INTERACTION_TYPE.TOOL_LIST)}
           </Typography>
         )}
@@ -57,9 +62,11 @@ export default function MCPInteractionPreview({ interaction }: MCPInteractionPre
       {interaction.error_message && (
         <Typography
           variant="body2"
-          color="error.main"
-          sx={{ fontWeight: 500, fontSize: '0.8rem' }}
-        >
+          sx={{
+            color: 'error.main',
+            fontWeight: 500,
+            fontSize: '0.8rem'
+          }}>
           Error: {interaction.error_message}
         </Typography>
       )}

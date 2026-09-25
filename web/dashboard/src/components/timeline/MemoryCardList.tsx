@@ -47,7 +47,14 @@ export function MemoryCardList({ memories, renderContent, maxHeight = 500 }: Mem
               {renderContent(mem.content)}
             </Typography>
             {mem.ageLabel && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', mt: 0.25, display: 'block' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontSize: '0.7rem',
+                  mt: 0.25,
+                  display: 'block'
+                }}>
                 {mem.ageLabel}
               </Typography>
             )}

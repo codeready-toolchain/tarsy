@@ -53,7 +53,12 @@ export function PaginationControls({
         py: 0.75,
       }}
     >
-      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+      <Typography
+        variant="caption"
+        sx={{
+          color: 'text.secondary',
+          whiteSpace: 'nowrap'
+        }}>
         {startItem}–{endItem} of {pagination.totalItems.toLocaleString()}
       </Typography>
       <Pagination

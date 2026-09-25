@@ -68,7 +68,12 @@ export function ActiveAlertsPanel({
           borderColor: 'divider',
         }}
       >
-        <Typography variant="subtitle2" fontWeight={600} sx={{ flexGrow: 1 }}>
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            flexGrow: 1
+          }}>
           Active Alerts
         </Typography>
 
@@ -109,10 +114,14 @@ export function ActiveAlertsPanel({
 
       {!isInitialLoad && isEmpty && (
         <Box sx={{ py: 6, textAlign: 'center' }}>
-          <Typography variant="h6" color="text.secondary" gutterBottom>
+          <Typography variant="h6" gutterBottom sx={{
+            color: 'text.secondary'
+          }}>
             No Active Alerts
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             All alerts are currently completed or there are no alerts in the system.
           </Typography>
         </Box>
@@ -139,7 +148,9 @@ export function ActiveAlertsPanel({
           )}
 
           <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               {activeSessions.length > 0 && `${activeSessions.length} active`}
               {queuedSessions.length > 0 && activeSessions.length > 0 && ' • '}
               {queuedSessions.length > 0 && `${queuedSessions.length} queued`}

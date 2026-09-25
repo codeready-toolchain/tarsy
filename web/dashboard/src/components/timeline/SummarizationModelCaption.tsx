@@ -28,16 +28,15 @@ export default function SummarizationModelCaption({
   return (
     <Typography
       variant="caption"
-      color="text.secondary"
       sx={{
+        color: 'text.secondary',
         fontFamily: 'monospace',
         fontSize: '0.7rem',
         fontWeight: 400,
         lineHeight: 1.2,
         opacity,
-        transition: 'opacity 0.2s ease',
-      }}
-    >
+        transition: 'opacity 0.2s ease'
+      }}>
       {model}
     </Typography>
   );

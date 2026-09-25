@@ -163,7 +163,9 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
     <Box>
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Chip label="LLM Messages" size="small" color="primary" variant="outlined" />
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{
+          color: 'text.secondary'
+        }}>
           {parsed.sections?.length} message{parsed.sections?.length !== 1 ? 's' : ''}
         </Typography>
       </Box>
@@ -189,7 +191,12 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
                 variant="filled"
               />
               <Typography variant="subtitle2" sx={{ flex: 1 }}>{section.title}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  mr: 1
+                }}>
                 {String(section.content).length.toLocaleString()} chars
               </Typography>
             </Box>
@@ -278,7 +285,9 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
         <Box>
           <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <Chip label="Mixed Content" size="small" color="info" variant="outlined" />
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: 'text.secondary'
+            }}>
               {parsed.sections?.length} structured block{parsed.sections?.length !== 1 ? 's' : ''}
             </Typography>
           </Box>
@@ -292,7 +301,9 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
       <Box>
         <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Chip label="Mixed Content" size="small" color="info" variant="outlined" />
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             {formattedTextSections.length} formatted &bull; {rawDataSections.length} raw
           </Typography>
         </Box>
@@ -337,7 +348,9 @@ function JsonDisplay({ data, collapsed = false, maxHeight = 400 }: JsonDisplayPr
     <Box sx={{ maxWidth: '100%', overflow: 'hidden', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
       {showDebugInfo && (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 2 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             Content length: {contentLength.toLocaleString()} characters &bull; Scrollable area
           </Typography>
         </Box>

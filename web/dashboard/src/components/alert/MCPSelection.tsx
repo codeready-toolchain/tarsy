@@ -451,7 +451,12 @@ export function MCPSelection({
               <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'flex-start' }}>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flex: 1 }}>
                   <InfoIcon sx={{ color: 'info.main', fontSize: 20, mt: 0.25 }} />
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'text.secondary',
+                      lineHeight: 1.6
+                    }}>
                     {hasChanges ? (
                       <>
                         <Box component="strong" sx={{ color: 'warning.main' }}>Custom configuration active.</Box>{' '}
@@ -526,9 +531,12 @@ export function MCPSelection({
                         {/* Tool count */}
                         <Typography
                           variant="caption"
-                          color="text.secondary"
-                          sx={{ ml: 4, display: 'block', mt: 0.5 }}
-                        >
+                          sx={{
+                            color: 'text.secondary',
+                            ml: 4,
+                            display: 'block',
+                            mt: 0.5
+                          }}>
                           {server.tools.length} tool{server.tools.length !== 1 ? 's' : ''}{' '}
                           available
                         </Typography>
@@ -625,9 +633,10 @@ export function MCPSelection({
                                           {tool.description && (
                                             <Typography
                                               variant="caption"
-                                              color="text.secondary"
-                                              sx={{ display: 'block' }}
-                                            >
+                                              sx={{
+                                                color: 'text.secondary',
+                                                display: 'block'
+                                              }}>
                                               {tool.description}
                                             </Typography>
                                           )}
@@ -673,9 +682,11 @@ export function MCPSelection({
 
                     <Typography
                       variant="caption"
-                      color="text.secondary"
-                      sx={{ display: 'block', mt: 0.5 }}
-                    >
+                      sx={{
+                        color: 'text.secondary',
+                        display: 'block',
+                        mt: 0.5
+                      }}>
                       {enabledNativeToolsCount} of 3 tools enabled
                     </Typography>
 
@@ -731,9 +742,10 @@ export function MCPSelection({
                                   </Typography>
                                   <Typography
                                     variant="caption"
-                                    color="text.secondary"
-                                    sx={{ display: 'block' }}
-                                  >
+                                    sx={{
+                                      color: 'text.secondary',
+                                      display: 'block'
+                                    }}>
                                     {NATIVE_TOOL_DESCRIPTIONS[toolName]}
                                   </Typography>
                                 </Box>

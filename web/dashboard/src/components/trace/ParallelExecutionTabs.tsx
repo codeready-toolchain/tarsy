@@ -84,7 +84,9 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
             color="secondary"
             sx={{ fontWeight: 600 }}
           />
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             {stage.executions.length} agents
           </Typography>
         </Box>
@@ -138,7 +140,12 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
 
           {/* Duration */}
           {aggregateDuration != null && (
-            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'text.secondary',
+                fontWeight: 500
+              }}>
               Max duration: {formatDurationMs(aggregateDuration)}
             </Typography>
           )}
@@ -222,7 +229,9 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
           >
             <Stack spacing={1}>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   <strong>Agent:</strong> {currentOverview.agent_name}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -240,17 +249,23 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
               </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {currentOverview.started_at && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     <strong>Started:</strong> {formatTimestamp(currentOverview.started_at, 'short')}
                   </Typography>
                 )}
                 {currentOverview.completed_at && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     <strong>Completed:</strong> {formatTimestamp(currentOverview.completed_at, 'short')}
                   </Typography>
                 )}
                 {currentOverview.duration_ms != null && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     <strong>Duration:</strong> {formatDurationMs(currentOverview.duration_ms)}
                   </Typography>
                 )}
@@ -285,7 +300,9 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
         {/* Error alert */}
         {CANCELLED_EXECUTION_STATUSES.has(currentOverview?.status ?? '') ? (
           <Alert severity="info" sx={{ mb: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               <strong>Cancelled</strong>
               {currentOverview?.error_message ? `: ${currentOverview.error_message}` : ''}
             </Typography>
@@ -308,7 +325,13 @@ export default function ParallelExecutionTabs({ stage, session }: ParallelExecut
             ))}
           </Stack>
         ) : !currentExecution?.sub_agents?.length ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              py: 2,
+              textAlign: 'center'
+            }}>
             No interactions recorded for this execution
           </Typography>
         ) : null}

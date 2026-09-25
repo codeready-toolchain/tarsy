@@ -165,7 +165,9 @@ export function TriageSessionRow({
 
       {/* Alert type */}
       <TableCell>
-        <Typography variant="body2" fontWeight={500} noWrap>
+        <Typography variant="body2" noWrap sx={{
+          fontWeight: 500
+        }}>
           {session.alert_type ?? '—'}
         </Typography>
       </TableCell>
@@ -176,7 +178,9 @@ export function TriageSessionRow({
 
       {/* Author */}
       <TableCell>
-        <Typography variant="body2" color="text.secondary" noWrap>
+        <Typography variant="body2" noWrap sx={{
+          color: 'text.secondary'
+        }}>
           {session.author ?? '—'}
         </Typography>
       </TableCell>
@@ -191,7 +195,9 @@ export function TriageSessionRow({
       {/* Time */}
       <TableCell>
         <Tooltip title={formatTimestamp(session.created_at, 'absolute')}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             {formatTimestamp(session.created_at, 'short')}
           </Typography>
         </Tooltip>

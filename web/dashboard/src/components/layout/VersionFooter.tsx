@@ -32,7 +32,12 @@ export function VersionFooter() {
     >
       {showSingleVersion && (
         <Tooltip title={`Agent status: ${backendStatus}`} arrow>
-          <Typography variant="body2" color="text.secondary" sx={{ cursor: 'help' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              cursor: 'help'
+            }}>
             TARSy - Powered by AI &bull; Version: {DASHBOARD_VERSION}
           </Typography>
         </Tooltip>
@@ -40,7 +45,12 @@ export function VersionFooter() {
 
       {showSeparateVersions && (
         <Tooltip title={`Agent status: ${backendStatus}`} arrow>
-          <Typography variant="body2" color="text.secondary" sx={{ cursor: 'help' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              cursor: 'help'
+            }}>
             TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION} &bull; Agent:{' '}
             {agentVersion}
           </Typography>
@@ -48,20 +58,26 @@ export function VersionFooter() {
       )}
 
       {!agentVersion && backendStatus === 'checking' && (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           TARSy - Powered by AI &bull; Loading version info...
         </Typography>
       )}
 
       {agentVersion === 'unavailable' && (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION} &bull; Agent: unavailable
         </Typography>
       )}
 
       {/* Fallback when backendStatus is 'error' and no agentVersion set yet */}
       {!agentVersion && backendStatus === 'error' && (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           TARSy - Powered by AI &bull; Dashboard: {DASHBOARD_VERSION}
         </Typography>
       )}

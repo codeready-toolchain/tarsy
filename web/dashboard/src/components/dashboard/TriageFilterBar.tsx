@@ -70,7 +70,9 @@ export function TriageFilterBar({
       <Box sx={{ flexGrow: 1 }} />
 
       {hasData && (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           {totalCount} session{totalCount !== 1 ? 's' : ''}
         </Typography>
       )}

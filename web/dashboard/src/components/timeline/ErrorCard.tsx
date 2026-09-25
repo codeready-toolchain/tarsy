@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { Box, Collapse, IconButton, Typography, alpha } from '@mui/material';
-import { ErrorOutline, ExpandMore, ExpandLess } from '@mui/icons-material';
+import { ErrorOutlined, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { highlightSearchTermNodes } from '../../utils/search';
 
 interface ErrorCardProps {
@@ -67,7 +67,7 @@ function ErrorCard({ label, message, sx: outerSx, searchTerm }: ErrorCardProps) 
               '&:hover': hasContent ? { bgcolor: alpha(theme.palette.error.main, 0.12) } : {},
             })}
           >
-            <ErrorOutline sx={{ fontSize: 18, color: 'error.main' }} />
+            <ErrorOutlined sx={{ fontSize: 18, color: 'error.main' }} />
             <Typography
               variant="caption"
               sx={{

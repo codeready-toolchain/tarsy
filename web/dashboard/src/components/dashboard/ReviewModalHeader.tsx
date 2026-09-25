@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { DialogTitle, Box, Typography, IconButton, Chip } from '@mui/material';
-import { Close, PersonOutline, EditOutlined } from '@mui/icons-material';
+import { Close, PersonOutlined, EditOutlined } from '@mui/icons-material';
 import { timeAgo } from '../../utils/format.ts';
 
 interface ReviewModalHeaderProps {
@@ -33,8 +33,10 @@ export function ReviewModalHeader({ icon, title, feedbackEdited, feedbackEditedB
         </Box>
         {assignee && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, ml: 0.5 }}>
-            <PersonOutline sx={{ fontSize: 16, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
+            <PersonOutlined sx={{ fontSize: 16, color: 'text.secondary' }} />
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               {assignee}
             </Typography>
           </Box>
@@ -42,7 +44,9 @@ export function ReviewModalHeader({ icon, title, feedbackEdited, feedbackEditedB
         {feedbackEditedBy && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, ml: 0.5 }}>
             <EditOutlined sx={{ fontSize: 16, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               Edited by {feedbackEditedBy}{feedbackEditedAt ? `, ${timeAgo(feedbackEditedAt)}` : ''}
             </Typography>
           </Box>

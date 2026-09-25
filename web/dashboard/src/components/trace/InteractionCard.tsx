@@ -141,7 +141,9 @@ export default function InteractionCard({ interaction, sessionId }: InteractionC
         }
         subheader={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               {formatTimestamp(interaction.created_at, 'short')}
             </Typography>
             {(interaction.kind !== 'mcp' || interaction.server_name) && (

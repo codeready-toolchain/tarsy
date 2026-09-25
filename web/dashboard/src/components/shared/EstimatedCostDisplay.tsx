@@ -98,7 +98,13 @@ function EstimatedCostDisplay({
         {formatEstimatedCostUsd(estimatedCostUsd)}
       </Typography>
       {variant === 'labeled' && (
-        <Typography component="span" variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+        <Typography
+          component="span"
+          variant="caption"
+          sx={{
+            color: 'text.disabled',
+            fontSize: labelFs
+          }}>
           cost
         </Typography>
       )}

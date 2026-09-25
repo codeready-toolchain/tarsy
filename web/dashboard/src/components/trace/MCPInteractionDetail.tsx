@@ -62,9 +62,11 @@ function ToolListDisplay({ tools }: { tools: ToolListEntry[] }) {
           {tool.description && (
             <Typography
               variant="body2"
-              color="text.secondary"
-              sx={{ mt: 0.25, fontSize: '0.8rem' }}
-            >
+              sx={{
+                color: 'text.secondary',
+                mt: 0.25,
+                fontSize: '0.8rem'
+              }}>
               {tool.description}
             </Typography>
           )}
@@ -193,7 +195,6 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
               {isToolList && detail.available_tools && (
                 <Typography
                   variant="caption"
-                  color="text.secondary"
                   sx={{
                     bgcolor: 'primary.main',
                     color: 'primary.contrastText',
@@ -201,9 +202,8 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
                     py: 0.25,
                     borderRadius: 1,
                     fontWeight: 600,
-                    fontSize: '0.75rem',
-                  }}
-                >
+                    fontSize: '0.75rem'
+                  }}>
                   {detail.available_tools.length} tools
                 </Typography>
               )}
@@ -231,14 +231,20 @@ function MCPInteractionDetail({ detail }: MCPInteractionDetailProps) {
             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
               Tool Information
             </Typography>
-            <Stack direction="row" spacing={2} flexWrap="wrap">
+            <Stack direction="row" spacing={2} sx={{
+              flexWrap: 'wrap'
+            }}>
               {detail.server_name && (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   <strong>Server:</strong> {detail.server_name}
                 </Typography>
               )}
               {detail.tool_name && (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   <strong>Tool:</strong> {detail.tool_name}
                 </Typography>
               )}

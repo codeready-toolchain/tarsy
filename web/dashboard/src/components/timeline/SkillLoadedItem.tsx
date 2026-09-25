@@ -63,7 +63,14 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm, forceExpanded = 
         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.9rem', color: 'text.secondary' }}>
           Pre-loaded Skill
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            fontSize: '0.8rem',
+            flex: 1,
+            lineHeight: 1.4
+          }}>
           {skillName}
         </Typography>
         <IconButton size="small" sx={{ p: 0.25 }}>
@@ -74,7 +81,9 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm, forceExpanded = 
       <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: 'text.secondary'
+            }}>
               Injected into system prompt at investigation start
             </Typography>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, color: 'text.secondary' }}>
@@ -121,7 +130,12 @@ function SkillLoadedItem({ item, expandAll = false, searchTerm, forceExpanded = 
               </ReactMarkdown>
             </Box>
           ) : (
-            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No content</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontStyle: 'italic'
+              }}>No content</Typography>
           )}
         </Box>
       </Collapse>

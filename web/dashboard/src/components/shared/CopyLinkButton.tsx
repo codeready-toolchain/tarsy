@@ -51,7 +51,9 @@ function CopyLinkButton({
         color={copied ? 'success' : 'default'}
         aria-label={tooltip}
       >
-        {copied ? <Check fontSize="inherit" /> : <Link fontSize="inherit" />}
+        {copied ? <Check fontSize="inherit" /> : <Link sx={{
+          fontSize: 'inherit'
+        }} />}
       </IconButton>
     </Tooltip>
   );

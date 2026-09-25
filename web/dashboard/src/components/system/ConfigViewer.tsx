@@ -156,7 +156,9 @@ export function ConfigViewer() {
   if (!config) {
     return (
       <Paper sx={{ p: 3 }}>
-        <Typography color="text.secondary">No configuration available.</Typography>
+        <Typography sx={{
+          color: 'text.secondary'
+        }}>No configuration available.</Typography>
       </Paper>
     );
   }
@@ -323,7 +325,9 @@ function ConfigSection({
     <Accordion defaultExpanded={title === 'Agents' || title === 'Chains' || title === 'MCP Servers'}>
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography fontWeight={600}>{title}</Typography>
+          <Typography sx={{
+            fontWeight: 600
+          }}>{title}</Typography>
           <Chip size="small" label={count} variant="outlined" />
         </Box>
       </AccordionSummary>
@@ -345,9 +349,10 @@ function NamedEntry({ name, children }: { name: string; children: ReactNode }) {
 
 function EmptyNote() {
   return (
-    <Typography variant="body2" color="text.secondary">
-      None configured.
-    </Typography>
+    <Typography variant="body2" sx={{
+      color: 'text.secondary'
+    }}>None configured.
+          </Typography>
   );
 }
 
@@ -355,7 +360,12 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
   if (value === undefined || value === null || value === '') return null;
   return (
     <Box sx={{ display: 'flex', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
-      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 140 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          color: 'text.secondary',
+          minWidth: 140
+        }}>
         {label}
       </Typography>
       <Typography variant="body2" component="div" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', flex: 1 }}>
@@ -366,7 +376,11 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function ChipList({ items }: { items?: string[] | null }) {
-  if (!items || items.length === 0) return <Typography variant="body2" color="text.secondary">—</Typography>;
+  if (!items || items.length === 0) return (
+    <Typography variant="body2" sx={{
+      color: 'text.secondary'
+    }}>—</Typography>
+  );
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
       {items.map((item) => (
@@ -432,7 +446,9 @@ function CostEstimationDetails({
         label="model_rates"
         value={
           rates.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               (none)
             </Typography>
           ) : (
@@ -454,7 +470,9 @@ function CostEstimationDetails({
         label="promotions"
         value={
           promotions.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               (none)
             </Typography>
           ) : (
@@ -510,7 +528,9 @@ function AgentDetails({ agent }: { agent: AgentConfigView }) {
       />
       {agent.custom_instructions && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             custom_instructions
           </Typography>
           <Box
@@ -531,7 +551,9 @@ function AgentDetails({ agent }: { agent: AgentConfigView }) {
       )}
       {agent.orchestrator && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             orchestrator
           </Typography>
           <KeyValueBlock data={agent.orchestrator} />
@@ -539,7 +561,9 @@ function AgentDetails({ agent }: { agent: AgentConfigView }) {
       )}
       {agent.native_tools && Object.keys(agent.native_tools).length > 0 && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             native_tools
           </Typography>
           <KeyValueBlock data={agent.native_tools} />
@@ -561,14 +585,18 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       <Field label="max_iterations" value={chain.max_iterations} />
       <Field label="mcp_servers" value={<ChipList items={chain.mcp_servers} />} />
       <Box sx={{ mt: 1 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{
+          color: 'text.secondary'
+        }}>
           stages ({chain.stages?.length ?? 0})
         </Typography>
         <KeyValueBlock data={chain.stages} />
       </Box>
       {chain.fallback_providers && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             fallback_providers
           </Typography>
           <KeyValueBlock data={chain.fallback_providers} />
@@ -576,7 +604,9 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       )}
       {chain.sub_agents && chain.sub_agents.length > 0 && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             sub_agents
           </Typography>
           <KeyValueBlock data={chain.sub_agents} />
@@ -584,7 +614,9 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       )}
       {chain.chat && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             chat
           </Typography>
           <KeyValueBlock data={chain.chat} />
@@ -592,7 +624,9 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       )}
       {chain.compose && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             compose
           </Typography>
           <KeyValueBlock data={chain.compose} />
@@ -600,7 +634,9 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       )}
       {chain.executive_summary && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             executive_summary
           </Typography>
           <KeyValueBlock data={chain.executive_summary} />
@@ -608,7 +644,9 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
       )}
       {chain.scoring && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             scoring
           </Typography>
           <KeyValueBlock data={chain.scoring} />
@@ -632,7 +670,9 @@ function MCPServerDetails({ server }: { server: MCPServerConfigView }) {
       <Field label="bearer_token_set" value={String(t.bearer_token_set)} />
       {server.instructions && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             instructions
           </Typography>
           <Box
@@ -653,7 +693,9 @@ function MCPServerDetails({ server }: { server: MCPServerConfigView }) {
       )}
       {server.data_masking && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             data_masking
           </Typography>
           <KeyValueBlock data={server.data_masking} />
@@ -661,7 +703,9 @@ function MCPServerDetails({ server }: { server: MCPServerConfigView }) {
       )}
       {server.summarization && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             summarization
           </Typography>
           <KeyValueBlock data={server.summarization} />
@@ -683,7 +727,9 @@ function LLMProviderDetails({ provider }: { provider: LLMProviderConfigView }) {
       <Field label="base_url" value={provider.base_url} />
       {provider.native_tools && Object.keys(provider.native_tools).length > 0 && (
         <Box sx={{ mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
             native_tools
           </Typography>
           <KeyValueBlock data={provider.native_tools} />
@@ -734,7 +780,9 @@ function SkillEntry({ skill }: { skill: SkillMetaView }) {
             {skill.name}
           </Typography>
           {skill.description && (
-            <Typography variant="body2" color="text.secondary" noWrap>
+            <Typography variant="body2" noWrap sx={{
+              color: 'text.secondary'
+            }}>
               {skill.description}
             </Typography>
           )}

@@ -307,10 +307,11 @@ export function UsagePage() {
             <Stack
               direction={{ xs: 'column', md: 'row' }}
               spacing={2}
-              alignItems={{ md: 'flex-end' }}
-              flexWrap="wrap"
               useFlexGap
-            >
+              sx={{
+                alignItems: { md: 'flex-end' },
+                flexWrap: 'wrap'
+              }}>
               <Button
                 variant="outlined"
                 startIcon={<AccessTime />}
@@ -669,7 +670,9 @@ function BreakdownTable({
         {action}
       </Box>
       {empty ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           No data in this window.
         </Typography>
       ) : (
@@ -723,26 +726,36 @@ function StatCard({
     <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
       <Typography
         variant="caption"
-        color="text.secondary"
-        sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, display: 'block' }}
-      >
+        sx={{
+          color: 'text.secondary',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+          fontWeight: 600,
+          display: 'block'
+        }}>
         {label}
       </Typography>
       <Typography
         variant="h5"
-        fontWeight={700}
         color={warning ? 'warning.main' : 'text.primary'}
-        sx={{ mt: 0.25, lineHeight: 1.2 }}
-      >
+        sx={{
+          fontWeight: 700,
+          mt: 0.25,
+          lineHeight: 1.2
+        }}>
         {value}
       </Typography>
       {caption && (
         <Tooltip title={captionTooltip ?? ''} disableHoverListener={!captionTooltip} arrow>
           <Typography
             variant="caption"
-            color="warning.main"
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mt: 0.25 }}
-          >
+            sx={{
+              color: 'warning.main',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.25,
+              mt: 0.25
+            }}>
             <WarningAmberRounded sx={{ fontSize: '0.9rem' }} />
             {caption}
           </Typography>

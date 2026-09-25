@@ -527,18 +527,24 @@ function NativeToolItem({ item, searchTerm, forceExpanded = false, linkUrl }: Na
         {previewSummary && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}
-          >
+            sx={{
+              color: 'text.secondary',
+              fontSize: '0.8rem',
+              flex: 1,
+              lineHeight: 1.4
+            }}>
             {previewSummary}
           </Typography>
         )}
         {!previewSummary && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}
-          />
+            sx={{
+              color: 'text.secondary',
+              fontSize: '0.8rem',
+              flex: 1,
+              lineHeight: 1.4
+            }} />
         )}
         <IconButton size="small" sx={{ p: 0.25 }}>
           {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
