@@ -5,6 +5,8 @@
   "alert_type": "test-alert",
   "assignee": null,
   "author": "api-client",
+  "cache_creation_tokens": 0,
+  "cache_read_tokens": 0,
   "cancel_reason": null,
   "cancelled_by": null,
   "chain_id": "test-chain",
@@ -377,6 +379,7 @@
   ],
   "started_at": "{TIMESTAMP}",
   "status": "completed",
+  "thinking_tokens": 0,
   "total_stages": 9,
   "total_tokens": 2555,
   "unpriced_interaction_count": 22

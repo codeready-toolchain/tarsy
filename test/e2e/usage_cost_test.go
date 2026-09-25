@@ -46,7 +46,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		alertData                            string
 		investText, summaryText              string
 		invIn, invOut, invTotal, invThinking int
-		invCacheRead                         int
+		invCacheRead, invCacheCreate         int
 		sumIn, sumOut, sumTotal              int
 	}
 	specs := []sessionSpec{
@@ -55,8 +55,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			investText:  "A investigation complete.",
 			summaryText: "A executive summary.",
 			invIn:       100, invOut: 50, invTotal: 150, invThinking: 1000,
-			invCacheRead: 40,
-			sumIn:        30, sumOut: 10, sumTotal: 40,
+			invCacheRead: 40, invCacheCreate: 12,
+			sumIn: 30, sumOut: 10, sumTotal: 40,
 		},
 		{
 			alertData:   "Usage session B",
@@ -73,11 +73,12 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			Chunks: []agent.Chunk{
 				&agent.TextChunk{Content: s.investText},
 				&agent.UsageChunk{
-					InputTokens:     s.invIn,
-					OutputTokens:    s.invOut,
-					TotalTokens:     s.invTotal,
-					ThinkingTokens:  s.invThinking,
-					CacheReadTokens: s.invCacheRead,
+					InputTokens:         s.invIn,
+					OutputTokens:        s.invOut,
+					TotalTokens:         s.invTotal,
+					ThinkingTokens:      s.invThinking,
+					CacheReadTokens:     s.invCacheRead,
+					CacheCreationTokens: s.invCacheCreate,
 				},
 			},
 		})
@@ -106,8 +107,9 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 	}
 
 	type sessionExpected struct {
-		inputTokens, outputTokens, totalTokens int
-		estimatedCost                          float64
+		inputTokens, outputTokens, totalTokens               int
+		thinkingTokens, cacheReadTokens, cacheCreationTokens int
+		estimatedCost                                        float64
 	}
 	expectedByID := make(map[string]sessionExpected, len(specs))
 	var totalIn, totalOut, totalTok int
@@ -116,10 +118,11 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		in := s.invIn + s.sumIn
 		out := s.invOut + s.sumOut
 		tok := s.invTotal + s.sumTotal
-		cost := estimateUSD(s.invIn, s.invOut, s.invThinking, s.invCacheRead, 0) +
+		cost := estimateUSD(s.invIn, s.invOut, s.invThinking, s.invCacheRead, s.invCacheCreate) +
 			estimateUSD(s.sumIn, s.sumOut, 0, 0, 0)
 		expectedByID[ids[i]] = sessionExpected{
 			inputTokens: in, outputTokens: out, totalTokens: tok,
+			thinkingTokens: s.invThinking, cacheReadTokens: s.invCacheRead, cacheCreationTokens: s.invCacheCreate,
 			estimatedCost: cost,
 		}
 		totalIn += in
@@ -140,7 +143,8 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			}
 			found = true
 			assert.Equal(t, specs[0].invCacheRead, *row.CacheReadTokens)
-			assert.Nil(t, row.CacheCreationTokens)
+			require.NotNil(t, row.CacheCreationTokens)
+			assert.Equal(t, specs[0].invCacheCreate, *row.CacheCreationTokens)
 		}
 		require.True(t, found, "session A investigation should persist cache_read_tokens")
 
@@ -171,8 +175,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		require.NotNil(t, execSummary, "expected an executive_summary in trace")
 
 		assert.Equal(t, specs[0].invCacheRead, toInt(iteration["cache_read_tokens"]))
-		_, hasCreate := iteration["cache_creation_tokens"]
-		assert.False(t, hasCreate, "cache_creation_tokens must be omitted when unset")
+		assert.Equal(t, specs[0].invCacheCreate, toInt(iteration["cache_creation_tokens"]))
 
 		_, hasRead := execSummary["cache_read_tokens"]
 		assert.False(t, hasRead, "exec summary must omit cache_read_tokens")
@@ -181,8 +184,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 
 		detail := app.GetLLMInteractionDetail(t, ids[0], iteration["id"].(string))
 		assert.Equal(t, specs[0].invCacheRead, toInt(detail["cache_read_tokens"]))
-		_, hasDetailCreate := detail["cache_creation_tokens"]
-		assert.False(t, hasDetailCreate, "detail cache_creation_tokens must be omitted when unset")
+		assert.Equal(t, specs[0].invCacheCreate, toInt(detail["cache_creation_tokens"]))
 	})
 
 	t.Run("InvestigationSetsPromptCacheExecSummaryDoesNot", func(t *testing.T) {
@@ -210,12 +212,11 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 			assert.Equal(t, exp.inputTokens, toInt(sess["input_tokens"]), "session %s input_tokens", id)
 			assert.Equal(t, exp.outputTokens, toInt(sess["output_tokens"]), "session %s output_tokens", id)
 			assert.Equal(t, exp.totalTokens, toInt(sess["total_tokens"]), "session %s total_tokens", id)
+			assert.Equal(t, exp.thinkingTokens, toInt(sess["thinking_tokens"]), "session %s thinking_tokens", id)
+			assert.Equal(t, exp.cacheReadTokens, toInt(sess["cache_read_tokens"]), "session %s cache_read_tokens", id)
+			assert.Equal(t, exp.cacheCreationTokens, toInt(sess["cache_creation_tokens"]), "session %s cache_creation_tokens", id)
 			assert.InDelta(t, exp.estimatedCost, toFloat(sess["estimated_cost_usd"]), 1e-12, "session %s cost", id)
 			assert.Equal(t, "complete", sess["cost_completeness"], "session %s completeness", id)
-			_, hasCacheRead := sess["cache_read_tokens"]
-			assert.False(t, hasCacheRead, "session list must not SUM cache tokens")
-			_, hasCacheCreate := sess["cache_creation_tokens"]
-			assert.False(t, hasCacheCreate, "session list must not SUM cache tokens")
 		}
 	})
 
@@ -228,13 +229,12 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.Equal(t, exp.inputTokens, toInt(detail["input_tokens"]))
 		assert.Equal(t, exp.outputTokens, toInt(detail["output_tokens"]))
 		assert.Equal(t, exp.totalTokens, toInt(detail["total_tokens"]))
+		assert.Equal(t, exp.thinkingTokens, toInt(detail["thinking_tokens"]))
+		assert.Equal(t, exp.cacheReadTokens, toInt(detail["cache_read_tokens"]))
+		assert.Equal(t, exp.cacheCreationTokens, toInt(detail["cache_creation_tokens"]))
 		assert.InDelta(t, exp.estimatedCost, toFloat(detail["estimated_cost_usd"]), 1e-12)
 		assert.Equal(t, "complete", detail["cost_completeness"])
 		assert.Equal(t, 0, toInt(detail["unpriced_interaction_count"]))
-		_, hasCacheRead := detail["cache_read_tokens"]
-		assert.False(t, hasCacheRead, "session detail must not SUM cache tokens")
-		_, hasCacheCreate := detail["cache_creation_tokens"]
-		assert.False(t, hasCacheCreate, "session detail must not SUM cache tokens")
 
 		summary := app.GetSessionSummary(t, id)
 		assert.Equal(t, true, summary["cost_estimation_enabled"])
@@ -260,7 +260,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.Equal(t, totalIn, toInt(totals["input_tokens"]))
 		assert.Equal(t, totalOut, toInt(totals["output_tokens"]))
 		assert.Equal(t, specs[0].invCacheRead, toInt(totals["cache_read_tokens"]))
-		assert.Equal(t, 0, toInt(totals["cache_creation_tokens"]))
+		assert.Equal(t, specs[0].invCacheCreate, toInt(totals["cache_creation_tokens"]))
 		assert.Equal(t, totalTok, toInt(totals["total_tokens"]))
 		assert.Equal(t, 2, toInt(totals["session_count"]))
 		assert.InDelta(t, totalCost, toFloat(totals["estimated_cost_usd"]), 1e-12)
@@ -277,7 +277,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		assert.Equal(t, true, model["priced"])
 		assert.Equal(t, 0, toInt(model["unpriced_interaction_count"]))
 		assert.Equal(t, specs[0].invCacheRead, toInt(model["cache_read_tokens"]))
-		assert.Equal(t, 0, toInt(model["cache_creation_tokens"]))
+		assert.Equal(t, specs[0].invCacheCreate, toInt(model["cache_creation_tokens"]))
 		assert.Equal(t, 2, toInt(model["session_count"]))
 		assert.InDelta(t, totalCost, toFloat(model["estimated_cost_usd"]), 1e-12)
 		assert.InDelta(t, totalCost/2, toFloat(model["average_cost_usd"]), 1e-12)
