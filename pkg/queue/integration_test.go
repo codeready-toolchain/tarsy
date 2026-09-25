@@ -12,7 +12,11 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
+	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	tarsyslack "github.com/codeready-toolchain/tarsy/pkg/slack"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
@@ -259,6 +263,370 @@ func TestStartupOrphanCleanup(t *testing.T) {
 	other, err := client.AlertSession.Get(ctx, otherSession.ID)
 	require.NoError(t, err)
 	assert.Equal(t, alertsession.StatusInProgress, other.Status, "other pod's session should be untouched")
+}
+
+type stuckScoringIDs struct {
+	sessionID string
+	scoreID   string
+	stageID   string
+	execID    string
+	eventID   string
+}
+
+func seedStuckScoring(t *testing.T, ctx context.Context, client *ent.Client, podID string, scoreStatus sessionscore.Status, startedAt time.Time) stuckScoringIDs {
+	t.Helper()
+
+	ids := stuckScoringIDs{
+		sessionID: uuid.New().String(),
+		scoreID:   uuid.New().String(),
+		stageID:   uuid.New().String(),
+		execID:    uuid.New().String(),
+		eventID:   uuid.New().String(),
+	}
+
+	_, err := client.AlertSession.Create().
+		SetID(ids.sessionID).
+		SetAlertData("stuck scoring").
+		SetAgentType("test-agent").
+		SetAlertType("test-alert").
+		SetChainID("test-chain").
+		SetStatus(alertsession.StatusCompleted).
+		SetPodID(podID).
+		SetAuthor("test-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.Stage.Create().
+		SetID(ids.stageID).
+		SetSessionID(ids.sessionID).
+		SetStageName("Reflection").
+		SetStageIndex(1).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeScoring).
+		SetStatus(stage.StatusPending).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.AgentExecution.Create().
+		SetID(ids.execID).
+		SetStageID(ids.stageID).
+		SetSessionID(ids.sessionID).
+		SetAgentName("ScoringAgent").
+		SetAgentIndex(1).
+		SetLlmBackend("test").
+		SetStatus(agentexecution.StatusActive).
+		SetStartedAt(startedAt).
+		Save(ctx)
+	require.NoError(t, err)
+
+	scoreCreate := client.SessionScore.Create().
+		SetID(ids.scoreID).
+		SetSessionID(ids.sessionID).
+		SetStageID(ids.stageID).
+		SetScoreTriggeredBy("auto").
+		SetStatus(scoreStatus).
+		SetStartedAt(startedAt)
+	if scoreStatus == sessionscore.StatusCompleted {
+		scoreCreate.SetCompletedAt(startedAt)
+	}
+	_, err = scoreCreate.Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.TimelineEvent.Create().
+		SetID(ids.eventID).
+		SetSessionID(ids.sessionID).
+		SetStageID(ids.stageID).
+		SetExecutionID(ids.execID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeLlmResponse).
+		SetContent("partial scoring output").
+		SetStatus(timelineevent.StatusStreaming).
+		Save(ctx)
+	require.NoError(t, err)
+
+	return ids
+}
+
+func assertOrphanedScoringClosed(t *testing.T, ctx context.Context, client *ent.Client, ids stuckScoringIDs) {
+	t.Helper()
+
+	score, err := client.SessionScore.Get(ctx, ids.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusFailed, score.Status)
+	require.NotNil(t, score.ErrorMessage)
+	assert.Equal(t, orphanedScoringError, *score.ErrorMessage)
+	assert.NotNil(t, score.CompletedAt)
+
+	stg, err := client.Stage.Get(ctx, ids.stageID)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusFailed, stg.Status)
+	require.NotNil(t, stg.ErrorMessage)
+	assert.Equal(t, orphanedScoringError, *stg.ErrorMessage)
+
+	exec, err := client.AgentExecution.Get(ctx, ids.execID)
+	require.NoError(t, err)
+	assert.Equal(t, agentexecution.StatusFailed, exec.Status)
+	require.NotNil(t, exec.ErrorMessage)
+	assert.Equal(t, orphanedScoringError, *exec.ErrorMessage)
+
+	event, err := client.TimelineEvent.Get(ctx, ids.eventID)
+	require.NoError(t, err)
+	assert.Equal(t, timelineevent.StatusTimedOut, event.Status)
+}
+
+func TestStartupScoringOrphanCleanup(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	client := dbClient.Client
+	ctx := context.Background()
+
+	podID := "startup-scoring-pod"
+	startedAt := time.Now().Add(-time.Minute)
+
+	stuck := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusInProgress, startedAt)
+	pending := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusPending, startedAt)
+	otherPod := seedStuckScoring(t, ctx, client, "other-pod", sessionscore.StatusInProgress, startedAt)
+	completed := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusCompleted, startedAt)
+	deleted := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusInProgress, startedAt)
+	_, err := client.AlertSession.UpdateOneID(deleted.sessionID).
+		SetDeletedAt(time.Now()).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Score row from before stages existed: still failed, with nothing else to close.
+	nilStageSessionID := uuid.New().String()
+	nilStageScoreID := uuid.New().String()
+	_, err = client.AlertSession.Create().
+		SetID(nilStageSessionID).
+		SetAlertData("score without stage").
+		SetAgentType("test-agent").
+		SetAlertType("test-alert").
+		SetChainID("test-chain").
+		SetStatus(alertsession.StatusCompleted).
+		SetPodID(podID).
+		SetAuthor("test-user").
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.SessionScore.Create().
+		SetID(nilStageScoreID).
+		SetSessionID(nilStageSessionID).
+		SetScoreTriggeredBy("auto").
+		SetStatus(sessionscore.StatusInProgress).
+		SetStartedAt(startedAt).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Open and finished work on the same scoring stage.
+	pendingExecID := uuid.New().String()
+	_, err = client.AgentExecution.Create().
+		SetID(pendingExecID).
+		SetStageID(stuck.stageID).
+		SetSessionID(stuck.sessionID).
+		SetAgentName("ScoringAgent").
+		SetAgentIndex(2).
+		SetLlmBackend("test").
+		SetStatus(agentexecution.StatusPending).
+		Save(ctx)
+	require.NoError(t, err)
+	completedExecID := uuid.New().String()
+	_, err = client.AgentExecution.Create().
+		SetID(completedExecID).
+		SetStageID(stuck.stageID).
+		SetSessionID(stuck.sessionID).
+		SetAgentName("ScoringAgent").
+		SetAgentIndex(3).
+		SetLlmBackend("test").
+		SetStatus(agentexecution.StatusCompleted).
+		SetCompletedAt(startedAt).
+		SetErrorMessage("already finished").
+		Save(ctx)
+	require.NoError(t, err)
+	completedEventID := uuid.New().String()
+	_, err = client.TimelineEvent.Create().
+		SetID(completedEventID).
+		SetSessionID(stuck.sessionID).
+		SetStageID(stuck.stageID).
+		SetExecutionID(stuck.execID).
+		SetSequenceNumber(2).
+		SetEventType(timelineevent.EventTypeLlmThinking).
+		SetContent("finished thought").
+		SetStatus(timelineevent.StatusCompleted).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// A streaming event on a finished stage of the stuck session must stay put.
+	otherEventID := uuid.New().String()
+	otherStageID := uuid.New().String()
+	_, err = client.Stage.Create().
+		SetID(otherStageID).
+		SetSessionID(stuck.sessionID).
+		SetStageName("Investigation").
+		SetStageIndex(0).
+		SetExpectedAgentCount(1).
+		SetStageType(stage.StageTypeInvestigation).
+		SetStatus(stage.StatusCompleted).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.TimelineEvent.Create().
+		SetID(otherEventID).
+		SetSessionID(stuck.sessionID).
+		SetStageID(otherStageID).
+		SetSequenceNumber(1).
+		SetEventType(timelineevent.EventTypeLlmResponse).
+		SetContent("finished stage").
+		SetStatus(timelineevent.StatusStreaming).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Stage already terminal: fail the score, leave the stage and execution alone.
+	finishedStage := seedStuckScoring(t, ctx, client, podID, sessionscore.StatusInProgress, startedAt)
+	_, err = client.Stage.UpdateOneID(finishedStage.stageID).
+		SetStatus(stage.StatusCompleted).
+		SetCompletedAt(startedAt).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.AgentExecution.UpdateOneID(finishedStage.execID).
+		SetStatus(agentexecution.StatusCompleted).
+		SetCompletedAt(startedAt).
+		Save(ctx)
+	require.NoError(t, err)
+
+	err = CleanupStartupScoringOrphans(ctx, client, podID)
+	require.NoError(t, err)
+
+	assertOrphanedScoringClosed(t, ctx, client, stuck)
+	assertOrphanedScoringClosed(t, ctx, client, pending)
+
+	pendingExec, err := client.AgentExecution.Get(ctx, pendingExecID)
+	require.NoError(t, err)
+	assert.Equal(t, agentexecution.StatusFailed, pendingExec.Status)
+
+	completedExec, err := client.AgentExecution.Get(ctx, completedExecID)
+	require.NoError(t, err)
+	assert.Equal(t, agentexecution.StatusCompleted, completedExec.Status)
+	require.NotNil(t, completedExec.ErrorMessage)
+	assert.Equal(t, "already finished", *completedExec.ErrorMessage)
+
+	completedEvent, err := client.TimelineEvent.Get(ctx, completedEventID)
+	require.NoError(t, err)
+	assert.Equal(t, timelineevent.StatusCompleted, completedEvent.Status)
+
+	untouchedEvent, err := client.TimelineEvent.Get(ctx, otherEventID)
+	require.NoError(t, err)
+	assert.Equal(t, timelineevent.StatusStreaming, untouchedEvent.Status)
+
+	otherScore, err := client.SessionScore.Get(ctx, otherPod.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusInProgress, otherScore.Status)
+
+	completedScore, err := client.SessionScore.Get(ctx, completed.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusCompleted, completedScore.Status)
+	assert.Nil(t, completedScore.ErrorMessage)
+
+	completedStage, err := client.Stage.Get(ctx, completed.stageID)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusPending, completedStage.Status)
+
+	deletedScore, err := client.SessionScore.Get(ctx, deleted.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusInProgress, deletedScore.Status)
+
+	nilStageScore, err := client.SessionScore.Get(ctx, nilStageScoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusFailed, nilStageScore.Status)
+	require.NotNil(t, nilStageScore.ErrorMessage)
+	assert.Equal(t, orphanedScoringError, *nilStageScore.ErrorMessage)
+
+	finishedScore, err := client.SessionScore.Get(ctx, finishedStage.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusFailed, finishedScore.Status)
+	finishedStg, err := client.Stage.Get(ctx, finishedStage.stageID)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusCompleted, finishedStg.Status)
+	finishedExec, err := client.AgentExecution.Get(ctx, finishedStage.execID)
+	require.NoError(t, err)
+	assert.Equal(t, agentexecution.StatusCompleted, finishedExec.Status)
+}
+
+func TestStaleScoringRecovery(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	client := dbClient.Client
+	ctx := context.Background()
+
+	staleAt := time.Now().Add(-scoringTimeout - time.Minute)
+	stale := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusInProgress, staleAt)
+	stalePending := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusPending, staleAt)
+	fresh := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusInProgress, time.Now())
+	deleted := seedStuckScoring(t, ctx, client, "any-pod", sessionscore.StatusInProgress, staleAt)
+	_, err := client.AlertSession.UpdateOneID(deleted.sessionID).
+		SetDeletedAt(time.Now()).
+		Save(ctx)
+	require.NoError(t, err)
+
+	pool := &WorkerPool{
+		podID:  "test-pod",
+		client: client,
+		config: intTestQueueConfig(),
+	}
+
+	err = pool.detectAndRecoverOrphans(ctx)
+	require.NoError(t, err)
+
+	assertOrphanedScoringClosed(t, ctx, client, stale)
+	assertOrphanedScoringClosed(t, ctx, client, stalePending)
+
+	freshScore, err := client.SessionScore.Get(ctx, fresh.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusInProgress, freshScore.Status)
+
+	freshStage, err := client.Stage.Get(ctx, fresh.stageID)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusPending, freshStage.Status)
+
+	deletedScore, err := client.SessionScore.Get(ctx, deleted.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusInProgress, deletedScore.Status)
+}
+
+func TestMarkOrphanedScoringFailedLeavesTerminalScore(t *testing.T) {
+	dbClient := testdb.NewTestClient(t)
+	client := dbClient.Client
+	ctx := context.Background()
+
+	ids := seedStuckScoring(t, ctx, client, "pod", sessionscore.StatusInProgress, time.Now().Add(-time.Minute))
+	loaded, err := client.SessionScore.Get(ctx, ids.scoreID)
+	require.NoError(t, err)
+
+	completedAt := time.Now()
+	_, err = client.SessionScore.UpdateOneID(ids.scoreID).
+		SetStatus(sessionscore.StatusCompleted).
+		SetCompletedAt(completedAt).
+		SetTotalScore(80).
+		Save(ctx)
+	require.NoError(t, err)
+
+	updated, err := markOrphanedScoringFailed(ctx, client, loaded)
+	require.NoError(t, err)
+	assert.False(t, updated)
+
+	score, err := client.SessionScore.Get(ctx, ids.scoreID)
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusCompleted, score.Status)
+	assert.Nil(t, score.ErrorMessage)
+	require.NotNil(t, score.TotalScore)
+	assert.Equal(t, 80, *score.TotalScore)
+
+	stg, err := client.Stage.Get(ctx, ids.stageID)
+	require.NoError(t, err)
+	assert.Equal(t, stage.StatusPending, stg.Status)
+
+	exec, err := client.AgentExecution.Get(ctx, ids.execID)
+	require.NoError(t, err)
+	assert.Equal(t, agentexecution.StatusActive, exec.Status)
+
+	event, err := client.TimelineEvent.Get(ctx, ids.eventID)
+	require.NoError(t, err)
+	assert.Equal(t, timelineevent.StatusStreaming, event.Status)
 }
 
 // mockExecutor counts executions and tracks which sessions were processed.
