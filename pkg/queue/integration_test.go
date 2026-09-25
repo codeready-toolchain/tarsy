@@ -477,15 +477,10 @@ func TestStartupScoringOrphanCleanup(t *testing.T) {
 		Save(ctx)
 	require.NoError(t, err)
 
-	// Stage already terminal: fail the score, leave the stage and execution alone.
+	// Stage already terminal: fail the score, leave the stage and its open work alone.
 	finishedStage := seedStuckScoring(ctx, t, client, podID, sessionscore.StatusInProgress, startedAt)
 	_, err = client.Stage.UpdateOneID(finishedStage.stageID).
 		SetStatus(stage.StatusCompleted).
-		SetCompletedAt(startedAt).
-		Save(ctx)
-	require.NoError(t, err)
-	_, err = client.AgentExecution.UpdateOneID(finishedStage.execID).
-		SetStatus(agentexecution.StatusCompleted).
 		SetCompletedAt(startedAt).
 		Save(ctx)
 	require.NoError(t, err)
@@ -543,9 +538,13 @@ func TestStartupScoringOrphanCleanup(t *testing.T) {
 	finishedStg, err := client.Stage.Get(ctx, finishedStage.stageID)
 	require.NoError(t, err)
 	assert.Equal(t, stage.StatusCompleted, finishedStg.Status)
+	assert.Nil(t, finishedStg.ErrorMessage)
 	finishedExec, err := client.AgentExecution.Get(ctx, finishedStage.execID)
 	require.NoError(t, err)
-	assert.Equal(t, agentexecution.StatusCompleted, finishedExec.Status)
+	assert.Equal(t, agentexecution.StatusActive, finishedExec.Status)
+	finishedEvent, err := client.TimelineEvent.Get(ctx, finishedStage.eventID)
+	require.NoError(t, err)
+	assert.Equal(t, timelineevent.StatusStreaming, finishedEvent.Status)
 }
 
 func TestStaleScoringRecovery(t *testing.T) {

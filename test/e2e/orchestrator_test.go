@@ -1287,10 +1287,11 @@ func TestE2E_OrchestratorListAgents(t *testing.T) {
 // ────────────────────────────────────────────────────────────
 // cancel_agent tool test.
 //
-// Orchestrator dispatches LogAnalyzer and GeneralWorker. GeneralWorker
-// completes quickly. Orchestrator then calls cancel_agent to cancel the
-// slow LogAnalyzer, and produces a final answer from GeneralWorker's
-// result alone.
+// Orchestrator dispatches LogAnalyzer and GeneralWorker, then calls
+// cancel_agent on the next turn. Cancel must not be preceded by a text
+// turn: that turn waits for a pending sub-agent, and if GeneralWorker has
+// already finished the wait blocks on LogAnalyzer, which only ends once
+// cancel_agent runs.
 //
 // Uses RewriteChunks on the cancel_agent entry to dynamically inject the
 // real execution_id (extracted from the dispatch_agent tool result in the
@@ -1313,7 +1314,7 @@ func runOrchestratorCancelSpecific(t *testing.T, reason, wantErrMsg string) {
 	subAgentGate := make(chan struct{})
 	laBlocked := make(chan struct{}, 1)
 
-	// Orchestrator iteration 1: dispatch both sub-agents.
+	// Iteration 1: dispatch both sub-agents.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ToolCallChunk{CallID: "orch-d1", Name: "dispatch_agent",
@@ -1323,15 +1324,10 @@ func runOrchestratorCancelSpecific(t *testing.T, reason, wantErrMsg string) {
 			&agent.UsageChunk{InputTokens: 200, OutputTokens: 40, TotalTokens: 240},
 		},
 	})
-	// Iteration 2: text → wait for first result.
-	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
-		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "Waiting for sub-agent results."},
-			&agent.UsageChunk{InputTokens: 300, OutputTokens: 15, TotalTokens: 315},
-		},
-	})
-	// Iteration 3: cancel LogAnalyzer (too slow). RewriteChunks patches the
-	// execution_id from the dispatch_agent result in conversation history.
+	// Iteration 2: cancel LogAnalyzer immediately. A text turn here would wait
+	// for a still-pending sub-agent, and if GeneralWorker already finished that
+	// wait blocks on LogAnalyzer — which only ends once cancel_agent runs.
+	// RewriteChunks patches the execution_id from the dispatch_agent result.
 	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.ToolCallChunk{CallID: "orch-cancel", Name: "cancel_agent",
@@ -1340,22 +1336,17 @@ func runOrchestratorCancelSpecific(t *testing.T, reason, wantErrMsg string) {
 		},
 		RewriteChunks: cancelAgentRewriter("LogAnalyzer", reason),
 	})
-	// Buffer entries for timing after cancel result + cancelled sub-agent result.
-	for i := range 2 {
+	// Text turns after cancel. Each one is either a wait for one remaining
+	// sub-agent result or the final answer, depending on who has already finished.
+	const cancelFinalAnswer = "LogAnalyzer was too slow and has been cancelled. Based on GeneralWorker's assessment: P3 severity, no immediate action required."
+	for range 3 {
 		llm.AddRouted("SREOrchestrator", LLMScriptEntry{
 			Chunks: []agent.Chunk{
-				&agent.TextChunk{Content: fmt.Sprintf("Processing cancellation (cycle %d).", i+1)},
-				&agent.UsageChunk{InputTokens: 450, OutputTokens: 15, TotalTokens: 465},
+				&agent.TextChunk{Content: cancelFinalAnswer},
+				&agent.UsageChunk{InputTokens: 500, OutputTokens: 50, TotalTokens: 550},
 			},
 		})
 	}
-	// Final answer using GeneralWorker result only.
-	llm.AddRouted("SREOrchestrator", LLMScriptEntry{
-		Chunks: []agent.Chunk{
-			&agent.TextChunk{Content: "LogAnalyzer was too slow and has been cancelled. Based on GeneralWorker's assessment: P3 severity, no immediate action required."},
-			&agent.UsageChunk{InputTokens: 500, OutputTokens: 50, TotalTokens: 550},
-		},
-	})
 
 	// LogAnalyzer: blocks until cancelled. OnBlock signals when it's blocked.
 	llm.AddRouted("LogAnalyzer", LLMScriptEntry{

@@ -299,8 +299,9 @@ func (p *WorkerPool) recoverStaleScoring(ctx context.Context) error {
 }
 
 // markOrphanedScoringFailed marks a non-terminal score, its stage, active
-// executions, and streaming timeline events as failed. The score update is
-// conditional so a run that finishes concurrently is left unchanged.
+// executions, and streaming timeline events as failed. The score and stage
+// updates are conditional so a run that finishes concurrently is left unchanged.
+// Executions and timeline events are updated only when the stage transitions.
 func markOrphanedScoringFailed(ctx context.Context, client *ent.Client, score *ent.SessionScore) (bool, error) {
 	now := time.Now()
 
@@ -328,7 +329,7 @@ func markOrphanedScoringFailed(ctx context.Context, client *ent.Client, score *e
 
 	if score.StageID != nil {
 		stageID := *score.StageID
-		if _, err := tx.Stage.Update().
+		n, err = tx.Stage.Update().
 			Where(
 				stage.IDEQ(stageID),
 				stage.StatusIn(stage.StatusPending, stage.StatusActive),
@@ -336,31 +337,33 @@ func markOrphanedScoringFailed(ctx context.Context, client *ent.Client, score *e
 			SetStatus(stage.StatusFailed).
 			SetCompletedAt(now).
 			SetErrorMessage(orphanedScoringError).
-			Save(ctx); err != nil {
+			Save(ctx)
+		if err != nil {
 			return false, fmt.Errorf("failed to mark scoring stage as failed: %w", err)
 		}
+		if n > 0 {
+			if _, err := tx.AgentExecution.Update().
+				Where(
+					agentexecution.StageIDEQ(stageID),
+					agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
+				).
+				SetStatus(agentexecution.StatusFailed).
+				SetCompletedAt(now).
+				SetErrorMessage(orphanedScoringError).
+				Save(ctx); err != nil {
+				return false, fmt.Errorf("failed to mark scoring execution as failed: %w", err)
+			}
 
-		if _, err := tx.AgentExecution.Update().
-			Where(
-				agentexecution.StageIDEQ(stageID),
-				agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
-			).
-			SetStatus(agentexecution.StatusFailed).
-			SetCompletedAt(now).
-			SetErrorMessage(orphanedScoringError).
-			Save(ctx); err != nil {
-			return false, fmt.Errorf("failed to mark scoring execution as failed: %w", err)
-		}
-
-		if _, err := tx.TimelineEvent.Update().
-			Where(
-				timelineevent.StageIDEQ(stageID),
-				timelineevent.StatusEQ(timelineevent.StatusStreaming),
-			).
-			SetStatus(timelineevent.StatusTimedOut).
-			SetUpdatedAt(now).
-			Save(ctx); err != nil {
-			return false, fmt.Errorf("failed to update scoring timeline events: %w", err)
+			if _, err := tx.TimelineEvent.Update().
+				Where(
+					timelineevent.StageIDEQ(stageID),
+					timelineevent.StatusEQ(timelineevent.StatusStreaming),
+				).
+				SetStatus(timelineevent.StatusTimedOut).
+				SetUpdatedAt(now).
+				Save(ctx); err != nil {
+				return false, fmt.Errorf("failed to update scoring timeline events: %w", err)
+			}
 		}
 	}
 
