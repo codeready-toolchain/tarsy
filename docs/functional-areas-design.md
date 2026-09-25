@@ -1561,7 +1561,7 @@ type TraceListResponse struct {
 }
 ```
 
-LLM list items and detail include optional `cache_read_tokens` / `cache_creation_tokens` (omitted when unset). Session list / header / `ExecutionOverview` do not carry those fields. See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+LLM list items and detail include optional `cache_read_tokens` / `cache_creation_tokens` (omitted when unset). Session detail and the dashboard session list also return session-level `cache_read_tokens`, `cache_creation_tokens`, and `thinking_tokens`. `ExecutionOverview` does not carry those fields. See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
 
 **Level 2: LLM Interaction Detail** (`GET /sessions/:id/trace/llm/:interaction_id`)
 Full LLM interaction with reconstructed conversation from the Message table. For self-contained interactions (summarization), conversation extracted from inline `llm_request` JSON.

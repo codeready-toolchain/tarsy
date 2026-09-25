@@ -31,7 +31,7 @@ import { ReviewCell } from './ReviewCell.tsx';
 import { qualityEvalScoreBodySx } from './qualityGroupSx.ts';
 import { OpenNewTabButton } from './OpenNewTabButton.tsx';
 import { highlightSearchTermNodes } from '../../utils/search.ts';
-import { formatTimestamp, formatDurationMs, formatCancelAttribution } from '../../utils/format.ts';
+import { formatTimestamp, formatDurationMs, formatCancelAttribution, formatTokens } from '../../utils/format.ts';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay.tsx';
 import EstimatedCostDisplay from '../shared/EstimatedCostDisplay.tsx';
 import { sessionDetailPath } from '../../constants/routes.ts';
@@ -52,6 +52,53 @@ const iconOnlyChipSx = {
   '& .MuiChip-label': { px: 0, display: 'none' },
   '& .MuiChip-icon': { mx: 0 },
 } as const;
+
+// The tooltip surface stays dark in both color schemes, so these match the dark palette
+// rather than the light-mode tints, which disappear on grey.
+const tokenTooltipNumberColor = {
+  total: '#ffcc80',
+  in: '#81d4fa',
+  out: '#a5d6a7',
+} as const;
+
+function TokenBreakdownTooltip({ session }: { session: DashboardSessionItem }) {
+  const lines: { label: string; value: number; color?: string }[] = [
+    { label: 'total', value: session.total_tokens, color: tokenTooltipNumberColor.total },
+    { label: 'in', value: session.input_tokens, color: tokenTooltipNumberColor.in },
+    { label: 'out', value: session.output_tokens, color: tokenTooltipNumberColor.out },
+  ];
+  if (session.cache_read_tokens > 0) {
+    lines.push({ label: 'cache read', value: session.cache_read_tokens });
+  }
+  if (session.cache_creation_tokens > 0) {
+    lines.push({ label: 'cache create', value: session.cache_creation_tokens });
+  }
+  if (session.thinking_tokens > 0) {
+    lines.push({ label: 'thinking', value: session.thinking_tokens });
+  }
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 132 }}>
+      {lines.map((line) => (
+        <Box
+          key={line.label}
+          sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 2 }}
+        >
+          <Box component="span">{line.label}</Box>
+          <Box
+            component="span"
+            sx={{
+              fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+              color: line.color ?? 'inherit',
+            }}
+          >
+            {formatTokens(line.value)}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 export function SessionListItem({
   session,
@@ -207,16 +254,31 @@ export function SessionListItem({
       {/* Tokens */}
       <TableCell>
         {(session.total_tokens > 0 || session.input_tokens > 0 || session.output_tokens > 0) ? (
-          <TokenUsageDisplay
-            tokenData={{
-              input_tokens: session.input_tokens,
-              output_tokens: session.output_tokens,
-              total_tokens: session.total_tokens,
+          <Tooltip
+            title={<TokenBreakdownTooltip session={session} />}
+            slotProps={{
+              tooltip: {
+                sx: {
+                  // Same dark-grey tooltip family, but solid and one step darker
+                  // than the default translucent grey so the numbers stay readable.
+                  bgcolor: 'grey.800',
+                },
+              },
             }}
-            variant="inline"
-            size="small"
-            showBreakdown={false}
-          />
+          >
+            <Box component="span" sx={{ display: 'inline-flex' }}>
+              <TokenUsageDisplay
+                tokenData={{
+                  input_tokens: session.input_tokens,
+                  output_tokens: session.output_tokens,
+                  total_tokens: session.total_tokens,
+                }}
+                variant="inline"
+                size="small"
+                showBreakdown={false}
+              />
+            </Box>
+          </Tooltip>
         ) : (
           <Typography variant="body2" color="text.secondary">
             —

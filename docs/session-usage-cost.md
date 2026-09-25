@@ -143,7 +143,7 @@ Rules:
 - `totals.session_count` is the number of matching sessions in the window (same filters; includes sessions with no LLM rows). When estimation is enabled and `session_count > 0`, `totals.average_cost_usd` is `estimated_cost_usd / session_count`.
 - `by_model[]`, `by_alert_type[]`, and `by_chain[]` rows include `session_count` and (when estimation is enabled) `average_cost_usd`. For models, `session_count` is distinct sessions that used that model — a session that hits two models counts toward both.
 - `by_model[]` rows carry `priced` (bool: all token-bearing rows for that model are priced) and `unpriced_interaction_count` (count of token-bearing rows for that model with no resolved rate); the dashboard surfaces the count in the "Incomplete" chip's tooltip.
-- `totals` and `by_model[]` include `cache_read_tokens` and `cache_creation_tokens` SUMs. The Usage page shows these as StatCards (keep the **Input tokens** label = uncached) and by-model columns. Session list, by-alert-type, by-chain, top-sessions, and Usage charts do **not** SUM cache in v1.
+- `totals` and `by_model[]` include `cache_read_tokens` and `cache_creation_tokens` SUMs. The Usage page shows these as StatCards (keep the **Input tokens** label = uncached) and by-model columns. By-alert-type, by-chain, top-sessions, and Usage charts do **not** SUM cache in v1.
 - `totals.unpriced_interaction_count` is that same row count across the window. `totals.unpriced_token_count` is `SUM(total_tokens + cache_read_tokens + cache_creation_tokens)` of those unpriced rows (so cache-only interactions still count); the Usage Est. cost caption shows it compactly (e.g. `1.2M unpriced`), with a tooltip of the form `1.2M tokens from 838 LLM interactions had no resolved rate`.
 - Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
@@ -164,7 +164,7 @@ Window edge case: a long-running session started before the window is excluded e
 - Gemini implicit cache reads are extracted from `cached_content_token_count` (no creation surcharge).
 - Looping Claude / GPT-5.6+ cache options honor `system.prompt_caching.enabled` (default on). That kill switch does not disable Gemini implicit caching.
 - Priced at write time using catalog cache rates or derived multipliers (see [How estimates are computed](#how-estimates-are-computed)).
-- Session list / header / `ExecutionOverview` do not SUM cache tokens in v1; the Usage page totals and by-model table do. Trace LLM list and detail show per-call cache read/create counts.
+- The session header SUMs cache read, cache create, and thinking and shows each when the sum is greater than zero. The session list includes those sums in its existing per-row token aggregate and shows them in a tooltip; the row still displays uncached input, output, and total. `ExecutionOverview` does not SUM cache tokens. The Usage page totals and by-model table do. Trace LLM list and detail show per-call cache read/create counts.
 
 ## Known gaps
 

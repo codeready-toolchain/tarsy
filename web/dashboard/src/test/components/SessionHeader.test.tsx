@@ -54,6 +54,9 @@ function makeSession(overrides: Partial<SessionDetailResponse> = {}): SessionDet
     input_tokens: 0,
     output_tokens: 0,
     total_tokens: 0,
+    thinking_tokens: 0,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
     llm_interaction_count: 0,
     mcp_interaction_count: 0,
     current_stage_index: 0,
@@ -70,6 +73,42 @@ function renderHeader(session: SessionDetailResponse = makeSession()) {
     </MemoryRouter>,
   );
 }
+
+describe('SessionHeader token summary', () => {
+  it('shows cache and thinking counts when they are non-zero', () => {
+    renderHeader(makeSession({
+      total_tokens: 2_600_000,
+      input_tokens: 1_700_000,
+      output_tokens: 56_000,
+      cache_read_tokens: 800_000,
+      cache_creation_tokens: 20_000,
+      thinking_tokens: 24_000,
+    }));
+
+    expect(screen.getByText('2.6M')).toBeInTheDocument();
+    expect(screen.getByText('1.7M')).toBeInTheDocument();
+    expect(screen.getByText('56.0K')).toBeInTheDocument();
+    expect(screen.getByText('800.0K')).toBeInTheDocument();
+    expect(screen.getByText('20.0K')).toBeInTheDocument();
+    expect(screen.getByText('24.0K')).toBeInTheDocument();
+    expect(screen.getByText('cache read')).toBeInTheDocument();
+    expect(screen.getByText('cache create')).toBeInTheDocument();
+    expect(screen.getByText('thinking')).toBeInTheDocument();
+  });
+
+  it('hides cache and thinking when they are zero', () => {
+    renderHeader(makeSession({
+      total_tokens: 150,
+      input_tokens: 100,
+      output_tokens: 50,
+    }));
+
+    expect(screen.getByText('150')).toBeInTheDocument();
+    expect(screen.queryByText('cache read')).not.toBeInTheDocument();
+    expect(screen.queryByText('cache create')).not.toBeInTheDocument();
+    expect(screen.queryByText('thinking')).not.toBeInTheDocument();
+  });
+});
 
 describe('SessionHeader cancel dialog', () => {
   beforeEach(() => {

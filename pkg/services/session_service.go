@@ -701,6 +701,9 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		InputTokens:             llmStats.InputTokens,
 		OutputTokens:            llmStats.OutputTokens,
 		TotalTokens:             llmStats.TotalTokens,
+		ThinkingTokens:          llmStats.ThinkingTokens,
+		CacheReadTokens:         llmStats.CacheReadTokens,
+		CacheCreationTokens:     llmStats.CacheCreationTokens,
 		CostEstimationEnabled:   s.costEstimationEnabled,
 		LLMInteractionCount:     llmStats.Count,
 		MCPInteractionCount:     mcpCount,
@@ -930,13 +933,9 @@ type dashboardRow struct {
 	CurrentStageIndex *int       `sql:"current_stage_index"`
 	CurrentStageID    *string    `sql:"current_stage_id"`
 	// Aggregated columns from subqueries.
-	LLMCount              int        `sql:"llm_count"`
-	LLMInputTokens        int64      `sql:"llm_input_tokens"`
-	LLMOutputTokens       int64      `sql:"llm_output_tokens"`
-	LLMTotalTokens        int64      `sql:"llm_total_tokens"`
-	LLMCostUsd            float64    `sql:"llm_cost_usd"`
-	LLMTokenBearing       int        `sql:"llm_token_bearing"`
-	LLMPriced             int        `sql:"llm_priced"`
+	// One jsonb object so input, output, total, cache, thinking, and cost
+	// are summed in a single index pass per listed session.
+	LLMTokenSums          []byte     `sql:"llm_token_sums"`
 	MCPCount              int        `sql:"mcp_count"`
 	TotalStages           int        `sql:"total_stages"`
 	CompletedStages       int        `sql:"completed_stages"`
@@ -970,6 +969,48 @@ func unmarshalLabels(data []byte) []string {
 		return nil
 	}
 	return labels
+}
+
+// llmListTokenSums is the single per-session aggregate returned by the dashboard list.
+type llmListTokenSums struct {
+	Count         int     `json:"count"`
+	Input         int64   `json:"input"`
+	Output        int64   `json:"output"`
+	Total         int64   `json:"total"`
+	Thinking      int64   `json:"thinking"`
+	CacheRead     int64   `json:"cache_read"`
+	CacheCreation int64   `json:"cache_creation"`
+	Cost          float64 `json:"cost"`
+	TokenBearing  int     `json:"token_bearing"`
+	Priced        int     `json:"priced"`
+}
+
+// llmListTokenAggregateSQL sums every token column for one session in one pass.
+// sessionIDExpr is a quoted alert_sessions.id reference.
+func llmListTokenAggregateSQL(sessionIDExpr string) string {
+	return fmt.Sprintf(`(SELECT jsonb_build_object(
+		'count', COUNT(*),
+		'input', COALESCE(SUM(input_tokens), 0),
+		'output', COALESCE(SUM(output_tokens), 0),
+		'total', COALESCE(SUM(total_tokens), 0),
+		'thinking', COALESCE(SUM(thinking_tokens), 0),
+		'cache_read', COALESCE(SUM(cache_read_tokens), 0),
+		'cache_creation', COALESCE(SUM(cache_creation_tokens), 0),
+		'cost', COALESCE(SUM(estimated_cost_usd), 0),
+		'token_bearing', COUNT(*) FILTER (WHERE %s),
+		'priced', COUNT(*) FILTER (WHERE %s AND estimated_cost_usd IS NOT NULL)
+	) FROM llm_interactions WHERE session_id = %s)`, tokenBearingPredicateSQL, tokenBearingPredicateSQL, sessionIDExpr)
+}
+
+func parseLLMListTokenSums(raw []byte) (llmListTokenSums, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return llmListTokenSums{}, nil
+	}
+	var sums llmListTokenSums
+	if err := json.Unmarshal(raw, &sums); err != nil {
+		return llmListTokenSums{}, fmt.Errorf("failed to parse session list token sums: %w", err)
+	}
+	return sums, nil
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -1173,43 +1214,10 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				sel.C(alertsession.FieldInvestigationFeedback),
 			)
 
-			// LLM interaction aggregates.
-			sel.AppendSelectAs(
-				fmt.Sprintf("(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s)", sid),
-				"llm_count",
-			)
-			sel.AppendSelectAs(
-				fmt.Sprintf("(SELECT COALESCE(SUM(input_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
-				"llm_input_tokens",
-			)
-			sel.AppendSelectAs(
-				fmt.Sprintf("(SELECT COALESCE(SUM(output_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
-				"llm_output_tokens",
-			)
-			sel.AppendSelectAs(
-				fmt.Sprintf("(SELECT COALESCE(SUM(total_tokens), 0) FROM llm_interactions WHERE session_id = %s)", sid),
-				"llm_total_tokens",
-			)
-			if s.costEstimationEnabled {
-				sel.AppendSelectAs(
-					fmt.Sprintf("(SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM llm_interactions WHERE session_id = %s)", sid),
-					"llm_cost_usd",
-				)
-				sel.AppendSelectAs(
-					fmt.Sprintf(
-						"(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s AND %s)",
-						sid, tokenBearingPredicateSQL,
-					),
-					"llm_token_bearing",
-				)
-				sel.AppendSelectAs(
-					fmt.Sprintf(
-						"(SELECT COUNT(*) FROM llm_interactions WHERE session_id = %s AND %s AND estimated_cost_usd IS NOT NULL)",
-						sid, tokenBearingPredicateSQL,
-					),
-					"llm_priced",
-				)
-			}
+			// One aggregate per listed session. Target-list subqueries run for the
+			// page only, and folding every token column into that pass avoids
+			// a separate index scan per sum.
+			sel.AppendSelectAs(llmListTokenAggregateSQL(sid), "llm_token_sums")
 
 			// MCP interaction count.
 			sel.AppendSelectAs(
@@ -1317,6 +1325,10 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	// Build response items from scanned rows.
 	items := make([]models.DashboardSessionItem, 0, len(rows))
 	for _, row := range rows {
+		llmSums, err := parseLLMListTokenSums(row.LLMTokenSums)
+		if err != nil {
+			return nil, err
+		}
 		var durationMs *int64
 		if row.StartedAt != nil && row.CompletedAt != nil {
 			ms := row.CompletedAt.Sub(*row.StartedAt).Milliseconds()
@@ -1338,11 +1350,14 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ErrorMessage:          row.ErrorMessage,
 			ExecutiveSummary:      row.ExecutiveSummary,
 			Labels:                unmarshalLabels(row.Labels),
-			LLMInteractionCount:   row.LLMCount,
+			LLMInteractionCount:   llmSums.Count,
 			MCPInteractionCount:   row.MCPCount,
-			InputTokens:           row.LLMInputTokens,
-			OutputTokens:          row.LLMOutputTokens,
-			TotalTokens:           row.LLMTotalTokens,
+			InputTokens:           llmSums.Input,
+			OutputTokens:          llmSums.Output,
+			TotalTokens:           llmSums.Total,
+			ThinkingTokens:        llmSums.Thinking,
+			CacheReadTokens:       llmSums.CacheRead,
+			CacheCreationTokens:   llmSums.CacheCreation,
 			TotalStages:           row.TotalStages,
 			CompletedStages:       row.CompletedStages,
 			HasParallelStages:     row.HasParallel != 0,
@@ -1366,9 +1381,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			FeedbackEditedAt:      row.FeedbackEditedAt,
 		}
 		if s.costEstimationEnabled {
-			cost := row.LLMCostUsd
+			cost := llmSums.Cost
 			item.EstimatedCostUsd = &cost
-			item.CostCompleteness = models.DeriveCostCompleteness(row.LLMTokenBearing, row.LLMPriced)
+			item.CostCompleteness = models.DeriveCostCompleteness(llmSums.TokenBearing, llmSums.Priced)
 		}
 		items = append(items, item)
 	}
@@ -1397,26 +1412,32 @@ const tokenBearingPredicateSQL = `(COALESCE(input_tokens, 0) > 0 OR COALESCE(out
 
 // llmSessionStats holds session-level LLM interaction aggregates.
 type llmSessionStats struct {
-	Count        int
-	InputTokens  int64
-	OutputTokens int64
-	TotalTokens  int64
-	CostUsd      float64
-	TokenBearing int
-	Priced       int
+	Count               int
+	InputTokens         int64
+	OutputTokens        int64
+	TotalTokens         int64
+	ThinkingTokens      int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+	CostUsd             float64
+	TokenBearing        int
+	Priced              int
 }
 
 // aggregateLLMStats returns LLM interaction count, token sums, and cost completeness counts.
 func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string) (llmSessionStats, error) {
 	// SUM returns NULL when all values are NULL (nullable columns).
 	var results []struct {
-		Count        int                `json:"count"`
-		InputSum     stdsql.NullInt64   `json:"input_sum"`
-		OutputSum    stdsql.NullInt64   `json:"output_sum"`
-		TotalSum     stdsql.NullInt64   `json:"total_sum"`
-		CostSum      stdsql.NullFloat64 `json:"cost_sum"`
-		TokenBearing int                `json:"token_bearing"`
-		Priced       int                `json:"priced"`
+		Count          int                `json:"count"`
+		InputSum       stdsql.NullInt64   `json:"input_sum"`
+		OutputSum      stdsql.NullInt64   `json:"output_sum"`
+		TotalSum       stdsql.NullInt64   `json:"total_sum"`
+		ThinkingSum    stdsql.NullInt64   `json:"thinking_sum"`
+		CacheReadSum   stdsql.NullInt64   `json:"cache_read_sum"`
+		CacheCreateSum stdsql.NullInt64   `json:"cache_create_sum"`
+		CostSum        stdsql.NullFloat64 `json:"cost_sum"`
+		TokenBearing   int                `json:"token_bearing"`
+		Priced         int                `json:"priced"`
 	}
 
 	err := s.client.LLMInteraction.Query().
@@ -1426,6 +1447,9 @@ func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string
 			ent.As(ent.Sum(llminteraction.FieldInputTokens), "input_sum"),
 			ent.As(ent.Sum(llminteraction.FieldOutputTokens), "output_sum"),
 			ent.As(ent.Sum(llminteraction.FieldTotalTokens), "total_sum"),
+			ent.As(ent.Sum(llminteraction.FieldThinkingTokens), "thinking_sum"),
+			ent.As(ent.Sum(llminteraction.FieldCacheReadTokens), "cache_read_sum"),
+			ent.As(ent.Sum(llminteraction.FieldCacheCreationTokens), "cache_create_sum"),
 			ent.As(ent.Sum(llminteraction.FieldEstimatedCostUsd), "cost_sum"),
 			ent.As(func(_ *sql.Selector) string {
 				return "COUNT(*) FILTER (WHERE " + tokenBearingPredicateSQL + ")"
@@ -1444,13 +1468,16 @@ func (s *SessionService) aggregateLLMStats(ctx context.Context, sessionID string
 	}
 	r := results[0]
 	return llmSessionStats{
-		Count:        r.Count,
-		InputTokens:  r.InputSum.Int64,
-		OutputTokens: r.OutputSum.Int64,
-		TotalTokens:  r.TotalSum.Int64,
-		CostUsd:      r.CostSum.Float64,
-		TokenBearing: r.TokenBearing,
-		Priced:       r.Priced,
+		Count:               r.Count,
+		InputTokens:         r.InputSum.Int64,
+		OutputTokens:        r.OutputSum.Int64,
+		TotalTokens:         r.TotalSum.Int64,
+		ThinkingTokens:      r.ThinkingSum.Int64,
+		CacheReadTokens:     r.CacheReadSum.Int64,
+		CacheCreationTokens: r.CacheCreateSum.Int64,
+		CostUsd:             r.CostSum.Float64,
+		TokenBearing:        r.TokenBearing,
+		Priced:              r.Priced,
 	}, nil
 }
 
