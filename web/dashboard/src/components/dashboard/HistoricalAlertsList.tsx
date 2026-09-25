@@ -85,7 +85,12 @@ export function HistoricalAlertsList({
           borderColor: 'divider',
         }}
       >
-        <Typography variant="subtitle2" fontWeight={600} sx={{ flexGrow: 1 }}>
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            flexGrow: 1
+          }}>
           Alert History
         </Typography>
         <Chip
@@ -272,19 +277,27 @@ export function HistoricalAlertsList({
                         {hasActiveFilters(filters) ? (
                           <>
                             <SearchOff sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                            <Typography variant="h6" gutterBottom sx={{
+                              color: 'text.secondary'
+                            }}>
                               No alerts found
                             </Typography>
-                            <Typography variant="body2" color="text.disabled">
+                            <Typography variant="body2" sx={{
+                              color: 'text.disabled'
+                            }}>
                               Try adjusting your search terms or filters
                             </Typography>
                           </>
                         ) : (
                           <>
-                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                            <Typography variant="h6" gutterBottom sx={{
+                              color: 'text.secondary'
+                            }}>
                               No Historical Alerts
                             </Typography>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" sx={{
+                              color: 'text.secondary'
+                            }}>
                               No completed, failed, or cancelled alerts found.
                             </Typography>
                           </>

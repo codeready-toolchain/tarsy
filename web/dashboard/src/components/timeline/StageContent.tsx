@@ -659,7 +659,13 @@ const StageContent: React.FC<StageContentProps> = ({
         ))}
 
         {!hasDbItems && !hasStreamingItems && !isExecutionActive && allSubAgentExecIds.size === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              textAlign: 'center',
+              py: 4
+            }}>
             No reasoning steps available for this agent
           </Typography>
         )}
@@ -670,7 +676,9 @@ const StageContent: React.FC<StageContentProps> = ({
 
         {isCancelled && (
           <Alert severity="info" sx={{ mt: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               <strong>Execution Cancelled</strong>
               {errorMessage ? `: ${errorMessage}` : ''}
             </Typography>
@@ -758,8 +766,20 @@ const StageContent: React.FC<StageContentProps> = ({
               }}
             >
               {/* Row 1: name + status */}
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5
+                }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5
+                  }}>
                   {statusIcon}
                   {label}
                 </Typography>
@@ -798,17 +818,38 @@ const StageContent: React.FC<StageContentProps> = ({
                 })()}
               </Box>
               {/* Row 2: model info (left) + tokens (right) */}
-              <Box display="flex" alignItems="center" gap={1} mt={0.5}>
-                <Box display="flex" alignItems="center" gap={1} flexWrap="wrap" sx={{ flex: 1, minWidth: 0 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  mt: 0.5
+                }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    flexWrap: 'wrap',
+                    flex: 1,
+                    minWidth: 0
+                  }}>
                   {modelLabel && (
                     <Tooltip title={providerTip ?? ''} disableHoverListener={!providerTip}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                          fontFamily: 'monospace'
+                        }}>
                         {modelLabel}
                       </Typography>
                     </Tooltip>
                   )}
                   {eo?.llm_backend && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: 'text.secondary'
+                    }}>
                       {eo.llm_backend}
                     </Typography>
                   )}
@@ -821,7 +862,13 @@ const StageContent: React.FC<StageContentProps> = ({
                   )}
                 </Box>
                 {hasTokens && tokenData ? (
-                  <Box display="flex" alignItems="center" gap={1} flexShrink={0}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      flexShrink: 0
+                    }}>
                     <TokenUsageDisplay tokenData={tokenData} variant="labeled" size="small" />
                     <EstimatedCostDisplay
                       enabled={costEstimationEnabled === true}
@@ -836,7 +883,13 @@ const StageContent: React.FC<StageContentProps> = ({
                   const total = streamCount + itemCount;
                   if (total > 0) {
                     return (
-                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, ml: 'auto' }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                          flexShrink: 0,
+                          ml: 'auto'
+                        }}>
                         {streamCount > 0 ? `${total} event${total > 1 ? 's' : ''} (${streamCount} streaming)` : `${total} event${total > 1 ? 's' : ''}`}
                       </Typography>
                     );

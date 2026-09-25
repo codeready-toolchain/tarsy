@@ -138,7 +138,9 @@ function StageSeparator({ item, isCollapsed = false, onToggleCollapse, fallbackC
 
       {isCancelledStatus && !isCollapsed && (
         <Alert severity="info" sx={{ mt: 2, mx: 2, bgcolor: 'action.hover', '& .MuiAlert-icon': { color: 'text.secondary' } }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             <strong>Stage Cancelled</strong>
             {errorMessage && `: ${errorMessage}`}
           </Typography>

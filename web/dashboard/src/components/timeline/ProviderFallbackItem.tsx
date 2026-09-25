@@ -113,7 +113,12 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
               <Chip label={errorCode} size="small" variant="outlined" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />
             )}
             {attempt != null && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontSize: '0.7rem'
+                }}>
                 attempt {attempt}
               </Typography>
             )}
@@ -160,12 +165,26 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
                   <CopyLinkButton url={linkUrl} />
                 </Box>
               )}
-              <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontStyle: 'italic' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  display: 'block',
+                  mb: 0.75,
+                  fontStyle: 'italic'
+                }}>
                 The original {originalKind} ({from}) returned an error, so execution was automatically switched to {to}.
               </Typography>
 
               {fromBackend && toBackend && fromBackend !== toBackend && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.7rem' }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    display: 'block',
+                    mb: 0.5,
+                    fontSize: '0.7rem'
+                  }}>
                   Backend: {fromBackend} &rarr; {toBackend}
                 </Typography>
               )}
@@ -173,12 +192,22 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
               {(errorCode || errorRetryable != null) && (
                 <Box sx={{ display: 'flex', gap: 1, mb: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
                   {errorCode && (
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontSize: '0.7rem'
+                      }}>
                       <strong>Code:</strong> {errorCode}
                     </Typography>
                   )}
                   {errorRetryable != null && (
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        fontSize: '0.7rem'
+                      }}>
                       <strong>Retryable:</strong> {String(errorRetryable)}
                     </Typography>
                   )}
@@ -215,7 +244,14 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
               )}
 
               {droppedTools && droppedTools.length > 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem', mt: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    mt: 0.5
+                  }}>
                   <strong>Native tools dropped:</strong> {droppedTools.join(', ')}
                 </Typography>
               )}

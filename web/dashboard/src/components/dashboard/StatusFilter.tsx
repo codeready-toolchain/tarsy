@@ -67,7 +67,9 @@ export function StatusFilter({ value, onChange, options = ALL_STATUSES }: Status
           </Box>
         )}
         MenuProps={{
-          PaperProps: { style: { maxHeight: 48 * 4.5 + 8, width: 250 } },
+          slotProps: {
+            paper: { style: { maxHeight: 48 * 4.5 + 8, width: 250 } },
+          },
         }}
       >
         <MenuItem value={CLEAR_VALUE}>All</MenuItem>

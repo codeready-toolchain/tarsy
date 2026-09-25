@@ -257,11 +257,18 @@ function ActivityRow({ item, isLast }: { item: ReviewActivityItem; isLast: boole
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {cfg.label}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             by {item.actor}
           </Typography>
           <Tooltip title={formatTimestamp(item.created_at, 'absolute')} arrow>
-            <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                ml: 'auto'
+              }}>
               {timeAgo(item.created_at)}
             </Typography>
           </Tooltip>
@@ -279,16 +286,23 @@ function ActivityRow({ item, isLast }: { item: ReviewActivityItem; isLast: boole
               />
             )}
             {item.note && (
-              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  whiteSpace: 'pre-wrap'
+                }}>
                 {item.note}
               </Typography>
             )}
             {item.investigation_feedback && (
               <Typography
                 variant="body2"
-                color="text.secondary"
-                sx={{ whiteSpace: 'pre-wrap', fontStyle: 'italic' }}
-              >
+                sx={{
+                  color: 'text.secondary',
+                  whiteSpace: 'pre-wrap',
+                  fontStyle: 'italic'
+                }}>
                 {item.investigation_feedback}
               </Typography>
             )}

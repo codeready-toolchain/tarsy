@@ -277,7 +277,9 @@ export function ScoringPage() {
                           borderColor: 'divider',
                         }}
                       >
-                        <Typography variant="h5" color="text.secondary">—</Typography>
+                        <Typography variant="h5" sx={{
+                          color: 'text.secondary'
+                        }}>—</Typography>
                       </Box>
                     )}
 
@@ -288,10 +290,14 @@ export function ScoringPage() {
                       {score ? (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
                           <ScoreBadge score={score.total_score} scoringStatus={score.status} onClick={rescoring ? undefined : handleRescoreClick} />
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" sx={{
+                            color: 'text.secondary'
+                          }}>
                             Triggered by: {score.score_triggered_by}
                           </Typography>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" sx={{
+                            color: 'text.secondary'
+                          }}>
                             {formatTimestamp(score.started_at, 'absolute')}
                           </Typography>
                           {score.prompt_hash && (
@@ -304,11 +310,21 @@ export function ScoringPage() {
                           )}
                         </Box>
                       ) : scoreError ? (
-                        <Typography variant="body2" color="error.main" sx={{ mt: 0.5 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: 'error.main',
+                            mt: 0.5
+                          }}>
                           {scoreError}
                         </Typography>
                       ) : !scoreLoading ? (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: 'text.secondary',
+                            mt: 0.5
+                          }}>
                           No score available for this session
                         </Typography>
                       ) : null}
@@ -380,10 +396,17 @@ export function ScoringPage() {
               {!score && !scoreLoading && !scoreError && (
                 <Paper sx={{ p: 4, textAlign: 'center' }}>
                   <GradingOutlined sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                  <Typography variant="h6" gutterBottom sx={{
+                    color: 'text.secondary'
+                  }}>
                     No Score Available
                   </Typography>
-                  <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'text.disabled',
+                      mb: 2
+                    }}>
                     This session has not been scored yet.
                   </Typography>
                   <Button
@@ -426,7 +449,9 @@ export function ScoringPage() {
                 borderColor: 'error.main',
               })}
             >
-              <Typography variant="body2" color="error.main">
+              <Typography variant="body2" sx={{
+                color: 'error.main'
+              }}>
                 {rescoreError}
               </Typography>
             </Box>

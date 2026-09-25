@@ -144,7 +144,12 @@ export default function ExtractedLearningsCard({ sessionId, hasScore, collapseCo
 
       <Collapse in={isExpanded} timeout={400}>
         {memories.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              fontStyle: 'italic'
+            }}>
             No new lessons were captured from this investigation.
           </Typography>
         ) : (

@@ -121,10 +121,14 @@ export default function TraceTimeline({ traceData, session }: TraceTimelineProps
     return (
       <Paper sx={{ p: 4, textAlign: 'center' }}>
         <AccountTree sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
-        <Typography variant="h6" color="text.secondary" gutterBottom>
+        <Typography variant="h6" gutterBottom sx={{
+          color: 'text.secondary'
+        }}>
           No trace data available
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           Trace data will appear here once the session starts processing.
         </Typography>
       </Paper>
@@ -330,7 +334,12 @@ export default function TraceTimeline({ traceData, session }: TraceTimelineProps
               sx={{ fontWeight: 600 }}
             />
           </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              mb: 2
+            }}>
             These interactions ran at the session level, outside the stage pipeline.
             In newer sessions, executive summaries run as typed stages and appear above.
           </Typography>

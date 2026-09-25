@@ -108,11 +108,18 @@ export function UserMenu() {
               <PersonIcon />
             </Avatar>
             <Box>
-              <Typography variant="body2" fontWeight="medium">
+              <Typography variant="body2" sx={{
+                fontWeight: 'medium'
+              }}>
                 {displayName}
               </Typography>
               {userEmail && (
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    display: 'block'
+                  }}>
                   {userEmail}
                 </Typography>
               )}

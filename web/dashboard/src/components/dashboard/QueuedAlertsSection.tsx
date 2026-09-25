@@ -130,7 +130,9 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
               Queued Alerts
             </Typography>
             <Chip label={sessions.length} color="warning" size="small" sx={{ fontWeight: 600 }} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               • Expected to start soon
             </Typography>
           </Box>
@@ -177,25 +179,35 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
                     }
                     secondary={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" sx={{
+                          color: 'text.secondary'
+                        }}>
                           Waiting: {liveDuration(session.created_at)}
                         </Typography>
                         {session.chain_id && (
                           <>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" sx={{
+                              color: 'text.secondary'
+                            }}>
                               •
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" sx={{
+                              color: 'text.secondary'
+                            }}>
                               {session.chain_id}
                             </Typography>
                           </>
                         )}
                         {session.author && (
                           <>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" sx={{
+                              color: 'text.secondary'
+                            }}>
                               •
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" sx={{
+                              color: 'text.secondary'
+                            }}>
                               by {session.author}
                             </Typography>
                           </>
@@ -268,7 +280,9 @@ export function QueuedAlertsSection({ sessions, onRefresh }: QueuedAlertsSection
                 borderColor: 'error.main',
               }}
             >
-              <Typography variant="body2" color="error.main">
+              <Typography variant="body2" sx={{
+                color: 'error.main'
+              }}>
                 {cancelError}
               </Typography>
             </Box>

@@ -78,13 +78,23 @@ function ConversationMessageView({ message, index }: { message: ConversationMess
             {style.label}
           </Box>
           {message.tool_call_id && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontFamily: 'monospace'
+              }}>
               {message.tool_name || message.tool_call_id}
             </Typography>
           )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontWeight: 500
+            }}>
             {content.length.toLocaleString()} chars
           </Typography>
           <CopyButton text={content} variant="icon" size="small" tooltip={`Copy ${style.label.toLowerCase()} message`} />
@@ -238,7 +248,9 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
                 >
                   Thinking
                 </Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{
+                  color: 'text.secondary'
+                }}>
                   Internal reasoning
                 </Typography>
               </Box>
@@ -270,11 +282,21 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             Model Information
           </Typography>
-          <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
-            <Typography variant="body2" color="text.secondary">
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              flexWrap: 'wrap',
+              alignItems: 'center'
+            }}>
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               <strong>Model:</strong> {detail.model_name}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: 'text.secondary'
+            }}>
               <strong>Type:</strong> {getInteractionTypeLabel(detail.interaction_type)}
             </Typography>
           </Stack>

@@ -109,9 +109,13 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
 
   if (value === null || value === undefined) {
     return (
-      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-        —
-      </Typography>
+      <Typography
+        variant="body2"
+        sx={{
+          color: 'text.secondary',
+          fontStyle: 'italic'
+        }}>—
+              </Typography>
     );
   }
 
@@ -344,7 +348,9 @@ export function AlertDataContent({ alertData }: { alertData: string }) {
               />
             )}
             {alertType && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{
+                color: 'text.secondary'
+              }}>
                 {String(alertType)}
               </Typography>
             )}
@@ -372,7 +378,9 @@ export function AlertDataContent({ alertData }: { alertData: string }) {
                     }
                   >
                     <Box>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      <Typography variant="subtitle2" gutterBottom sx={{
+                        color: 'text.secondary'
+                      }}>
                         {formatKeyName(key)}
                       </Typography>
                       <FieldValue fieldKey={key} value={value} />
@@ -393,7 +401,9 @@ export function AlertDataContent({ alertData }: { alertData: string }) {
                 }
               >
                 <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  <Typography variant="subtitle2" gutterBottom sx={{
+                    color: 'text.secondary'
+                  }}>
                     {formatKeyName(key)}
                   </Typography>
                   <FieldValue fieldKey={key} value={value} />
@@ -472,7 +482,9 @@ export default function OriginalAlertCard({ alertData, sessionStatus }: Original
             Alert Data
           </Typography>
           {parsed && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: 'text.secondary'
+            }}>
               {fieldCount} {fieldCount === 1 ? 'field' : 'fields'}
             </Typography>
           )}
@@ -497,9 +509,13 @@ export default function OriginalAlertCard({ alertData, sessionStatus }: Original
       {!isExpanded && summaryText && (
         <Typography
           variant="body2"
-          color="text.secondary"
-          sx={{ mt: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-        >
+          sx={{
+            color: 'text.secondary',
+            mt: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
           {summaryText}
         </Typography>
       )}

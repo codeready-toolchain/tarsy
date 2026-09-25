@@ -259,7 +259,9 @@ export function FilterPanel({
         {isActive && (
           <Box sx={{ mt: 2 }}>
             <Divider sx={{ mb: 1 }} />
-            <Typography variant="body2" color="text.secondary" gutterBottom>
+            <Typography variant="body2" gutterBottom sx={{
+              color: 'text.secondary'
+            }}>
               Active Filters ({activeCount}):
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

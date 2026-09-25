@@ -1,7 +1,7 @@
 import { createTheme } from '@mui/material/styles';
 
 /**
- * Single static MUI v7 theme with CSS variables and dual color schemes.
+ * Single static MUI theme with CSS variables and dual color schemes.
  *
  * Mode switches update CSS custom properties on <html data-theme="dark|light">,
  * not the React tree. Use `useColorScheme()` to read/set mode, and

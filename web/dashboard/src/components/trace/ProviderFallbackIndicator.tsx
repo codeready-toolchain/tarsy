@@ -37,12 +37,16 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
     return (
       <>
         {overview.llm_backend && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             <strong>Backend:</strong> {overview.llm_backend}
           </Typography>
         )}
         {modelLabel && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             <strong>{modelFieldLabel}:</strong> {modelLabel}
           </Typography>
         )}
@@ -61,12 +65,16 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
     <Box sx={{ width: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
         {overview.llm_backend && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             <strong>Backend:</strong> {overview.llm_backend}
           </Typography>
         )}
         {modelLabel && (
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: 'text.secondary'
+          }}>
             <strong>{modelFieldLabel}:</strong> {modelLabel}
           </Typography>
         )}
@@ -79,7 +87,9 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
           sx={{ fontWeight: 600, fontSize: '0.7rem', height: 22, cursor: hasDetails ? 'pointer' : 'default' }}
           onClick={hasDetails ? () => setExpanded((prev) => !prev) : undefined}
         />
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           (was: {originalLabel}
           {overview.original_llm_backend && overview.original_llm_backend !== overview.llm_backend
             ? ` / ${overview.original_llm_backend}`
@@ -90,7 +100,12 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
           <Chip label={errorCode} size="small" variant="outlined" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />
         )}
         {attempt != null && (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: '0.7rem'
+            }}>
             attempt {attempt}
           </Typography>
         )}
@@ -111,7 +126,13 @@ export default function ProviderFallbackIndicator({ overview }: ProviderFallback
             borderRadius: 1,
           })}
         >
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75, fontStyle: 'italic' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              mb: 0.75,
+              fontStyle: 'italic'
+            }}>
             The original {originalKind} ({originalLabel}) returned an error, so execution was switched to {modelLabel}.
           </Typography>
           {formattedReason && (

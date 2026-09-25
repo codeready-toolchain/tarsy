@@ -27,7 +27,9 @@ export default function LLMInteractionPreview({ interaction }: LLMInteractionPre
           color={getInteractionTypeColor(interaction.interaction_type)}
           sx={{ fontSize: '0.7rem', height: 22, fontWeight: 600 }}
         />
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           {interaction.model_name}
         </Typography>
       </Box>
@@ -58,9 +60,11 @@ export default function LLMInteractionPreview({ interaction }: LLMInteractionPre
       {interaction.error_message && (
         <Typography
           variant="body2"
-          color="error.main"
-          sx={{ fontWeight: 500, fontSize: '0.8rem' }}
-        >
+          sx={{
+            color: 'error.main',
+            fontWeight: 500,
+            fontSize: '0.8rem'
+          }}>
           Error: {interaction.error_message}
         </Typography>
       )}

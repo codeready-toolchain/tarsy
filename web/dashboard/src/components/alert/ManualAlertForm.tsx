@@ -341,7 +341,13 @@ export function ManualAlertForm() {
         >
           Submit Alert for Analysis
         </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1rem', lineHeight: 1.6 }}>
+        <Typography
+          variant="body1"
+          sx={{
+            color: 'text.secondary',
+            fontSize: '1rem',
+            lineHeight: 1.6
+          }}>
           Enter alert details as plain text or use structured key-value pairs.
         </Typography>
       </Box>
@@ -370,7 +376,13 @@ export function ManualAlertForm() {
                 {sourceSessionId.slice(-12)}
               </Box>
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                display: 'block',
+                mt: 0.5
+              }}>
               You can modify any fields before submitting.
             </Typography>
           </MuiAlert>
@@ -656,7 +668,9 @@ export function ManualAlertForm() {
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5, fontSize: '1.25rem' }}>
                     Alert Data
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     Enter structured key-value pairs for your alert data
                   </Typography>
                 </Box>
@@ -784,7 +798,9 @@ export function ManualAlertForm() {
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5, fontSize: '1.25rem' }}>
                   Alert Data
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{
+                  color: 'text.secondary'
+                }}>
                   Paste or type your alert details. Text will be sent as-is to the agent.
                 </Typography>
               </Box>
@@ -853,7 +869,9 @@ Message: The 'tarsy' Argo CD application is stuck in 'Progressing' status`}
                       px: 1,
                     }}
                   >
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" sx={{
+                      color: 'text.secondary'
+                    }}>
                       {freeText.length} characters, {freeText.split('\n').length} lines
                     </Typography>
                   </Box>

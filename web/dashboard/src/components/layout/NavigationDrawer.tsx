@@ -68,6 +68,7 @@ function NavList({
         const button = (
           <ListItemButton
             component={RouterLink}
+            nativeButton={false}
             to={item.to}
             selected={selected}
             onClick={onItemClick}

@@ -140,7 +140,12 @@ function ResponseItem({
               <Box sx={{ mt: 1, pb: 3 }}>
                 <ContentCard linkUrl={linkUrl}>
                   {totalActions === 0 ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: 'text.secondary',
+                        fontStyle: 'italic'
+                      }}>
                       No new learnings extracted from this investigation.
                     </Typography>
                   ) : (
@@ -162,7 +167,9 @@ function ResponseItem({
                           border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
                         })}>
                           <Chip label={reinforced.length} size="small" color="success" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.75rem', height: 22 }} />
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" sx={{
+                            color: 'text.secondary'
+                          }}>
                             existing {reinforced.length === 1 ? 'insight' : 'insights'} reinforced
                           </Typography>
                         </Box>

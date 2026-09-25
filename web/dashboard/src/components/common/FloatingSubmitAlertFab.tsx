@@ -11,6 +11,7 @@ export function FloatingSubmitAlertFab() {
     <Tooltip title="Submit Manual Alert" placement="left">
       <Fab
         component={RouterLink}
+        nativeButton={false}
         to={ROUTES.SUBMIT_ALERT}
         color="primary"
         aria-label="submit alert"

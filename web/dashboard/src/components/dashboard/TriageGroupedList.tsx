@@ -22,7 +22,7 @@ import {
   Search as SearchIcon,
   RateReview,
   AssignmentTurnedIn,
-  CheckCircleOutline,
+  CheckCircleOutlined,
   Close,
   CallSplit,
   Hub,
@@ -93,7 +93,7 @@ const groups_config: GroupConfig[] = [
     key: 'reviewed',
     label: 'Reviewed',
     dataKey: 'reviewed',
-    icon: <CheckCircleOutline sx={{ fontSize: 18 }} />,
+    icon: <CheckCircleOutlined sx={{ fontSize: 18 }} />,
     defaultOpen: false,
     color: 'success',
   },
@@ -220,7 +220,12 @@ export function TriageGroupedList({
                 <Box sx={{ color: `${group.color}.main`, display: 'flex', alignItems: 'center' }}>
                   {group.icon}
                 </Box>
-                <Typography variant="subtitle2" fontWeight={600} color="text.secondary">
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    fontWeight: 600,
+                    color: 'text.secondary'
+                  }}>
                   {group.label}
                 </Typography>
                 <Chip
@@ -235,7 +240,12 @@ export function TriageGroupedList({
                     color: 'text.disabled',
                   }}
                 />
-                <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.disabled',
+                    ml: 0.5
+                  }}>
                   No active investigations
                 </Typography>
               </Box>
@@ -275,7 +285,12 @@ export function TriageGroupedList({
               <Box sx={{ color: `${group.color}.main`, display: 'flex', alignItems: 'center' }}>
                 {group.icon}
               </Box>
-              <Typography variant="subtitle2" fontWeight={600} sx={{ flexGrow: 1 }}>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: 600,
+                  flexGrow: 1
+                }}>
                 {group.label}
               </Typography>
               <Chip
@@ -303,7 +318,9 @@ export function TriageGroupedList({
             <Collapse in={isOpen}>
               {isEmpty ? (
                 <Box sx={{ px: 2, py: 2.5, textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{
+                    color: 'text.secondary'
+                  }}>
                     No sessions
                   </Typography>
                 </Box>
@@ -323,7 +340,12 @@ export function TriageGroupedList({
                         borderColor: 'divider',
                       }}
                     >
-                      <Typography variant="body2" fontWeight={600} sx={{ mr: 1 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 600,
+                          mr: 1
+                        }}>
                         {selectedCount} selected{atSelectionLimit ? ` (max ${MAX_BULK_SELECTION})` : ''}
                       </Typography>
 

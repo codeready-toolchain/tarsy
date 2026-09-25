@@ -77,7 +77,14 @@ function TypingIndicator({
         }} />
       )}
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
-        <Typography variant="body2" color="primary.main" sx={{ fontSize: config.fontSize, fontWeight: 500, opacity: 0.8 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: 'primary.main',
+            fontSize: config.fontSize,
+            fontWeight: 500,
+            opacity: 0.8
+          }}>
           {message}
         </Typography>
         {dots}

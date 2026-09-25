@@ -1821,7 +1821,13 @@ export function SessionDetailPage() {
                 <Typography variant="body2">
                   This session is missing stage execution data. All sessions should be processed as chains.
                 </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    mt: 1,
+                    display: 'block'
+                  }}>
                   Session: {session.id} &bull; Type: {session.alert_type || 'Unknown'}
                 </Typography>
               </Alert>

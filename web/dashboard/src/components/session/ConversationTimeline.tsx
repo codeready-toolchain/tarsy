@@ -470,7 +470,9 @@ export default function ConversationTimeline({
     }
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: 'text.secondary'
+        }}>
           No reasoning steps available for this session
         </Typography>
       </Box>

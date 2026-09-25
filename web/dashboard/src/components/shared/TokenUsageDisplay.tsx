@@ -63,31 +63,64 @@ function CacheTokenSegments({
       }}
     >
       {separated && (
-        <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs, mx: 0.25 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.disabled',
+            fontSize: labelFs,
+            mx: 0.25
+          }}>
           |
         </Typography>
       )}
       {cacheReadTokens != null && (
         <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.25 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: fs, fontWeight: 600 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: fs,
+              fontWeight: 600
+            }}>
             {formatTokensCompact(cacheReadTokens)}
           </Typography>
-          <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.disabled',
+              fontSize: labelFs
+            }}>
             cache read
           </Typography>
         </Box>
       )}
       {cacheReadTokens != null && cacheCreationTokens != null && (
-        <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.disabled',
+            fontSize: labelFs
+          }}>
           ·
         </Typography>
       )}
       {cacheCreationTokens != null && (
         <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.25 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: fs, fontWeight: 600 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: fs,
+              fontWeight: 600
+            }}>
             {formatTokensCompact(cacheCreationTokens)}
           </Typography>
-          <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.disabled',
+              fontSize: labelFs
+            }}>
             cache create
           </Typography>
         </Box>
@@ -168,14 +201,13 @@ function TokenUsageDisplay({
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexWrap: 'wrap' }}>
         {label && (
-          <Typography 
-            variant="caption" 
-            color="text.secondary"
-            sx={{ 
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
               fontSize: size === 'small' ? '0.7rem' : '0.75rem',
-              fontWeight: 500 
-            }}
-          >
+              fontWeight: 500
+            }}>
             {label}:
           </Typography>
         )}
@@ -191,11 +223,12 @@ function TokenUsageDisplay({
             >
               {formatTokensCompact(inputTokens)}
             </Typography>
-            <Typography 
-              variant="caption" 
-              color="text.disabled"
-              sx={{ fontSize: size === 'small' ? '0.65rem' : '0.7rem' }}
-            >
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: size === 'small' ? '0.65rem' : '0.7rem'
+              }}>
               •
             </Typography>
             <Typography 
@@ -208,11 +241,12 @@ function TokenUsageDisplay({
             >
               {formatTokensCompact(outputTokens)}
             </Typography>
-            <Typography 
-              variant="caption" 
-              color="text.disabled"
-              sx={{ fontSize: size === 'small' ? '0.65rem' : '0.7rem' }}
-            >
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: size === 'small' ? '0.65rem' : '0.7rem'
+              }}>
               =
             </Typography>
             <Typography 
@@ -239,7 +273,13 @@ function TokenUsageDisplay({
             {formatTokensCompact(totalTokens)}
           </Typography>
         ) : !hasCache ? (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: size === 'small' ? '0.7rem' : '0.75rem', fontWeight: 500 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: size === 'small' ? '0.7rem' : '0.75rem',
+              fontWeight: 500
+            }}>
             —
           </Typography>
         ) : null}
@@ -259,7 +299,12 @@ function TokenUsageDisplay({
             <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 700, color: 'warning.main' }}>
               {formatTokensCompact(totalTokens)}
             </Typography>
-            <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>total</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: labelFs
+              }}>total</Typography>
           </>
         )}
         {inputTokens != null && (
@@ -267,7 +312,12 @@ function TokenUsageDisplay({
             <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 600, color: 'info.main' }}>
               {formatTokensCompact(inputTokens)}
             </Typography>
-            <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>in</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: labelFs
+              }}>in</Typography>
           </>
         )}
         {outputTokens != null && (
@@ -275,7 +325,12 @@ function TokenUsageDisplay({
             <Typography variant="caption" sx={{ fontSize: fs, fontWeight: 600, color: 'success.main' }}>
               {formatTokensCompact(outputTokens)}
             </Typography>
-            <Typography variant="caption" color="text.disabled" sx={{ fontSize: labelFs }}>out</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: labelFs
+              }}>out</Typography>
           </>
         )}
         {cacheSegments}
@@ -311,11 +366,12 @@ function TokenUsageDisplay({
             >
               {formatTokensCompact(inputTokens)}
             </Typography>
-            <Typography 
-              variant="caption" 
-              color="text.disabled"
-              sx={{ fontSize: size === 'small' ? '0.65rem' : '0.7rem' }}
-            >
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: size === 'small' ? '0.65rem' : '0.7rem'
+              }}>
               •
             </Typography>
             <Typography 
@@ -328,11 +384,12 @@ function TokenUsageDisplay({
             >
               {formatTokensCompact(outputTokens)}
             </Typography>
-            <Typography 
-              variant="caption" 
-              color="text.disabled"
-              sx={{ fontSize: size === 'small' ? '0.65rem' : '0.7rem' }}
-            >
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.disabled',
+                fontSize: size === 'small' ? '0.65rem' : '0.7rem'
+              }}>
               =
             </Typography>
             <Typography 
@@ -360,14 +417,13 @@ function TokenUsageDisplay({
             {formatTokensCompact(totalTokens)}
           </Typography>
         ) : !hasCache ? (
-          <Typography 
-            variant="caption" 
-            color="text.secondary" 
-            sx={{ 
-              fontSize: size === 'small' ? '0.7rem' : '0.75rem', 
-              fontWeight: 500 
-            }}
-          >
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: size === 'small' ? '0.7rem' : '0.75rem',
+              fontWeight: 500
+            }}>
             —
           </Typography>
         ) : null}
@@ -392,23 +448,23 @@ function TokenUsageDisplay({
           {label}
         </Typography>
       )}
-      
-      <Stack 
-        direction={size === 'small' ? 'column' : 'row'} 
-        spacing={size === 'small' ? 0.5 : 2} 
-        flexWrap="wrap"
-        alignItems={size === 'small' ? 'flex-start' : 'center'}
-      >
+
+      <Stack
+        direction={size === 'small' ? 'column' : 'row'}
+        spacing={size === 'small' ? 0.5 : 2}
+        sx={{
+          flexWrap: 'wrap',
+          alignItems: size === 'small' ? 'flex-start' : 'center'
+        }}>
         {(totalTokens != null || inputTokens != null || outputTokens != null) && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography 
-              variant="body2" 
-              color="text.secondary"
-              sx={{ 
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'text.secondary',
                 fontSize: size === 'small' ? '0.75rem' : undefined,
-                fontWeight: 500 
-              }}
-            >
+                fontWeight: 500
+              }}>
               <strong>Total:</strong>
             </Typography>
             <Typography 
@@ -428,21 +484,21 @@ function TokenUsageDisplay({
           <>
             {inputTokens !== null && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
-                  sx={{ fontSize: size === 'small' ? '0.75rem' : undefined }}
-                >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.secondary',
+                    fontSize: size === 'small' ? '0.75rem' : undefined
+                  }}>
                   <strong>Input:</strong>
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  color="info.main"
-                  sx={{ 
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'info.main',
                     fontSize: size === 'small' ? '0.8rem' : undefined,
-                    fontWeight: 500 
-                  }}
-                >
+                    fontWeight: 500
+                  }}>
                   {formatTokens(inputTokens)}
                 </Typography>
               </Box>
@@ -450,21 +506,21 @@ function TokenUsageDisplay({
 
             {outputTokens !== null && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
-                  sx={{ fontSize: size === 'small' ? '0.75rem' : undefined }}
-                >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.secondary',
+                    fontSize: size === 'small' ? '0.75rem' : undefined
+                  }}>
                   <strong>Output:</strong>
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  color="success.main"
-                  sx={{ 
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'success.main',
                     fontSize: size === 'small' ? '0.8rem' : undefined,
-                    fontWeight: 500 
-                  }}
-                >
+                    fontWeight: 500
+                  }}>
                   {formatTokens(outputTokens)}
                 </Typography>
               </Box>
@@ -476,9 +532,10 @@ function TokenUsageDisplay({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography
               variant="body2"
-              color="text.secondary"
-              sx={{ fontSize: size === 'small' ? '0.75rem' : undefined }}
-            >
+              sx={{
+                color: 'text.secondary',
+                fontSize: size === 'small' ? '0.75rem' : undefined
+              }}>
               <strong>Cache read:</strong>
             </Typography>
             <Typography
@@ -497,9 +554,10 @@ function TokenUsageDisplay({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography
               variant="body2"
-              color="text.secondary"
-              sx={{ fontSize: size === 'small' ? '0.75rem' : undefined }}
-            >
+              sx={{
+                color: 'text.secondary',
+                fontSize: size === 'small' ? '0.75rem' : undefined
+              }}>
               <strong>Cache create:</strong>
             </Typography>
             <Typography

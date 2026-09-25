@@ -149,7 +149,13 @@ function MemoryResultCards({ result, searchTerm }: { result: string; searchTerm?
   return (
     <Box>
       {header && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            display: 'block',
+            mb: 1
+          }}>
           {header}
         </Typography>
       )}
@@ -228,11 +234,26 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         icon={<HistoryOutlined sx={(theme) => ({ fontSize: 18, color: theme.palette.success.main })} />}
         headerExtras={
           <>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.8rem',
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
               {query || ''}
             </Typography>
             {durationMs != null && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', flexShrink: 0 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontSize: '0.75rem',
+                  flexShrink: 0
+                }}>
                 {formatDurationMs(durationMs)}
               </Typography>
             )}
@@ -275,7 +296,12 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
               </ReactMarkdown>
             </Box>
           ) : (
-            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No result</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontStyle: 'italic'
+              }}>No result</Typography>
           )}
         </Box>
       </InsightsCard>
@@ -292,11 +318,26 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         title={searchTerm ? highlightSearchTermNodes('Recalled Insights', searchTerm) : 'Recalled Insights'}
         headerExtras={
           <>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.8rem',
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
               {query || ''}
             </Typography>
             {durationMs != null && (
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', flexShrink: 0 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontSize: '0.75rem',
+                  flexShrink: 0
+                }}>
                 {formatDurationMs(durationMs)}
               </Typography>
             )}
@@ -305,7 +346,13 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         expandAll={expandAll}
         forceExpanded={forceExpanded}
       >
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            display: 'block',
+            mb: 1
+          }}>
           Recalled during investigation
         </Typography>
         {query && (
@@ -330,7 +377,12 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
           {toolResult && typeof toolResult === 'string' ? (
             <MemoryResultCards result={stripHistoricalContext(toolResult)} searchTerm={searchTerm} />
           ) : (
-            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No result</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontStyle: 'italic'
+              }}>No result</Typography>
           )}
         </Box>
       </InsightsCard>
@@ -388,11 +440,23 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.9rem', color: 'text.secondary' }}>
           {searchTerm ? highlightSearchTermNodes(displayName, searchTerm) : displayName}
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.8rem', flex: 1, lineHeight: 1.4 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            fontSize: '0.8rem',
+            flex: 1,
+            lineHeight: 1.4
+          }}>
           {getArgumentsPreview()}
         </Typography>
         {durationMs != null && (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+              fontSize: '0.75rem'
+            }}>
             {formatDurationMs(durationMs)}
           </Typography>
         )}
@@ -404,11 +468,23 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
       <Collapse in={isExpanded}>
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
           {isGoogleNative ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                display: 'block',
+                mb: 1
+              }}>
               Gemini native tool{serverName ? ` (${serverName})` : ''}
             </Typography>
           ) : serverName ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                display: 'block',
+                mb: 1
+              }}>
               Server: {serverName}
             </Typography>
           ) : null}
@@ -429,7 +505,12 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
             {toolArguments && Object.keys(toolArguments).length > 0 ? (
               isSimpleArguments(toolArguments) ? <SimpleArgumentsList args={toolArguments} /> : <JsonDisplay data={toolArguments} maxHeight={250} />
             ) : (
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No arguments</Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontStyle: 'italic'
+                }}>No arguments</Typography>
             )}
           </Box>
 
@@ -457,7 +538,12 @@ function ToolCallItem({ item, expandAll = false, searchTerm, forceExpanded = fal
                 <JsonDisplay data={toolResult} maxHeight={300} />
               )
             ) : (
-              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>No result</Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontStyle: 'italic'
+                }}>No result</Typography>
             )}
           </Box>
         </Box>

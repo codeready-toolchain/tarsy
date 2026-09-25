@@ -96,7 +96,12 @@ export const SessionSearchBar = memo(function SessionSearchBar({
         sx={{ flex: 1 }}
       />
       {hasActiveSearch && (
-        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+            whiteSpace: 'nowrap'
+          }}>
           {matchCount === 0
             ? 'No matches'
             : `${currentMatchIndex + 1} of ${matchCount}`}
