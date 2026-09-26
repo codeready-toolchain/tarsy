@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { UsageSummaryResponse } from '../../types/api';
+import type { UsageSeriesResponse, UsageSummaryResponse } from '../../types/api';
 
 vi.mock('../../services/api.ts', () => ({
   getUsageSummary: vi.fn(),
+  getUsageSeries: vi.fn(),
   getFilterOptions: vi.fn(),
   handleAPIError: (err: unknown) =>
     err instanceof Error ? err.message : 'An unexpected error occurred',
@@ -50,11 +51,12 @@ vi.mock('../../services/websocket.ts', () => ({
   },
 }));
 
-import { getFilterOptions, getUsageSummary } from '../../services/api';
+import { getFilterOptions, getUsageSeries, getUsageSummary } from '../../services/api';
 import { PageHeaderProvider } from '../../contexts/PageHeaderContext';
 import { UsagePage } from '../../pages/UsagePage';
 
 const mockGetUsageSummary = vi.mocked(getUsageSummary);
+const mockGetUsageSeries = vi.mocked(getUsageSeries);
 const mockGetFilterOptions = vi.mocked(getFilterOptions);
 
 function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummaryResponse {
@@ -125,6 +127,33 @@ function makeSummary(overrides: Partial<UsageSummaryResponse> = {}): UsageSummar
   };
 }
 
+function makeSeries(overrides: Partial<UsageSeriesResponse> = {}): UsageSeriesResponse {
+  return {
+    cost_estimation_enabled: true,
+    window: {
+      start: '2026-06-23T00:00:00.000Z',
+      end: '2026-07-23T00:00:00.000Z',
+    },
+    timezone: 'UTC',
+    bucket: 'day',
+    cost_completeness: 'complete',
+    unpriced_interaction_count: 0,
+    unpriced_token_count: 0,
+    models: ['gemini-flash'],
+    points: [
+      {
+        start: '2026-07-01T00:00:00.000Z',
+        end: '2026-07-02T00:00:00.000Z',
+        session_count: 2,
+        estimated_cost_usd: 1.23,
+        average_cost_usd: 0.615,
+        by_model: { 'gemini-flash': 1.23 },
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function renderUsagePage() {
   return render(
     <MemoryRouter>
@@ -138,6 +167,7 @@ function renderUsagePage() {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  mockGetUsageSeries.mockResolvedValue(makeSeries());
   mockGetFilterOptions.mockResolvedValue({
     alert_types: ['kubernetes'],
     chain_ids: ['default'],
@@ -172,7 +202,8 @@ describe('UsagePage', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getAllByText('Cache read').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Cache create').length).toBeGreaterThan(0);
-    expect(screen.getByText('Avg. cost / session')).toBeInTheDocument();
+    expect(screen.getAllByText('Avg. cost / session').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Est. cost by model')).toBeInTheDocument();
     expect(screen.getAllByText('Avg. / session').length).toBe(3);
     expect(screen.getAllByText('$0.615').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$1.23').length).toBeGreaterThan(0);
@@ -318,6 +349,7 @@ describe('UsagePage', () => {
       expect(mockGetUsageSummary).toHaveBeenCalledTimes(2);
     });
     expect(mockGetUsageSummary.mock.calls[1][0].rank_by).toBe('tokens');
+    expect(mockGetUsageSeries).toHaveBeenCalledTimes(1);
   });
 
   it('refetches and shows a brief notice when a session completes via WebSocket', async () => {
@@ -343,6 +375,7 @@ describe('UsagePage', () => {
       { timeout: 4000 },
     );
     expect(await screen.findByText('Updated — new session data available')).toBeInTheDocument();
+    expect(mockGetUsageSeries).toHaveBeenCalledTimes(2);
   });
 
   it('ignores non-terminal session status events (no refetch, no notice)', async () => {
@@ -528,5 +561,115 @@ describe('UsagePage', () => {
     expect(modelSection).toBeInstanceOf(HTMLElement);
     expect(within(modelSection as HTMLElement).getByText('Cache read')).toBeInTheDocument();
     expect(within(modelSection as HTMLElement).getByText('Cache create')).toBeInTheDocument();
+  });
+
+  it('ignores series results from a request that is no longer the latest', async () => {
+    const user = userEvent.setup();
+    let rejectStale: (err: Error) => void = () => {};
+    const stale = new Promise<UsageSeriesResponse>((_, reject) => {
+      rejectStale = reject;
+    });
+    let resolveFresh: (value: UsageSeriesResponse) => void = () => {};
+    const fresh = new Promise<UsageSeriesResponse>((resolve) => {
+      resolveFresh = resolve;
+    });
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+    mockGetUsageSeries.mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+    await waitFor(() => {
+      expect(mockGetUsageSeries).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole('combobox', { name: 'Alert type' }));
+    await user.click(await screen.findByRole('option', { name: 'kubernetes' }));
+    await waitFor(() => {
+      expect(mockGetUsageSeries).toHaveBeenCalledTimes(2);
+    });
+    expect(mockGetUsageSeries.mock.calls[1][0].alert_type).toBe('kubernetes');
+    await waitFor(() => {
+      expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+    });
+
+    await act(async () => {
+      rejectStale(new Error('stale series failure'));
+    });
+    expect(screen.queryByText('stale series failure')).not.toBeInTheDocument();
+    expect(screen.queryByText('Est. cost by model')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+
+    const freshPoint = makeSeries().points![0];
+    await act(async () => {
+      resolveFresh(
+        makeSeries({
+          models: ['fresh-model'],
+          points: [{ ...freshPoint, by_model: { 'fresh-model': 1.23 } }],
+        }),
+      );
+    });
+    expect(await screen.findByText('fresh-model')).toBeInTheDocument();
+    expect(screen.queryByText('stale series failure')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('does not request series again after estimation is reported off', async () => {
+    const user = userEvent.setup();
+    mockGetUsageSummary.mockResolvedValue(
+      makeSummary({
+        cost_estimation_enabled: false,
+        rank_by: 'tokens',
+        totals: {
+          session_count: 1,
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+          total_tokens: 150,
+        },
+      }),
+    );
+    mockGetUsageSeries.mockResolvedValue({ cost_estimation_enabled: false });
+
+    const { unmount } = renderUsagePage();
+    await screen.findByText('Totals');
+    await waitFor(() => {
+      expect(mockGetUsageSeries).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText('Est. cost by model')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'Alert type' }));
+    await user.click(await screen.findByRole('option', { name: 'kubernetes' }));
+
+    await waitFor(() => {
+      expect(mockGetUsageSummary).toHaveBeenCalledTimes(2);
+    });
+    expect(mockGetUsageSeries).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('shows the series partial caption and leaves totals up when series fails', async () => {
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+    mockGetUsageSeries.mockResolvedValue(
+      makeSeries({
+        cost_completeness: 'partial',
+        unpriced_interaction_count: 838,
+        unpriced_token_count: 1_200_000,
+      }),
+    );
+
+    const { unmount } = renderUsagePage();
+    const chart = (await screen.findByText('Est. cost by model')).closest('.MuiPaper-root');
+    expect(chart).toBeInstanceOf(HTMLElement);
+    expect(within(chart as HTMLElement).getByText('1.2M unpriced')).toBeInTheDocument();
+    unmount();
+
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+    mockGetUsageSeries.mockRejectedValue(new Error('series down'));
+    renderUsagePage();
+    expect(await screen.findByText('Totals')).toBeInTheDocument();
+    expect(await screen.findByText('series down')).toBeInTheDocument();
+    expect(screen.getByText('By model')).toBeInTheDocument();
+    expect(screen.queryByText('Est. cost by model')).not.toBeInTheDocument();
   });
 });

@@ -280,6 +280,7 @@ func (s *Server) setupRoutes() {
 
 	// Usage aggregation.
 	v1.GET("/usage/summary", s.usageSummaryHandler)
+	v1.GET("/usage/series", s.usageSeriesHandler)
 
 	// System endpoints.
 	v1.GET("/system/warnings", s.systemWarningsHandler)

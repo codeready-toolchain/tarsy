@@ -28,6 +28,8 @@ import type {
   ReviewActivityResponse,
   UsageSummaryParams,
   UsageSummaryResponse,
+  UsageSeriesParams,
+  UsageSeriesResponse,
 } from '../types/api.ts';
 import type {
   SessionDetailResponse,
@@ -145,6 +147,13 @@ export async function getSessions(params: DashboardListParams): Promise<Dashboar
 export async function getUsageSummary(params: UsageSummaryParams): Promise<UsageSummaryResponse> {
   const response = await retryOnTemporaryError(() =>
     client.get<UsageSummaryResponse>('/api/v1/usage/summary', { params }),
+  );
+  return response.data;
+}
+
+export async function getUsageSeries(params: UsageSeriesParams): Promise<UsageSeriesResponse> {
+  const response = await retryOnTemporaryError(() =>
+    client.get<UsageSeriesResponse>('/api/v1/usage/series', { params }),
   );
   return response.data;
 }

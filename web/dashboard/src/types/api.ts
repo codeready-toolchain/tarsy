@@ -111,6 +111,50 @@ export interface UsageSummaryResponse {
   top_sessions: UsageTopSession[];
 }
 
+/** Query parameters for GET /api/v1/usage/series. */
+export interface UsageSeriesParams {
+  start_date: string;
+  end_date: string;
+  alert_type?: string;
+  chain_id?: string;
+  /** IANA name. The server falls back to UTC when it is missing or unknown. */
+  timezone?: string;
+}
+
+/** One collapsed model inside a day's Other band. */
+export interface UsageSeriesOtherModel {
+  model_name: string;
+  estimated_cost_usd: number;
+}
+
+/** One local calendar day in a usage series. */
+export interface UsageSeriesPoint {
+  start: string;
+  end: string;
+  session_count: number;
+  estimated_cost_usd: number;
+  average_cost_usd?: number | null;
+  by_model?: Record<string, number>;
+  other_models?: UsageSeriesOtherModel[];
+}
+
+/**
+ * Response from GET /api/v1/usage/series.
+ * When estimation is disabled, only `cost_estimation_enabled` is set.
+ */
+export interface UsageSeriesResponse {
+  cost_estimation_enabled: boolean;
+  window?: UsageWindow;
+  timezone?: string;
+  bucket?: 'day';
+  cost_completeness?: CostCompleteness;
+  unpriced_interaction_count?: number;
+  unpriced_token_count?: number;
+  /** Stack order: up to six names, largest window cost first. Does not include Other. */
+  models?: string[];
+  points?: UsageSeriesPoint[];
+}
+
 /** Query parameters for the dashboard session list. */
 export interface DashboardListParams {
   page?: number;

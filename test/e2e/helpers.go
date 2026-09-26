@@ -213,6 +213,16 @@ func (app *TestApp) GetUsageSummary(t *testing.T, queryParams string) map[string
 	return app.getJSON(t, path, http.StatusOK)
 }
 
+// GetUsageSeries calls GET /api/v1/usage/series with the given query string.
+func (app *TestApp) GetUsageSeries(t *testing.T, queryParams string) map[string]interface{} {
+	t.Helper()
+	path := "/api/v1/usage/series"
+	if queryParams != "" {
+		path += "?" + queryParams
+	}
+	return app.getJSON(t, path, http.StatusOK)
+}
+
 // GetSystemConfigSkill calls GET /api/v1/system/config/skills/:name.
 func (app *TestApp) GetSystemConfigSkill(t *testing.T, name string, expectedStatus int) map[string]interface{} {
 	t.Helper()

@@ -315,6 +315,19 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		// rank_by=tokens: B (more tokens) before A
 		assert.Equal(t, ids[1], topTok[0].(map[string]interface{})["session_id"])
 		assert.Equal(t, ids[0], topTok[1].(map[string]interface{})["session_id"])
+
+		q.Del("rank_by")
+		q.Set("timezone", "UTC")
+		series := app.GetUsageSeries(t, q.Encode())
+		assert.Equal(t, true, series["cost_estimation_enabled"])
+		points, ok := series["points"].([]interface{})
+		require.True(t, ok)
+		var seriesCost float64
+		for _, raw := range points {
+			point := raw.(map[string]interface{})
+			seriesCost += toFloat(point["estimated_cost_usd"])
+		}
+		assert.InDelta(t, totalCost, seriesCost, 1e-9)
 	})
 
 	t.Run("SystemConfigCostEstimation", func(t *testing.T) {
@@ -410,6 +423,18 @@ func TestUsageCost_EstimationDisabled(t *testing.T) {
 	assert.False(t, hasUnpricedTokens, "unpriced_token_count must be omitted when estimation is disabled")
 	_, hasUnpricedInteractions := totals["unpriced_interaction_count"]
 	assert.False(t, hasUnpricedInteractions, "unpriced_interaction_count must be omitted when estimation is disabled")
+
+	series := app.GetUsageSeries(t, fmt.Sprintf(
+		"start_date=%s&end_date=%s",
+		url.QueryEscape(start), url.QueryEscape(end),
+	))
+	assert.Equal(t, false, series["cost_estimation_enabled"])
+	_, hasPoints := series["points"]
+	assert.False(t, hasPoints, "series points must be omitted when estimation is disabled")
+	_, hasModels := series["models"]
+	assert.False(t, hasModels)
+	_, hasTimezone := series["timezone"]
+	assert.False(t, hasTimezone)
 
 	// rank_by=cost is rejected when estimation is disabled.
 	app.getJSON(t, fmt.Sprintf(
