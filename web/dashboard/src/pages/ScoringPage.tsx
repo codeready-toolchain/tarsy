@@ -76,9 +76,12 @@ function getScoreColorKey(score: number): 'success' | 'warning' | 'error' {
   return 'error';
 }
 
-/** Replace a finished score with the in-progress view shown after a re-score starts. */
-function markScoreInProgress(score: SessionScoreResponse): SessionScoreResponse {
-  if (score.status === SCORING_STATUS.COMPLETED) return score;
+/** In-progress view after scoring starts. A completed score is left unchanged
+ * unless force is set, so a late in_progress event cannot clear a finished run.
+ * A user-triggered rescore passes force and clears the previous score.
+ */
+function markScoreInProgress(score: SessionScoreResponse, force = false): SessionScoreResponse {
+  if (!force && score.status === SCORING_STATUS.COMPLETED) return score;
   return {
     ...score,
     status: SCORING_STATUS.IN_PROGRESS,
@@ -164,6 +167,9 @@ export function ScoringPage() {
       if (eventType === EVENT_SESSION_SCORE_UPDATED) {
         const payload = data as unknown as SessionScoreUpdatedPayload;
         if (payload.scoring_status === SCORING_STATUS.IN_PROGRESS) {
+          // Drop any getScore started before this event so its response
+          // cannot restore the previous run.
+          scoreFetchGen.current += 1;
           setRescoring(true);
           setScore((prev) => (prev ? markScoreInProgress(prev) : prev));
           return;
@@ -228,7 +234,7 @@ export function ScoringPage() {
     try {
       await triggerScoring(id);
       setShowRescoreDialog(false);
-      setScore((prev) => (prev ? markScoreInProgress(prev) : prev));
+      setScore((prev) => (prev ? markScoreInProgress(prev, true) : prev));
       await loadScore();
     } catch (err) {
       setRescoreError(handleAPIError(err));

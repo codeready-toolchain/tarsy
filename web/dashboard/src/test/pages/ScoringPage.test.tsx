@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { SessionScoreResponse } from '../../types/api';
@@ -61,6 +61,23 @@ const inProgressScore: SessionScoreResponse = {
   started_at: '2026-09-25T12:05:00.000Z',
 };
 
+const completedScore: SessionScoreResponse = {
+  ...failedScore,
+  total_score: 82,
+  score_analysis: 'Previous analysis',
+  status: 'completed',
+  error_message: null,
+};
+
+function inProgressEvent() {
+  return {
+    type: 'session.score_updated',
+    session_id: 'session-1',
+    scoring_status: 'in_progress',
+    timestamp: '2026-09-25T12:05:00.000Z',
+  };
+}
+
 function renderPage() {
   return render(
     <PageHeaderProvider>
@@ -116,14 +133,85 @@ describe('ScoringPage re-score', () => {
     renderPage();
 
     await screen.findByRole('button', { name: 'Click to re-score' });
+    sessionHandler?.(inProgressEvent());
+
+    expect(await screen.findByText('Scoring')).toBeInTheDocument();
+    expect(screen.queryByText('Scoring interrupted')).not.toBeInTheDocument();
+  });
+
+  it('clears a completed score as soon as re-score is confirmed', async () => {
+    let releaseRefresh: (score: SessionScoreResponse) => void = () => {};
+    mockGetScore
+      .mockResolvedValueOnce(completedScore)
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          releaseRefresh = resolve;
+        }),
+      );
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Eval score: 82 / 100' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm Re-score' }));
+
+    expect(await screen.findByText('Scoring')).toBeInTheDocument();
+    expect(screen.queryByText('82')).not.toBeInTheDocument();
+    expect(screen.queryByText('Previous analysis')).not.toBeInTheDocument();
+
+    releaseRefresh(inProgressScore);
+    await waitFor(() => {
+      expect(mockGetScore).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByText('Scoring')).toBeInTheDocument();
+    expect(screen.queryByText('82')).not.toBeInTheDocument();
+  });
+
+  it('keeps a completed score when a late in-progress event arrives', async () => {
+    mockGetScore.mockResolvedValue(completedScore);
+    renderPage();
+
+    expect(await screen.findAllByText('82')).toHaveLength(2);
+    await act(async () => {
+      sessionHandler?.(inProgressEvent());
+    });
+
+    expect(screen.getAllByText('82')).toHaveLength(2);
+    expect(screen.getByText('Previous analysis')).toBeInTheDocument();
+    expect(screen.queryByText('Scoring')).not.toBeInTheDocument();
+  });
+
+  it('ignores a score response that was already in flight when scoring starts', async () => {
+    let releaseStale: (score: SessionScoreResponse) => void = () => {};
+    mockGetScore
+      .mockResolvedValueOnce(failedScore)
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          releaseStale = resolve;
+        }),
+      );
+
+    renderPage();
+    await screen.findByRole('button', { name: 'Click to re-score' });
+
     sessionHandler?.({
       type: 'session.score_updated',
       session_id: 'session-1',
-      scoring_status: 'in_progress',
-      timestamp: '2026-09-25T12:05:00.000Z',
+      scoring_status: 'failed',
+      timestamp: '2026-09-25T12:04:00.000Z',
+    });
+    await waitFor(() => {
+      expect(mockGetScore).toHaveBeenCalledTimes(2);
     });
 
+    sessionHandler?.(inProgressEvent());
     expect(await screen.findByText('Scoring')).toBeInTheDocument();
+
+    await act(async () => {
+      releaseStale(failedScore);
+    });
+
+    expect(screen.getByText('Scoring')).toBeInTheDocument();
     expect(screen.queryByText('Scoring interrupted')).not.toBeInTheDocument();
   });
 });
