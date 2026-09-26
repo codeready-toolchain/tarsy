@@ -50,11 +50,11 @@ Charts render only when the summary says estimation is enabled. A parallel serie
 
 ### Charts
 
-Placed directly under the Totals cards, both charts full width. The cost chart is taller. The average chart sits under it.
+Placed directly under the Totals cards. When the chart panel is at least 860px wide, the two charts share one row, each half the width and the same height, with their plot areas aligned. The cost legend sits above its plot and does not change that height. Below 860px they stack, cost chart on top, each full width.
 
 **Cost chart.** Stacked area of cumulative estimated USD by model. The client adds each day's delta onto the previous days, treating a missing model that day as +0. A day with sessions and $0 spend keeps the stack flat; it is not a gap. The right edge of the stack matches the **Est. cost** card when the two responses see the same rows. Hovering a point shows that day's spend by model, the day total, and the cumulative total, with **Est.** in the title. Bands follow the `models` array (largest window cost first), then **Other** when that day has collapsed cost. MUI X stacks series in array order from the baseline, so the largest band sits on the bottom and Other on top; confirm that direction on the installed major. The **Other** row lists `other_models` for that day (cost descending, then `model_name`) with each model's Est. cost. When no day has collapsed cost, Other is absent from the stack and the legend.
 
-**Average chart.** One line. Each point is that day's estimated cost divided by that day's session count (every non-deleted session created that day, including sessions with no LLM rows). Days with zero sessions are gaps, so a quiet day does not read as a $0 session. The tooltip always includes the session count. A day with exactly one session uses a hollow mark, and the tooltip says the figure is that session's cost. Days with two or more sessions use a filled mark. The line is not split by model: a session that uses two models would be counted twice, and the by-model table already has **Avg. / session**.
+**Average chart.** One line. Each point is that day's estimated cost divided by that day's session count (every non-deleted session created that day, including sessions with no LLM rows). Days with zero sessions break the solid line, so a quiet day does not read as a $0 session. A dotted segment joins the previous session-day to the next and has no mark of its own. The tooltip always includes the session count. A day with exactly one session uses a hollow mark, and the tooltip says the figure is that session's cost. Days with two or more sessions use a filled mark. The line is not split by model: a session that uses two models would be counted twice, and the by-model table already has **Avg. / session**.
 
 Both charts use `formatEstimatedCostUsd`. The partial-completeness caption on the cost chart reads the series payload (`cost_completeness`, `unpriced_token_count`, `unpriced_interaction_count`) and uses the same copy as the **Est. cost** card. Per-day completeness is not shown.
 
@@ -166,7 +166,7 @@ A half-open calendar day in the applied timezone. Points cover the request windo
 
 ### Average cost per session
 
-`day estimated_cost_usd / day session_count`, with `session_count` equal to non-deleted sessions created that day, including sessions with no LLM rows. The population matches **Avg. cost / session** on the Totals card (`usageAverageCostUSD`). It is a fleet ratio, not a per-model ratio. The field is omitted when `session_count` is 0, and the average line gaps there. A day with one session is drawn as a hollow mark because the ratio is that session's cost.
+`day estimated_cost_usd / day session_count`, with `session_count` equal to non-deleted sessions created that day, including sessions with no LLM rows. The population matches **Avg. cost / session** on the Totals card (`usageAverageCostUSD`). It is a fleet ratio, not a per-model ratio. The field is omitted when `session_count` is 0. The solid line gaps there, and a dotted segment bridges to the next session-day. A day with one session is drawn as a hollow mark because the ratio is that session's cost.
 
 ### Named series and Other
 
@@ -202,7 +202,7 @@ One PR. The series endpoint exists to feed these charts, and nothing else calls 
 - A small chart section component used by `web/dashboard/src/pages/UsagePage.tsx`, under Totals.
 - Parallel fetch of the series. Request deps: `start`, `end`, `alert_type`, `chain_id`, browser IANA timezone. Not `rank_by`.
 - Cumulative stacked cost chart and per-day average chart, hidden when estimation is disabled.
-- Average line: gap on `session_count == 0`, hollow mark when `session_count == 1`, tooltip includes the count.
+- Average line: solid line gaps on `session_count == 0`, with a dotted bridge to the next session-day; hollow mark when `session_count == 1`; tooltip includes the count.
 - Cost tooltip: named models, day total, cumulative total, and the Other breakdown from `other_models`.
 - Empty window: the same "No data in this window." treatment as the tables, in the chart region.
 - Series error does not clear the tables.
@@ -242,7 +242,7 @@ The summary response stays unchanged. Existing Usage tables stay as they are whe
 |---|--------|--------|
 | [Q1](usage-charts-questions.md#q1-which-timestamp-fills-the-buckets) | Timestamp used to bucket | Session `created_at` |
 | [Q2](usage-charts-questions.md#q2-how-should-estimated-total-cost-be-drawn) | Cost chart | Cumulative stacked area; tooltip has the day split, day total, and cumulative total |
-| [Q3](usage-charts-questions.md#q3-what-should-the-average-chart-plot) | Average chart | Per-day fleet average; gap when there are no sessions; hollow mark when there is one |
+| [Q3](usage-charts-questions.md#q3-what-should-the-average-chart-plot) | Average chart | Per-day fleet average; solid line gaps when there are no sessions, with a dotted bridge; hollow mark when there is one |
 | [Q4](usage-charts-questions.md#q4-how-long-is-a-bucket) | Bucket size | Calendar day |
 | [Q5](usage-charts-questions.md#q5-whose-calendar-is-a-day) | Timezone | Browser IANA zone; missing or unknown falls back to UTC; response echoes the zone used |
 | [Q6](usage-charts-questions.md#q6-how-many-models-stay-visible) | Model series | Top 6 by window cost; the rest are Other, listed in that day's tooltip |

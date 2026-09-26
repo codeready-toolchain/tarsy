@@ -5,13 +5,13 @@ import type { UsageSeriesPoint, UsageSeriesResponse } from '../../types/api.ts';
  * The last color is reserved for the Other band.
  */
 export const USAGE_CHART_COLORS = [
-  '#3B6D9A',
-  '#E07A14',
-  '#D14343',
-  '#2A9D8F',
-  '#3D8B40',
-  '#C49A12',
-  '#8E5B9C',
+  '#5B86A8',
+  '#D08B45',
+  '#C46E6E',
+  '#5A9E96',
+  '#5C9460',
+  '#C0A04A',
+  '#9678A4',
 ] as const;
 
 export const OTHER_SERIES_ID = 'usage-other';
@@ -84,6 +84,26 @@ export function cumulativeTotalAt(bands: CumulativeCostBand[], index: number): n
 
 export function averageCostData(points: UsageSeriesPoint[]): (number | null)[] {
   return points.map((point) => (point.session_count === 0 ? null : (point.average_cost_usd ?? null)));
+}
+
+/**
+ * Same values as {@link averageCostData} when an empty day sits between two
+ * session days, so a connectNulls series can bridge that gap. Null otherwise.
+ */
+export function averageGapData(points: UsageSeriesPoint[]): (number | null)[] | null {
+  const values = averageCostData(points);
+  let seenValue = false;
+  let seenGap = false;
+  for (const value of values) {
+    if (value == null) {
+      if (seenValue) seenGap = true;
+    } else if (seenGap) {
+      return values;
+    } else {
+      seenValue = true;
+    }
+  }
+  return null;
 }
 
 /** Accessible name for an average-chart mark. One session is the hollow mark. */

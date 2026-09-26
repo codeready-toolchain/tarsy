@@ -10,13 +10,18 @@ import {
   COST_STACK_ID,
   USAGE_CHART_COLORS,
   averageCostData,
+  averageGapData,
   cumulativeCostBands,
+  type CumulativeCostBand,
   cumulativeTotalAt,
   formatSeriesDay,
   formatSeriesInterval,
   seriesWindowIsEmpty,
   sessionMarkLabel,
 } from './usageChartModel.ts';
+
+/** Both charts use this height so their axes share a top and a baseline. */
+const CHART_HEIGHT = 320;
 
 const tooltipSurfaceSx = {
   bgcolor: 'background.paper',
@@ -196,6 +201,7 @@ function CostChart({ series }: { series: UsageSeriesResponse }) {
           label: band.label,
           data: band.data,
           color: band.color,
+          labelMarkType: 'square' as const,
           stack: COST_STACK_ID,
           area: true,
           curve: 'linear' as const,
@@ -213,9 +219,9 @@ function CostChart({ series }: { series: UsageSeriesResponse }) {
 
   return (
     <LineChart
-      height={320}
+      height={CHART_HEIGHT}
       skipAnimation
-      hideLegend={bands.length === 0}
+      hideLegend
       series={chartSeries}
       xAxis={dayAxis(points, timeZone)}
       yAxis={costAxis()}
@@ -224,10 +230,51 @@ function CostChart({ series }: { series: UsageSeriesResponse }) {
   );
 }
 
+/** Drawn outside the plot so it does not change the cost chart's height. */
+function CostLegend({ bands }: { bands: CumulativeCostBand[] }) {
+  if (bands.length === 0) return null;
+  return (
+    <Box
+      component="ul"
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 2,
+        m: 0,
+        p: 0,
+        listStyle: 'none',
+      }}
+    >
+      {bands.map((band) => (
+        <Box
+          component="li"
+          key={band.id}
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
+        >
+          <Box
+            aria-hidden
+            sx={{
+              width: 16,
+              height: 16,
+              bgcolor: band.color,
+              borderRadius: 0.25,
+              flexShrink: 0,
+            }}
+          />
+          <Typography variant="caption">{band.label}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 function AverageChart({ series }: { series: UsageSeriesResponse }) {
   const points = series.points ?? [];
   const timeZone = series.timezone || 'UTC';
   const color = USAGE_CHART_COLORS[0];
+  const gapData = averageGapData(points);
 
   function TooltipSlot() {
     const axes = useAxesTooltip();
@@ -254,17 +301,37 @@ function AverageChart({ series }: { series: UsageSeriesResponse }) {
 
   return (
     <LineChart
-      height={220}
+      height={CHART_HEIGHT}
       skipAnimation
       hideLegend
+      sx={{
+        '& .MuiLineChart-line[data-series-id="average-gap"]': {
+          strokeDasharray: '2 4',
+        },
+      }}
       series={[
+        // Under the solid line. connectNulls bridges empty days; the solid
+        // series covers the same path wherever neighboring days both have sessions.
+        ...(gapData
+          ? [
+              {
+                id: 'average-gap',
+                data: gapData,
+                color,
+                curve: 'linear' as const,
+                connectNulls: true,
+                showMark: false,
+                disableHighlight: true,
+              },
+            ]
+          : []),
         {
           id: 'average-cost',
           data: averageCostData(points),
           color,
-          curve: 'linear',
-          shape: 'circle',
-          showMark: ({ index }) => (points[index]?.session_count ?? 0) > 0,
+          curve: 'linear' as const,
+          shape: 'circle' as const,
+          showMark: ({ index }: { index: number }) => (points[index]?.session_count ?? 0) > 0,
         },
       ]}
       xAxis={dayAxis(points, timeZone)}
@@ -344,11 +411,17 @@ function StackCharts({
   partialCaption?: string;
   partialTooltip?: string;
 }) {
+  const bands = cumulativeCostBands(series);
+  const hasLegend = bands.length > 0;
+  const wideAreas = hasLegend
+    ? '"cost-title avg-title" "cost-legend ." "cost-chart avg-chart"'
+    : '"cost-title avg-title" "cost-chart avg-chart"';
+  const narrowAreas = hasLegend
+    ? '"cost-title" "cost-legend" "cost-chart" "avg-title" "avg-chart"'
+    : '"cost-title" "cost-chart" "avg-title" "avg-chart"';
+
   return (
-    <>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Typography variant="h6">Est. cost by model</Typography>
-      </Box>
+    <Box sx={{ containerType: 'inline-size' }}>
       {partialCaption && (
         <Tooltip title={partialTooltip ?? ''} disableHoverListener={!partialTooltip} arrow>
           <Typography
@@ -367,11 +440,39 @@ function StackCharts({
           </Typography>
         </Tooltip>
       )}
-      <CostChart series={series} />
-      <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-        Avg. cost / session
-      </Typography>
-      <AverageChart series={series} />
-    </>
+      <Box
+        sx={{
+          display: 'grid',
+          columnGap: 2,
+          rowGap: 1,
+          alignItems: 'start',
+          gridTemplateColumns: 'minmax(0, 1fr)',
+          gridTemplateAreas: narrowAreas,
+          // The query has to live on a child; a container cannot query itself.
+          '@container (min-width: 860px)': {
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gridTemplateAreas: wideAreas,
+          },
+        }}
+      >
+        <Typography variant="h6" sx={{ gridArea: 'cost-title' }}>
+          Est. cost by model
+        </Typography>
+        <Typography variant="h6" sx={{ gridArea: 'avg-title' }}>
+          Avg. cost / session
+        </Typography>
+        {hasLegend && (
+          <Box sx={{ gridArea: 'cost-legend', minWidth: 0 }}>
+            <CostLegend bands={bands} />
+          </Box>
+        )}
+        <Box sx={{ gridArea: 'cost-chart', minWidth: 0 }}>
+          <CostChart series={series} />
+        </Box>
+        <Box sx={{ gridArea: 'avg-chart', minWidth: 0 }}>
+          <AverageChart series={series} />
+        </Box>
+      </Box>
+    </Box>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { UsageSeriesResponse } from '../../../types/api';
+import type { UsageSeriesPoint, UsageSeriesResponse } from '../../../types/api';
 import {
+  averageGapData,
   cumulativeCostBands,
   cumulativeTotalAt,
   OTHER_SERIES_ID,
@@ -73,5 +74,29 @@ describe('cumulativeCostBands', () => {
     expect(bands[1].label).toBe('Other');
     expect(bands[1].data).toEqual([0, 1]);
     expect(cumulativeTotalAt(bands, 1)).toBeCloseTo(2.4);
+  });
+});
+
+function day(sessionCount: number, average?: number): UsageSeriesPoint {
+  return {
+    start: '2024-06-01T00:00:00Z',
+    end: '2024-06-02T00:00:00Z',
+    session_count: sessionCount,
+    estimated_cost_usd: average ?? 0,
+    average_cost_usd: sessionCount === 0 ? undefined : average,
+  };
+}
+
+describe('averageGapData', () => {
+  it('stays empty when every day has sessions', () => {
+    expect(averageGapData([day(2, 1), day(1, 0.5)])).toBeNull();
+  });
+
+  it('stays empty when empty days are only at the ends', () => {
+    expect(averageGapData([day(0), day(2, 1), day(0)])).toBeNull();
+  });
+
+  it('repeats the session-day values when an empty day sits between them', () => {
+    expect(averageGapData([day(2, 1), day(0), day(1, 0.4)])).toEqual([1, null, 0.4]);
   });
 });
