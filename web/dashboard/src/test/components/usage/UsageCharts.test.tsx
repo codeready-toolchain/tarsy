@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from '../../../theme';
-import { AverageCostColumn, CostTooltipBody } from '../../../components/usage/UsageCharts';
-import type { UsageSeriesPoint } from '../../../types/api';
+import { AverageChart, AverageCostColumn, CostTooltipBody } from '../../../components/usage/UsageCharts';
+import type { UsageSeriesPoint, UsageSeriesResponse } from '../../../types/api';
 
 function renderWithTheme(ui: ReactElement) {
   return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
@@ -39,6 +39,76 @@ describe('CostTooltipBody', () => {
     expect(screen.getByText('$1.40')).toBeInTheDocument();
     expect(screen.getByText('Cumulative')).toBeInTheDocument();
     expect(screen.getByText('$2.40')).toBeInTheDocument();
+  });
+});
+
+function usageSeries(points: UsageSeriesPoint[]): UsageSeriesResponse {
+  return {
+    cost_estimation_enabled: true,
+    timezone: 'UTC',
+    points,
+  };
+}
+
+function day(start: string, end: string, sessionCount: number, average: number): UsageSeriesPoint {
+  return {
+    start,
+    end,
+    session_count: sessionCount,
+    estimated_cost_usd: average * sessionCount,
+    average_cost_usd: sessionCount === 0 ? undefined : average,
+  };
+}
+
+/** Tick labels sit in a translated group, so the axis position is the group's y plus the text y. */
+function tickBaselineY(svg: SVGElement, label: string): number {
+  const text = [...svg.querySelectorAll('text')].find((node) => node.textContent === label);
+  if (!text) throw new Error(`missing tick ${label}`);
+  const transform = text.closest('g')?.getAttribute('transform') ?? '';
+  const match = /translate\(\s*[^,]+,\s*([-0-9.]+)\s*\)/.exec(transform);
+  return (match ? Number(match[1]) : 0) + Number(text.getAttribute('y'));
+}
+
+function columnBottom(name: string): { bottom: number; svg: SVGElement } {
+  const column = screen.getByRole('img', { name, hidden: true });
+  const svg = column.closest('svg');
+  if (!svg) throw new Error('column is not in a chart');
+  return {
+    bottom: Number(column.getAttribute('y')) + Number(column.getAttribute('height')),
+    svg,
+  };
+}
+
+describe('AverageChart axis', () => {
+  it('keeps an all-zero window on the baseline under a positive maximum', () => {
+    renderWithTheme(
+      <AverageChart
+        series={usageSeries([
+          day('2024-06-01T00:00:00.000Z', '2024-06-02T00:00:00.000Z', 2, 0),
+          day('2024-06-02T00:00:00.000Z', '2024-06-03T00:00:00.000Z', 3, 0),
+        ])}
+        width={640}
+      />,
+    );
+
+    const { bottom, svg } = columnBottom('2 sessions');
+    const zeroY = tickBaselineY(svg, '$0.00');
+    expect(tickBaselineY(svg, '$1.00')).toBeLessThan(zeroY);
+    expect(bottom).toBeCloseTo(zeroY, 0);
+  });
+
+  it('keeps a positive average on a scale above $1', () => {
+    renderWithTheme(
+      <AverageChart
+        series={usageSeries([day('2024-06-01T00:00:00.000Z', '2024-06-02T00:00:00.000Z', 2, 12)])}
+        width={640}
+      />,
+    );
+
+    const { bottom, svg } = columnBottom('2 sessions');
+    const zeroY = tickBaselineY(svg, '$0.00');
+    expect(tickBaselineY(svg, '$12.00')).toBeLessThan(zeroY);
+    expect(bottom).toBeCloseTo(zeroY, 0);
   });
 });
 

@@ -173,14 +173,28 @@ function dayAxis(points: UsageSeriesPoint[], timeZone: string, scaleType: 'point
   ];
 }
 
-function costAxis(min?: number) {
+/**
+ * Top of the axis when every plotted day is $0.
+ * A [0, 0] scale places every value at the plot midpoint, so the short
+ * baseline columns would float in the middle. $1 is enough to keep $0 at the bottom.
+ */
+const ZERO_WINDOW_AXIS_MAX = 1;
+
+function costAxis(bounds: { min?: number; max?: number } = {}) {
+  const { min, max } = bounds;
   return [
     {
       width: 72,
       ...(min === undefined ? {} : { min }),
+      ...(max === undefined ? {} : { max }),
       valueFormatter: (value: number | null) => formatEstimatedCostUsd(value),
     },
   ];
+}
+
+function averageCostAxis(points: UsageSeriesPoint[]) {
+  const hasPositive = averageCostData(points).some((value) => value != null && value > 0);
+  return costAxis(hasPositive ? { min: 0 } : { min: 0, max: ZERO_WINDOW_AXIS_MAX });
 }
 
 function CostChart({ series }: { series: UsageSeriesResponse }) {
@@ -283,7 +297,7 @@ function CostLegend({ bands }: { bands: CumulativeCostBand[] }) {
   );
 }
 
-function AverageChart({ series }: { series: UsageSeriesResponse }) {
+export function AverageChart({ series, width }: { series: UsageSeriesResponse; width?: number }) {
   const points = series.points ?? [];
   const timeZone = series.timezone || 'UTC';
   const color = USAGE_CHART_COLORS[0];
@@ -316,6 +330,7 @@ function AverageChart({ series }: { series: UsageSeriesResponse }) {
 
   return (
     <BarChart
+      width={width}
       height={CHART_HEIGHT}
       skipAnimation
       hideLegend
@@ -327,7 +342,7 @@ function AverageChart({ series }: { series: UsageSeriesResponse }) {
         },
       ]}
       xAxis={dayAxis(points, timeZone, 'band')}
-      yAxis={costAxis(0)}
+      yAxis={averageCostAxis(points)}
       slots={{ tooltip: TooltipSlot, bar: ColumnSlot }}
     />
   );
