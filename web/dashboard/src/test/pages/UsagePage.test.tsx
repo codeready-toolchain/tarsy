@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { UsageSeriesResponse, UsageSummaryResponse } from '../../types/api';
@@ -561,6 +561,56 @@ describe('UsagePage', () => {
     expect(modelSection).toBeInstanceOf(HTMLElement);
     expect(within(modelSection as HTMLElement).getByText('Cache read')).toBeInTheDocument();
     expect(within(modelSection as HTMLElement).getByText('Cache create')).toBeInTheDocument();
+  });
+
+  it('ignores series results from a request that is no longer the latest', async () => {
+    const user = userEvent.setup();
+    let rejectStale: (err: Error) => void = () => {};
+    const stale = new Promise<UsageSeriesResponse>((_, reject) => {
+      rejectStale = reject;
+    });
+    let resolveFresh: (value: UsageSeriesResponse) => void = () => {};
+    const fresh = new Promise<UsageSeriesResponse>((resolve) => {
+      resolveFresh = resolve;
+    });
+    mockGetUsageSummary.mockResolvedValue(makeSummary());
+    mockGetUsageSeries.mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+
+    renderUsagePage();
+    await screen.findByText('Totals');
+    await waitFor(() => {
+      expect(mockGetUsageSeries).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole('combobox', { name: 'Alert type' }));
+    await user.click(await screen.findByRole('option', { name: 'kubernetes' }));
+    await waitFor(() => {
+      expect(mockGetUsageSeries).toHaveBeenCalledTimes(2);
+    });
+    expect(mockGetUsageSeries.mock.calls[1][0].alert_type).toBe('kubernetes');
+    await waitFor(() => {
+      expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+    });
+
+    await act(async () => {
+      rejectStale(new Error('stale series failure'));
+    });
+    expect(screen.queryByText('stale series failure')).not.toBeInTheDocument();
+    expect(screen.queryByText('Est. cost by model')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+
+    const freshPoint = makeSeries().points![0];
+    await act(async () => {
+      resolveFresh(
+        makeSeries({
+          models: ['fresh-model'],
+          points: [{ ...freshPoint, by_model: { 'fresh-model': 1.23 } }],
+        }),
+      );
+    });
+    expect(await screen.findByText('fresh-model')).toBeInTheDocument();
+    expect(screen.queryByText('stale series failure')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
   it('does not request series again after estimation is reported off', async () => {

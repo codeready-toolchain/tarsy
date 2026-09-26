@@ -74,7 +74,7 @@ A session that starts Monday and keeps chatting on Wednesday shows all of its co
 Buckets:
 
 - Every bucket is one calendar day, including Last day (usually one or two partial days).
-- The dashboard sends the browser IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`). Resolve it with `time.LoadLocation`. A known name is applied with `AT TIME ZONE` to session `created_at` (`timestamptz`). A missing or unknown name falls back to UTC and is not an error. The response `timezone` field is the zone actually used.
+- The dashboard sends the browser IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`). Resolve it with `time.LoadLocation`. A known name is applied with `AT TIME ZONE` to session `created_at` (`timestamptz`). If PostgreSQL does not recognize that name, the read is retried in UTC. A missing or unknown name falls back to UTC and is not an error. The response `timezone` field is the zone actually used.
 - Build days with `date_trunc('day', created_at AT TIME ZONE zone)` and `generate_series` stepped by `interval '1 day'` on that local timestamp, then convert the bucket bounds back with `AT TIME ZONE`. Do not step `timestamptz` by 24 hours; a DST day is not 24 hours long and the series would drift.
 - The series is half-open. A window that ends exactly on local midnight does not include that day's bucket. The first bucket is the local day that contains `start`, and the last bucket is the local day that contains the instant just before `end`.
 - Days inside the window with no sessions are still returned: `session_count: 0`, `estimated_cost_usd: 0`, `average_cost_usd` omitted, no model costs. Omit follows the summary's `omitempty` pattern. The client treats `session_count == 0` as a gap on the average line.
@@ -192,7 +192,7 @@ One PR. The series endpoint exists to feed these charts, and nothing else calls 
 **Lands**
 
 - Route next to the summary in `pkg/api/server.go`.
-- Handler in `pkg/api/handler_usage.go`: reuse the summary's window validation (RFC3339, `start < end`, ≤ 365 days). Resolve `timezone` with `time.LoadLocation`. Missing or unknown names use UTC. Echo the applied zone on the response.
+- Handler in `pkg/api/handler_usage.go`: reuse the summary's window validation (RFC3339, `start < end`, ≤ 365 days). Resolve `timezone` with `time.LoadLocation`. Missing or unknown names use UTC. A name PostgreSQL rejects is retried as UTC. Echo the applied zone on the response.
 - DTOs in `pkg/models/session.go`.
 - Query in `pkg/services/` (alongside `session_service_usage.go`): session counts from `alert_sessions`, cost from interactions grouped by the session's local day, zero-fill, top six models with cost greater than zero, `other_models` for the rest, average, completeness via `DeriveCostCompleteness` and `tokenBearingPredicateSQL`. `date_trunc` / `generate_series` stepped by `interval '1 day'` / `AT TIME ZONE` in PostgreSQL.
 - Operator doc: a series section in `docs/session-usage-cost.md`, plus a line in the API lists in `README.md`, `docs/architecture-overview.md`, and `docs/functional-areas-design.md`.
@@ -219,7 +219,7 @@ One PR. The series endpoint exists to feed these charts, and nothing else calls 
   - A session created on Monday with an interaction on Wednesday contributes its cost to Monday.
   - Unpriced rows do not add cost and do not create a series by themselves.
   - More than six models with positive cost: `models` has length 6 in cost-then-name order, and the rest appear under `other_models` on the days they have cost. An unpriced model appears in neither. A tie on the sixth slot follows `model_name` ascending.
-  - A timezone offset puts a timestamp on the local calendar day. An unknown timezone falls back to UTC.
+  - A timezone offset puts a timestamp on the local calendar day. An unknown timezone, including one PostgreSQL rejects, falls back to UTC.
   - Estimation disabled returns `cost_estimation_enabled: false` and no points.
 - Handler tests: window rules, and missing or unknown `timezone` still returns 200 with `timezone: "UTC"`.
 - One e2e assertion in `test/e2e/usage_cost_test.go` that a series for the window sums to the summary cost when estimation is on, and that the disabled case omits the series payload.

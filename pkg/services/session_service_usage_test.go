@@ -3,6 +3,9 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,9 +17,64 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 	testdb "github.com/codeready-toolchain/tarsy/test/database"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// usageSeriesRejectedZone is an IANA-shaped name this test installs for Go
+// only. PostgreSQL does not ship it, so AT TIME ZONE raises SQLSTATE 22023.
+const usageSeriesRejectedZone = "Test/NotAZone"
+
+func TestMain(m *testing.M) {
+	// LoadLocation reads ZONEINFO once, on the first call in the process.
+	// Install the extra zone before any test loads a location. Names that are
+	// not in this directory still fall through to the system zoneinfo.
+	dir, err := os.MkdirTemp("", "tarsy-zoneinfo")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "zoneinfo temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	if err := installUsageSeriesRejectedZone(dir); err != nil {
+		fmt.Fprintf(os.Stderr, "install test zone: %v\n", err)
+		os.RemoveAll(dir)
+		os.Exit(1)
+	}
+	if err := os.Setenv("ZONEINFO", dir); err != nil {
+		fmt.Fprintf(os.Stderr, "set ZONEINFO: %v\n", err)
+		os.RemoveAll(dir)
+		os.Exit(1)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+func installUsageSeriesRejectedZone(dir string) error {
+	src, err := readZoneinfoUTC()
+	if err != nil {
+		return err
+	}
+	dst := filepath.Join(dir, filepath.FromSlash(usageSeriesRejectedZone))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, src, 0o644)
+}
+
+func readZoneinfoUTC() ([]byte, error) {
+	for _, path := range []string{
+		"/usr/share/zoneinfo/UTC",
+		"/usr/share/zoneinfo/Etc/UTC",
+		"/usr/share/lib/zoneinfo/UTC",
+	} {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("UTC zoneinfo file not found")
+}
 
 func TestSessionService_GetUsageSummary(t *testing.T) {
 	client := testdb.NewTestClient(t)
@@ -803,6 +861,25 @@ func seedUsageLLMInteractionType(
 	create.SaveX(context.Background())
 }
 
+func TestPostgresUnrecognizedTimezone(t *testing.T) {
+	t.Parallel()
+	zoneErr := &pgconn.PgError{
+		Code:    sqlstateInvalidParameterValue,
+		Message: `time zone "right/UTC" not recognized`,
+	}
+	assert.True(t, postgresUnrecognizedTimezone(zoneErr))
+	assert.True(t, postgresUnrecognizedTimezone(fmt.Errorf("failed to query usage series: %w", zoneErr)))
+	assert.False(t, postgresUnrecognizedTimezone(&pgconn.PgError{
+		Code:    sqlstateInvalidParameterValue,
+		Message: `invalid value for parameter "TimeZone"`,
+	}))
+	assert.False(t, postgresUnrecognizedTimezone(&pgconn.PgError{
+		Code:    "23505",
+		Message: `time zone "right/UTC" not recognized`,
+	}))
+	assert.False(t, postgresUnrecognizedTimezone(fmt.Errorf("time zone not recognized (SQLSTATE 22023)")))
+}
+
 func TestUsageAverageCostUSD(t *testing.T) {
 	t.Parallel()
 	cost := 1.5
@@ -1149,6 +1226,35 @@ func TestSessionService_GetUsageSeries(t *testing.T) {
 		assert.Equal(t, int64(1), utcPoint.SessionCount)
 		may31 := seriesPointOn(t, utc.Points, "UTC", 2024, time.June, 1)
 		assert.Equal(t, int64(0), may31.SessionCount)
+	})
+
+	t.Run("falls back to UTC when PostgreSQL rejects the zone", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		loc, loadErr := time.LoadLocation(usageSeriesRejectedZone)
+		require.NoError(t, loadErr)
+		require.Equal(t, usageSeriesRejectedZone, loc.String())
+		zone := usageSeriesRejectedZone
+		created := time.Date(2024, 6, 2, 6, 30, 0, 0, time.UTC)
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "pg-rejects-zone",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: created,
+		})
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(1), 0)
+
+		series, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+			EndDate:   time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+			Timezone:  zone,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "UTC", series.Timezone)
+		june2 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 2)
+		assert.Equal(t, int64(1), june2.SessionCount)
 	})
 
 	t.Run("clips partial days and excludes an end on local midnight", func(t *testing.T) {

@@ -165,7 +165,7 @@ Per-day estimated cost for the same session population as the summary. The Usage
 | `end_date` | yes | RFC3339, exclusive. |
 | `alert_type` | no | Exact match. |
 | `chain_id` | no | Exact match. |
-| `timezone` | no | IANA name, for example `America/Los_Angeles`. Missing or unknown falls back to UTC. The response `timezone` is the zone that was applied. |
+| `timezone` | no | IANA name, for example `America/Los_Angeles`. Missing, unknown to Go, or unrecognized by PostgreSQL falls back to UTC. The response `timezone` is the zone that was applied. |
 
 Rules:
 

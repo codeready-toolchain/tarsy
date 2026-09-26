@@ -183,6 +183,8 @@ export function UsagePage() {
   const [seriesError, setSeriesError] = useState<string | null>(null);
   /** Once a summary reports estimation off, later filter changes skip the series call. */
   const estimationDisabledRef = useRef(false);
+  /** Only the latest series request may write series, error, or loading. */
+  const seriesRequestIdRef = useRef(0);
 
   const browserTimeZone = useMemo(() => {
     try {
@@ -238,6 +240,7 @@ export function UsagePage() {
   }, [startDate, endDate, alertType, chainId, rankBy]);
 
   const fetchSeries = useCallback(async (): Promise<boolean> => {
+    const requestId = ++seriesRequestIdRef.current;
     if (estimationDisabledRef.current) {
       setSeries(null);
       setSeriesError(null);
@@ -254,6 +257,7 @@ export function UsagePage() {
         chain_id: chainId || undefined,
         timezone: browserTimeZone,
       });
+      if (requestId !== seriesRequestIdRef.current) return true;
       if (!data.cost_estimation_enabled || estimationDisabledRef.current) {
         setSeries(null);
         return true;
@@ -261,11 +265,14 @@ export function UsagePage() {
       setSeries(data);
       return true;
     } catch (err) {
+      if (requestId !== seriesRequestIdRef.current) return true;
       setSeriesError(handleAPIError(err));
       setSeries(null);
       return false;
     } finally {
-      setSeriesLoading(false);
+      if (requestId === seriesRequestIdRef.current) {
+        setSeriesLoading(false);
+      }
     }
   }, [startDate, endDate, alertType, chainId, browserTimeZone]);
 

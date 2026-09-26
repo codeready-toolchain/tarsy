@@ -4,9 +4,11 @@ import (
 	"cmp"
 	"context"
 	stdsql "database/sql"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -15,11 +17,14 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
 	usageTopSessionsCap  = 20
 	usageSeriesTopModels = 6
+	// sqlstateInvalidParameterValue is PostgreSQL SQLSTATE 22023.
+	sqlstateInvalidParameterValue = "22023"
 )
 
 // GetUsageSummary returns fleet token/cost aggregates for sessions created in the
@@ -441,8 +446,9 @@ func usageAverageCostUSD(cost *float64, sessionCount int64) *float64 {
 	return new(*cost / float64(sessionCount))
 }
 
-// resolveUsageTimezone returns a PostgreSQL-usable IANA name.
+// resolveUsageTimezone returns an IANA name Go can load.
 // Missing, unknown, and Go's Local zone fall back to UTC.
+// A name Go accepts but PostgreSQL rejects is retried as UTC by GetUsageSeries.
 func resolveUsageTimezone(name string) string {
 	if name == "" || name == "Local" {
 		return "UTC"
@@ -452,6 +458,17 @@ func resolveUsageTimezone(name string) string {
 		return "UTC"
 	}
 	return loc.String()
+}
+
+// postgresUnrecognizedTimezone reports AT TIME ZONE rejecting the zone name.
+// That failure is SQLSTATE 22023, invalid_parameter_value, with a message that
+// names the time zone. Other 22023 errors are not treated as a zone mismatch.
+func postgresUnrecognizedTimezone(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == sqlstateInvalidParameterValue && strings.Contains(pgErr.Message, "time zone")
 }
 
 // GetUsageSeries returns per-day estimated cost and session counts for the same
@@ -471,6 +488,11 @@ func (s *SessionService) GetUsageSeries(ctx context.Context, params models.Usage
 	})
 
 	rows, err := s.queryUsageSeriesRows(ctx, params, sessionPreds)
+	if err != nil && zone != "UTC" && postgresUnrecognizedTimezone(err) {
+		zone = "UTC"
+		params.Timezone = zone
+		rows, err = s.queryUsageSeriesRows(ctx, params, sessionPreds)
+	}
 	if err != nil {
 		return nil, err
 	}
