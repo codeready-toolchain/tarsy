@@ -220,7 +220,7 @@ TARSy estimates USD cost for LLM interactions at write time (list prices from a 
 
 Provider prompt caching (Claude `cache_control`, GPT-5.6+ OpenAI implicit looping cache, Gemini implicit) is measured and priced: `input_tokens` is uncached input; cache read/create are stored and billed separately. Trace LLM list/detail show per-call cache counts; Usage totals and by-model SUMs them. The session header shows session-level cache read, cache create, and thinking when those sums are non-zero. The session list returns the same sums in the token aggregate it already runs per row and shows them in a tooltip. `ExecutionOverview` does not. Cluster kill switch: `system.prompt_caching.enabled` (default on; does not disable Gemini implicit caching).
 
-**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), and [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+**For operator guide and design:** See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), and [ADR-0033: Usage Charts](adr/0033-usage-charts.md).
 
 ### 13. Prometheus Metrics
 

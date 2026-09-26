@@ -2,7 +2,7 @@
 
 TARSy can attach an **estimated USD cost** to each LLM interaction at write time, using list prices from a price book. Estimates are for operator judgment — they are **not** invoice truth.
 
-**Architecture decisions:** [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md)
+**Architecture decisions:** [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), [ADR-0033: Usage Charts](adr/0033-usage-charts.md)
 
 Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The dashboard shows soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when estimation is enabled. Fleet dig-in is available on the **Usage** page (`/usage`, hamburger → Usage) via `GET /api/v1/usage/summary`. Estimated-cost charts on that page use `GET /api/v1/usage/series`. Config Viewer exposes the effective toggle, overrides, promotions (with lifecycle status), and catalog status under System → Cost estimation (`GET /api/v1/system/config`).
 
@@ -144,7 +144,7 @@ Rules:
 - `totals.session_count` is the number of matching sessions in the window (same filters; includes sessions with no LLM rows). When estimation is enabled and `session_count > 0`, `totals.average_cost_usd` is `estimated_cost_usd / session_count`.
 - `by_model[]`, `by_alert_type[]`, and `by_chain[]` rows include `session_count` and (when estimation is enabled) `average_cost_usd`. For models, `session_count` is distinct sessions that used that model — a session that hits two models counts toward both.
 - `by_model[]` rows carry `priced` (bool: all token-bearing rows for that model are priced) and `unpriced_interaction_count` (count of token-bearing rows for that model with no resolved rate); the dashboard surfaces the count in the "Incomplete" chip's tooltip.
-- `totals` and `by_model[]` include `cache_read_tokens` and `cache_creation_tokens` SUMs. The Usage page shows these as StatCards (keep the **Input tokens** label = uncached) and by-model columns. By-alert-type, by-chain, top-sessions, and Usage charts do **not** SUM cache in v1.
+- `totals` and `by_model[]` include `cache_read_tokens` and `cache_creation_tokens` SUMs. The Usage page shows these as StatCards (keep the **Input tokens** label = uncached) and by-model columns. By-alert-type, by-chain, and top-sessions do not sum cache tokens. Usage charts omit cache-token volume but include cache pricing in estimated costs.
 - `totals.unpriced_interaction_count` is that same row count across the window. `totals.unpriced_token_count` is `SUM(total_tokens + cache_read_tokens + cache_creation_tokens)` of those unpriced rows (so cache-only interactions still count); the Usage Est. cost caption shows it compactly (e.g. `1.2M unpriced`), with a tooltip of the form `1.2M tokens from 838 LLM interactions had no resolved rate`.
 - Unpriced top sessions are included with `$0` + `cost_completeness` (not dropped).
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
