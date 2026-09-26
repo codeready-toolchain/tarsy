@@ -54,6 +54,7 @@ import {
   getSystemConfig,
   getSystemConfigSkill,
   getUsageSummary,
+  getUsageSeries,
 } from '../../services/api';
 
 function getMockClient() {
@@ -251,6 +252,27 @@ describe('API methods', () => {
       };
       const result = await getUsageSummary(params);
       expect(client.get).toHaveBeenCalledWith('/api/v1/usage/summary', { params });
+      expect(result).toEqual(data);
+    });
+  });
+
+  describe('getUsageSeries', () => {
+    it('calls usage series endpoint with params', async () => {
+      const data = {
+        cost_estimation_enabled: true,
+        timezone: 'UTC',
+        bucket: 'day',
+        models: ['gemini-flash'],
+        points: [],
+      };
+      client.get.mockResolvedValue({ data });
+      const params = {
+        start_date: '2026-01-01T00:00:00Z',
+        end_date: '2026-01-31T00:00:00Z',
+        timezone: 'America/Los_Angeles',
+      };
+      const result = await getUsageSeries(params);
+      expect(client.get).toHaveBeenCalledWith('/api/v1/usage/series', { params });
       expect(result).toEqual(data);
     });
   });

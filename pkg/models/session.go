@@ -456,6 +456,56 @@ type UsageTopSession struct {
 	CreatedAt        time.Time        `json:"created_at"`
 }
 
+// --- Usage series DTOs (GET /api/v1/usage/series) ---
+
+// UsageBucket is the calendar size of each series point.
+type UsageBucket string
+
+// Usage series buckets.
+const (
+	UsageBucketDay UsageBucket = "day"
+)
+
+// UsageSeriesParams holds query parameters for the usage series endpoint.
+type UsageSeriesParams struct {
+	StartDate time.Time // created_at >= start (required)
+	EndDate   time.Time // created_at < end (required)
+	AlertType string    // optional exact filter
+	ChainID   string    // optional exact filter
+	Timezone  string    // IANA name; empty or unknown resolves to UTC
+}
+
+// UsageSeriesResponse is returned by GET /api/v1/usage/series.
+// When estimation is disabled only CostEstimationEnabled is set.
+type UsageSeriesResponse struct {
+	CostEstimationEnabled    bool               `json:"cost_estimation_enabled"`
+	Window                   UsageWindow        `json:"window,omitzero"`
+	Timezone                 string             `json:"timezone,omitempty"`
+	Bucket                   UsageBucket        `json:"bucket,omitempty"`
+	CostCompleteness         CostCompleteness   `json:"cost_completeness,omitempty"`
+	UnpricedInteractionCount *int               `json:"unpriced_interaction_count,omitempty"`
+	UnpricedTokenCount       *int64             `json:"unpriced_token_count,omitempty"`
+	Models                   []string           `json:"models,omitempty"`
+	Points                   []UsageSeriesPoint `json:"points,omitempty"`
+}
+
+// UsageSeriesPoint is one local calendar day, clipped to the request window.
+type UsageSeriesPoint struct {
+	Start            time.Time               `json:"start"`
+	End              time.Time               `json:"end"`
+	SessionCount     int64                   `json:"session_count"`
+	EstimatedCostUsd float64                 `json:"estimated_cost_usd"`
+	AverageCostUsd   *float64                `json:"average_cost_usd,omitempty"`
+	ByModel          map[string]float64      `json:"by_model,omitempty"`
+	OtherModels      []UsageSeriesOtherModel `json:"other_models,omitempty"`
+}
+
+// UsageSeriesOtherModel is one collapsed model inside a day's Other band.
+type UsageSeriesOtherModel struct {
+	ModelName        string  `json:"model_name"`
+	EstimatedCostUsd float64 `json:"estimated_cost_usd"`
+}
+
 // --- Review workflow DTOs ---
 
 // ReviewAction represents a workflow transition action.

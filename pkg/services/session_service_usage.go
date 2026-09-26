@@ -1,9 +1,12 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	stdsql "database/sql"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -14,7 +17,10 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/models"
 )
 
-const usageTopSessionsCap = 20
+const (
+	usageTopSessionsCap  = 20
+	usageSeriesTopModels = 6
+)
 
 // GetUsageSummary returns fleet token/cost aggregates for sessions created in the
 // given window (soft-deleted sessions excluded).
@@ -433,4 +439,280 @@ func usageAverageCostUSD(cost *float64, sessionCount int64) *float64 {
 		return nil
 	}
 	return new(*cost / float64(sessionCount))
+}
+
+// resolveUsageTimezone returns a PostgreSQL-usable IANA name.
+// Missing, unknown, and Go's Local zone fall back to UTC.
+func resolveUsageTimezone(name string) string {
+	if name == "" || name == "Local" {
+		return "UTC"
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil || loc.String() == "Local" {
+		return "UTC"
+	}
+	return loc.String()
+}
+
+// GetUsageSeries returns per-day estimated cost and session counts for the same
+// population as GetUsageSummary. Days are calendar days in the resolved timezone.
+func (s *SessionService) GetUsageSeries(ctx context.Context, params models.UsageSeriesParams) (*models.UsageSeriesResponse, error) {
+	if !s.costEstimationEnabled {
+		return &models.UsageSeriesResponse{CostEstimationEnabled: false}, nil
+	}
+
+	zone := resolveUsageTimezone(params.Timezone)
+	params.Timezone = zone
+	sessionPreds := usageSessionPreds(models.UsageSummaryParams{
+		StartDate: params.StartDate,
+		EndDate:   params.EndDate,
+		AlertType: params.AlertType,
+		ChainID:   params.ChainID,
+	})
+
+	rows, err := s.queryUsageSeriesRows(ctx, params, sessionPreds)
+	if err != nil {
+		return nil, err
+	}
+	totals, err := s.usageTotals(ctx, llminteraction.HasSessionWith(sessionPreds...))
+	if err != nil {
+		return nil, err
+	}
+
+	points, modelNames := assembleUsageSeries(rows)
+	return &models.UsageSeriesResponse{
+		CostEstimationEnabled:    true,
+		Window:                   models.UsageWindow{Start: params.StartDate, End: params.EndDate},
+		Timezone:                 zone,
+		Bucket:                   models.UsageBucketDay,
+		CostCompleteness:         totals.CostCompleteness,
+		UnpricedInteractionCount: totals.UnpricedInteractionCount,
+		UnpricedTokenCount:       totals.UnpricedTokenCount,
+		Models:                   modelNames,
+		Points:                   points,
+	}, nil
+}
+
+type usageSeriesScanRow struct {
+	BucketStart  time.Time          `json:"bucket_start"`
+	BucketEnd    time.Time          `json:"bucket_end"`
+	SessionCount int64              `json:"session_count"`
+	ModelName    stdsql.NullString  `json:"model_name"`
+	Cost         stdsql.NullFloat64 `json:"cost"`
+}
+
+type usageSeriesDay struct {
+	start    time.Time
+	end      time.Time
+	sessions int64
+	costs    map[string]float64
+}
+
+func (s *SessionService) queryUsageSeriesRows(
+	ctx context.Context,
+	params models.UsageSeriesParams,
+	preds []predicate.AlertSession,
+) ([]usageSeriesScanRow, error) {
+	var rows []usageSeriesScanRow
+	err := s.client.AlertSession.Query().Modify(func(sel *sql.Selector) {
+		d := sql.Dialect(sel.Dialect())
+		sessions := usageSeriesSessions(d, params.Timezone, preds)
+		days := usageSeriesDays(d, params)
+		counts := usageSeriesCounts(d)
+		costs := usageSeriesModelCosts(d)
+
+		daysT := d.Table("days").As("d")
+		countsT := d.Table("session_counts").As("sc")
+		costsT := d.Table("model_costs").As("mc")
+
+		sel.SetP(nil)
+		sel.From(daysT)
+		sel.LeftJoin(countsT).On(daysT.C("local_day"), countsT.C("local_day"))
+		sel.LeftJoin(costsT).On(daysT.C("local_day"), costsT.C("local_day"))
+		// Clear the entity column list, then select the series shape.
+		sel.Select()
+		sel.AppendSelectExprAs(sql.ExprFunc(func(b *sql.Builder) {
+			b.WriteString("GREATEST(" + daysT.C("local_day") + " AT TIME ZONE ")
+			b.Arg(params.Timezone)
+			b.WriteString("::text, ")
+			b.Arg(params.StartDate)
+			b.WriteString("::timestamptz)")
+		}), "bucket_start")
+		sel.AppendSelectExprAs(sql.ExprFunc(func(b *sql.Builder) {
+			b.WriteString("LEAST((" + daysT.C("local_day") + " + interval '1 day') AT TIME ZONE ")
+			b.Arg(params.Timezone)
+			b.WriteString("::text, ")
+			b.Arg(params.EndDate)
+			b.WriteString("::timestamptz)")
+		}), "bucket_end")
+		sel.AppendSelectExprAs(
+			sql.Expr("COALESCE("+countsT.C("session_count")+", 0)"),
+			"session_count",
+		)
+		sel.AppendSelectAs(costsT.C("model_name"), "model_name")
+		sel.AppendSelectAs(costsT.C("cost"), "cost")
+		sel.ClearOrder()
+		sel.OrderExpr(
+			sql.Expr(daysT.C("local_day")),
+			sql.Expr(costsT.C("cost")+" DESC NULLS LAST"),
+			sql.Expr(costsT.C("model_name")+" ASC NULLS LAST"),
+		)
+		sel.Prefix(d.With("sessions").As(sessions).
+			With("days").As(days).
+			With("session_counts").As(counts).
+			With("model_costs").As(costs))
+	}).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query usage series: %w", err)
+	}
+	return rows, nil
+}
+
+func usageSeriesSessions(d *sql.DialectBuilder, zone string, preds []predicate.AlertSession) *sql.Selector {
+	sessions := d.Select().From(d.Table(alertsession.Table))
+	for _, p := range preds {
+		p(sessions)
+	}
+	createdAt := sessions.C(alertsession.FieldCreatedAt)
+	sessions.AppendSelectAs(sessions.C(alertsession.FieldID), "session_id")
+	sessions.AppendSelectExprAs(sql.ExprFunc(func(b *sql.Builder) {
+		b.WriteString("date_trunc('day', " + createdAt + " AT TIME ZONE ")
+		b.Arg(zone)
+		b.WriteString("::text)")
+	}), "local_day")
+	return sessions
+}
+
+func usageSeriesDays(d *sql.DialectBuilder, params models.UsageSeriesParams) *sql.Selector {
+	days := d.Select()
+	// Step timestamp (not timestamptz) by one day so a DST day does not drift.
+	// Subtract one microsecond so a window that ends on local midnight excludes that day.
+	days.AppendSelectExprAs(sql.ExprFunc(func(b *sql.Builder) {
+		b.WriteString("generate_series(date_trunc('day', ")
+		b.Arg(params.StartDate)
+		b.WriteString("::timestamptz AT TIME ZONE ")
+		b.Arg(params.Timezone)
+		b.WriteString("::text), date_trunc('day', (")
+		b.Arg(params.EndDate)
+		b.WriteString("::timestamptz - interval '1 microsecond') AT TIME ZONE ")
+		b.Arg(params.Timezone)
+		b.WriteString("::text), interval '1 day')")
+	}), "local_day")
+	return days
+}
+
+func usageSeriesCounts(d *sql.DialectBuilder) *sql.Selector {
+	counts := d.Select().From(d.Table("sessions"))
+	counts.AppendSelectAs("local_day", "local_day")
+	counts.AppendSelectExprAs(sql.Expr("COUNT(*)"), "session_count")
+	counts.GroupBy("local_day")
+	return counts
+}
+
+func usageSeriesModelCosts(d *sql.DialectBuilder) *sql.Selector {
+	sessionsT := d.Table("sessions").As("s")
+	li := d.Table(llminteraction.Table).As("li")
+	costExpr := "SUM(" + li.C(llminteraction.FieldEstimatedCostUsd) + ")"
+	costs := d.Select().From(sessionsT)
+	costs.Join(li).On(sessionsT.C("session_id"), li.C(llminteraction.FieldSessionID))
+	costs.AppendSelectAs(sessionsT.C("local_day"), "local_day")
+	costs.AppendSelectAs(li.C(llminteraction.FieldModelName), "model_name")
+	costs.AppendSelectExprAs(sql.Expr(costExpr), "cost")
+	costs.GroupBy(sessionsT.C("local_day"), li.C(llminteraction.FieldModelName))
+	costs.Having(sql.ExprP(costExpr + " > 0"))
+	return costs
+}
+
+func assembleUsageSeries(rows []usageSeriesScanRow) ([]models.UsageSeriesPoint, []string) {
+	var days []usageSeriesDay
+	for _, row := range rows {
+		if len(days) == 0 || !days[len(days)-1].start.Equal(row.BucketStart) {
+			days = append(days, usageSeriesDay{
+				start:    row.BucketStart,
+				end:      row.BucketEnd,
+				sessions: row.SessionCount,
+				costs:    map[string]float64{},
+			})
+		}
+		day := &days[len(days)-1]
+		if row.ModelName.Valid && row.Cost.Valid && row.Cost.Float64 > 0 {
+			day.costs[row.ModelName.String] = row.Cost.Float64
+		}
+	}
+
+	windowCost := map[string]float64{}
+	for _, day := range days {
+		for name, cost := range day.costs {
+			windowCost[name] += cost
+		}
+	}
+	ranked := slices.Collect(maps.Keys(windowCost))
+	slices.SortFunc(ranked, func(a, b string) int {
+		if c := cmp.Compare(windowCost[b], windowCost[a]); c != 0 {
+			return c
+		}
+		return cmp.Compare(a, b)
+	})
+	named := ranked
+	var collapsed []string
+	if len(ranked) > usageSeriesTopModels {
+		named = slices.Clone(ranked[:usageSeriesTopModels])
+		collapsed = ranked[usageSeriesTopModels:]
+	}
+	collapsedSet := map[string]struct{}{}
+	for _, name := range collapsed {
+		collapsedSet[name] = struct{}{}
+	}
+
+	points := make([]models.UsageSeriesPoint, 0, len(days))
+	for _, day := range days {
+		byModel := map[string]float64{}
+		var namedSum float64
+		for _, name := range named {
+			cost, ok := day.costs[name]
+			if !ok || cost <= 0 {
+				continue
+			}
+			byModel[name] = cost
+			namedSum += cost
+		}
+		other := make([]models.UsageSeriesOtherModel, 0, len(collapsed))
+		var otherSum float64
+		for _, name := range collapsed {
+			cost, ok := day.costs[name]
+			if !ok || cost <= 0 {
+				continue
+			}
+			other = append(other, models.UsageSeriesOtherModel{
+				ModelName:        name,
+				EstimatedCostUsd: cost,
+			})
+			otherSum += cost
+		}
+		slices.SortFunc(other, func(a, b models.UsageSeriesOtherModel) int {
+			if c := cmp.Compare(b.EstimatedCostUsd, a.EstimatedCostUsd); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.ModelName, b.ModelName)
+		})
+		total := namedSum + otherSum
+		point := models.UsageSeriesPoint{
+			Start:            day.start,
+			End:              day.end,
+			SessionCount:     day.sessions,
+			EstimatedCostUsd: total,
+			AverageCostUsd:   usageAverageCostUSD(&total, day.sessions),
+		}
+		if len(byModel) > 0 {
+			point.ByModel = byModel
+		}
+		if len(other) > 0 {
+			point.OtherModels = other
+		}
+		points = append(points, point)
+	}
+	if len(named) == 0 {
+		named = nil
+	}
+	return points, named
 }

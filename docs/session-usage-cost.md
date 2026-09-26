@@ -4,7 +4,7 @@ TARSy can attach an **estimated USD cost** to each LLM interaction at write time
 
 **Architecture decisions:** [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md)
 
-Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The dashboard shows soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when estimation is enabled. Fleet dig-in is available on the **Usage** page (`/usage`, hamburger → Usage) via `GET /api/v1/usage/summary`. Config Viewer exposes the effective toggle, overrides, promotions (with lifecycle status), and catalog status under System → Cost estimation (`GET /api/v1/system/config`).
+Cost is persisted on each `llm_interaction` at write time. Session list, detail, summary, and `ExecutionOverview` APIs expose estimated cost + completeness when estimation is enabled. The dashboard shows soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when estimation is enabled. Fleet dig-in is available on the **Usage** page (`/usage`, hamburger → Usage) via `GET /api/v1/usage/summary`. Estimated-cost charts on that page use `GET /api/v1/usage/series`. Config Viewer exposes the effective toggle, overrides, promotions (with lifecycle status), and catalog status under System → Cost estimation (`GET /api/v1/system/config`).
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@ Cost is persisted on each `llm_interaction` at write time. Session list, detail,
 - [How estimates are computed](#how-estimates-are-computed)
 - [Session APIs](#session-apis)
 - [Usage API](#usage-api)
+- [Usage series](#usage-series)
 - [Thinking tokens](#thinking-tokens)
 - [Cache tokens](#cache-tokens)
 - [Known gaps](#known-gaps)
@@ -149,6 +150,30 @@ Rules:
 - When estimation is disabled: `cost_estimation_enabled: false` and cost fields are omitted; token rollups remain.
 
 Window edge case: a long-running session started before the window is excluded even if it burns tokens inside the window (and late chat on an in-window session is included). Same mental model as Alert History.
+
+### Usage series
+
+```text
+GET /api/v1/usage/series?start_date=&end_date=&alert_type=&chain_id=&timezone=
+```
+
+Per-day estimated cost for the same session population as the summary. The Usage page requests it in parallel with the summary (same window and `alert_type` / `chain_id`, plus the browser IANA timezone). `rank_by` is not a series parameter.
+
+| Param | Required | Notes |
+|-------|----------|--------|
+| `start_date` | yes | RFC3339. Same half-open window and 365-day cap as the summary. |
+| `end_date` | yes | RFC3339, exclusive. |
+| `alert_type` | no | Exact match. |
+| `chain_id` | no | Exact match. |
+| `timezone` | no | IANA name, for example `America/Los_Angeles`. Missing or unknown falls back to UTC. The response `timezone` is the zone that was applied. |
+
+Rules:
+
+- Cost is attributed to the session's `created_at`, not `llm_interactions.created_at`. A session that starts Monday and keeps chatting on Wednesday contributes all of its cost to Monday. A session created before the window is excluded even if an interaction falls inside it.
+- Each point is one local calendar day, including days with no sessions (`session_count: 0`, `estimated_cost_usd: 0`, `average_cost_usd` omitted). `session_count` includes sessions with no LLM rows. `average_cost_usd` is that day's cost divided by that day's session count.
+- `models` is up to six names with positive window cost, largest cost first, then `model_name` ascending. Remaining positive-cost models are listed per day in `other_models` (not a `model_name`). Unpriced-only models and explicit `$0` models appear in neither.
+- `cost_completeness`, `unpriced_interaction_count`, and `unpriced_token_count` match the summary for the same population.
+- When estimation is disabled the body is `{ "cost_estimation_enabled": false }` with no points.
 
 ## Thinking tokens
 

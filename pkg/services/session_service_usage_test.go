@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -830,4 +831,581 @@ func TestUsageAverageCostUSD(t *testing.T) {
 			assert.InDelta(t, tt.want, *got, 1e-9)
 		})
 	}
+}
+
+func TestSessionService_GetUsageSeries(t *testing.T) {
+	windowStart := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+	windowEnd := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+	dayOne := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	dayTwo := time.Date(2024, 6, 2, 12, 0, 0, 0, time.UTC)
+
+	params := models.UsageSeriesParams{
+		StartDate: windowStart,
+		EndDate:   windowEnd,
+		Timezone:  "UTC",
+	}
+	summaryParams := models.UsageSummaryParams{
+		StartDate: windowStart,
+		EndDate:   windowEnd,
+	}
+
+	t.Run("splits sessions and models across days and matches the summary", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		aID, aStage, aExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "day-one-a",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, aID, aStage, aExec, "model-a", 100, 50, 150, floatPtr(1.0), 0)
+		seedLLMInteraction(t, client.Client, aID, aStage, aExec, "model-b", 10, 10, 20, floatPtr(0.5), 0)
+		// A session with no LLM rows still counts toward that day's session_count.
+		seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "day-one-empty",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne.Add(time.Hour),
+		})
+
+		bID, bStage, bExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "day-two",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayTwo,
+		})
+		seedLLMInteraction(t, client.Client, bID, bStage, bExec, "model-a", 20, 10, 30, floatPtr(0.25), 0)
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		assert.True(t, series.CostEstimationEnabled)
+		assert.Equal(t, "UTC", series.Timezone)
+		assert.Equal(t, models.UsageBucketDay, series.Bucket)
+		assert.Equal(t, []string{"model-a", "model-b"}, series.Models)
+		require.Len(t, series.Points, 2)
+
+		june1 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+		assert.Equal(t, int64(2), june1.SessionCount)
+		assert.InDelta(t, 1.5, june1.EstimatedCostUsd, 1e-9)
+		require.NotNil(t, june1.AverageCostUsd)
+		assert.InDelta(t, 0.75, *june1.AverageCostUsd, 1e-9)
+		assert.InDelta(t, 1.0, june1.ByModel["model-a"], 1e-9)
+		assert.InDelta(t, 0.5, june1.ByModel["model-b"], 1e-9)
+		assert.Empty(t, june1.OtherModels)
+
+		june2 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 2)
+		assert.Equal(t, int64(1), june2.SessionCount)
+		assert.InDelta(t, 0.25, june2.EstimatedCostUsd, 1e-9)
+		assert.InDelta(t, 0.25, june2.ByModel["model-a"], 1e-9)
+		_, hasB := june2.ByModel["model-b"]
+		assert.False(t, hasB)
+
+		summary, err := svc.GetUsageSummary(ctx, summaryParams)
+		require.NoError(t, err)
+		assertSeriesMatchesSummary(t, summary, series)
+	})
+
+	t.Run("zero-fills an empty day and omits its average", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "only-day-one",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(0.2), 0)
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, series.Points, 2)
+
+		empty := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 2)
+		assert.Equal(t, int64(0), empty.SessionCount)
+		assert.InDelta(t, 0, empty.EstimatedCostUsd, 1e-9)
+		assert.Nil(t, empty.AverageCostUsd)
+		assert.Empty(t, empty.ByModel)
+
+		raw, err := json.Marshal(empty)
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), "average_cost_usd")
+	})
+
+	t.Run("filters match the summary", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		keepID, keepStage, keepExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "kept",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, keepID, keepStage, keepExec, "model-a", 10, 10, 20, floatPtr(0.4), 0)
+
+		otherID, otherStage, otherExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "other",
+			AlertType: "oom",
+			ChainID:   "other-chain",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, otherID, otherStage, otherExec, "model-b", 10, 10, 20, floatPtr(9), 0)
+
+		deletedID, deletedStage, deletedExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "deleted",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, deletedID, deletedStage, deletedExec, "model-a", 10, 10, 20, floatPtr(8), 0)
+		require.NoError(t, client.Client.AlertSession.UpdateOneID(deletedID).SetDeletedAt(time.Now()).Exec(ctx))
+
+		filtered := params
+		filtered.AlertType = "pod-crash"
+		filtered.ChainID = "k8s-analysis"
+		series, err := svc.GetUsageSeries(ctx, filtered)
+		require.NoError(t, err)
+		june1 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+		assert.Equal(t, int64(1), june1.SessionCount)
+		assert.InDelta(t, 0.4, june1.EstimatedCostUsd, 1e-9)
+
+		summary, err := svc.GetUsageSummary(ctx, models.UsageSummaryParams{
+			StartDate: windowStart,
+			EndDate:   windowEnd,
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+		})
+		require.NoError(t, err)
+		assertSeriesMatchesSummary(t, summary, series)
+	})
+
+	t.Run("excludes a session created before the window", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		before := time.Date(2024, 5, 15, 12, 0, 0, 0, time.UTC)
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "before",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: before,
+		})
+		seedLLMInteractionAt(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(4), dayOne)
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		for _, point := range series.Points {
+			assert.Equal(t, int64(0), point.SessionCount)
+			assert.InDelta(t, 0, point.EstimatedCostUsd, 1e-9)
+		}
+	})
+
+	t.Run("attributes later interactions to the session start day", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		monday := time.Date(2024, 6, 3, 15, 0, 0, 0, time.UTC)
+		wednesday := time.Date(2024, 6, 5, 15, 0, 0, 0, time.UTC)
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "monday-session",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: monday,
+		})
+		seedLLMInteractionAt(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(1.25), wednesday)
+
+		series, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+			EndDate:   time.Date(2024, 6, 6, 0, 0, 0, 0, time.UTC),
+			Timezone:  "UTC",
+		})
+		require.NoError(t, err)
+		require.Len(t, series.Points, 3)
+		mon := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 3)
+		assert.InDelta(t, 1.25, mon.EstimatedCostUsd, 1e-9)
+		assert.Equal(t, int64(1), mon.SessionCount)
+		wed := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 5)
+		assert.Equal(t, int64(0), wed.SessionCount)
+		assert.InDelta(t, 0, wed.EstimatedCostUsd, 1e-9)
+	})
+
+	t.Run("unpriced rows do not create a series", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "partial",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "priced", 100, 50, 150, floatPtr(0.3), 0)
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "unpriced", 200, 100, 300, nil, 0)
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "explicit-zero", 10, 10, 20, floatPtr(0), 0)
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"priced"}, series.Models)
+		assert.Equal(t, models.CostCompletenessPartial, series.CostCompleteness)
+		require.NotNil(t, series.UnpricedInteractionCount)
+		assert.Equal(t, 1, *series.UnpricedInteractionCount)
+		june1 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+		assert.InDelta(t, 0.3, june1.EstimatedCostUsd, 1e-9)
+		_, hasUnpriced := june1.ByModel["unpriced"]
+		assert.False(t, hasUnpriced)
+		assert.Empty(t, june1.OtherModels)
+
+		summary, err := svc.GetUsageSummary(ctx, summaryParams)
+		require.NoError(t, err)
+		assertSeriesMatchesSummary(t, summary, series)
+	})
+
+	t.Run("collapses models past the top six", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "many-models",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		// Five distinct costs, then a tie on the sixth slot (a-tie before z-tie by name).
+		costs := []struct {
+			name string
+			cost float64
+		}{
+			{"m7", 7},
+			{"m6", 6},
+			{"m5", 5},
+			{"m4", 4},
+			{"m3", 3},
+			{"z-tie", 2},
+			{"a-tie", 2},
+		}
+		for _, model := range costs {
+			seedLLMInteraction(t, client.Client, sid, stageID, execID, model.name, 10, 10, 20, floatPtr(model.cost), 0)
+		}
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "unpriced", 40, 10, 50, nil, 0)
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"m7", "m6", "m5", "m4", "m3", "a-tie"}, series.Models)
+		june1 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+		require.Len(t, june1.OtherModels, 1)
+		assert.Equal(t, "z-tie", june1.OtherModels[0].ModelName)
+		assert.InDelta(t, 2, june1.OtherModels[0].EstimatedCostUsd, 1e-9)
+		assert.InDelta(t, 29, june1.EstimatedCostUsd, 1e-9)
+		_, hasUnpriced := june1.ByModel["unpriced"]
+		assert.False(t, hasUnpriced)
+	})
+
+	t.Run("buckets on the requested local calendar day", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		// 2024-06-02 06:30 UTC is 2024-06-01 23:30 in America/Los_Angeles (PDT, UTC-7).
+		created := time.Date(2024, 6, 2, 6, 30, 0, 0, time.UTC)
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "tz-boundary",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: created,
+		})
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(1), 0)
+
+		wide := models.UsageSeriesParams{
+			StartDate: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+			EndDate:   time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+			Timezone:  "America/Los_Angeles",
+		}
+		series, err := svc.GetUsageSeries(ctx, wide)
+		require.NoError(t, err)
+		assert.Equal(t, "America/Los_Angeles", series.Timezone)
+		local := seriesPointOn(t, series.Points, "America/Los_Angeles", 2024, time.June, 1)
+		assert.Equal(t, int64(1), local.SessionCount)
+		assert.InDelta(t, 1, local.EstimatedCostUsd, 1e-9)
+		next := seriesPointOn(t, series.Points, "America/Los_Angeles", 2024, time.June, 2)
+		assert.Equal(t, int64(0), next.SessionCount)
+
+		utc, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: wide.StartDate,
+			EndDate:   wide.EndDate,
+			Timezone:  "Not/AZone",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "UTC", utc.Timezone)
+		utcPoint := seriesPointOn(t, utc.Points, "UTC", 2024, time.June, 2)
+		assert.Equal(t, int64(1), utcPoint.SessionCount)
+		may31 := seriesPointOn(t, utc.Points, "UTC", 2024, time.June, 1)
+		assert.Equal(t, int64(0), may31.SessionCount)
+	})
+
+	t.Run("clips partial days and excludes an end on local midnight", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		// 16:00 UTC is 09:00 PDT on June 1. 18:00 UTC is 11:00 PDT on June 2.
+		for _, created := range []time.Time{
+			time.Date(2024, 6, 1, 16, 0, 0, 0, time.UTC),
+			time.Date(2024, 6, 2, 18, 0, 0, 0, time.UTC),
+		} {
+			sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+				AlertData: created.Format(time.RFC3339),
+				AlertType: "pod-crash",
+				ChainID:   "k8s-analysis",
+				CreatedAt: created,
+			})
+			seedLLMInteraction(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(1), 0)
+		}
+
+		// 08:30 PDT June 1 through 13:00 PDT June 2. Both edge days are shorter than a calendar day.
+		start := time.Date(2024, 6, 1, 15, 30, 0, 0, time.UTC)
+		end := time.Date(2024, 6, 2, 20, 0, 0, 0, time.UTC)
+		series, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: start,
+			EndDate:   end,
+			Timezone:  "America/Los_Angeles",
+		})
+		require.NoError(t, err)
+		require.Len(t, series.Points, 2)
+		assert.Equal(t, []string{"2024-06-01", "2024-06-02"}, localSeriesDates(t, series.Points, "America/Los_Angeles"))
+		assert.True(t, series.Points[0].Start.Equal(start), "first day starts at the window, not local midnight")
+		assert.True(t, series.Points[0].End.Equal(time.Date(2024, 6, 2, 7, 0, 0, 0, time.UTC)))
+		assert.True(t, series.Points[1].Start.Equal(time.Date(2024, 6, 2, 7, 0, 0, 0, time.UTC)))
+		assert.True(t, series.Points[1].End.Equal(end), "last day ends at the window, not the next local midnight")
+		assert.Equal(t, int64(1), series.Points[0].SessionCount)
+		assert.Equal(t, int64(1), series.Points[1].SessionCount)
+
+		// Ends exactly at June 3 00:00 PDT, so that day is not a bucket.
+		onMidnight, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: time.Date(2024, 6, 1, 7, 0, 0, 0, time.UTC),
+			EndDate:   time.Date(2024, 6, 3, 7, 0, 0, 0, time.UTC),
+			Timezone:  "America/Los_Angeles",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"2024-06-01", "2024-06-02"}, localSeriesDates(t, onMidnight.Points, "America/Los_Angeles"))
+	})
+
+	t.Run("returns one point per local day across DST", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		springAt := time.Date(2024, 3, 10, 18, 0, 0, 0, time.UTC) // 11:00 PDT, after the spring-forward
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "spring-forward",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: springAt,
+		})
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "model-a", 10, 10, 20, floatPtr(1), 0)
+
+		spring, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: time.Date(2024, 3, 9, 8, 0, 0, 0, time.UTC),  // March 9 00:00 PST
+			EndDate:   time.Date(2024, 3, 12, 7, 0, 0, 0, time.UTC), // March 12 00:00 PDT
+			Timezone:  "America/Los_Angeles",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"2024-03-09", "2024-03-10", "2024-03-11"}, localSeriesDates(t, spring.Points, "America/Los_Angeles"))
+		assert.Equal(t, int64(1), seriesPointOn(t, spring.Points, "America/Los_Angeles", 2024, time.March, 10).SessionCount)
+		assert.Equal(t, int64(0), seriesPointOn(t, spring.Points, "America/Los_Angeles", 2024, time.March, 9).SessionCount)
+
+		fallAt := time.Date(2024, 11, 3, 18, 0, 0, 0, time.UTC) // 10:00 PST, after the fall-back
+		fid, fStage, fExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "fall-back",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: fallAt,
+		})
+		seedLLMInteraction(t, client.Client, fid, fStage, fExec, "model-a", 10, 10, 20, floatPtr(1), 0)
+
+		fall, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+			StartDate: time.Date(2024, 11, 2, 7, 0, 0, 0, time.UTC), // November 2 00:00 PDT
+			EndDate:   time.Date(2024, 11, 5, 8, 0, 0, 0, time.UTC), // November 5 00:00 PST
+			Timezone:  "America/Los_Angeles",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"2024-11-02", "2024-11-03", "2024-11-04"}, localSeriesDates(t, fall.Points, "America/Los_Angeles"))
+		assert.Equal(t, int64(1), seriesPointOn(t, fall.Points, "America/Los_Angeles", 2024, time.November, 3).SessionCount)
+		assert.Equal(t, int64(0), seriesPointOn(t, fall.Points, "America/Los_Angeles", 2024, time.November, 4).SessionCount)
+	})
+
+	t.Run("orders other_models by that day's cost", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		dayOneID, dayOneStage, dayOneExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "other-day-one",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		for i, name := range []string{"a", "b", "c", "d", "e", "f"} {
+			seedLLMInteraction(t, client.Client, dayOneID, dayOneStage, dayOneExec, name, 10, 10, 20, floatPtr(float64(10-i)), 0)
+		}
+		// Window rank is m-high (4) then m-low (3). Day two spends the other way.
+		seedLLMInteraction(t, client.Client, dayOneID, dayOneStage, dayOneExec, "m-high", 10, 10, 20, floatPtr(3), 0)
+		seedLLMInteraction(t, client.Client, dayOneID, dayOneStage, dayOneExec, "m-low", 10, 10, 20, floatPtr(0.5), 0)
+
+		dayTwoID, dayTwoStage, dayTwoExec := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "other-day-two",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayTwo,
+		})
+		seedLLMInteraction(t, client.Client, dayTwoID, dayTwoStage, dayTwoExec, "m-high", 10, 10, 20, floatPtr(1), 0)
+		seedLLMInteraction(t, client.Client, dayTwoID, dayTwoStage, dayTwoExec, "m-low", 10, 10, 20, floatPtr(2.5), 0)
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"a", "b", "c", "d", "e", "f"}, series.Models)
+
+		june1 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+		require.Len(t, june1.OtherModels, 2)
+		assert.Equal(t, "m-high", june1.OtherModels[0].ModelName)
+		assert.InDelta(t, 3, june1.OtherModels[0].EstimatedCostUsd, 1e-9)
+		assert.Equal(t, "m-low", june1.OtherModels[1].ModelName)
+		assert.InDelta(t, 0.5, june1.OtherModels[1].EstimatedCostUsd, 1e-9)
+
+		june2 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 2)
+		require.Len(t, june2.OtherModels, 2)
+		assert.Equal(t, "m-low", june2.OtherModels[0].ModelName)
+		assert.InDelta(t, 2.5, june2.OtherModels[0].EstimatedCostUsd, 1e-9)
+		assert.Equal(t, "m-high", june2.OtherModels[1].ModelName)
+		assert.InDelta(t, 1, june2.OtherModels[1].EstimatedCostUsd, 1e-9)
+		assert.Empty(t, june2.ByModel)
+	})
+
+	t.Run("counts every interaction type", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		ctx := t.Context()
+
+		sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+			AlertData: "all-types",
+			AlertType: "pod-crash",
+			ChainID:   "k8s-analysis",
+			CreatedAt: dayOne,
+		})
+		seedLLMInteraction(t, client.Client, sid, stageID, execID, "m", 10, 10, 20, floatPtr(0.1), 0)
+		seedUsageLLMInteractionType(t, client.Client, sid, stageID, execID,
+			llminteraction.InteractionTypeSummarization, "m", 30, 20, 50, floatPtr(0.2))
+		seedUsageLLMInteractionType(t, client.Client, sid, stageID, execID,
+			llminteraction.InteractionTypeScoring, "m", 5, 5, 10, floatPtr(0.05))
+
+		series, err := svc.GetUsageSeries(ctx, params)
+		require.NoError(t, err)
+		june1 := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+		assert.InDelta(t, 0.35, june1.EstimatedCostUsd, 1e-9)
+		assert.InDelta(t, 0.35, june1.ByModel["m"], 1e-9)
+
+		summary, err := svc.GetUsageSummary(ctx, summaryParams)
+		require.NoError(t, err)
+		assertSeriesMatchesSummary(t, summary, series)
+	})
+
+	t.Run("estimation disabled returns no points", func(t *testing.T) {
+		client := testdb.NewTestClient(t)
+		svc := setupTestSessionService(t, client.Client)
+		svc.SetCostEstimationEnabled(false)
+
+		series, err := svc.GetUsageSeries(t.Context(), params)
+		require.NoError(t, err)
+		assert.False(t, series.CostEstimationEnabled)
+		assert.Empty(t, series.Points)
+		assert.Empty(t, series.Timezone)
+
+		raw, err := json.Marshal(series)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"cost_estimation_enabled":false}`, string(raw))
+	})
+}
+
+func seedLLMInteractionAt(
+	t *testing.T,
+	client *ent.Client,
+	sessionID, stageID, execID, modelName string,
+	inputTokens, outputTokens, totalTokens int,
+	costUSD *float64,
+	createdAt time.Time,
+) {
+	t.Helper()
+	create := client.LLMInteraction.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stageID).
+		SetExecutionID(execID).
+		SetInteractionType(llminteraction.InteractionTypeIteration).
+		SetModelName(modelName).
+		SetLlmRequest(map[string]any{}).
+		SetLlmResponse(map[string]any{}).
+		SetInputTokens(inputTokens).
+		SetOutputTokens(outputTokens).
+		SetTotalTokens(totalTokens).
+		SetCreatedAt(createdAt)
+	if costUSD != nil {
+		create = create.SetEstimatedCostUsd(*costUSD)
+	}
+	create.SaveX(context.Background())
+}
+
+func assertSeriesMatchesSummary(t *testing.T, summary *models.UsageSummaryResponse, series *models.UsageSeriesResponse) {
+	t.Helper()
+	var costSum float64
+	var sessions int64
+	var weighted float64
+	for _, point := range series.Points {
+		costSum += point.EstimatedCostUsd
+		sessions += point.SessionCount
+		if point.AverageCostUsd != nil {
+			weighted += *point.AverageCostUsd * float64(point.SessionCount)
+		}
+	}
+	require.NotNil(t, summary.Totals.EstimatedCostUsd)
+	assert.InDelta(t, *summary.Totals.EstimatedCostUsd, costSum, 1e-9)
+	assert.Equal(t, summary.Totals.SessionCount, sessions)
+	if sessions == 0 {
+		assert.Nil(t, summary.Totals.AverageCostUsd)
+		return
+	}
+	require.NotNil(t, summary.Totals.AverageCostUsd)
+	assert.InDelta(t, *summary.Totals.AverageCostUsd, weighted/float64(sessions), 1e-9)
+}
+
+func localSeriesDates(t *testing.T, points []models.UsageSeriesPoint, zone string) []string {
+	t.Helper()
+	loc, err := time.LoadLocation(zone)
+	require.NoError(t, err)
+	dates := make([]string, len(points))
+	for i, point := range points {
+		dates[i] = point.Start.In(loc).Format(time.DateOnly)
+	}
+	return dates
+}
+
+func seriesPointOn(t *testing.T, points []models.UsageSeriesPoint, zone string, year int, month time.Month, day int) models.UsageSeriesPoint {
+	t.Helper()
+	loc, err := time.LoadLocation(zone)
+	require.NoError(t, err)
+	for _, point := range points {
+		local := point.Start.In(loc)
+		if local.Year() == year && local.Month() == month && local.Day() == day {
+			return point
+		}
+	}
+	t.Fatalf("no series point on %04d-%02d-%02d in %s", year, month, day, zone)
+	return models.UsageSeriesPoint{}
 }

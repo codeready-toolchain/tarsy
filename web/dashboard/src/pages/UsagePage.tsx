@@ -1,11 +1,12 @@
 /**
  * Usage page — fleet dig-in over a date window.
  *
- * Fetches GET /api/v1/usage/summary for server aggregates (totals, breakdowns, top-20).
+ * Fetches GET /api/v1/usage/summary for server aggregates (totals, breakdowns, top-20)
+ * and GET /api/v1/usage/series for the cost charts. Rank-by applies to the summary only.
  * Date presets are Usage-oriented (7d / 30d / MTD / last calendar month); default 30d.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
@@ -47,7 +48,8 @@ import {
   formatAppliedRange,
 } from '../components/dashboard/TimeRangeModal.tsx';
 import EstimatedCostDisplay from '../components/shared/EstimatedCostDisplay.tsx';
-import { getFilterOptions, getUsageSummary, handleAPIError } from '../services/api.ts';
+import { UsageCharts } from '../components/usage/UsageCharts.tsx';
+import { getFilterOptions, getUsageSeries, getUsageSummary, handleAPIError } from '../services/api.ts';
 import { websocketService } from '../services/websocket.ts';
 import { EVENT_SESSION_STATUS } from '../constants/eventTypes.ts';
 import { isTerminalStatus, type SessionStatus } from '../constants/sessionStatus.ts';
@@ -57,7 +59,7 @@ import {
   saveUsageFiltersToStorage,
 } from '../utils/filterPersistence.ts';
 import { sessionDetailPath } from '../constants/routes.ts';
-import type { UsageRankBy, UsageSummaryResponse } from '../types/api.ts';
+import type { UsageRankBy, UsageSeriesResponse, UsageSummaryResponse } from '../types/api.ts';
 import type { UsagePageFilters } from '../types/dashboard.ts';
 import type { SessionStatusPayload } from '../types/events.ts';
 
@@ -176,6 +178,19 @@ export function UsagePage() {
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [series, setSeries] = useState<UsageSeriesResponse | null>(null);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+  /** Once a summary reports estimation off, later filter changes skip the series call. */
+  const estimationDisabledRef = useRef(false);
+
+  const browserTimeZone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +222,11 @@ export function UsagePage() {
         rank_by: rankBy,
       });
       setSummary(data);
+      if (data.cost_estimation_enabled === false) {
+        estimationDisabledRef.current = true;
+        setSeries(null);
+        setSeriesError(null);
+      }
       return true;
     } catch (err) {
       setError(handleAPIError(err));
@@ -217,16 +237,58 @@ export function UsagePage() {
     }
   }, [startDate, endDate, alertType, chainId, rankBy]);
 
+  const fetchSeries = useCallback(async (): Promise<boolean> => {
+    if (estimationDisabledRef.current) {
+      setSeries(null);
+      setSeriesError(null);
+      setSeriesLoading(false);
+      return true;
+    }
+    setSeriesLoading(true);
+    setSeriesError(null);
+    try {
+      const data = await getUsageSeries({
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        alert_type: alertType || undefined,
+        chain_id: chainId || undefined,
+        timezone: browserTimeZone,
+      });
+      if (!data.cost_estimation_enabled || estimationDisabledRef.current) {
+        setSeries(null);
+        return true;
+      }
+      setSeries(data);
+      return true;
+    } catch (err) {
+      setSeriesError(handleAPIError(err));
+      setSeries(null);
+      return false;
+    } finally {
+      setSeriesLoading(false);
+    }
+  }, [startDate, endDate, alertType, chainId, browserTimeZone]);
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch sets loading around the request
     void fetchSummary();
   }, [fetchSummary]);
 
-  // Ref so the WebSocket handler (subscribed once, below) always calls the
-  // latest fetchSummary — without re-subscribing every time filters change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch sets loading around the request
+    void fetchSeries();
+  }, [fetchSeries]);
+
+  // Refs so the WebSocket handler (subscribed once, below) always calls the
+  // latest fetches — without re-subscribing every time filters change.
   const fetchSummaryRef = useRef(fetchSummary);
+  const fetchSeriesRef = useRef(fetchSeries);
   useEffect(() => {
     fetchSummaryRef.current = fetchSummary;
   }, [fetchSummary]);
+  useEffect(() => {
+    fetchSeriesRef.current = fetchSeries;
+  }, [fetchSeries]);
 
   const [liveUpdateNotice, setLiveUpdateNotice] = useState(false);
 
@@ -244,9 +306,11 @@ export function UsagePage() {
       if (refreshTimeout) clearTimeout(refreshTimeout);
       refreshTimeout = setTimeout(() => {
         refreshTimeout = null;
-        void fetchSummaryRef.current().then((success) => {
-          if (success) setLiveUpdateNotice(true);
-        });
+        void Promise.all([fetchSummaryRef.current(), fetchSeriesRef.current()]).then(
+          ([summaryOk]) => {
+            if (summaryOk) setLiveUpdateNotice(true);
+          },
+        );
       }, WS_REFRESH_THROTTLE_MS);
     };
 
@@ -274,6 +338,8 @@ export function UsagePage() {
   };
 
   const costEnabled = summary?.cost_estimation_enabled === true;
+  const chartSeries = series?.cost_estimation_enabled ? series : null;
+  const seriesPartial = chartSeries?.cost_completeness === 'partial';
   // Always reflects the actual applied range — the preset label, or the
   // real dates when a custom range is in effect — never a generic "Custom
   // range" placeholder that hides what's actually being shown.
@@ -411,6 +477,26 @@ export function UsagePage() {
                   )}
                 </Box>
               </Paper>
+
+              {costEnabled && (
+                <UsageCharts
+                  series={chartSeries}
+                  loading={seriesLoading}
+                  error={seriesError}
+                  onRetry={() => void fetchSeries()}
+                  partialCaption={
+                    seriesPartial ? unpricedCostCaption(chartSeries?.unpriced_token_count) : undefined
+                  }
+                  partialTooltip={
+                    seriesPartial
+                      ? unpricedCostTooltip(
+                          chartSeries?.unpriced_token_count,
+                          chartSeries?.unpriced_interaction_count,
+                        )
+                      : undefined
+                  }
+                />
+              )}
 
               {/* By model */}
               <BreakdownTable
