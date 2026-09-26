@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from '../../../theme';
-import { AverageSessionMark, CostTooltipBody } from '../../../components/usage/UsageCharts';
+import { AverageCostColumn, CostTooltipBody } from '../../../components/usage/UsageCharts';
 import type { UsageSeriesPoint } from '../../../types/api';
 
 function renderWithTheme(ui: ReactElement) {
@@ -42,22 +42,35 @@ describe('CostTooltipBody', () => {
   });
 });
 
-describe('AverageSessionMark', () => {
-  it('names a one-session mark differently from a filled mark', () => {
+describe('AverageCostColumn', () => {
+  it('outlines a one-session day and fills a day with more sessions', () => {
     const { rerender } = render(
       <svg>
-        <AverageSessionMark x={10} y={12} color="#3B6D9A" sessionCount={1} />
+        <AverageCostColumn x={10} y={12} width={8} height={40} color="#3B6D9A" sessionCount={1} />
       </svg>,
     );
-    const hollow = screen.getByRole('img', { name: 'One session' });
-    expect(hollow).toHaveAttribute('fill', 'transparent');
+    const outlined = screen.getByRole('img', { name: 'One session' });
+    expect(outlined).toHaveAttribute('fill', 'transparent');
+    expect(outlined).toHaveAttribute('stroke', '#3B6D9A');
 
     rerender(
       <svg>
-        <AverageSessionMark x={10} y={12} color="#3B6D9A" sessionCount={4} />
+        <AverageCostColumn x={10} y={12} width={8} height={40} color="#3B6D9A" sessionCount={4} />
       </svg>,
     );
     const filled = screen.getByRole('img', { name: '4 sessions' });
     expect(filled).toHaveAttribute('fill', '#3B6D9A');
+    expect(filled).toHaveAttribute('stroke', 'none');
+  });
+
+  it('keeps a zero-cost day visible on the baseline', () => {
+    render(
+      <svg>
+        <AverageCostColumn x={10} y={20} width={8} height={0} color="#3B6D9A" sessionCount={3} />
+      </svg>,
+    );
+    const column = screen.getByRole('img', { name: '3 sessions' });
+    expect(Number(column.getAttribute('height'))).toBeGreaterThan(0);
+    expect(Number(column.getAttribute('y'))).toBeLessThan(20);
   });
 });

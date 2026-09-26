@@ -1,16 +1,16 @@
 import type { ReactNode } from 'react';
 import { Alert, Box, Button, CircularProgress, Paper, Tooltip, Typography } from '@mui/material';
 import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
+import { BarChart } from '@mui/x-charts/BarChart';
+import type { BarProps } from '@mui/x-charts/BarChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { ChartsTooltipContainer, useAxesTooltip } from '@mui/x-charts/ChartsTooltip';
-import type { MarkElementProps } from '@mui/x-charts/LineChart';
 import { formatEstimatedCostUsd } from '../../utils/format.ts';
 import type { UsageSeriesPoint, UsageSeriesResponse } from '../../types/api.ts';
 import {
   COST_STACK_ID,
   USAGE_CHART_COLORS,
   averageCostData,
-  averageGapData,
   cumulativeCostBands,
   type CumulativeCostBand,
   cumulativeTotalAt,
@@ -124,47 +124,60 @@ export function AverageTooltipBody({
   );
 }
 
-/** Hollow when the day has one session; filled otherwise. */
-export function AverageSessionMark({
+/** A $0 day still occupies the baseline, so it does not look like a day with no sessions. */
+const ZERO_COLUMN_PX = 2;
+
+/** Outlined when the day has one session; filled otherwise. */
+export function AverageCostColumn({
   x,
   y,
+  width,
+  height,
   color,
   sessionCount,
 }: {
   x: number;
   y: number;
+  width: number;
+  height: number;
   color: string;
   sessionCount: number;
 }) {
-  const hollow = sessionCount === 1;
+  const outlined = sessionCount === 1;
+  const barHeight = height > 0 ? height : ZERO_COLUMN_PX;
+  const barY = height > 0 ? y : y - ZERO_COLUMN_PX;
+  const strokeWidth = outlined ? Math.min(1.5, width / 2, barHeight / 2) : 0;
+  const inset = strokeWidth / 2;
   return (
-    <circle
-      cx={x}
-      cy={y}
-      r={hollow ? 4 : 3.5}
-      fill={hollow ? 'transparent' : color}
-      stroke={color}
-      strokeWidth={2}
+    <rect
+      x={x + inset}
+      y={barY + inset}
+      width={Math.max(width - strokeWidth, 0)}
+      height={Math.max(barHeight - strokeWidth, 0)}
+      fill={outlined ? 'transparent' : color}
+      stroke={outlined ? color : 'none'}
+      strokeWidth={strokeWidth}
       role="img"
       aria-label={sessionMarkLabel(sessionCount)}
     />
   );
 }
 
-function dayAxis(points: UsageSeriesPoint[], timeZone: string) {
+function dayAxis(points: UsageSeriesPoint[], timeZone: string, scaleType: 'point' | 'band' = 'point') {
   return [
     {
-      scaleType: 'point' as const,
+      scaleType,
       data: points.map((point) => point.start),
       valueFormatter: (value: string) => formatSeriesDay(value, timeZone),
     },
   ];
 }
 
-function costAxis() {
+function costAxis(min?: number) {
   return [
     {
       width: 72,
+      ...(min === undefined ? {} : { min }),
       valueFormatter: (value: number | null) => formatEstimatedCostUsd(value),
     },
   ];
@@ -274,7 +287,6 @@ function AverageChart({ series }: { series: UsageSeriesResponse }) {
   const points = series.points ?? [];
   const timeZone = series.timezone || 'UTC';
   const color = USAGE_CHART_COLORS[0];
-  const gapData = averageGapData(points);
 
   function TooltipSlot() {
     const axes = useAxesTooltip();
@@ -287,56 +299,36 @@ function AverageChart({ series }: { series: UsageSeriesResponse }) {
     );
   }
 
-  function MarkSlot(props: MarkElementProps) {
-    const count = points[props.dataIndex]?.session_count ?? 0;
+  function ColumnSlot({ x, y, width, height, color: barColor, dataIndex }: BarProps) {
+    const count = points[dataIndex]?.session_count ?? 0;
+    if (count === 0) return null;
     return (
-      <AverageSessionMark
-        x={Number(props.x)}
-        y={Number(props.y)}
-        color={typeof props.color === 'string' ? props.color : color}
+      <AverageCostColumn
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        color={barColor}
         sessionCount={count}
       />
     );
   }
 
   return (
-    <LineChart
+    <BarChart
       height={CHART_HEIGHT}
       skipAnimation
       hideLegend
-      sx={{
-        '& .MuiLineChart-line[data-series-id="average-gap"]': {
-          strokeDasharray: '2 4',
-        },
-      }}
       series={[
-        // Under the solid line. connectNulls bridges empty days; the solid
-        // series covers the same path wherever neighboring days both have sessions.
-        ...(gapData
-          ? [
-              {
-                id: 'average-gap',
-                data: gapData,
-                color,
-                curve: 'linear' as const,
-                connectNulls: true,
-                showMark: false,
-                disableHighlight: true,
-              },
-            ]
-          : []),
         {
           id: 'average-cost',
           data: averageCostData(points),
           color,
-          curve: 'linear' as const,
-          shape: 'circle' as const,
-          showMark: ({ index }: { index: number }) => (points[index]?.session_count ?? 0) > 0,
         },
       ]}
-      xAxis={dayAxis(points, timeZone)}
-      yAxis={costAxis()}
-      slots={{ tooltip: TooltipSlot, mark: MarkSlot }}
+      xAxis={dayAxis(points, timeZone, 'band')}
+      yAxis={costAxis(0)}
+      slots={{ tooltip: TooltipSlot, bar: ColumnSlot }}
     />
   );
 }
