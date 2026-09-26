@@ -8,10 +8,17 @@ import (
 	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
+	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
+	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
+	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/metrics"
 )
+
+// orphanedScoringError is stored on scores, stages, and executions abandoned
+// because the process stopped before scoring reached a terminal status.
+const orphanedScoringError = "Scoring interrupted: process stopped while scoring was in progress"
 
 // orphanState tracks orphan detection metrics (thread-safe).
 type orphanState struct {
@@ -43,6 +50,10 @@ func (p *WorkerPool) runOrphanDetection(ctx context.Context) {
 // detectAndRecoverOrphans finds in_progress sessions with stale heartbeats
 // and marks them as timed_out (terminal state).
 func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
+	if err := p.recoverStaleScoring(ctx); err != nil {
+		slog.Error("Stale scoring recovery failed", "error", err)
+	}
+
 	threshold := time.Now().Add(-p.config.OrphanThreshold)
 
 	orphans, err := p.client.AlertSession.Query().
@@ -198,4 +209,167 @@ func markSessionTimedOut(ctx context.Context, client *ent.Client, sessionID, err
 	}
 
 	return nil
+}
+
+// CleanupStartupScoringOrphans marks scoring runs left in progress by a previous
+// process as failed. Scoring starts only after the session is already completed,
+// so CleanupStartupOrphans does not see these rows.
+// Called once during startup, before the worker pool begins processing.
+func CleanupStartupScoringOrphans(ctx context.Context, client *ent.Client, podID string) error {
+	scores, err := client.SessionScore.Query().
+		Where(
+			sessionscore.StatusIn(sessionscore.StatusPending, sessionscore.StatusInProgress),
+			sessionscore.HasSessionWith(
+				alertsession.PodIDEQ(podID),
+				alertsession.DeletedAtIsNil(),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to query startup scoring orphans: %w", err)
+	}
+	if len(scores) == 0 {
+		return nil
+	}
+
+	slog.Warn("Found startup scoring orphans from previous run",
+		"pod_id", podID,
+		"count", len(scores))
+
+	for _, score := range scores {
+		updated, err := markOrphanedScoringFailed(ctx, client, score)
+		if err != nil {
+			slog.Error("Failed to mark startup scoring orphan",
+				"session_id", score.SessionID,
+				"score_id", score.ID,
+				"error", err)
+			continue
+		}
+		if !updated {
+			continue
+		}
+		slog.Info("Startup scoring orphan recovered",
+			"session_id", score.SessionID,
+			"score_id", score.ID)
+	}
+
+	return nil
+}
+
+// recoverStaleScoring marks scoring runs that outlived the scoring timeout as failed.
+// A live run is cancelled at scoringTimeout, so anything older was abandoned
+// (for example a pod crash while another replica kept running).
+func (p *WorkerPool) recoverStaleScoring(ctx context.Context) error {
+	threshold := time.Now().Add(-scoringTimeout)
+
+	scores, err := p.client.SessionScore.Query().
+		Where(
+			sessionscore.StatusIn(sessionscore.StatusPending, sessionscore.StatusInProgress),
+			sessionscore.StartedAtLT(threshold),
+			sessionscore.HasSessionWith(alertsession.DeletedAtIsNil()),
+		).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to query stale scoring runs: %w", err)
+	}
+	if len(scores) == 0 {
+		return nil
+	}
+
+	slog.Warn("Detected stale scoring runs", "count", len(scores))
+
+	for _, score := range scores {
+		updated, err := markOrphanedScoringFailed(ctx, p.client, score)
+		if err != nil {
+			slog.Error("Failed to recover stale scoring run",
+				"session_id", score.SessionID,
+				"score_id", score.ID,
+				"error", err)
+			continue
+		}
+		if !updated {
+			continue
+		}
+		slog.Info("Stale scoring run marked as failed",
+			"session_id", score.SessionID,
+			"score_id", score.ID)
+	}
+
+	return nil
+}
+
+// markOrphanedScoringFailed marks a non-terminal score, its stage, active
+// executions, and streaming timeline events as failed. The score and stage
+// updates are conditional so a run that finishes concurrently is left unchanged.
+// Executions and timeline events are updated only when the stage transitions.
+func markOrphanedScoringFailed(ctx context.Context, client *ent.Client, score *ent.SessionScore) (bool, error) {
+	now := time.Now()
+
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	n, err := tx.SessionScore.Update().
+		Where(
+			sessionscore.IDEQ(score.ID),
+			sessionscore.StatusIn(sessionscore.StatusPending, sessionscore.StatusInProgress),
+		).
+		SetStatus(sessionscore.StatusFailed).
+		SetCompletedAt(now).
+		SetErrorMessage(orphanedScoringError).
+		Save(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to mark session score as failed: %w", err)
+	}
+	if n == 0 {
+		return false, nil
+	}
+
+	if score.StageID != nil {
+		stageID := *score.StageID
+		n, err = tx.Stage.Update().
+			Where(
+				stage.IDEQ(stageID),
+				stage.StatusIn(stage.StatusPending, stage.StatusActive),
+			).
+			SetStatus(stage.StatusFailed).
+			SetCompletedAt(now).
+			SetErrorMessage(orphanedScoringError).
+			Save(ctx)
+		if err != nil {
+			return false, fmt.Errorf("failed to mark scoring stage as failed: %w", err)
+		}
+		if n > 0 {
+			if _, err := tx.AgentExecution.Update().
+				Where(
+					agentexecution.StageIDEQ(stageID),
+					agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
+				).
+				SetStatus(agentexecution.StatusFailed).
+				SetCompletedAt(now).
+				SetErrorMessage(orphanedScoringError).
+				Save(ctx); err != nil {
+				return false, fmt.Errorf("failed to mark scoring execution as failed: %w", err)
+			}
+
+			if _, err := tx.TimelineEvent.Update().
+				Where(
+					timelineevent.StageIDEQ(stageID),
+					timelineevent.StatusEQ(timelineevent.StatusStreaming),
+				).
+				SetStatus(timelineevent.StatusTimedOut).
+				SetUpdatedAt(now).
+				Save(ctx); err != nil {
+				return false, fmt.Errorf("failed to update scoring timeline events: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return true, nil
 }

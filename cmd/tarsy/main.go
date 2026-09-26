@@ -140,6 +140,10 @@ func main() {
 		slog.Error("Failed to cleanup startup orphans", "error", err)
 		// Non-fatal — continue
 	}
+	if err := queue.CleanupStartupScoringOrphans(ctx, dbClient.Client, podID); err != nil {
+		slog.Error("Failed to cleanup startup scoring orphans", "error", err)
+		// Non-fatal — continue
+	}
 
 	// 4. Initialize masking service and domain services
 	maskingService := masking.NewService(

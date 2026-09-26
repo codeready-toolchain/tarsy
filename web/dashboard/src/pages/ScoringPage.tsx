@@ -5,7 +5,7 @@
  * re-score button, and back link to session detail.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -41,11 +41,11 @@ import { websocketService } from '../services/websocket.ts';
 import { remarkPlugins, finalAnswerMarkdownComponents } from '../utils/markdownComponents.tsx';
 import { formatTimestamp } from '../utils/format.ts';
 import { sessionDetailPath } from '../constants/routes.ts';
-import { EVENT_STAGE_STATUS, STAGE_TYPE } from '../constants/eventTypes.ts';
-import { TERMINAL_EXECUTION_STATUSES } from '../constants/sessionStatus.ts';
+import { EVENT_SESSION_SCORE_UPDATED, EVENT_STAGE_STATUS, STAGE_TYPE } from '../constants/eventTypes.ts';
+import { SCORING_STATUS, TERMINAL_EXECUTION_STATUSES } from '../constants/sessionStatus.ts';
 import type { SessionDetailResponse } from '../types/session.ts';
 import type { SessionScoreResponse } from '../types/api.ts';
-import type { StageStatusPayload } from '../types/events.ts';
+import type { SessionScoreUpdatedPayload, StageStatusPayload } from '../types/events.ts';
 
 function ScoreHeaderSkeleton() {
   return (
@@ -76,6 +76,24 @@ function getScoreColorKey(score: number): 'success' | 'warning' | 'error' {
   return 'error';
 }
 
+/** In-progress view after scoring starts. A completed score is left unchanged
+ * unless force is set, so a late in_progress event cannot clear a finished run.
+ * A user-triggered rescore passes force and clears the previous score.
+ */
+function markScoreInProgress(score: SessionScoreResponse, force = false): SessionScoreResponse {
+  if (!force && score.status === SCORING_STATUS.COMPLETED) return score;
+  return {
+    ...score,
+    status: SCORING_STATUS.IN_PROGRESS,
+    total_score: null,
+    score_analysis: null,
+    tool_improvement_report: null,
+    failure_tags: null,
+    error_message: null,
+    completed_at: null,
+  };
+}
+
 export function ScoringPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -90,6 +108,7 @@ export function ScoringPage() {
   const [rescoring, setRescoring] = useState(false);
   const [rescoreError, setRescoreError] = useState<string | null>(null);
   const [showRescoreDialog, setShowRescoreDialog] = useState(false);
+  const scoreFetchGen = useRef(0);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -108,20 +127,25 @@ export function ScoringPage() {
 
   const loadScore = useCallback(async () => {
     if (!id) return;
+    const gen = ++scoreFetchGen.current;
     setScoreLoading(true);
     setScoreError(null);
 
     try {
       const scoreData = await getScore(id);
+      if (gen !== scoreFetchGen.current) return;
       setScore(scoreData);
     } catch (err) {
+      if (gen !== scoreFetchGen.current) return;
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         setScore(null);
       } else {
         setScoreError(handleAPIError(err));
       }
     } finally {
-      setScoreLoading(false);
+      if (gen === scoreFetchGen.current) {
+        setScoreLoading(false);
+      }
     }
   }, [id]);
 
@@ -131,13 +155,35 @@ export function ScoringPage() {
     })();
   }, [loadData, loadScore]);
 
-  // WebSocket: re-fetch score when scoring stage completes
+  // WebSocket: show the in-progress spinner as soon as scoring starts, and
+  // re-fetch the score when it reaches a terminal status.
   useEffect(() => {
     if (!id) return;
     websocketService.connect();
 
     const handler = (data: Record<string, unknown>) => {
       const eventType = data.type as string | undefined;
+
+      if (eventType === EVENT_SESSION_SCORE_UPDATED) {
+        const payload = data as unknown as SessionScoreUpdatedPayload;
+        if (payload.scoring_status === SCORING_STATUS.IN_PROGRESS) {
+          // Drop any getScore started before this event so its response
+          // cannot restore the previous run.
+          scoreFetchGen.current += 1;
+          setRescoring(true);
+          setScore((prev) => (prev ? markScoreInProgress(prev) : prev));
+          return;
+        }
+        if (
+          payload.scoring_status === SCORING_STATUS.COMPLETED ||
+          payload.scoring_status === SCORING_STATUS.FAILED
+        ) {
+          setRescoring(false);
+          loadScore();
+        }
+        return;
+      }
+
       if (eventType !== EVENT_STAGE_STATUS) return;
 
       const payload = data as unknown as StageStatusPayload;
@@ -188,11 +234,13 @@ export function ScoringPage() {
     try {
       await triggerScoring(id);
       setShowRescoreDialog(false);
+      setScore((prev) => (prev ? markScoreInProgress(prev, true) : prev));
+      await loadScore();
     } catch (err) {
       setRescoreError(handleAPIError(err));
       setRescoring(false);
     }
-  }, [id]);
+  }, [id, loadScore]);
 
   const headerTitle = session
     ? `Scoring - ${id?.slice(-8) ?? ''}`
@@ -261,7 +309,7 @@ export function ScoringPage() {
                           {score.total_score}
                         </Typography>
                       </Box>
-                    ) : scoreLoading ? (
+                    ) : scoreLoading && !score ? (
                       <Skeleton variant="circular" width={72} height={72} />
                     ) : (
                       <Box
