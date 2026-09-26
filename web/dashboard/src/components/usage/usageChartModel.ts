@@ -82,31 +82,12 @@ export function cumulativeTotalAt(bands: CumulativeCostBand[], index: number): n
   return bands.reduce((sum, band) => sum + (band.data[index] ?? 0), 0);
 }
 
+/** Null on days with no sessions, so the column chart draws no bar. */
 export function averageCostData(points: UsageSeriesPoint[]): (number | null)[] {
   return points.map((point) => (point.session_count === 0 ? null : (point.average_cost_usd ?? null)));
 }
 
-/**
- * Same values as {@link averageCostData} when an empty day sits between two
- * session days, so a connectNulls series can bridge that gap. Null otherwise.
- */
-export function averageGapData(points: UsageSeriesPoint[]): (number | null)[] | null {
-  const values = averageCostData(points);
-  let seenValue = false;
-  let seenGap = false;
-  for (const value of values) {
-    if (value == null) {
-      if (seenValue) seenGap = true;
-    } else if (seenGap) {
-      return values;
-    } else {
-      seenValue = true;
-    }
-  }
-  return null;
-}
-
-/** Accessible name for an average-chart mark. One session is the hollow mark. */
+/** Accessible name for an average-chart column. One session is the outlined column. */
 export function sessionMarkLabel(sessionCount: number): string {
   return sessionCount === 1 ? 'One session' : `${sessionCount} sessions`;
 }
