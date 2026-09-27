@@ -47,6 +47,12 @@ type SessionExecutor interface {
 	Execute(ctx context.Context, session *ent.AlertSession) *ExecutionResult
 }
 
+// SessionLabelEvaluator is an optional experiment run after a completed session
+// has been finalized. Implementations must leave the investigation unchanged.
+type SessionLabelEvaluator interface {
+	EvaluateSessionLabels(ctx context.Context, sessionID string)
+}
+
 // ExecutionResult is lightweight — just the terminal state.
 // All intermediate state (TimelineEvents, Interactions, Stages) was already
 // written to DB by the executor during processing.

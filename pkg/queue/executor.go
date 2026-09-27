@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/cost"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
+	"github.com/codeready-toolchain/tarsy/pkg/labeling"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
 	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
@@ -42,6 +43,7 @@ type RealSessionExecutor struct {
 	memoryService    *memory.Service
 	memoryConfig     *config.MemoryConfig
 	costBook         *cost.Book
+	labelClassifier  *labeling.Classifier
 }
 
 // NewRealSessionExecutor creates a new session executor.
