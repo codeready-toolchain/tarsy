@@ -25,16 +25,16 @@ An explicit value on a model below the floor is still sent. The floor only picks
 
 Generation 5 already uses adaptive thinking. A user provider that omits the field is sent `output_config.effort: high`, which is the API default. Opus 4.7 still receives `budget_tokens` when the field is omitted. That model rejects the budget at the API; leaving the path in place is intentional so existing 4.7 providers are not retargeted.
 
-Eligible builtin providers set the highest documented effort for that family, so they do not use the omitted-field `high`:
+Eligible builtin providers set a quality default below the unconstrained top where that top does not earn its cost, so they do not use the omitted-field `high` except where `high` is the chosen level:
 
 | Builtins | Model | `reasoning_effort` |
 |---|---|---|
 | `openai-default`, `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-sol`, `gpt-6-luna` | GPT ≥ 5.6 | `max` |
-| `xai-default`, `grok-4.6`, `grok-4.7` | Grok ≥ 4.6 | `xhigh` |
+| `xai-default`, `grok-4.6`, `grok-4.7` | Grok ≥ 4.6 | `high` |
 | `google-default`, `gemini-3.8-flash` | Gemini 3.8 | `high` |
-| `anthropic-default`, `claude-sonnet-5-5`, `claude-opus-5-5`, `vertexai-default` | Claude Sonnet 5, Sonnet 5.5, Opus 5.5 | `max` |
+| `anthropic-default`, `claude-sonnet-5-5`, `claude-opus-5-5`, `vertexai-default` | Claude Sonnet 5, Sonnet 5.5, Opus 5.5 | `xhigh` |
 
-`claude-sonnet-5-5` is Claude Sonnet 5.5 (released 2026-09-28). It supports `low`, `medium`, `high`, `xhigh`, and `max`, so the builtin uses `max`. The version parser already treats it as 5.5, which is above 4.8. `xhigh` is documented because it is generation 5. There is no `gpt-6-terra` on the OpenAI API as of 2026-09-28. The GPT-6 models are Astra, Sol, and Luna. Terra remains `gpt-5.6-terra`, which is already a builtin at `max`.
+`claude-sonnet-5-5` is Claude Sonnet 5.5 (released 2026-09-28). It supports `low`, `medium`, `high`, `xhigh`, and `max`. The builtin uses `xhigh`: on FrontierCode, `max` scores below `xhigh`. The version parser already treats it as 5.5, which is above 4.8. `xhigh` is documented because it is generation 5. Grok builtins use `high` because `xhigh` does not raise the Intelligence Index and is worse on terminal-agent benches. Claude Sonnet 5 and Opus 5.5 builtins use `xhigh` because `max` adds token spend without a reliable quality gain, and on Terminal-Bench Opus 5.5 peaks at `xhigh`. GPT builtins stay at `max` because the Sol agentic ladder still climbs there. There is no `gpt-6-terra` on the OpenAI API as of 2026-09-28. The GPT-6 models are Astra, Sol, and Luna. Terra remains `gpt-5.6-terra`, which is already a builtin at `max`.
 
 `max` is above `xhigh`. Gemini's documented set stops at `high`. Builtins below the floor stay unset: `gpt-5.2`, Gemini 3.7 and older, `google-image-flash`. A user `llm_providers` entry with the same name replaces the builtin wholesale and does not inherit this value. If that entry omits the field and the model is eligible, the omitted-field rule still sends `high`.
 
@@ -48,7 +48,7 @@ Eligible builtin providers set the highest documented effort for that family, so
 - Also warn when there is no custom `base_url`, the model ID is one we recognize, and the value is outside that model's documented set. A recognized model below its family floor, a `gpt-5*`-chat or `gpt-5*`-main ID, or a Gemini ID containing `image` has no documented set, so any configured value warns. An unrecognized model ID (`company-reasoner`) does not get this warning.
 - A custom `base_url` skips the documented-set warning. `openai-gemini-proxy` can send a well-known level with no warning. Wiring `LLMConfig.base_url` into the LangChain client is out of scope: the Python service does not read that field today.
 - TARSy does not clamp. If the provider rejects the level, the call fails with the provider's error.
-- Eligible builtin providers set the highest documented effort for their family (`max` for GPT 5.6+ and Claude 4.8+, `xhigh` for Grok 4.6+, `high` for Gemini 3.8). Builtins below the floor leave the field unset. A user provider that omits the field still gets `high` when the model is eligible.
+- Eligible builtin providers set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8. Builtins below the floor leave the field unset. A user provider that omits the field still gets `high` when the model is eligible.
 
 ## Architecture
 
@@ -135,13 +135,13 @@ xAI currently receives no reasoning object. Eligible Grok models with the field 
 
 ## Implementation plan
 
-### PR 1: Config, warnings, and the proto field
+### PR 1: Config, warnings, and the proto field - DONE
 
 Lands the knob without changing any provider payload.
 
 - Well-known `ReasoningEffort` constants in `pkg/config`. The struct field is a string.
-- Set `reasoning_effort` on the eligible builtins in `initBuiltinLLMProviders` to the family's highest documented level (`max`, `xhigh`, or `high` as in the builtin table). Leave `gpt-5.2`, Gemini 3.7 and older, and `google-image-flash` unset. Cover the values in `pkg/config/builtin_test.go`.
-- Add builtin `claude-sonnet-5-5`: type `anthropic`, model `claude-sonnet-5-5`, `reasoning_effort: max`. Do not retarget `anthropic-default` or `vertexai-default`; those stay on `claude-sonnet-5`. Add the row to the built-in provider table in `docs/functional-areas-design.md` and a case in `pkg/config/builtin_test.go`. Do not add `gpt-6-terra`. That slug is not on the OpenAI API.
+- Set `reasoning_effort` on the eligible builtins in `initBuiltinLLMProviders` to the levels in the builtin table (`max` for GPT, `xhigh` for Claude, `high` for Grok and Gemini). Leave `gpt-5.2`, Gemini 3.7 and older, and `google-image-flash` unset. Cover the values in `pkg/config/builtin_test.go`.
+- Add builtin `claude-sonnet-5-5`: type `anthropic`, model `claude-sonnet-5-5`, `reasoning_effort: xhigh`. Do not retarget `anthropic-default` or `vertexai-default`; those stay on `claude-sonnet-5`. Add the row to the built-in provider table in `docs/functional-areas-design.md` and a case in `pkg/config/builtin_test.go`. Do not add `gpt-6-terra`. That slug is not on the OpenAI API.
 - `reasoning_effort` on `LLMProviderConfig`. Empty or whitespace fails load inside `validateLLMProviders` (`NewValidationError`, startup fails). Other values `slog.Warn` and are kept, including providers that no chain references. ` high ` and `High` warn as outside the well-known five. `high` on `claude-sonnet-4-6` warns as below the floor. `medium` on a custom `base_url` does not warn. `xhigh` on `gemini-3.8-flash` warns. `company-reasoner` with `medium` does not.
 - Version parser with table tests: `gpt-5.6-sol` and `gpt-6` eligible, `gpt-5.2` and `gpt-5.6-chat` not; `grok-4.6` eligible, `grok-4` not; `gemini-3.8-flash` eligible, `gemini-3.7-flash` and `gemini-3.8-flash-image` not; `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, and `claude-opus-5-5` eligible; `claude-sonnet-4-6`, `claude-opus-4.6`, `claude-opus-4-7`, and `claude-sonnet-4-6-20260217` not. An ID that does not match the family pattern is unrecognized, not eligible.
 - `LLMConfig.reasoning_effort` is field 11 (`backend` is 10). Run `make proto-generate` so the Go and Python stubs both grow the field. `toProtoLLMConfig` writes the three proto rules in Architecture. Tests live next to the existing cases in `pkg/agent/llm_grpc_test.go`.

@@ -209,6 +209,21 @@ llm_providers:
       google_search: true
 ```
 
+`reasoning_effort` is optional. Well-known levels are `low`, `medium`, `high`, `xhigh`, and `max`. Any other non-empty token is forwarded as written: no trimming and no case-folding. A whitespace-only value fails startup. A missing key is omitted.
+
+When the field is omitted, current models are sent `high`: GPT 5.6 and newer (not IDs containing `-chat` or `-main`), Grok 4.6 and newer, Gemini 3.8 and newer (not IDs containing `image`), and Claude 4.8 and newer, including generation 5 and 5.5. Older models keep today's payload.
+
+Startup logs one warning per provider and still boots when the configured value is outside the well-known five. With no custom `base_url`, it also warns when the model ID is recognized and the value is outside that model's documented set:
+
+| Models | Documented levels |
+|--------|-------------------|
+| GPT 5.6+, excluding `-chat` and `-main` | `low`, `medium`, `high`, `xhigh`, `max` |
+| Grok 4.6+ | `low`, `medium`, `high`, `xhigh` |
+| Gemini 3.8+, excluding `image` | `low`, `medium`, `high` |
+| Claude 4.8+ | `low`, `medium`, `high`, `max`. `xhigh` is also documented for Opus 4.8+ and generation 5, including 5.5 |
+
+A custom `base_url` skips the documented-set warning. A recognized model below its floor, a GPT ID containing `-chat` or `-main`, or a Gemini ID containing `image` has no documented set, so any configured value warns. Eligible built-in providers set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8. Built-ins below the floor leave the field unset.
+
 ### .env
 
 Environment variables:
@@ -278,6 +293,7 @@ agent_chains:
 - **gpt-5.2** - previous generation (OpenAI recommends GPT-5.6)
 - **anthropic-default** - Claude Sonnet 5
 - **claude-opus-5-5** - Claude Opus 5.5
+- **claude-sonnet-5-5** - Claude Sonnet 5.5
 - **xai-default**, **grok-4.7** - Grok 4.7
 - **grok-4.6** - previous Grok generation
 - **vertexai-default** - Claude Sonnet 5 on Vertex AI

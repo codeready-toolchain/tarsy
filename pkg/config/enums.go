@@ -110,6 +110,16 @@ func (t LLMProviderType) IsValid() bool {
 	}
 }
 
+// Well-known reasoning effort levels. The provider field is a free string;
+// these constants document the common models and are not a closed set.
+const (
+	ReasoningEffortLow    = "low"
+	ReasoningEffortMedium = "medium"
+	ReasoningEffortHigh   = "high"
+	ReasoningEffortXHigh  = "xhigh"
+	ReasoningEffortMax    = "max"
+)
+
 // GoogleNativeTool defines Google/Gemini native tools
 type GoogleNativeTool string
 

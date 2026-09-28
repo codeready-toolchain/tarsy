@@ -57,6 +57,118 @@ func TestToProtoLLMConfig(t *testing.T) {
 	assert.True(t, proto.NativeTools["google_search"])
 	// Backend is set by toProtoRequest from input.Backend
 	assert.Empty(t, proto.Backend)
+	assert.Empty(t, proto.ReasoningEffort)
+}
+
+func TestToProtoLLMConfig_ReasoningEffort(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *config.LLMProviderConfig
+		want string
+	}{
+		{
+			name: "explicit value",
+			cfg: &config.LLMProviderConfig{
+				Type:            config.LLMProviderTypeGoogle,
+				Model:           "gemini-3.8-flash",
+				ReasoningEffort: "medium",
+			},
+			want: "medium",
+		},
+		{
+			name: "explicit value is not rewritten",
+			cfg: &config.LLMProviderConfig{
+				Type:            config.LLMProviderTypeOpenAI,
+				Model:           "gpt-5.6",
+				ReasoningEffort: " high ",
+			},
+			want: " high ",
+		},
+		{
+			name: "explicit value on below-floor claude",
+			cfg: &config.LLMProviderConfig{
+				Type:            config.LLMProviderTypeAnthropic,
+				Model:           "claude-sonnet-4-6",
+				ReasoningEffort: "max",
+			},
+			want: "max",
+		},
+		{
+			name: "omitted eligible gpt-5.6",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeOpenAI, Model: "gpt-5.6"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible gpt-6",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeOpenAI, Model: "gpt-6"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible grok",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeXAI, Model: "grok-4.6"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible gemini",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "gemini-3.8-flash"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible claude 4.8",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude-opus-4-8"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible sonnet 5",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude-sonnet-5"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible sonnet 5.5",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude-sonnet-5-5"},
+			want: "high",
+		},
+		{
+			name: "omitted eligible opus 5.5",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude-opus-5-5"},
+			want: "high",
+		},
+		{
+			name: "omitted vertex claude uses the model id",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeVertexAI, Model: "claude-sonnet-5"},
+			want: "high",
+		},
+		{
+			name: "omitted legacy gpt",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeOpenAI, Model: "gpt-5.2"},
+		},
+		{
+			name: "omitted gpt chat",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeOpenAI, Model: "gpt-5.6-chat"},
+		},
+		{
+			name: "omitted gemini image",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "gemini-3.8-flash-image"},
+		},
+		{
+			name: "omitted legacy claude",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude-sonnet-4-6"},
+		},
+		{
+			name: "omitted opus 4.7",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude-opus-4-7"},
+		},
+		{
+			name: "omitted unrecognized",
+			cfg:  &config.LLMProviderConfig{Type: config.LLMProviderTypeOpenAI, Model: "company-reasoner"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, toProtoLLMConfig(tt.cfg).ReasoningEffort)
+		})
+	}
 }
 
 func TestToProtoRequest_BackendPassthrough(t *testing.T) {

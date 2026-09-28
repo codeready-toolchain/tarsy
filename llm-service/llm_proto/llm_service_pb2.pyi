@@ -169,7 +169,7 @@ class ErrorInfo(_message.Message):
     def __init__(self, message: _Optional[str] = ..., code: _Optional[str] = ..., retryable: _Optional[bool] = ...) -> None: ...
 
 class LLMConfig(_message.Message):
-    __slots__ = ("provider", "model", "api_key_env", "credentials_env", "base_url", "native_tools", "project", "location", "backend")
+    __slots__ = ("provider", "model", "api_key_env", "credentials_env", "base_url", "native_tools", "project", "location", "backend", "reasoning_effort")
     class NativeToolsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -186,6 +186,7 @@ class LLMConfig(_message.Message):
     PROJECT_FIELD_NUMBER: _ClassVar[int]
     LOCATION_FIELD_NUMBER: _ClassVar[int]
     BACKEND_FIELD_NUMBER: _ClassVar[int]
+    REASONING_EFFORT_FIELD_NUMBER: _ClassVar[int]
     provider: str
     model: str
     api_key_env: str
@@ -195,4 +196,5 @@ class LLMConfig(_message.Message):
     project: str
     location: str
     backend: str
-    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., api_key_env: _Optional[str] = ..., credentials_env: _Optional[str] = ..., base_url: _Optional[str] = ..., native_tools: _Optional[_Mapping[str, bool]] = ..., project: _Optional[str] = ..., location: _Optional[str] = ..., backend: _Optional[str] = ...) -> None: ...
+    reasoning_effort: str
+    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., api_key_env: _Optional[str] = ..., credentials_env: _Optional[str] = ..., base_url: _Optional[str] = ..., native_tools: _Optional[_Mapping[str, bool]] = ..., project: _Optional[str] = ..., location: _Optional[str] = ..., backend: _Optional[str] = ..., reasoning_effort: _Optional[str] = ...) -> None: ...

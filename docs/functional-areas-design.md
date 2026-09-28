@@ -853,7 +853,7 @@ Shared convention between Go and Python:
 #### gRPC Protocol (`proto/llm_service.proto`)
 
 - **RPC**: `Generate(GenerateRequest) returns (stream GenerateResponse)`
-- **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`
+- **LLMConfig**: `backend`, `provider`, `model`, `api_key_env`, `base_url`, `native_tools`, `reasoning_effort`
 - **GenerateRequest flags**: `clear_cache` (signals provider switch mid-execution — Google Native clears `_model_contents` cache to avoid stale thought signatures); `prompt_cache` (Claude `cache_control` / GPT-5.6+ OpenAI cache options — Go ANDs eligibility with `system.prompt_caching.enabled`); `disable_tool_calls` (keep tool schemas, forbid calling — forced conclusion)
 - **UsageInfo**: `input_tokens` is **uncached** billed input; `cache_read_tokens` / `cache_creation_tokens` persisted when > 0. Python normalizes provider-inclusive counts before streaming usage.
 - **Response streaming**: `TextDelta`, `ThinkingDelta`, `ToolCallDelta`, `UsageInfo`, `ErrorInfo`, `CodeExecutionDelta`, `GroundingDelta`
@@ -874,6 +874,7 @@ Shared convention between Go and Python:
 | `gpt-5.2` | openai | gpt-5.2 | 400K |
 | `anthropic-default` | anthropic | claude-sonnet-5 | 1M |
 | `claude-opus-5-5` | anthropic | claude-opus-5-5 | 1M |
+| `claude-sonnet-5-5` | anthropic | claude-sonnet-5-5 | 1M |
 | `xai-default` | xai | grok-4.7 | 500K |
 | `grok-4.7` | xai | grok-4.7 | 500K |
 | `grok-4.6` | xai | grok-4.6 | 500K |

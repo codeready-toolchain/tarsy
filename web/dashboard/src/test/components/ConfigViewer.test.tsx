@@ -75,6 +75,47 @@ describe('ConfigViewer fallback lists', () => {
   });
 });
 
+describe('ConfigViewer LLM providers', () => {
+  it('shows reasoning_effort when the API sends it', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        llm_providers: {
+          'gemini-3.8-flash': {
+            type: 'google',
+            model: 'gemini-3.8-flash',
+            reasoning_effort: 'high',
+          },
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('LLM Providers'));
+    expect(await screen.findByText('reasoning_effort')).toBeInTheDocument();
+    expect(screen.getByText('high')).toBeInTheDocument();
+  });
+
+  it('hides reasoning_effort when the API omits it', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        llm_providers: {
+          legacy: {
+            type: 'openai',
+            model: 'gpt-5.2',
+          },
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('LLM Providers'));
+    expect(await screen.findByText('gpt-5.2')).toBeInTheDocument();
+    expect(screen.queryByText('reasoning_effort')).not.toBeInTheDocument();
+  });
+});
+
 describe('ConfigViewer label maps', () => {
   it('shows a catalog name under Label maps', async () => {
     mockGetSystemConfig.mockResolvedValue(

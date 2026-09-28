@@ -26,6 +26,10 @@ type LLMProviderConfig struct {
 	// Optional custom endpoint/base URL
 	BaseURL string `yaml:"base_url,omitempty"`
 
+	// Optional reasoning effort forwarded to the provider as written.
+	// Empty means omitted. Eligible models are then sent "high".
+	ReasoningEffort string `yaml:"reasoning_effort,omitempty"`
+
 	// Google-specific native tools
 	NativeTools map[GoogleNativeTool]bool `yaml:"native_tools,omitempty"`
 }
