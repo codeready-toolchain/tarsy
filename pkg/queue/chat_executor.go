@@ -286,13 +286,14 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 
 	// 3. Create AgentExecution record
 	exec, err := e.stageService.CreateAgentExecution(execCtx, models.CreateAgentExecutionRequest{
-		StageID:     stageID,
-		SessionID:   input.Session.ID,
-		AgentName:   resolvedConfig.AgentName,
-		AgentIndex:  1,
-		LLMBackend:  resolvedConfig.LLMBackend,
-		LLMProvider: chatProviderName,
-		ModelName:   resolvedConfig.ModelName(),
+		StageID:         stageID,
+		SessionID:       input.Session.ID,
+		AgentName:       resolvedConfig.AgentName,
+		AgentIndex:      1,
+		LLMBackend:      resolvedConfig.LLMBackend,
+		LLMProvider:     chatProviderName,
+		ModelName:       resolvedConfig.ModelName(),
+		ReasoningEffort: resolvedConfig.LLMProvider.EffectiveReasoningEffort(),
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)

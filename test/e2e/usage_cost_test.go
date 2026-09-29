@@ -131,6 +131,31 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		totalCost += cost
 	}
 
+	t.Run("PersistsReasoningEffort", func(t *testing.T) {
+		rows, err := app.EntClient.LLMInteraction.Query().
+			Where(llminteraction.SessionID(ids[0])).
+			All(t.Context())
+		require.NoError(t, err)
+		require.NotEmpty(t, rows)
+		for _, row := range rows {
+			assert.Equal(t, "test-model", row.ModelName)
+			require.NotNil(t, row.ReasoningEffort)
+			assert.Equal(t, "medium", *row.ReasoningEffort)
+		}
+
+		execs := app.QueryExecutions(t, ids[0])
+		require.NotEmpty(t, execs)
+		for _, exec := range execs {
+			require.NotNil(t, exec.ReasoningEffort)
+			assert.Equal(t, "medium", *exec.ReasoningEffort)
+		}
+
+		for _, item := range collectTraceLLMItems(t, app.GetTraceList(t, ids[0])) {
+			assert.Equal(t, "test-model", item["model_name"])
+			assert.Equal(t, "medium", item["reasoning_effort"])
+		}
+	})
+
 	t.Run("PersistsCacheReadOnInteraction", func(t *testing.T) {
 		rows, err := app.EntClient.LLMInteraction.Query().
 			Where(llminteraction.SessionID(ids[0])).
@@ -274,6 +299,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		require.Len(t, byModel, 1)
 		model := byModel[0].(map[string]interface{})
 		assert.Equal(t, "test-model", model["model_name"])
+		assert.Equal(t, "medium", model["reasoning_effort"])
 		assert.Equal(t, true, model["priced"])
 		assert.Equal(t, 0, toInt(model["unpriced_interaction_count"]))
 		assert.Equal(t, specs[0].invCacheRead, toInt(model["cache_read_tokens"]))
@@ -320,6 +346,7 @@ func TestUsageCost_PipelinePersistsAndExposesCost(t *testing.T) {
 		q.Set("timezone", "UTC")
 		series := app.GetUsageSeries(t, q.Encode())
 		assert.Equal(t, true, series["cost_estimation_enabled"])
+		assert.Equal(t, []interface{}{"test-model (medium)"}, series["models"])
 		points, ok := series["points"].([]interface{})
 		require.True(t, ok)
 		var seriesCost float64

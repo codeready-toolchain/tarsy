@@ -31,6 +31,7 @@ export interface LLMInteractionListItem {
   id: string;
   interaction_type: string;
   model_name: string;
+  reasoning_effort?: string | null;
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
@@ -57,6 +58,7 @@ export interface LLMInteractionDetailResponse {
   id: string;
   interaction_type: string;
   model_name: string;
+  reasoning_effort?: string | null;
   thinking_content?: string;
   input_tokens?: number;
   output_tokens?: number;

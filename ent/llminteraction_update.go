@@ -58,6 +58,26 @@ func (_u *LLMInteractionUpdate) SetNillableModelName(v *string) *LLMInteractionU
 	return _u
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_u *LLMInteractionUpdate) SetReasoningEffort(v string) *LLMInteractionUpdate {
+	_u.mutation.SetReasoningEffort(v)
+	return _u
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_u *LLMInteractionUpdate) SetNillableReasoningEffort(v *string) *LLMInteractionUpdate {
+	if v != nil {
+		_u.SetReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (_u *LLMInteractionUpdate) ClearReasoningEffort() *LLMInteractionUpdate {
+	_u.mutation.ClearReasoningEffort()
+	return _u
+}
+
 // SetLastMessageID sets the "last_message_id" field.
 func (_u *LLMInteractionUpdate) SetLastMessageID(v string) *LLMInteractionUpdate {
 	_u.mutation.SetLastMessageID(v)
@@ -474,6 +494,12 @@ func (_u *LLMInteractionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if value, ok := _u.mutation.ModelName(); ok {
 		_spec.SetField(llminteraction.FieldModelName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ReasoningEffort(); ok {
+		_spec.SetField(llminteraction.FieldReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.ReasoningEffortCleared() {
+		_spec.ClearField(llminteraction.FieldReasoningEffort, field.TypeString)
+	}
 	if value, ok := _u.mutation.LlmRequest(); ok {
 		_spec.SetField(llminteraction.FieldLlmRequest, field.TypeJSON, value)
 	}
@@ -691,6 +717,26 @@ func (_u *LLMInteractionUpdateOne) SetNillableModelName(v *string) *LLMInteracti
 	if v != nil {
 		_u.SetModelName(*v)
 	}
+	return _u
+}
+
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_u *LLMInteractionUpdateOne) SetReasoningEffort(v string) *LLMInteractionUpdateOne {
+	_u.mutation.SetReasoningEffort(v)
+	return _u
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_u *LLMInteractionUpdateOne) SetNillableReasoningEffort(v *string) *LLMInteractionUpdateOne {
+	if v != nil {
+		_u.SetReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (_u *LLMInteractionUpdateOne) ClearReasoningEffort() *LLMInteractionUpdateOne {
+	_u.mutation.ClearReasoningEffort()
 	return _u
 }
 
@@ -1139,6 +1185,12 @@ func (_u *LLMInteractionUpdateOne) sqlSave(ctx context.Context) (_node *LLMInter
 	}
 	if value, ok := _u.mutation.ModelName(); ok {
 		_spec.SetField(llminteraction.FieldModelName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ReasoningEffort(); ok {
+		_spec.SetField(llminteraction.FieldReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.ReasoningEffortCleared() {
+		_spec.ClearField(llminteraction.FieldReasoningEffort, field.TypeString)
 	}
 	if value, ok := _u.mutation.LlmRequest(); ok {
 		_spec.SetField(llminteraction.FieldLlmRequest, field.TypeJSON, value)

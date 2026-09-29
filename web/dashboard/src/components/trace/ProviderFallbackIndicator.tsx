@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Chip, Collapse, IconButton, Typography, alpha } from '@mui/material';
 import { SwapHoriz, ExpandMore, ExpandLess } from '@mui/icons-material';
 import type { ExecutionOverview } from '../../types/session';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 
 interface ProviderFallbackIndicatorProps {
   overview: ExecutionOverview;
@@ -29,8 +30,12 @@ function stripEnvelope(raw: string): string {
 export default function ProviderFallbackIndicator({ overview }: ProviderFallbackIndicatorProps) {
   const hasFallback = !!overview.original_llm_provider;
   const [expanded, setExpanded] = useState(false);
-  const modelLabel = overview.model_name || overview.llm_provider;
-  const originalLabel = overview.original_model_name || overview.original_llm_provider;
+  const modelLabel = overview.model_name
+    ? formatModelWithEffort(overview.model_name, overview.reasoning_effort)
+    : overview.llm_provider;
+  const originalLabel = overview.original_model_name
+    ? formatModelWithEffort(overview.original_model_name, overview.original_reasoning_effort)
+    : overview.original_llm_provider;
   const modelFieldLabel = overview.model_name ? 'Model' : 'Provider';
 
   if (!hasFallback) {

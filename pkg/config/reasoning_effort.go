@@ -60,6 +60,15 @@ func EffectiveReasoningEffort(model, configured string) string {
 	return ""
 }
 
+// EffectiveReasoningEffort is the effort sent for this provider.
+// A nil provider returns empty.
+func (p *LLMProviderConfig) EffectiveReasoningEffort() string {
+	if p == nil {
+		return ""
+	}
+	return EffectiveReasoningEffort(p.Model, p.ReasoningEffort)
+}
+
 func checkReasoningEffort(name string, p *LLMProviderConfig) error {
 	effort := p.ReasoningEffort
 	if effort == "" {

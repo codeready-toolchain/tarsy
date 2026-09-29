@@ -108,6 +108,7 @@ export default function TraceTimeline({ traceData, session }: TraceTimelineProps
         duration_ms: i.duration_ms,
         error_message: i.error_message,
         model_name: i.model_name,
+        reasoning_effort: i.reasoning_effort,
         input_tokens: i.input_tokens,
         output_tokens: i.output_tokens,
         total_tokens: i.total_tokens,

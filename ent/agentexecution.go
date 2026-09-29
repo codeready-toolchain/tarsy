@@ -43,12 +43,16 @@ type AgentExecution struct {
 	LlmProvider *string `json:"llm_provider,omitempty"`
 	// Configured model at execution time (e.g. 'gemini-3.7-flash')
 	ModelName *string `json:"model_name,omitempty"`
+	// Effective reasoning effort for the current model; NULL when unset or recorded before the field existed
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 	// Original provider before fallback (NULL = no fallback occurred)
 	OriginalLlmProvider *string `json:"original_llm_provider,omitempty"`
 	// Original backend before fallback (NULL = no fallback occurred)
 	OriginalLlmBackend *string `json:"original_llm_backend,omitempty"`
 	// Original model before fallback (NULL = no fallback occurred)
 	OriginalModelName *string `json:"original_model_name,omitempty"`
+	// Original reasoning effort before fallback (NULL = no fallback occurred, or the original effort was unset)
+	OriginalReasoningEffort *string `json:"original_reasoning_effort,omitempty"`
 	// For orchestrator sub-agents: links to the parent orchestrator execution
 	ParentExecutionID *string `json:"parent_execution_id,omitempty"`
 	// Task description from orchestrator dispatch
@@ -178,7 +182,7 @@ func (*AgentExecution) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case agentexecution.FieldAgentIndex, agentexecution.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider, agentexecution.FieldModelName, agentexecution.FieldOriginalLlmProvider, agentexecution.FieldOriginalLlmBackend, agentexecution.FieldOriginalModelName, agentexecution.FieldParentExecutionID, agentexecution.FieldTask:
+		case agentexecution.FieldID, agentexecution.FieldStageID, agentexecution.FieldSessionID, agentexecution.FieldAgentName, agentexecution.FieldStatus, agentexecution.FieldErrorMessage, agentexecution.FieldLlmBackend, agentexecution.FieldLlmProvider, agentexecution.FieldModelName, agentexecution.FieldReasoningEffort, agentexecution.FieldOriginalLlmProvider, agentexecution.FieldOriginalLlmBackend, agentexecution.FieldOriginalModelName, agentexecution.FieldOriginalReasoningEffort, agentexecution.FieldParentExecutionID, agentexecution.FieldTask:
 			values[i] = new(sql.NullString)
 		case agentexecution.FieldStartedAt, agentexecution.FieldCompletedAt:
 			values[i] = new(sql.NullTime)
@@ -281,6 +285,13 @@ func (_m *AgentExecution) assignValues(columns []string, values []any) error {
 				_m.ModelName = new(string)
 				*_m.ModelName = value.String
 			}
+		case agentexecution.FieldReasoningEffort:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field reasoning_effort", values[i])
+			} else if value.Valid {
+				_m.ReasoningEffort = new(string)
+				*_m.ReasoningEffort = value.String
+			}
 		case agentexecution.FieldOriginalLlmProvider:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field original_llm_provider", values[i])
@@ -301,6 +312,13 @@ func (_m *AgentExecution) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.OriginalModelName = new(string)
 				*_m.OriginalModelName = value.String
+			}
+		case agentexecution.FieldOriginalReasoningEffort:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field original_reasoning_effort", values[i])
+			} else if value.Valid {
+				_m.OriginalReasoningEffort = new(string)
+				*_m.OriginalReasoningEffort = value.String
 			}
 		case agentexecution.FieldParentExecutionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -445,6 +463,11 @@ func (_m *AgentExecution) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
+	if v := _m.ReasoningEffort; v != nil {
+		builder.WriteString("reasoning_effort=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
 	if v := _m.OriginalLlmProvider; v != nil {
 		builder.WriteString("original_llm_provider=")
 		builder.WriteString(*v)
@@ -457,6 +480,11 @@ func (_m *AgentExecution) String() string {
 	builder.WriteString(", ")
 	if v := _m.OriginalModelName; v != nil {
 		builder.WriteString("original_model_name=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.OriginalReasoningEffort; v != nil {
+		builder.WriteString("original_reasoning_effort=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

@@ -223,6 +223,26 @@ func (_u *AgentExecutionUpdate) ClearModelName() *AgentExecutionUpdate {
 	return _u
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_u *AgentExecutionUpdate) SetReasoningEffort(v string) *AgentExecutionUpdate {
+	_u.mutation.SetReasoningEffort(v)
+	return _u
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableReasoningEffort(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (_u *AgentExecutionUpdate) ClearReasoningEffort() *AgentExecutionUpdate {
+	_u.mutation.ClearReasoningEffort()
+	return _u
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (_u *AgentExecutionUpdate) SetOriginalLlmProvider(v string) *AgentExecutionUpdate {
 	_u.mutation.SetOriginalLlmProvider(v)
@@ -280,6 +300,26 @@ func (_u *AgentExecutionUpdate) SetNillableOriginalModelName(v *string) *AgentEx
 // ClearOriginalModelName clears the value of the "original_model_name" field.
 func (_u *AgentExecutionUpdate) ClearOriginalModelName() *AgentExecutionUpdate {
 	_u.mutation.ClearOriginalModelName()
+	return _u
+}
+
+// SetOriginalReasoningEffort sets the "original_reasoning_effort" field.
+func (_u *AgentExecutionUpdate) SetOriginalReasoningEffort(v string) *AgentExecutionUpdate {
+	_u.mutation.SetOriginalReasoningEffort(v)
+	return _u
+}
+
+// SetNillableOriginalReasoningEffort sets the "original_reasoning_effort" field if the given value is not nil.
+func (_u *AgentExecutionUpdate) SetNillableOriginalReasoningEffort(v *string) *AgentExecutionUpdate {
+	if v != nil {
+		_u.SetOriginalReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearOriginalReasoningEffort clears the value of the "original_reasoning_effort" field.
+func (_u *AgentExecutionUpdate) ClearOriginalReasoningEffort() *AgentExecutionUpdate {
+	_u.mutation.ClearOriginalReasoningEffort()
 	return _u
 }
 
@@ -684,6 +724,12 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if _u.mutation.ModelNameCleared() {
 		_spec.ClearField(agentexecution.FieldModelName, field.TypeString)
 	}
+	if value, ok := _u.mutation.ReasoningEffort(); ok {
+		_spec.SetField(agentexecution.FieldReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.ReasoningEffortCleared() {
+		_spec.ClearField(agentexecution.FieldReasoningEffort, field.TypeString)
+	}
 	if value, ok := _u.mutation.OriginalLlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
 	}
@@ -701,6 +747,12 @@ func (_u *AgentExecutionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.OriginalModelNameCleared() {
 		_spec.ClearField(agentexecution.FieldOriginalModelName, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalReasoningEffort(); ok {
+		_spec.SetField(agentexecution.FieldOriginalReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.OriginalReasoningEffortCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalReasoningEffort, field.TypeString)
 	}
 	if value, ok := _u.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)
@@ -1219,6 +1271,26 @@ func (_u *AgentExecutionUpdateOne) ClearModelName() *AgentExecutionUpdateOne {
 	return _u
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_u *AgentExecutionUpdateOne) SetReasoningEffort(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetReasoningEffort(v)
+	return _u
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableReasoningEffort(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (_u *AgentExecutionUpdateOne) ClearReasoningEffort() *AgentExecutionUpdateOne {
+	_u.mutation.ClearReasoningEffort()
+	return _u
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (_u *AgentExecutionUpdateOne) SetOriginalLlmProvider(v string) *AgentExecutionUpdateOne {
 	_u.mutation.SetOriginalLlmProvider(v)
@@ -1276,6 +1348,26 @@ func (_u *AgentExecutionUpdateOne) SetNillableOriginalModelName(v *string) *Agen
 // ClearOriginalModelName clears the value of the "original_model_name" field.
 func (_u *AgentExecutionUpdateOne) ClearOriginalModelName() *AgentExecutionUpdateOne {
 	_u.mutation.ClearOriginalModelName()
+	return _u
+}
+
+// SetOriginalReasoningEffort sets the "original_reasoning_effort" field.
+func (_u *AgentExecutionUpdateOne) SetOriginalReasoningEffort(v string) *AgentExecutionUpdateOne {
+	_u.mutation.SetOriginalReasoningEffort(v)
+	return _u
+}
+
+// SetNillableOriginalReasoningEffort sets the "original_reasoning_effort" field if the given value is not nil.
+func (_u *AgentExecutionUpdateOne) SetNillableOriginalReasoningEffort(v *string) *AgentExecutionUpdateOne {
+	if v != nil {
+		_u.SetOriginalReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearOriginalReasoningEffort clears the value of the "original_reasoning_effort" field.
+func (_u *AgentExecutionUpdateOne) ClearOriginalReasoningEffort() *AgentExecutionUpdateOne {
+	_u.mutation.ClearOriginalReasoningEffort()
 	return _u
 }
 
@@ -1710,6 +1802,12 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	if _u.mutation.ModelNameCleared() {
 		_spec.ClearField(agentexecution.FieldModelName, field.TypeString)
 	}
+	if value, ok := _u.mutation.ReasoningEffort(); ok {
+		_spec.SetField(agentexecution.FieldReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.ReasoningEffortCleared() {
+		_spec.ClearField(agentexecution.FieldReasoningEffort, field.TypeString)
+	}
 	if value, ok := _u.mutation.OriginalLlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
 	}
@@ -1727,6 +1825,12 @@ func (_u *AgentExecutionUpdateOne) sqlSave(ctx context.Context) (_node *AgentExe
 	}
 	if _u.mutation.OriginalModelNameCleared() {
 		_spec.ClearField(agentexecution.FieldOriginalModelName, field.TypeString)
+	}
+	if value, ok := _u.mutation.OriginalReasoningEffort(); ok {
+		_spec.SetField(agentexecution.FieldOriginalReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.OriginalReasoningEffortCleared() {
+		_spec.ClearField(agentexecution.FieldOriginalReasoningEffort, field.TypeString)
 	}
 	if value, ok := _u.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)

@@ -9,6 +9,7 @@ import {
   SwapHoriz,
 } from '@mui/icons-material';
 import { FLOW_ITEM, countProviderFallbacks, type FlowItem } from '../../utils/timelineParser';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 import { sessionDeepLinkUrl } from '../../utils/deepLink';
 import type { ExecutionOverview } from '../../types/session';
 import type { LiveExecutionStatus } from '../../types/events';
@@ -741,8 +742,12 @@ const StageContent: React.FC<StageContentProps> = ({
             ? { input_tokens: eo.input_tokens, output_tokens: eo.output_tokens, total_tokens: eo.total_tokens }
             : deriveTokenData(execution.items);
           const hasTokens = tokenData && (tokenData.input_tokens > 0 || tokenData.output_tokens > 0);
-          const modelLabel = eo?.model_name || eo?.llm_provider;
-          const wasLabel = eo?.original_model_name || eo?.original_llm_provider;
+          const modelLabel = eo?.model_name
+            ? formatModelWithEffort(eo.model_name, eo.reasoning_effort)
+            : eo?.llm_provider;
+          const wasLabel = eo?.original_model_name
+            ? formatModelWithEffort(eo.original_model_name, eo.original_reasoning_effort)
+            : eo?.original_llm_provider;
           const providerTip = eo?.model_name && eo.llm_provider
             ? (eo.original_llm_provider
               ? `${eo.llm_provider} (was: ${eo.original_llm_provider})`

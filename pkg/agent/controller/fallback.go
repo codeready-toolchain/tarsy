@@ -27,6 +27,7 @@ type FallbackState struct {
 	OriginalProvider          string
 	OriginalBackend           config.LLMBackend
 	OriginalModel             string
+	OriginalReasoningEffort   string
 	CurrentProviderIndex      int // -1 = primary, 0+ = index into ResolvedFallbackProviders
 	AttemptedProviders        []string
 	FallbackReason            string
@@ -39,11 +40,12 @@ type FallbackState struct {
 // NewFallbackState creates a FallbackState initialized from the current provider.
 func NewFallbackState(execCtx *agent.ExecutionContext) *FallbackState {
 	return &FallbackState{
-		OriginalProvider:     execCtx.Config.LLMProviderName,
-		OriginalBackend:      execCtx.Config.LLMBackend,
-		OriginalModel:        execCtx.Config.ModelName(),
-		CurrentProviderIndex: -1,
-		AttemptedProviders:   []string{execCtx.Config.LLMProviderName},
+		OriginalProvider:        execCtx.Config.LLMProviderName,
+		OriginalBackend:         execCtx.Config.LLMBackend,
+		OriginalModel:           execCtx.Config.ModelName(),
+		OriginalReasoningEffort: execCtx.Config.LLMProvider.EffectiveReasoningEffort(),
+		CurrentProviderIndex:    -1,
+		AttemptedProviders:      []string{execCtx.Config.LLMProviderName},
 	}
 }
 
@@ -187,9 +189,12 @@ func tryFallback(
 	prevProvider := execCtx.Config.LLMProviderName
 	prevBackend := execCtx.Config.LLMBackend
 	prevModel := execCtx.Config.ModelName()
+	prevEffort := execCtx.Config.LLMProvider.EffectiveReasoningEffort()
 	fallbackModel := ""
+	fallbackEffort := ""
 	if entry.Config != nil {
 		fallbackModel = entry.Config.Model
+		fallbackEffort = entry.Config.EffectiveReasoningEffort()
 	}
 
 	// Check for native tools that will be lost on backend switch.
@@ -242,6 +247,12 @@ func tryFallback(
 		meta["error_code"] = string(poeForMeta.Code)
 		meta["error_retryable"] = poeForMeta.Retryable
 	}
+	if prevEffort != "" {
+		meta["original_reasoning_effort"] = prevEffort
+	}
+	if fallbackEffort != "" {
+		meta["fallback_reasoning_effort"] = fallbackEffort
+	}
 	if len(droppedTools) > 0 {
 		meta["native_tools_dropped"] = droppedTools
 	}
@@ -256,8 +267,8 @@ func tryFallback(
 	if execCtx.Services != nil && execCtx.Services.Stage != nil {
 		if updateErr := execCtx.Services.Stage.UpdateExecutionProviderFallback(
 			ctx, execCtx.ExecutionID,
-			state.OriginalProvider, string(state.OriginalBackend), state.OriginalModel,
-			entry.ProviderName, string(entry.Backend), fallbackModel,
+			state.OriginalProvider, string(state.OriginalBackend), state.OriginalModel, state.OriginalReasoningEffort,
+			entry.ProviderName, string(entry.Backend), fallbackModel, fallbackEffort,
 		); updateErr != nil {
 			slog.Warn("Failed to update execution fallback record",
 				"execution_id", execCtx.ExecutionID, "error", updateErr)

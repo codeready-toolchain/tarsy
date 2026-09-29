@@ -910,6 +910,84 @@ func TestUsageAverageCostUSD(t *testing.T) {
 	}
 }
 
+func TestUsageGroupsByReasoningEffort(t *testing.T) {
+	windowStart := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+	windowEnd := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+	dayOne := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	client := testdb.NewTestClient(t)
+	svc := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	sid, stageID, execID := seedUsageSession(t, client.Client, usageSeed{
+		AlertData: "effort-split",
+		AlertType: "pod-crash",
+		ChainID:   "k8s-analysis",
+		CreatedAt: dayOne,
+	})
+	seedUsageEffort := func(effort string, cost float64) {
+		t.Helper()
+		create := client.Client.LLMInteraction.Create().
+			SetID(uuid.New().String()).
+			SetSessionID(sid).
+			SetStageID(stageID).
+			SetExecutionID(execID).
+			SetInteractionType(llminteraction.InteractionTypeIteration).
+			SetModelName("gemini-3.8-flash").
+			SetLlmRequest(map[string]any{}).
+			SetLlmResponse(map[string]any{}).
+			SetInputTokens(10).
+			SetOutputTokens(10).
+			SetTotalTokens(20).
+			SetEstimatedCostUsd(cost).
+			SetCreatedAt(dayOne)
+		if effort != "" {
+			create = create.SetReasoningEffort(effort)
+		}
+		create.SaveX(ctx)
+	}
+	seedUsageEffort("", 0.2)
+	seedUsageEffort("", 0.3)
+	seedUsageEffort("high", 1)
+	seedUsageEffort("max", 2)
+
+	summary, err := svc.GetUsageSummary(ctx, models.UsageSummaryParams{
+		StartDate: windowStart,
+		EndDate:   windowEnd,
+	})
+	require.NoError(t, err)
+	byEffort := map[string]models.UsageModelBreakdown{}
+	for _, row := range summary.ByModel {
+		if row.ModelName == "gemini-3.8-flash" {
+			byEffort[row.ReasoningEffort] = row
+		}
+	}
+	require.Len(t, byEffort, 3)
+	require.NotNil(t, byEffort[""].EstimatedCostUsd)
+	assert.InDelta(t, 0.5, *byEffort[""].EstimatedCostUsd, 1e-9)
+	assert.Empty(t, byEffort[""].ReasoningEffort)
+	require.NotNil(t, byEffort["high"].EstimatedCostUsd)
+	assert.InDelta(t, 1, *byEffort["high"].EstimatedCostUsd, 1e-9)
+	require.NotNil(t, byEffort["max"].EstimatedCostUsd)
+	assert.InDelta(t, 2, *byEffort["max"].EstimatedCostUsd, 1e-9)
+
+	series, err := svc.GetUsageSeries(ctx, models.UsageSeriesParams{
+		StartDate: windowStart,
+		EndDate:   windowEnd,
+		Timezone:  "UTC",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"gemini-3.8-flash (max)",
+		"gemini-3.8-flash (high)",
+		"gemini-3.8-flash",
+	}, series.Models)
+	point := seriesPointOn(t, series.Points, "UTC", 2024, time.June, 1)
+	assert.InDelta(t, 2, point.ByModel["gemini-3.8-flash (max)"], 1e-9)
+	assert.InDelta(t, 1, point.ByModel["gemini-3.8-flash (high)"], 1e-9)
+	assert.InDelta(t, 0.5, point.ByModel["gemini-3.8-flash"], 1e-9)
+}
+
 func TestSessionService_GetUsageSeries(t *testing.T) {
 	windowStart := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
 	windowEnd := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)

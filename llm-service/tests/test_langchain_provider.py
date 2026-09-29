@@ -197,12 +197,14 @@ class TestLangChainProviderReasoningConfig:
     @pytest.mark.parametrize("model", [
         "claude-sonnet-4-5-20250929", "claude-opus-4-6",
         "claude-haiku-4-5-20251001", "claude-sonnet-4-6-20260217",
+        "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8",
     ])
     def test_anthropic_thinking(self, model):
         result = LangChainProvider._get_anthropic_thinking_kwargs(model)
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 32000
         assert result["max_tokens"] == 64000
+        assert "output_config" not in result
 
     # --- Anthropic: 5th-gen models only support adaptive thinking (manual
     # budget_tokens returns a 400 error on these) ---
@@ -214,7 +216,63 @@ class TestLangChainProviderReasoningConfig:
         result = LangChainProvider._get_anthropic_thinking_kwargs(model)
         assert result["thinking"] == {"type": "adaptive"}
         assert result["max_tokens"] == 64000
+        assert "output_config" not in result
 
+    @pytest.mark.parametrize("model", [
+        "claude-sonnet-5", "claude-sonnet-5-5",
+        "claude-opus-5-5", "claude-opus-4-8",
+    ])
+    def test_anthropic_explicit_high(self, model):
+        result = LangChainProvider._get_anthropic_thinking_kwargs(model, "high")
+        assert result["thinking"] == {"type": "adaptive"}
+        assert result["output_config"] == {"effort": "high"}
+        assert result["max_tokens"] == 64000
+        assert "budget_tokens" not in result["thinking"]
+
+    def test_anthropic_explicit_effort_on_sonnet_4_6(self):
+        result = LangChainProvider._get_anthropic_thinking_kwargs(
+            "claude-sonnet-4-6", "medium",
+        )
+        assert result["thinking"] == {"type": "adaptive"}
+        assert result["output_config"] == {"effort": "medium"}
+        assert "budget_tokens" not in result["thinking"]
+
+    def test_anthropic_unknown_token_forwarded(self):
+        result = LangChainProvider._get_anthropic_thinking_kwargs(
+            "claude-sonnet-4-6", "extra-high",
+        )
+        assert result["output_config"]["effort"] == "extra-high"
+        assert result["thinking"] == {"type": "adaptive"}
+
+    def test_openai_explicit_effort_on_any_model(self):
+        result = LangChainProvider._get_openai_reasoning_kwargs(
+            "gpt-5-chat-latest", "max",
+        )
+        assert result["use_responses_api"] is True
+        assert result["reasoning"] == {"effort": "max", "summary": "auto"}
+
+    def test_openai_unknown_token_forwarded(self):
+        result = LangChainProvider._get_openai_reasoning_kwargs("gpt-5.6", "extra-high")
+        assert result["use_responses_api"] is True
+        assert result["reasoning"]["effort"] == "extra-high"
+        assert result["reasoning"]["summary"] == "auto"
+
+    def test_google_explicit_high_on_gemini_3_8(self):
+        result = LangChainProvider._get_google_thinking_kwargs("gemini-3.8-flash", "high")
+        assert result == {
+            "thinking_config": {"thinking_level": "high", "include_thoughts": True},
+        }
+
+    def test_google_unknown_token_forwarded(self):
+        result = LangChainProvider._get_google_thinking_kwargs(
+            "gemini-2.5-pro", "extra-high",
+        )
+        assert result == {
+            "thinking_config": {
+                "thinking_level": "extra-high",
+                "include_thoughts": True,
+            },
+        }
 
 
 class TestLangChainProviderModelCreation:
@@ -231,6 +289,180 @@ class TestLangChainProviderModelCreation:
         model2 = provider._get_or_create_model(config, [])
 
         mock_create.assert_called_once()
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
+    @patch("llm.providers.langchain_provider.LangChainProvider._create_chat_model")
+    def test_cache_key_includes_reasoning_effort(self, mock_create, provider):
+        mock_create.side_effect = lambda config: MagicMock()
+        low = pb.LLMConfig(
+            provider="openai", model="gpt-5.6", api_key_env="OPENAI_API_KEY",
+            reasoning_effort="low",
+        )
+        high = pb.LLMConfig(
+            provider="openai", model="gpt-5.6", api_key_env="OPENAI_API_KEY",
+            reasoning_effort="high",
+        )
+        high_again = pb.LLMConfig(
+            provider="openai", model="gpt-5.6", api_key_env="OPENAI_API_KEY",
+            reasoning_effort="high",
+        )
+
+        provider._get_or_create_model(low, [])
+        provider._get_or_create_model(high, [])
+        provider._get_or_create_model(high_again, [])
+
+        assert mock_create.call_count == 2
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    @pytest.mark.parametrize("model", [
+        "claude-sonnet-5", "claude-sonnet-5-5",
+        "claude-opus-5-5", "claude-opus-4-8",
+    ])
+    def test_anthropic_constructor_sends_effort(self, provider, model):
+        captured = {}
+
+        class FakeChatAnthropic:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_anthropic.ChatAnthropic", FakeChatAnthropic):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="anthropic", model=model, api_key_env="ANTHROPIC_API_KEY",
+                reasoning_effort="high",
+            ))
+
+        assert captured["ctor"]["thinking"] == {"type": "adaptive"}
+        assert captured["ctor"]["output_config"] == {"effort": "high"}
+        assert captured["ctor"]["max_tokens"] == 64000
+
+    @pytest.mark.parametrize("model", [
+        "claude-sonnet-5", "claude-sonnet-5-5",
+        "claude-opus-5-5", "claude-opus-4-8",
+    ])
+    def test_vertex_claude_constructor_sends_effort(self, provider, model):
+        captured = {}
+
+        class FakeChatAnthropicVertex:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch(
+            "langchain_google_vertexai.model_garden.ChatAnthropicVertex",
+            FakeChatAnthropicVertex,
+        ):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="vertexai", model=model, project="p", location="us-east5",
+                reasoning_effort="high",
+            ))
+
+        assert captured["ctor"]["max_tokens"] == 64000
+        assert captured["ctor"]["model_kwargs"]["thinking"] == {"type": "adaptive"}
+        assert captured["ctor"]["model_kwargs"]["output_config"] == {"effort": "high"}
+        assert "max_tokens" not in captured["ctor"]["model_kwargs"]
+
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"})
+    def test_anthropic_constructor_explicit_effort_on_sonnet_4_6(self, provider):
+        captured = {}
+
+        class FakeChatAnthropic:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_anthropic.ChatAnthropic", FakeChatAnthropic):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="anthropic", model="claude-sonnet-4-6",
+                api_key_env="ANTHROPIC_API_KEY", reasoning_effort="medium",
+            ))
+
+        assert captured["ctor"]["thinking"] == {"type": "adaptive"}
+        assert captured["ctor"]["output_config"] == {"effort": "medium"}
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
+    def test_openai_constructor_sends_effort(self, provider):
+        captured = {}
+
+        class FakeChatOpenAI:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_openai.ChatOpenAI", FakeChatOpenAI):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="openai", model="gpt-5-chat-latest",
+                api_key_env="OPENAI_API_KEY", reasoning_effort="max",
+            ))
+
+        assert captured["ctor"]["use_responses_api"] is True
+        assert captured["ctor"]["reasoning"] == {"effort": "max", "summary": "auto"}
+
+    @patch.dict(os.environ, {"XAI_API_KEY": "test-key"})
+    def test_xai_constructor_omits_effort_when_empty(self, provider):
+        captured = {}
+
+        class FakeChatXAI:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_xai.ChatXAI", FakeChatXAI):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="xai", model="grok-4", api_key_env="XAI_API_KEY",
+            ))
+
+        assert "reasoning_effort" not in captured["ctor"]
+        assert "reasoning" not in captured["ctor"]
+
+    @patch.dict(os.environ, {"XAI_API_KEY": "test-key"})
+    def test_xai_constructor_forwards_unknown_token(self, provider):
+        captured = {}
+
+        class FakeChatXAI:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_xai.ChatXAI", FakeChatXAI):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="xai", model="grok-4", api_key_env="XAI_API_KEY",
+                reasoning_effort="extra-high",
+            ))
+
+        assert captured["ctor"]["reasoning_effort"] == "extra-high"
+        assert "reasoning" not in captured["ctor"]
+
+    @patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"})
+    def test_google_constructor_sends_thinking_level(self, provider):
+        captured = {}
+
+        class FakeChatGoogle:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_google_genai.ChatGoogleGenerativeAI", FakeChatGoogle):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="google", model="gemini-3.8-flash",
+                api_key_env="GOOGLE_API_KEY", reasoning_effort="high",
+            ))
+
+        assert captured["ctor"]["thinking_config"] == {
+            "thinking_level": "high",
+            "include_thoughts": True,
+        }
+
+    def test_vertex_gemini_constructor_sends_thinking_level(self, provider):
+        captured = {}
+
+        class FakeChatGoogle:
+            def __init__(self, **kwargs):
+                captured["ctor"] = kwargs
+
+        with patch("langchain_google_genai.ChatGoogleGenerativeAI", FakeChatGoogle):
+            provider._create_chat_model(pb.LLMConfig(
+                provider="vertexai", model="gemini-3.8-flash",
+                project="p", location="us-central1", reasoning_effort="high",
+            ))
+
+        assert captured["ctor"]["thinking_config"] == {
+            "thinking_level": "high",
+            "include_thoughts": True,
+        }
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
     def test_create_openai_model(self, provider):

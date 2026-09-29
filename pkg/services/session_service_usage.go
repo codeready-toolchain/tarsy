@@ -172,16 +172,17 @@ func (s *SessionService) usageTotals(ctx context.Context, interactionPred predic
 
 func (s *SessionService) usageByModel(ctx context.Context, interactionPred predicate.LLMInteraction) ([]models.UsageModelBreakdown, error) {
 	var rows []struct {
-		ModelName      string             `json:"model_name"`
-		SessionCount   stdsql.NullInt64   `json:"session_count"`
-		InputSum       stdsql.NullInt64   `json:"input_sum"`
-		OutputSum      stdsql.NullInt64   `json:"output_sum"`
-		CacheReadSum   stdsql.NullInt64   `json:"cache_read_sum"`
-		CacheCreateSum stdsql.NullInt64   `json:"cache_create_sum"`
-		TotalSum       stdsql.NullInt64   `json:"total_sum"`
-		CostSum        stdsql.NullFloat64 `json:"cost_sum"`
-		TokenBearing   int                `json:"token_bearing"`
-		Priced         int                `json:"priced"`
+		ModelName       string             `json:"model_name"`
+		ReasoningEffort stdsql.NullString  `json:"reasoning_effort"`
+		SessionCount    stdsql.NullInt64   `json:"session_count"`
+		InputSum        stdsql.NullInt64   `json:"input_sum"`
+		OutputSum       stdsql.NullInt64   `json:"output_sum"`
+		CacheReadSum    stdsql.NullInt64   `json:"cache_read_sum"`
+		CacheCreateSum  stdsql.NullInt64   `json:"cache_create_sum"`
+		TotalSum        stdsql.NullInt64   `json:"total_sum"`
+		CostSum         stdsql.NullFloat64 `json:"cost_sum"`
+		TokenBearing    int                `json:"token_bearing"`
+		Priced          int                `json:"priced"`
 	}
 
 	aggs := []ent.AggregateFunc{
@@ -208,7 +209,7 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 
 	err := s.client.LLMInteraction.Query().
 		Where(interactionPred).
-		GroupBy(llminteraction.FieldModelName).
+		GroupBy(llminteraction.FieldModelName, llminteraction.FieldReasoningEffort).
 		Aggregate(aggs...).
 		Scan(ctx, &rows)
 	if err != nil {
@@ -219,6 +220,7 @@ func (s *SessionService) usageByModel(ctx context.Context, interactionPred predi
 	for _, row := range rows {
 		item := models.UsageModelBreakdown{
 			ModelName:           row.ModelName,
+			ReasoningEffort:     row.ReasoningEffort.String,
 			SessionCount:        row.SessionCount.Int64,
 			InputTokens:         row.InputSum.Int64,
 			OutputTokens:        row.OutputSum.Int64,
@@ -516,11 +518,12 @@ func (s *SessionService) GetUsageSeries(ctx context.Context, params models.Usage
 }
 
 type usageSeriesScanRow struct {
-	BucketStart  time.Time          `json:"bucket_start"`
-	BucketEnd    time.Time          `json:"bucket_end"`
-	SessionCount int64              `json:"session_count"`
-	ModelName    stdsql.NullString  `json:"model_name"`
-	Cost         stdsql.NullFloat64 `json:"cost"`
+	BucketStart     time.Time          `json:"bucket_start"`
+	BucketEnd       time.Time          `json:"bucket_end"`
+	SessionCount    int64              `json:"session_count"`
+	ModelName       stdsql.NullString  `json:"model_name"`
+	ReasoningEffort stdsql.NullString  `json:"reasoning_effort"`
+	Cost            stdsql.NullFloat64 `json:"cost"`
 }
 
 type usageSeriesDay struct {
@@ -572,12 +575,14 @@ func (s *SessionService) queryUsageSeriesRows(
 			"session_count",
 		)
 		sel.AppendSelectAs(costsT.C("model_name"), "model_name")
+		sel.AppendSelectAs(costsT.C("reasoning_effort"), "reasoning_effort")
 		sel.AppendSelectAs(costsT.C("cost"), "cost")
 		sel.ClearOrder()
 		sel.OrderExpr(
 			sql.Expr(daysT.C("local_day")),
 			sql.Expr(costsT.C("cost")+" DESC NULLS LAST"),
 			sql.Expr(costsT.C("model_name")+" ASC NULLS LAST"),
+			sql.Expr(costsT.C("reasoning_effort")+" ASC NULLS LAST"),
 		)
 		sel.Prefix(d.With("sessions").As(sessions).
 			With("days").As(days).
@@ -639,8 +644,13 @@ func usageSeriesModelCosts(d *sql.DialectBuilder) *sql.Selector {
 	costs.Join(li).On(sessionsT.C("session_id"), li.C(llminteraction.FieldSessionID))
 	costs.AppendSelectAs(sessionsT.C("local_day"), "local_day")
 	costs.AppendSelectAs(li.C(llminteraction.FieldModelName), "model_name")
+	costs.AppendSelectAs(li.C(llminteraction.FieldReasoningEffort), "reasoning_effort")
 	costs.AppendSelectExprAs(sql.Expr(costExpr), "cost")
-	costs.GroupBy(sessionsT.C("local_day"), li.C(llminteraction.FieldModelName))
+	costs.GroupBy(
+		sessionsT.C("local_day"),
+		li.C(llminteraction.FieldModelName),
+		li.C(llminteraction.FieldReasoningEffort),
+	)
 	costs.Having(sql.ExprP(costExpr + " > 0"))
 	return costs
 }
@@ -658,7 +668,8 @@ func assembleUsageSeries(rows []usageSeriesScanRow) ([]models.UsageSeriesPoint, 
 		}
 		day := &days[len(days)-1]
 		if row.ModelName.Valid && row.Cost.Valid && row.Cost.Float64 > 0 {
-			day.costs[row.ModelName.String] = row.Cost.Float64
+			label := models.FormatModelWithEffort(row.ModelName.String, row.ReasoningEffort.String)
+			day.costs[label] = row.Cost.Float64
 		}
 	}
 

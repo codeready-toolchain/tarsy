@@ -550,7 +550,10 @@ func TestTryFallback_UpdatesExecutionRecord(t *testing.T) {
 	}
 	execCtx := newTestExecCtx(t, llm, &mockToolExecutor{})
 	execCtx.Config.LLMProviderName = "primary"
-	execCtx.Config.ResolvedFallbackProviders = fallbackProviders()
+	execCtx.Config.LLMProvider.ReasoningEffort = "high"
+	providers := fallbackProviders()
+	providers[0].Config.ReasoningEffort = "max"
+	execCtx.Config.ResolvedFallbackProviders = providers
 
 	state := NewFallbackState(execCtx)
 	eventSeq := 0
@@ -574,6 +577,10 @@ func TestTryFallback_UpdatesExecutionRecord(t *testing.T) {
 	assert.Equal(t, "test-model", *exec.OriginalModelName)
 	require.NotNil(t, exec.ModelName)
 	assert.Equal(t, "fallback-model-1", *exec.ModelName)
+	require.NotNil(t, exec.OriginalReasoningEffort)
+	assert.Equal(t, "high", *exec.OriginalReasoningEffort)
+	require.NotNil(t, exec.ReasoningEffort)
+	assert.Equal(t, "max", *exec.ReasoningEffort)
 }
 
 func TestTryFallback_PreservesOriginalOnSecondFallback(t *testing.T) {

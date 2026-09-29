@@ -26,6 +26,7 @@ import JsonDisplay from '../shared/JsonDisplay';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import NativeToolsDisplay from './NativeToolsDisplay';
 import { getInteractionTypeLabel, formatLLMDetailForCopy, serializeMessageContent } from './traceHelpers';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 
 interface LLMInteractionDetailProps {
   detail: LLMInteractionDetailResponse;
@@ -154,7 +155,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
     for (const msg of detail.conversation ?? []) {
       text += `${msg.role.toUpperCase()}:\n${serializeMessageContent(msg.content)}\n\n`;
     }
-    text += `MODEL: ${detail.model_name}`;
+    text += `MODEL: ${formatModelWithEffort(detail.model_name, detail.reasoning_effort)}`;
     if (detail.total_tokens != null) text += ` | TOKENS: ${detail.total_tokens}`;
     return text;
   })();
@@ -292,7 +293,7 @@ function LLMInteractionDetail({ detail }: LLMInteractionDetailProps) {
             <Typography variant="body2" sx={{
               color: 'text.secondary'
             }}>
-              <strong>Model:</strong> {detail.model_name}
+              <strong>Model:</strong> {formatModelWithEffort(detail.model_name, detail.reasoning_effort)}
             </Typography>
             <Typography variant="body2" sx={{
               color: 'text.secondary'

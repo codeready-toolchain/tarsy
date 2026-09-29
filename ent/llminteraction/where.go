@@ -90,6 +90,11 @@ func ModelName(v string) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEQ(FieldModelName, v))
 }
 
+// ReasoningEffort applies equality check predicate on the "reasoning_effort" field. It's identical to ReasoningEffortEQ.
+func ReasoningEffort(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldReasoningEffort, v))
+}
+
 // LastMessageID applies equality check predicate on the "last_message_id" field. It's identical to LastMessageIDEQ.
 func LastMessageID(v string) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldEQ(FieldLastMessageID, v))
@@ -483,6 +488,81 @@ func ModelNameEqualFold(v string) predicate.LLMInteraction {
 // ModelNameContainsFold applies the ContainsFold predicate on the "model_name" field.
 func ModelNameContainsFold(v string) predicate.LLMInteraction {
 	return predicate.LLMInteraction(sql.FieldContainsFold(FieldModelName, v))
+}
+
+// ReasoningEffortEQ applies the EQ predicate on the "reasoning_effort" field.
+func ReasoningEffortEQ(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEQ(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortNEQ applies the NEQ predicate on the "reasoning_effort" field.
+func ReasoningEffortNEQ(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNEQ(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortIn applies the In predicate on the "reasoning_effort" field.
+func ReasoningEffortIn(vs ...string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIn(FieldReasoningEffort, vs...))
+}
+
+// ReasoningEffortNotIn applies the NotIn predicate on the "reasoning_effort" field.
+func ReasoningEffortNotIn(vs ...string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotIn(FieldReasoningEffort, vs...))
+}
+
+// ReasoningEffortGT applies the GT predicate on the "reasoning_effort" field.
+func ReasoningEffortGT(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGT(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortGTE applies the GTE predicate on the "reasoning_effort" field.
+func ReasoningEffortGTE(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldGTE(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortLT applies the LT predicate on the "reasoning_effort" field.
+func ReasoningEffortLT(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLT(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortLTE applies the LTE predicate on the "reasoning_effort" field.
+func ReasoningEffortLTE(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldLTE(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortContains applies the Contains predicate on the "reasoning_effort" field.
+func ReasoningEffortContains(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldContains(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortHasPrefix applies the HasPrefix predicate on the "reasoning_effort" field.
+func ReasoningEffortHasPrefix(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldHasPrefix(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortHasSuffix applies the HasSuffix predicate on the "reasoning_effort" field.
+func ReasoningEffortHasSuffix(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldHasSuffix(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortIsNil applies the IsNil predicate on the "reasoning_effort" field.
+func ReasoningEffortIsNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldIsNull(FieldReasoningEffort))
+}
+
+// ReasoningEffortNotNil applies the NotNil predicate on the "reasoning_effort" field.
+func ReasoningEffortNotNil() predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldNotNull(FieldReasoningEffort))
+}
+
+// ReasoningEffortEqualFold applies the EqualFold predicate on the "reasoning_effort" field.
+func ReasoningEffortEqualFold(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldEqualFold(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortContainsFold applies the ContainsFold predicate on the "reasoning_effort" field.
+func ReasoningEffortContainsFold(v string) predicate.LLMInteraction {
+	return predicate.LLMInteraction(sql.FieldContainsFold(FieldReasoningEffort, v))
 }
 
 // LastMessageIDEQ applies the EQ predicate on the "last_message_id" field.

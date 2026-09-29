@@ -151,7 +151,7 @@ Lands the knob without changing any provider payload.
 
 Temporary gap: config accepts `reasoning_effort: medium`, but the LLM service still sends today's hardcoded payload until PR 2. Call this out in the PR description. Do not ship PR 1 alone to a branch that operators will run.
 
-### PR 2: Apply the effort in the LLM service
+### PR 2: Apply the effort in the LLM service - DONE
 
 Python trusts `LLMConfig.reasoning_effort`. It does not decide eligibility.
 

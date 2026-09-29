@@ -259,6 +259,7 @@ type ExecutionOverview struct {
 	LLMBackend               string              `json:"llm_backend"`
 	LLMProvider              *string             `json:"llm_provider"`
 	ModelName                *string             `json:"model_name,omitempty"`
+	ReasoningEffort          *string             `json:"reasoning_effort,omitempty"`
 	StartedAt                *time.Time          `json:"started_at"`
 	CompletedAt              *time.Time          `json:"completed_at"`
 	DurationMs               *int64              `json:"duration_ms"`
@@ -274,6 +275,7 @@ type ExecutionOverview struct {
 	OriginalLLMProvider      *string             `json:"original_llm_provider,omitempty"`
 	OriginalLLMBackend       *string             `json:"original_llm_backend,omitempty"`
 	OriginalModelName        *string             `json:"original_model_name,omitempty"`
+	OriginalReasoningEffort  *string             `json:"original_reasoning_effort,omitempty"`
 	FallbackReason           *string             `json:"fallback_reason,omitempty"`
 	FallbackErrorCode        *string             `json:"fallback_error_code,omitempty"`
 	FallbackAttempt          *int                `json:"fallback_attempt,omitempty"`
@@ -412,9 +414,19 @@ type UsageTotals struct {
 	UnpricedTokenCount       *int64           `json:"unpriced_token_count,omitempty"` // SUM(total_tokens + cache_read + cache_creation) of token-bearing unpriced rows
 }
 
+// FormatModelWithEffort renders a model label. An empty model or effort
+// leaves the model unchanged, so historical rows stay unlabeled.
+func FormatModelWithEffort(model, effort string) string {
+	if model == "" || effort == "" {
+		return model
+	}
+	return model + " (" + effort + ")"
+}
+
 // UsageModelBreakdown is a per-model rollup within the window.
 type UsageModelBreakdown struct {
 	ModelName                string   `json:"model_name"`
+	ReasoningEffort          string   `json:"reasoning_effort,omitempty"`
 	SessionCount             int64    `json:"session_count"`
 	InputTokens              int64    `json:"input_tokens"`
 	OutputTokens             int64    `json:"output_tokens"`

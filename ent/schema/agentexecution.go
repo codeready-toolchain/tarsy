@@ -62,6 +62,10 @@ func (AgentExecution) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Configured model at execution time (e.g. 'gemini-3.7-flash')"),
+		field.String("reasoning_effort").
+			Optional().
+			Nillable().
+			Comment("Effective reasoning effort for the current model; NULL when unset or recorded before the field existed"),
 
 		// Fallback tracking fields (NULL = no fallback occurred)
 		field.String("original_llm_provider").
@@ -76,6 +80,10 @@ func (AgentExecution) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Original model before fallback (NULL = no fallback occurred)"),
+		field.String("original_reasoning_effort").
+			Optional().
+			Nillable().
+			Comment("Original reasoning effort before fallback (NULL = no fallback occurred, or the original effort was unset)"),
 
 		// Orchestrator sub-agent fields
 		field.String("parent_execution_id").

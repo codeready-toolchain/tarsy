@@ -56,7 +56,7 @@ class LangChainProvider(LLMProvider):
 
     Supports: OpenAI, Anthropic, xAI, Google (via LangChain), VertexAI.
     Features:
-    - Cached chat model instances per (provider, model, api_key_env)
+    - Cached chat model instances per (provider, model, api_key_env, reasoning_effort)
     - Streaming via astream() with content_blocks for unified reasoning/text/tool_calls
     - Tool binding via bind_tools()
     - Tool name encoding via shared tool_names utility
@@ -65,11 +65,13 @@ class LangChainProvider(LLMProvider):
     """
 
     def __init__(self):
-        # Cache BaseChatModel instances per (provider, model, api_key_env) tuple.
+        # Cache BaseChatModel instances per
+        # (provider, model, api_key_env, reasoning_effort). Reasoning kwargs
+        # are fixed at construction, so two efforts must not share a client.
         # LangChain model objects are stateless — conversation state is passed
         # per-call via messages. This avoids re-reading env vars and
         # re-initializing HTTP clients on every request.
-        self._model_cache: Dict[Tuple[str, str, str], object] = {}
+        self._model_cache: Dict[Tuple[str, str, str, str], object] = {}
 
     def _get_or_create_model(
         self,
@@ -84,7 +86,9 @@ class LangChainProvider(LLMProvider):
 
         Cache policy is applied per request (not on the shared ChatOpenAI instance).
         """
-        cache_key = (config.provider, config.model, config.api_key_env)
+        cache_key = (
+            config.provider, config.model, config.api_key_env, config.reasoning_effort,
+        )
         if cache_key not in self._model_cache:
             self._model_cache[cache_key] = self._create_chat_model(config)
         model = self._model_cache[cache_key]
@@ -118,12 +122,23 @@ class LangChainProvider(LLMProvider):
     # ── Reasoning/thinking configuration per provider ──────────────────
 
     @staticmethod
-    def _get_google_thinking_kwargs(model: str) -> dict:
+    def _get_google_thinking_kwargs(model: str, reasoning_effort: str = "") -> dict:
         """Return kwargs to enable thinking/reasoning for Google models.
 
-        Mirrors the thinking configuration from GoogleNativeProvider._get_thinking_config
-        but using the LangChain ChatGoogleGenerativeAI parameter names.
+        A non-empty reasoning_effort is sent as thinking_level on any model ID,
+        including Gemini 2.5. thinking_config is used because ChatGoogleGenerativeAI's
+        thinking_level field rejects tokens outside minimal/low/medium/high.
+
+        An empty effort mirrors GoogleNativeProvider._get_thinking_config:
+        Gemini 2.5 keeps token budgets; every other ID uses thinking_level high.
         """
+        if reasoning_effort:
+            return {
+                "thinking_config": {
+                    "thinking_level": reasoning_effort,
+                    "include_thoughts": True,
+                },
+            }
         model_lower = model.lower()
         if "gemini-2.5-pro" in model_lower:
             return {"include_thoughts": True, "thinking_budget": 32768}
@@ -133,13 +148,19 @@ class LangChainProvider(LLMProvider):
             return {"include_thoughts": True, "thinking_level": "high"}
 
     @staticmethod
-    def _get_openai_reasoning_kwargs(model: str) -> dict:
+    def _get_openai_reasoning_kwargs(model: str, reasoning_effort: str = "") -> dict:
         """Return kwargs to enable reasoning for OpenAI models.
 
         Uses the Responses API which properly streams reasoning summaries.
-        Reasoning is enabled by default; only non-reasoning GPT-5 variants
+        A non-empty reasoning_effort is sent on any model ID. An empty effort
+        enables reasoning by default; only non-reasoning GPT-5 variants
         (chat, main) are excluded.
         """
+        if reasoning_effort:
+            return {
+                "use_responses_api": True,
+                "reasoning": {"effort": reasoning_effort, "summary": "auto"},
+            }
         model_lower = model.lower()
         if model_lower.startswith("gpt-5") and any(
             tag in model_lower for tag in ("-chat", "-main")
@@ -157,14 +178,25 @@ class LangChainProvider(LLMProvider):
     _ADAPTIVE_ONLY_THINKING_RE = re.compile(r"claude-[a-z]+-5(?:-|$)")
 
     @classmethod
-    def _get_anthropic_thinking_kwargs(cls, model: str) -> dict:
+    def _get_anthropic_thinking_kwargs(cls, model: str, reasoning_effort: str = "") -> dict:
         """Return kwargs to enable thinking for Claude models.
 
-        budget_tokens must be less than max_tokens. Claude Sonnet 5 (and other
-        5th-generation models) removed manual budget_tokens thinking in favor
-        of always-on adaptive thinking; passing budget_tokens to those models
-        returns a 400 error, so they get the adaptive form instead.
+        A non-empty reasoning_effort uses adaptive thinking and output_config.effort
+        on any model ID, with no budget_tokens.
+
+        An empty effort keeps the legacy split. budget_tokens must be less than
+        max_tokens. Claude generation 5 removed manual budget_tokens thinking in
+        favor of always-on adaptive thinking; passing budget_tokens to those models
+        returns a 400 error, so they get the adaptive form instead. Claude 4.x,
+        including 4.8, stays on budget_tokens; Go writes the effort for models
+        that should leave this path.
         """
+        if reasoning_effort:
+            return {
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": reasoning_effort},
+                "max_tokens": 64000,
+            }
         if cls._ADAPTIVE_ONLY_THINKING_RE.search(model.lower()):
             return {
                 "thinking": {"type": "adaptive"},
@@ -199,7 +231,9 @@ class LangChainProvider(LLMProvider):
 
         if provider is ProviderType.OPENAI:
             from langchain_openai import ChatOpenAI
-            reasoning_kwargs = self._get_openai_reasoning_kwargs(config.model)
+            reasoning_kwargs = self._get_openai_reasoning_kwargs(
+                config.model, config.reasoning_effort,
+            )
             return ChatOpenAI(
                 model=config.model,
                 api_key=_require_api_key(),
@@ -211,7 +245,9 @@ class LangChainProvider(LLMProvider):
 
         elif provider is ProviderType.ANTHROPIC:
             from langchain_anthropic import ChatAnthropic
-            thinking_kwargs = self._get_anthropic_thinking_kwargs(config.model)
+            thinking_kwargs = self._get_anthropic_thinking_kwargs(
+                config.model, config.reasoning_effort,
+            )
             base_kwargs = {
                 "model": config.model,
                 "api_key": _require_api_key(),
@@ -225,16 +261,23 @@ class LangChainProvider(LLMProvider):
 
         elif provider is ProviderType.XAI:
             from langchain_xai import ChatXAI
-            return ChatXAI(
-                model=config.model,
-                api_key=_require_api_key(),
-                streaming=True,
-                max_retries=0,
-            )
+            xai_kwargs = {
+                "model": config.model,
+                "api_key": _require_api_key(),
+                "streaming": True,
+                "max_retries": 0,
+            }
+            # ChatXAI moves reasoning_effort into extra_body. The OpenAI
+            # reasoning dict would select the Responses API instead.
+            if config.reasoning_effort:
+                xai_kwargs["reasoning_effort"] = config.reasoning_effort
+            return ChatXAI(**xai_kwargs)
 
         elif provider is ProviderType.GOOGLE:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            thinking_kwargs = self._get_google_thinking_kwargs(config.model)
+            thinking_kwargs = self._get_google_thinking_kwargs(
+                config.model, config.reasoning_effort,
+            )
             return ChatGoogleGenerativeAI(
                 model=config.model,
                 google_api_key=_require_api_key(),
@@ -247,7 +290,9 @@ class LangChainProvider(LLMProvider):
             model_lower = config.model.lower()
             if "claude" in model_lower or "anthropic" in model_lower:
                 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
-                thinking_kwargs = self._get_anthropic_thinking_kwargs(config.model)
+                thinking_kwargs = self._get_anthropic_thinking_kwargs(
+                    config.model, config.reasoning_effort,
+                )
                 max_tokens = thinking_kwargs.pop("max_tokens", 64000)
                 return ChatAnthropicVertex(
                     model=config.model,
@@ -260,7 +305,9 @@ class LangChainProvider(LLMProvider):
                 )
             else:
                 from langchain_google_genai import ChatGoogleGenerativeAI
-                thinking_kwargs = self._get_google_thinking_kwargs(config.model)
+                thinking_kwargs = self._get_google_thinking_kwargs(
+                    config.model, config.reasoning_effort,
+                )
                 return ChatGoogleGenerativeAI(
                     model=config.model,
                     project=config.project,

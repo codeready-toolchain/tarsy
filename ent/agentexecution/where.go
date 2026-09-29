@@ -120,6 +120,11 @@ func ModelName(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldModelName, v))
 }
 
+// ReasoningEffort applies equality check predicate on the "reasoning_effort" field. It's identical to ReasoningEffortEQ.
+func ReasoningEffort(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldReasoningEffort, v))
+}
+
 // OriginalLlmProvider applies equality check predicate on the "original_llm_provider" field. It's identical to OriginalLlmProviderEQ.
 func OriginalLlmProvider(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmProvider, v))
@@ -133,6 +138,11 @@ func OriginalLlmBackend(v string) predicate.AgentExecution {
 // OriginalModelName applies equality check predicate on the "original_model_name" field. It's identical to OriginalModelNameEQ.
 func OriginalModelName(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalModelName, v))
+}
+
+// OriginalReasoningEffort applies equality check predicate on the "original_reasoning_effort" field. It's identical to OriginalReasoningEffortEQ.
+func OriginalReasoningEffort(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalReasoningEffort, v))
 }
 
 // ParentExecutionID applies equality check predicate on the "parent_execution_id" field. It's identical to ParentExecutionIDEQ.
@@ -840,6 +850,81 @@ func ModelNameContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldModelName, v))
 }
 
+// ReasoningEffortEQ applies the EQ predicate on the "reasoning_effort" field.
+func ReasoningEffortEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortNEQ applies the NEQ predicate on the "reasoning_effort" field.
+func ReasoningEffortNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortIn applies the In predicate on the "reasoning_effort" field.
+func ReasoningEffortIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldReasoningEffort, vs...))
+}
+
+// ReasoningEffortNotIn applies the NotIn predicate on the "reasoning_effort" field.
+func ReasoningEffortNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldReasoningEffort, vs...))
+}
+
+// ReasoningEffortGT applies the GT predicate on the "reasoning_effort" field.
+func ReasoningEffortGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortGTE applies the GTE predicate on the "reasoning_effort" field.
+func ReasoningEffortGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortLT applies the LT predicate on the "reasoning_effort" field.
+func ReasoningEffortLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortLTE applies the LTE predicate on the "reasoning_effort" field.
+func ReasoningEffortLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortContains applies the Contains predicate on the "reasoning_effort" field.
+func ReasoningEffortContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortHasPrefix applies the HasPrefix predicate on the "reasoning_effort" field.
+func ReasoningEffortHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortHasSuffix applies the HasSuffix predicate on the "reasoning_effort" field.
+func ReasoningEffortHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortIsNil applies the IsNil predicate on the "reasoning_effort" field.
+func ReasoningEffortIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldReasoningEffort))
+}
+
+// ReasoningEffortNotNil applies the NotNil predicate on the "reasoning_effort" field.
+func ReasoningEffortNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldReasoningEffort))
+}
+
+// ReasoningEffortEqualFold applies the EqualFold predicate on the "reasoning_effort" field.
+func ReasoningEffortEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldReasoningEffort, v))
+}
+
+// ReasoningEffortContainsFold applies the ContainsFold predicate on the "reasoning_effort" field.
+func ReasoningEffortContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldReasoningEffort, v))
+}
+
 // OriginalLlmProviderEQ applies the EQ predicate on the "original_llm_provider" field.
 func OriginalLlmProviderEQ(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalLlmProvider, v))
@@ -1063,6 +1148,81 @@ func OriginalModelNameEqualFold(v string) predicate.AgentExecution {
 // OriginalModelNameContainsFold applies the ContainsFold predicate on the "original_model_name" field.
 func OriginalModelNameContainsFold(v string) predicate.AgentExecution {
 	return predicate.AgentExecution(sql.FieldContainsFold(FieldOriginalModelName, v))
+}
+
+// OriginalReasoningEffortEQ applies the EQ predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEQ(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortNEQ applies the NEQ predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortNEQ(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNEQ(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortIn applies the In predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIn(FieldOriginalReasoningEffort, vs...))
+}
+
+// OriginalReasoningEffortNotIn applies the NotIn predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortNotIn(vs ...string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotIn(FieldOriginalReasoningEffort, vs...))
+}
+
+// OriginalReasoningEffortGT applies the GT predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortGT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGT(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortGTE applies the GTE predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortGTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldGTE(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortLT applies the LT predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortLT(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLT(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortLTE applies the LTE predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortLTE(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldLTE(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortContains applies the Contains predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortContains(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContains(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortHasPrefix applies the HasPrefix predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortHasPrefix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasPrefix(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortHasSuffix applies the HasSuffix predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortHasSuffix(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldHasSuffix(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortIsNil applies the IsNil predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortIsNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldIsNull(FieldOriginalReasoningEffort))
+}
+
+// OriginalReasoningEffortNotNil applies the NotNil predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortNotNil() predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldNotNull(FieldOriginalReasoningEffort))
+}
+
+// OriginalReasoningEffortEqualFold applies the EqualFold predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortEqualFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldEqualFold(FieldOriginalReasoningEffort, v))
+}
+
+// OriginalReasoningEffortContainsFold applies the ContainsFold predicate on the "original_reasoning_effort" field.
+func OriginalReasoningEffortContainsFold(v string) predicate.AgentExecution {
+	return predicate.AgentExecution(sql.FieldContainsFold(FieldOriginalReasoningEffort, v))
 }
 
 // ParentExecutionIDEQ applies the EQ predicate on the "parent_execution_id" field.

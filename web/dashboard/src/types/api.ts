@@ -58,6 +58,7 @@ export interface UsageTotals {
 /** Per-model rollup within a usage window. */
 export interface UsageModelBreakdown {
   model_name: string;
+  reasoning_effort?: string;
   session_count: number;
   input_tokens: number;
   output_tokens: number;
