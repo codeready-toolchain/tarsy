@@ -41,6 +41,13 @@ describe('summarizationModelLabel', () => {
     expect(summarizationModelLabel({ summarization_model: 'gemini-flash' })).toBe('gemini-flash');
   });
 
+  it('appends reasoning effort when the event stored it', () => {
+    expect(summarizationModelLabel({
+      summarization_model: 'gemini-flash',
+      summarization_reasoning_effort: 'high',
+    })).toBe('gemini-flash (high)');
+  });
+
   it('returns undefined when metadata is missing or blank', () => {
     expect(summarizationModelLabel(undefined)).toBeUndefined();
     expect(summarizationModelLabel({})).toBeUndefined();

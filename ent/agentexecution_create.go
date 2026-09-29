@@ -154,6 +154,20 @@ func (_c *AgentExecutionCreate) SetNillableModelName(v *string) *AgentExecutionC
 	return _c
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_c *AgentExecutionCreate) SetReasoningEffort(v string) *AgentExecutionCreate {
+	_c.mutation.SetReasoningEffort(v)
+	return _c
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableReasoningEffort(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetReasoningEffort(*v)
+	}
+	return _c
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (_c *AgentExecutionCreate) SetOriginalLlmProvider(v string) *AgentExecutionCreate {
 	_c.mutation.SetOriginalLlmProvider(v)
@@ -192,6 +206,20 @@ func (_c *AgentExecutionCreate) SetOriginalModelName(v string) *AgentExecutionCr
 func (_c *AgentExecutionCreate) SetNillableOriginalModelName(v *string) *AgentExecutionCreate {
 	if v != nil {
 		_c.SetOriginalModelName(*v)
+	}
+	return _c
+}
+
+// SetOriginalReasoningEffort sets the "original_reasoning_effort" field.
+func (_c *AgentExecutionCreate) SetOriginalReasoningEffort(v string) *AgentExecutionCreate {
+	_c.mutation.SetOriginalReasoningEffort(v)
+	return _c
+}
+
+// SetNillableOriginalReasoningEffort sets the "original_reasoning_effort" field if the given value is not nil.
+func (_c *AgentExecutionCreate) SetNillableOriginalReasoningEffort(v *string) *AgentExecutionCreate {
+	if v != nil {
+		_c.SetOriginalReasoningEffort(*v)
 	}
 	return _c
 }
@@ -496,6 +524,10 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 		_spec.SetField(agentexecution.FieldModelName, field.TypeString, value)
 		_node.ModelName = &value
 	}
+	if value, ok := _c.mutation.ReasoningEffort(); ok {
+		_spec.SetField(agentexecution.FieldReasoningEffort, field.TypeString, value)
+		_node.ReasoningEffort = &value
+	}
 	if value, ok := _c.mutation.OriginalLlmProvider(); ok {
 		_spec.SetField(agentexecution.FieldOriginalLlmProvider, field.TypeString, value)
 		_node.OriginalLlmProvider = &value
@@ -507,6 +539,10 @@ func (_c *AgentExecutionCreate) createSpec() (*AgentExecution, *sqlgraph.CreateS
 	if value, ok := _c.mutation.OriginalModelName(); ok {
 		_spec.SetField(agentexecution.FieldOriginalModelName, field.TypeString, value)
 		_node.OriginalModelName = &value
+	}
+	if value, ok := _c.mutation.OriginalReasoningEffort(); ok {
+		_spec.SetField(agentexecution.FieldOriginalReasoningEffort, field.TypeString, value)
+		_node.OriginalReasoningEffort = &value
 	}
 	if value, ok := _c.mutation.Task(); ok {
 		_spec.SetField(agentexecution.FieldTask, field.TypeString, value)

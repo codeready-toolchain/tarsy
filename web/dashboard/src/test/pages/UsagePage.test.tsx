@@ -537,6 +537,7 @@ describe('UsagePage', () => {
         by_model: [
           {
             model_name: 'gemini-flash',
+            reasoning_effort: 'high',
             session_count: 2,
             input_tokens: 100,
             output_tokens: 50,
@@ -561,6 +562,7 @@ describe('UsagePage', () => {
     expect(modelSection).toBeInstanceOf(HTMLElement);
     expect(within(modelSection as HTMLElement).getByText('Cache read')).toBeInTheDocument();
     expect(within(modelSection as HTMLElement).getByText('Cache create')).toBeInTheDocument();
+    expect(within(modelSection as HTMLElement).getByText('gemini-flash (high)')).toBeInTheDocument();
   });
 
   it('ignores series results from a request that is no longer the latest', async () => {

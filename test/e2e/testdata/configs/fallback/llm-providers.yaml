@@ -2,9 +2,12 @@ llm_providers:
   primary-provider:
     type: google
     model: test-primary
+    reasoning_effort: high
   fallback-1:
     type: google
     model: test-fallback-1
+    reasoning_effort: max
   fallback-2:
     type: google
     model: test-fallback-2
+    reasoning_effort: low

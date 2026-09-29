@@ -38,12 +38,16 @@ const (
 	FieldLlmProvider = "llm_provider"
 	// FieldModelName holds the string denoting the model_name field in the database.
 	FieldModelName = "model_name"
+	// FieldReasoningEffort holds the string denoting the reasoning_effort field in the database.
+	FieldReasoningEffort = "reasoning_effort"
 	// FieldOriginalLlmProvider holds the string denoting the original_llm_provider field in the database.
 	FieldOriginalLlmProvider = "original_llm_provider"
 	// FieldOriginalLlmBackend holds the string denoting the original_llm_backend field in the database.
 	FieldOriginalLlmBackend = "original_llm_backend"
 	// FieldOriginalModelName holds the string denoting the original_model_name field in the database.
 	FieldOriginalModelName = "original_model_name"
+	// FieldOriginalReasoningEffort holds the string denoting the original_reasoning_effort field in the database.
+	FieldOriginalReasoningEffort = "original_reasoning_effort"
 	// FieldParentExecutionID holds the string denoting the parent_execution_id field in the database.
 	FieldParentExecutionID = "parent_execution_id"
 	// FieldTask holds the string denoting the task field in the database.
@@ -154,9 +158,11 @@ var Columns = []string{
 	FieldLlmBackend,
 	FieldLlmProvider,
 	FieldModelName,
+	FieldReasoningEffort,
 	FieldOriginalLlmProvider,
 	FieldOriginalLlmBackend,
 	FieldOriginalModelName,
+	FieldOriginalReasoningEffort,
 	FieldParentExecutionID,
 	FieldTask,
 }
@@ -269,6 +275,11 @@ func ByModelName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldModelName, opts...).ToFunc()
 }
 
+// ByReasoningEffort orders the results by the reasoning_effort field.
+func ByReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReasoningEffort, opts...).ToFunc()
+}
+
 // ByOriginalLlmProvider orders the results by the original_llm_provider field.
 func ByOriginalLlmProvider(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOriginalLlmProvider, opts...).ToFunc()
@@ -282,6 +293,11 @@ func ByOriginalLlmBackend(opts ...sql.OrderTermOption) OrderOption {
 // ByOriginalModelName orders the results by the original_model_name field.
 func ByOriginalModelName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOriginalModelName, opts...).ToFunc()
+}
+
+// ByOriginalReasoningEffort orders the results by the original_reasoning_effort field.
+func ByOriginalReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOriginalReasoningEffort, opts...).ToFunc()
 }
 
 // ByParentExecutionID orders the results by the parent_execution_id field.

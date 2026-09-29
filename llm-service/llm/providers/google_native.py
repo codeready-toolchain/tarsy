@@ -117,8 +117,20 @@ class GoogleNativeProvider(LLMProvider):
         logger.info("Created genai client for %s", api_key_env)
         return client
 
-    def _get_thinking_config(self, model: str) -> genai_types.ThinkingConfig:
-        """Get thinking configuration based on model name."""
+    def _get_thinking_config(
+        self, model: str, reasoning_effort: str = "",
+    ) -> genai_types.ThinkingConfig:
+        """Get thinking configuration based on model name.
+
+        A non-empty reasoning_effort is sent as thinking_level on any model ID.
+        Unknown tokens are kept by the SDK enum. An empty effort keeps the
+        legacy budgets and the hardcoded high level.
+        """
+        if reasoning_effort:
+            return genai_types.ThinkingConfig(
+                thinking_level=reasoning_effort,
+                include_thoughts=True,
+            )
         model_lower = model.lower()
         if "gemini-2.5-pro" in model_lower:
             return genai_types.ThinkingConfig(
@@ -368,7 +380,9 @@ class GoogleNativeProvider(LLMProvider):
             return
 
         # Build generation config
-        thinking_config = self._get_thinking_config(config.model)
+        thinking_config = self._get_thinking_config(
+            config.model, config.reasoning_effort,
+        )
         gen_config = genai_types.GenerateContentConfig(
             thinking_config=thinking_config,
             system_instruction=system_instruction,

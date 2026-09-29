@@ -22,9 +22,11 @@ var (
 		{Name: "llm_backend", Type: field.TypeString},
 		{Name: "llm_provider", Type: field.TypeString, Nullable: true},
 		{Name: "model_name", Type: field.TypeString, Nullable: true},
+		{Name: "reasoning_effort", Type: field.TypeString, Nullable: true},
 		{Name: "original_llm_provider", Type: field.TypeString, Nullable: true},
 		{Name: "original_llm_backend", Type: field.TypeString, Nullable: true},
 		{Name: "original_model_name", Type: field.TypeString, Nullable: true},
+		{Name: "original_reasoning_effort", Type: field.TypeString, Nullable: true},
 		{Name: "task", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "parent_execution_id", Type: field.TypeString, Nullable: true},
 		{Name: "session_id", Type: field.TypeString},
@@ -38,19 +40,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "agent_executions_agent_executions_sub_agents",
-				Columns:    []*schema.Column{AgentExecutionsColumns[15]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[17]},
 				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_alert_sessions_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[16]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[18]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "agent_executions_stages_agent_executions",
-				Columns:    []*schema.Column{AgentExecutionsColumns[17]},
+				Columns:    []*schema.Column{AgentExecutionsColumns[19]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -59,12 +61,12 @@ var (
 			{
 				Name:    "agentexecution_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[16]},
+				Columns: []*schema.Column{AgentExecutionsColumns[18]},
 			},
 			{
 				Name:    "agentexecution_parent_execution_id",
 				Unique:  false,
-				Columns: []*schema.Column{AgentExecutionsColumns[15]},
+				Columns: []*schema.Column{AgentExecutionsColumns[17]},
 			},
 		},
 	}
@@ -348,6 +350,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "interaction_type", Type: field.TypeEnum, Enums: []string{"iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring", "memory_extraction", "composition"}},
 		{Name: "model_name", Type: field.TypeString},
+		{Name: "reasoning_effort", Type: field.TypeString, Nullable: true},
 		{Name: "llm_request", Type: field.TypeJSON},
 		{Name: "llm_response", Type: field.TypeJSON},
 		{Name: "thinking_content", Type: field.TypeString, Nullable: true, Size: 2147483647},
@@ -374,25 +377,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "llm_interactions_agent_executions_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[17]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[18]},
 				RefColumns: []*schema.Column{AgentExecutionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "llm_interactions_alert_sessions_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[18]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[19]},
 				RefColumns: []*schema.Column{AlertSessionsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "llm_interactions_messages_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[19]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[20]},
 				RefColumns: []*schema.Column{MessagesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "llm_interactions_stages_llm_interactions",
-				Columns:    []*schema.Column{LlmInteractionsColumns[20]},
+				Columns:    []*schema.Column{LlmInteractionsColumns[21]},
 				RefColumns: []*schema.Column{StagesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -401,17 +404,17 @@ var (
 			{
 				Name:    "llminteraction_execution_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[17], LlmInteractionsColumns[1]},
+				Columns: []*schema.Column{LlmInteractionsColumns[18], LlmInteractionsColumns[1]},
 			},
 			{
 				Name:    "llminteraction_stage_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[20], LlmInteractionsColumns[1]},
+				Columns: []*schema.Column{LlmInteractionsColumns[21], LlmInteractionsColumns[1]},
 			},
 			{
 				Name:    "llminteraction_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{LlmInteractionsColumns[18], LlmInteractionsColumns[1]},
+				Columns: []*schema.Column{LlmInteractionsColumns[19], LlmInteractionsColumns[1]},
 			},
 		},
 	}

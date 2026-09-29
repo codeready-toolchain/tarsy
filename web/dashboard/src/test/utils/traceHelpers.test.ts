@@ -523,6 +523,21 @@ describe('formatLLMDetailForCopy', () => {
     expect(text).toContain('Tokens: 5,000');
   });
 
+  it('appends reasoning effort to the model line', () => {
+    const detail: LLMInteractionDetailResponse = {
+      id: 'llm-1',
+      interaction_type: 'iteration',
+      model_name: 'gemini-2.0-flash',
+      reasoning_effort: 'high',
+      conversation: [],
+      llm_request: {},
+      llm_response: {},
+      created_at: '2025-01-15T10:00:00Z',
+    };
+
+    expect(formatLLMDetailForCopy(detail)).toContain('Model: gemini-2.0-flash (high)');
+  });
+
   it('includes cache token lines when present', () => {
     const detail: LLMInteractionDetailResponse = {
       id: 'llm-1',

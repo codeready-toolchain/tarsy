@@ -27,6 +27,8 @@ const (
 	FieldInteractionType = "interaction_type"
 	// FieldModelName holds the string denoting the model_name field in the database.
 	FieldModelName = "model_name"
+	// FieldReasoningEffort holds the string denoting the reasoning_effort field in the database.
+	FieldReasoningEffort = "reasoning_effort"
 	// FieldLastMessageID holds the string denoting the last_message_id field in the database.
 	FieldLastMessageID = "last_message_id"
 	// FieldLlmRequest holds the string denoting the llm_request field in the database.
@@ -123,6 +125,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldInteractionType,
 	FieldModelName,
+	FieldReasoningEffort,
 	FieldLastMessageID,
 	FieldLlmRequest,
 	FieldLlmResponse,
@@ -221,6 +224,11 @@ func ByInteractionType(opts ...sql.OrderTermOption) OrderOption {
 // ByModelName orders the results by the model_name field.
 func ByModelName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldModelName, opts...).ToFunc()
+}
+
+// ByReasoningEffort orders the results by the reasoning_effort field.
+func ByReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldReasoningEffort, opts...).ToFunc()
 }
 
 // ByLastMessageID orders the results by the last_message_id field.

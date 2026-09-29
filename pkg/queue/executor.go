@@ -690,13 +690,14 @@ func (e *RealSessionExecutor) executeResolvedAgent(
 
 	// Create AgentExecution DB record with resolved strategy and provider
 	exec, err := input.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:     stg.ID,
-		SessionID:   input.session.ID,
-		AgentName:   displayName,
-		AgentIndex:  agentIndex + 1, // 1-based in DB
-		LLMBackend:  resolvedConfig.LLMBackend,
-		LLMProvider: resolvedConfig.LLMProviderName,
-		ModelName:   resolvedConfig.ModelName(),
+		StageID:         stg.ID,
+		SessionID:       input.session.ID,
+		AgentName:       displayName,
+		AgentIndex:      agentIndex + 1, // 1-based in DB
+		LLMBackend:      resolvedConfig.LLMBackend,
+		LLMProvider:     resolvedConfig.LLMProviderName,
+		ModelName:       resolvedConfig.ModelName(),
+		ReasoningEffort: resolvedConfig.LLMProvider.EffectiveReasoningEffort(),
 	})
 	if err != nil {
 		logger.Error("Failed to create agent execution", "error", err)

@@ -119,6 +119,7 @@ func recordLLMInteraction(
 		ExecutionID:         &execCtx.ExecutionID,
 		InteractionType:     string(interactionType),
 		ModelName:           execCtx.Config.LLMProvider.Model,
+		ReasoningEffort:     execCtx.Config.LLMProvider.EffectiveReasoningEffort(),
 		LastMessageID:       lastMessageID,
 		LLMRequest:          llmRequestMeta,
 		LLMResponse:         llmResponseMeta,

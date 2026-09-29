@@ -46,6 +46,9 @@ func (s *InteractionService) CreateLLMInteraction(httpCtx context.Context, req m
 		SetLlmRequest(req.LLMRequest).
 		SetLlmResponse(req.LLMResponse).
 		SetCreatedAt(time.Now())
+	if req.ReasoningEffort != "" {
+		builder = builder.SetReasoningEffort(req.ReasoningEffort)
+	}
 
 	if req.LastMessageID != nil {
 		builder = builder.SetLastMessageID(*req.LastMessageID)

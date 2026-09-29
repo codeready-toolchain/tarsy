@@ -45,6 +45,10 @@ func (LLMInteraction) Fields() []ent.Field {
 			Values("iteration", "final_analysis", "executive_summary", "chat_response", "summarization", "synthesis", "forced_conclusion", "scoring", "memory_extraction", "composition"),
 		field.String("model_name").
 			Comment("e.g., 'gemini-2.0-flash-thinking-exp'"),
+		field.String("reasoning_effort").
+			Optional().
+			Nillable().
+			Comment("Effective reasoning effort at call time; NULL when unset or recorded before the field existed"),
 
 		// Conversation Context (links to Message table)
 		field.String("last_message_id").

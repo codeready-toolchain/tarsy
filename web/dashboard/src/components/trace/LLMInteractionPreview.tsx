@@ -9,6 +9,7 @@
 import { Box, Typography, Chip } from '@mui/material';
 
 import type { LLMInteractionListItem } from '../../types/trace';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 import TokenUsageDisplay from '../shared/TokenUsageDisplay';
 import { getInteractionTypeLabel, getInteractionTypeColor } from './traceHelpers';
 
@@ -30,7 +31,7 @@ export default function LLMInteractionPreview({ interaction }: LLMInteractionPre
         <Typography variant="body2" sx={{
           color: 'text.secondary'
         }}>
-          {interaction.model_name}
+          {formatModelWithEffort(interaction.model_name, interaction.reasoning_effort)}
         </Typography>
       </Box>
 

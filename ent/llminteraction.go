@@ -34,6 +34,8 @@ type LLMInteraction struct {
 	InteractionType llminteraction.InteractionType `json:"interaction_type,omitempty"`
 	// e.g., 'gemini-2.0-flash-thinking-exp'
 	ModelName string `json:"model_name,omitempty"`
+	// Effective reasoning effort at call time; NULL when unset or recorded before the field existed
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 	// Last message sent to LLM
 	LastMessageID *string `json:"last_message_id,omitempty"`
 	// Full API request payload
@@ -149,7 +151,7 @@ func (*LLMInteraction) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case llminteraction.FieldInputTokens, llminteraction.FieldOutputTokens, llminteraction.FieldTotalTokens, llminteraction.FieldThinkingTokens, llminteraction.FieldCacheReadTokens, llminteraction.FieldCacheCreationTokens, llminteraction.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case llminteraction.FieldID, llminteraction.FieldSessionID, llminteraction.FieldStageID, llminteraction.FieldExecutionID, llminteraction.FieldInteractionType, llminteraction.FieldModelName, llminteraction.FieldLastMessageID, llminteraction.FieldThinkingContent, llminteraction.FieldErrorMessage:
+		case llminteraction.FieldID, llminteraction.FieldSessionID, llminteraction.FieldStageID, llminteraction.FieldExecutionID, llminteraction.FieldInteractionType, llminteraction.FieldModelName, llminteraction.FieldReasoningEffort, llminteraction.FieldLastMessageID, llminteraction.FieldThinkingContent, llminteraction.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case llminteraction.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -211,6 +213,13 @@ func (_m *LLMInteraction) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field model_name", values[i])
 			} else if value.Valid {
 				_m.ModelName = value.String
+			}
+		case llminteraction.FieldReasoningEffort:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field reasoning_effort", values[i])
+			} else if value.Valid {
+				_m.ReasoningEffort = new(string)
+				*_m.ReasoningEffort = value.String
 			}
 		case llminteraction.FieldLastMessageID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -395,6 +404,11 @@ func (_m *LLMInteraction) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("model_name=")
 	builder.WriteString(_m.ModelName)
+	builder.WriteString(", ")
+	if v := _m.ReasoningEffort; v != nil {
+		builder.WriteString("reasoning_effort=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	if v := _m.LastMessageID; v != nil {
 		builder.WriteString("last_message_id=")

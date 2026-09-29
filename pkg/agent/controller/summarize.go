@@ -202,8 +202,10 @@ func callSummarizationLLM(
 
 			streamed, err := callSummarizationLLMWithStreaming(ctx, execCtx, input, resolved, primaryName, serverID, toolName, estimatedTokens, eventSeq, thisStream)
 			modelName := ""
+			reasoningEffort := ""
 			if resolved.Provider != nil {
 				modelName = resolved.Provider.Model
+				reasoningEffort = resolved.Provider.EffectiveReasoningEffort()
 			}
 			metrics.ObserveLLMCall(resolved.ProviderName, modelName,
 				time.Since(attemptStart), metricsTokens(streamed, err), err)
@@ -211,7 +213,7 @@ func callSummarizationLLM(
 				stickSummarizationProvider(execCtx, primaryName, resolved)
 				summary := strings.TrimSpace(streamed.Text)
 				recordSummarizationInteraction(ctx, execCtx, messages, summary,
-					streamed.LLMResponse, attemptStart, modelName)
+					streamed.LLMResponse, attemptStart, modelName, reasoningEffort)
 				return summary, streamed.Usage, nil
 			}
 			lastErr = err
@@ -284,6 +286,9 @@ func summarizationProviderMetadata(resolved agent.ResolvedSummarizationLLM, prim
 	meta := map[string]any{}
 	if resolved.Provider != nil && resolved.Provider.Model != "" {
 		meta["summarization_model"] = resolved.Provider.Model
+	}
+	if effort := resolved.Provider.EffectiveReasoningEffort(); effort != "" {
+		meta["summarization_reasoning_effort"] = effort
 	}
 	if resolved.ProviderName != "" {
 		meta["summarization_provider"] = resolved.ProviderName
@@ -559,6 +564,7 @@ func recordSummarizationInteraction(
 	resp *LLMResponse,
 	startTime time.Time,
 	modelName string,
+	reasoningEffort string,
 ) {
 	durationMs := int(time.Since(startTime).Milliseconds())
 
@@ -605,6 +611,7 @@ func recordSummarizationInteraction(
 		ExecutionID:     &execCtx.ExecutionID,
 		InteractionType: string(llminteraction.InteractionTypeSummarization),
 		ModelName:       modelName,
+		ReasoningEffort: reasoningEffort,
 		LLMRequest: map[string]any{
 			"messages_count": len(inputMessages),
 			"iteration":      0,

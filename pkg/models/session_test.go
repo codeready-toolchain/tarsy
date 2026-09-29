@@ -27,6 +27,12 @@ func TestDeriveCostCompleteness(t *testing.T) {
 	}
 }
 
+func TestFormatModelWithEffort(t *testing.T) {
+	assert.Equal(t, "gemini-3.8-flash", FormatModelWithEffort("gemini-3.8-flash", ""))
+	assert.Equal(t, "gemini-3.8-flash (high)", FormatModelWithEffort("gemini-3.8-flash", "high"))
+	assert.Equal(t, "", FormatModelWithEffort("", "high"))
+}
+
 func TestSessionCostFieldsJSON(t *testing.T) {
 	t.Run("zero estimated cost is serialized", func(t *testing.T) {
 		zero := 0.0

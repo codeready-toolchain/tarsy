@@ -189,6 +189,7 @@ export interface ExecutionOverview {
   llm_backend: string;
   llm_provider: string | null;
   model_name?: string | null;
+  reasoning_effort?: string | null;
   started_at: string | null;
   completed_at: string | null;
   duration_ms: number | null;
@@ -204,6 +205,7 @@ export interface ExecutionOverview {
   original_llm_provider?: string | null;
   original_llm_backend?: string | null;
   original_model_name?: string | null;
+  original_reasoning_effort?: string | null;
   fallback_reason?: string | null;
   fallback_error_code?: string | null;
   fallback_attempt?: number | null;

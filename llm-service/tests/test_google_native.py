@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import warnings
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import httpx
@@ -108,6 +109,24 @@ class TestGoogleNativeProvider:
         
         assert config.thinking_level == genai_types.ThinkingLevel.HIGH
         assert config.include_thoughts is True
+
+    def test_get_thinking_config_explicit_high(self, provider):
+        """A proto effort replaces the legacy budget or hardcoded level."""
+        config = provider._get_thinking_config("gemini-3.8-flash", "high")
+
+        assert config.thinking_level == genai_types.ThinkingLevel.HIGH
+        assert config.include_thoughts is True
+        assert config.thinking_budget is None
+
+    def test_get_thinking_config_unknown_token_forwarded(self, provider):
+        """Tokens outside the SDK enum are still sent as the original string."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            config = provider._get_thinking_config("gemini-2.5-pro", "extra-high")
+
+        assert config.thinking_level.value == "extra-high"
+        assert config.include_thoughts is True
+        assert config.thinking_budget is None
 
     def test_convert_messages_system_instruction(self, provider):
         """Test that system messages are extracted as system_instruction."""
@@ -1330,6 +1349,54 @@ class TestGoogleNativeProvider:
             == genai_types.FunctionCallingConfigMode.NONE
         )
         assert not config.tool_config.include_server_side_tool_invocations
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"TEST_API_KEY": "test-key-123"})
+    @patch("llm.providers.google_native.genai.Client")
+    @pytest.mark.parametrize(
+        ("model", "effort", "want_level", "want_budget"),
+        [
+            ("gemini-3.8-flash", "high", genai_types.ThinkingLevel.HIGH, None),
+            ("gemini-2.5-pro", "", None, 32768),
+            ("gemini-2.5-pro", "extra-high", "extra-high", None),
+        ],
+    )
+    async def test_generate_thinking_config_follows_reasoning_effort(
+        self, mock_client_class, provider, model, effort, want_level, want_budget,
+    ):
+        """The proto effort is applied on the generate request, not only in the helper."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        async def mock_stream():
+            yield self._text_chunk("done")
+
+        mock_client.aio.models.generate_content_stream = AsyncMock(return_value=mock_stream())
+        request = pb.GenerateRequest(
+            session_id="sess-1",
+            execution_id="exec-1",
+            llm_config=pb.LLMConfig(
+                backend="google-native",
+                model=model,
+                api_key_env="TEST_API_KEY",
+                reasoning_effort=effort,
+            ),
+            messages=[pb.ConversationMessage(role="user", content="Hi")],
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            async for _ in provider.generate(request):
+                pass
+
+        thinking = mock_client.aio.models.generate_content_stream.call_args.kwargs[
+            "config"
+        ].thinking_config
+        assert thinking.include_thoughts is True
+        assert thinking.thinking_budget == want_budget
+        if isinstance(want_level, str):
+            assert thinking.thinking_level.value == want_level
+        else:
+            assert thinking.thinking_level == want_level
 
 
 class TestStreamPartTypes:

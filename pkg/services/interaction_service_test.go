@@ -65,6 +65,7 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 			ExecutionID:      &exec.ID,
 			InteractionType:  "iteration",
 			ModelName:        "gemini-2.0-flash",
+			ReasoningEffort:  "high",
 			LLMRequest:       map[string]any{"prompt": "test"},
 			LLMResponse:      map[string]any{"text": "response"},
 			ThinkingContent:  &thinking,
@@ -78,6 +79,8 @@ func TestInteractionService_CreateLLMInteraction(t *testing.T) {
 		interaction, err := interactionService.CreateLLMInteraction(ctx, req)
 		require.NoError(t, err)
 		assert.Equal(t, req.ModelName, interaction.ModelName)
+		require.NotNil(t, interaction.ReasoningEffort)
+		assert.Equal(t, "high", *interaction.ReasoningEffort)
 		assert.Equal(t, thinking, *interaction.ThinkingContent)
 		assert.Equal(t, inputTokens, *interaction.InputTokens)
 	})

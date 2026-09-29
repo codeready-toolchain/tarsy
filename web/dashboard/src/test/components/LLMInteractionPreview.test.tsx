@@ -37,6 +37,13 @@ describe('LLMInteractionPreview', () => {
     expect(screen.getByText('10')).toBeInTheDocument();
   });
 
+  it('appends reasoning effort to the model', () => {
+    renderWithTheme(
+      <LLMInteractionPreview interaction={makeItem({ reasoning_effort: 'high' })} />,
+    );
+    expect(screen.getByText('gemini-2.0-flash (high)')).toBeInTheDocument();
+  });
+
   it('hides cache tokens when fields are absent', () => {
     renderWithTheme(<LLMInteractionPreview interaction={makeItem()} />);
 

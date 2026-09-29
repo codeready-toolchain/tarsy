@@ -1,4 +1,5 @@
 import { Typography } from '@mui/material';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 
 interface SummarizationModelCaptionProps {
   metadata?: Record<string, unknown> | null;
@@ -9,7 +10,9 @@ export function summarizationModelLabel(metadata?: Record<string, unknown> | nul
   const model = metadata?.summarization_model;
   if (typeof model !== 'string') return undefined;
   const trimmed = model.trim();
-  return trimmed === '' ? undefined : trimmed;
+  if (trimmed === '') return undefined;
+  const effort = metadata?.summarization_reasoning_effort;
+  return formatModelWithEffort(trimmed, typeof effort === 'string' ? effort : undefined);
 }
 
 /**

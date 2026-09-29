@@ -70,9 +70,11 @@ type AgentExecutionMutation struct {
 	llm_backend                      *string
 	llm_provider                     *string
 	model_name                       *string
+	reasoning_effort                 *string
 	original_llm_provider            *string
 	original_llm_backend             *string
 	original_model_name              *string
+	original_reasoning_effort        *string
 	task                             *string
 	clearedFields                    map[string]struct{}
 	stage                            *string
@@ -759,6 +761,55 @@ func (m *AgentExecutionMutation) ResetModelName() {
 	delete(m.clearedFields, agentexecution.FieldModelName)
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (m *AgentExecutionMutation) SetReasoningEffort(s string) {
+	m.reasoning_effort = &s
+}
+
+// ReasoningEffort returns the value of the "reasoning_effort" field in the mutation.
+func (m *AgentExecutionMutation) ReasoningEffort() (r string, exists bool) {
+	v := m.reasoning_effort
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReasoningEffort returns the old "reasoning_effort" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldReasoningEffort(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReasoningEffort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReasoningEffort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReasoningEffort: %w", err)
+	}
+	return oldValue.ReasoningEffort, nil
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (m *AgentExecutionMutation) ClearReasoningEffort() {
+	m.reasoning_effort = nil
+	m.clearedFields[agentexecution.FieldReasoningEffort] = struct{}{}
+}
+
+// ReasoningEffortCleared returns if the "reasoning_effort" field was cleared in this mutation.
+func (m *AgentExecutionMutation) ReasoningEffortCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldReasoningEffort]
+	return ok
+}
+
+// ResetReasoningEffort resets all changes to the "reasoning_effort" field.
+func (m *AgentExecutionMutation) ResetReasoningEffort() {
+	m.reasoning_effort = nil
+	delete(m.clearedFields, agentexecution.FieldReasoningEffort)
+}
+
 // SetOriginalLlmProvider sets the "original_llm_provider" field.
 func (m *AgentExecutionMutation) SetOriginalLlmProvider(s string) {
 	m.original_llm_provider = &s
@@ -904,6 +955,55 @@ func (m *AgentExecutionMutation) OriginalModelNameCleared() bool {
 func (m *AgentExecutionMutation) ResetOriginalModelName() {
 	m.original_model_name = nil
 	delete(m.clearedFields, agentexecution.FieldOriginalModelName)
+}
+
+// SetOriginalReasoningEffort sets the "original_reasoning_effort" field.
+func (m *AgentExecutionMutation) SetOriginalReasoningEffort(s string) {
+	m.original_reasoning_effort = &s
+}
+
+// OriginalReasoningEffort returns the value of the "original_reasoning_effort" field in the mutation.
+func (m *AgentExecutionMutation) OriginalReasoningEffort() (r string, exists bool) {
+	v := m.original_reasoning_effort
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOriginalReasoningEffort returns the old "original_reasoning_effort" field's value of the AgentExecution entity.
+// If the AgentExecution object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AgentExecutionMutation) OldOriginalReasoningEffort(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOriginalReasoningEffort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOriginalReasoningEffort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOriginalReasoningEffort: %w", err)
+	}
+	return oldValue.OriginalReasoningEffort, nil
+}
+
+// ClearOriginalReasoningEffort clears the value of the "original_reasoning_effort" field.
+func (m *AgentExecutionMutation) ClearOriginalReasoningEffort() {
+	m.original_reasoning_effort = nil
+	m.clearedFields[agentexecution.FieldOriginalReasoningEffort] = struct{}{}
+}
+
+// OriginalReasoningEffortCleared returns if the "original_reasoning_effort" field was cleared in this mutation.
+func (m *AgentExecutionMutation) OriginalReasoningEffortCleared() bool {
+	_, ok := m.clearedFields[agentexecution.FieldOriginalReasoningEffort]
+	return ok
+}
+
+// ResetOriginalReasoningEffort resets all changes to the "original_reasoning_effort" field.
+func (m *AgentExecutionMutation) ResetOriginalReasoningEffort() {
+	m.original_reasoning_effort = nil
+	delete(m.clearedFields, agentexecution.FieldOriginalReasoningEffort)
 }
 
 // SetParentExecutionID sets the "parent_execution_id" field.
@@ -1456,7 +1556,7 @@ func (m *AgentExecutionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AgentExecutionMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 19)
 	if m.stage != nil {
 		fields = append(fields, agentexecution.FieldStageID)
 	}
@@ -1493,6 +1593,9 @@ func (m *AgentExecutionMutation) Fields() []string {
 	if m.model_name != nil {
 		fields = append(fields, agentexecution.FieldModelName)
 	}
+	if m.reasoning_effort != nil {
+		fields = append(fields, agentexecution.FieldReasoningEffort)
+	}
 	if m.original_llm_provider != nil {
 		fields = append(fields, agentexecution.FieldOriginalLlmProvider)
 	}
@@ -1501,6 +1604,9 @@ func (m *AgentExecutionMutation) Fields() []string {
 	}
 	if m.original_model_name != nil {
 		fields = append(fields, agentexecution.FieldOriginalModelName)
+	}
+	if m.original_reasoning_effort != nil {
+		fields = append(fields, agentexecution.FieldOriginalReasoningEffort)
 	}
 	if m.parent != nil {
 		fields = append(fields, agentexecution.FieldParentExecutionID)
@@ -1540,12 +1646,16 @@ func (m *AgentExecutionMutation) Field(name string) (ent.Value, bool) {
 		return m.LlmProvider()
 	case agentexecution.FieldModelName:
 		return m.ModelName()
+	case agentexecution.FieldReasoningEffort:
+		return m.ReasoningEffort()
 	case agentexecution.FieldOriginalLlmProvider:
 		return m.OriginalLlmProvider()
 	case agentexecution.FieldOriginalLlmBackend:
 		return m.OriginalLlmBackend()
 	case agentexecution.FieldOriginalModelName:
 		return m.OriginalModelName()
+	case agentexecution.FieldOriginalReasoningEffort:
+		return m.OriginalReasoningEffort()
 	case agentexecution.FieldParentExecutionID:
 		return m.ParentExecutionID()
 	case agentexecution.FieldTask:
@@ -1583,12 +1693,16 @@ func (m *AgentExecutionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldLlmProvider(ctx)
 	case agentexecution.FieldModelName:
 		return m.OldModelName(ctx)
+	case agentexecution.FieldReasoningEffort:
+		return m.OldReasoningEffort(ctx)
 	case agentexecution.FieldOriginalLlmProvider:
 		return m.OldOriginalLlmProvider(ctx)
 	case agentexecution.FieldOriginalLlmBackend:
 		return m.OldOriginalLlmBackend(ctx)
 	case agentexecution.FieldOriginalModelName:
 		return m.OldOriginalModelName(ctx)
+	case agentexecution.FieldOriginalReasoningEffort:
+		return m.OldOriginalReasoningEffort(ctx)
 	case agentexecution.FieldParentExecutionID:
 		return m.OldParentExecutionID(ctx)
 	case agentexecution.FieldTask:
@@ -1686,6 +1800,13 @@ func (m *AgentExecutionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetModelName(v)
 		return nil
+	case agentexecution.FieldReasoningEffort:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReasoningEffort(v)
+		return nil
 	case agentexecution.FieldOriginalLlmProvider:
 		v, ok := value.(string)
 		if !ok {
@@ -1706,6 +1827,13 @@ func (m *AgentExecutionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOriginalModelName(v)
+		return nil
+	case agentexecution.FieldOriginalReasoningEffort:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOriginalReasoningEffort(v)
 		return nil
 	case agentexecution.FieldParentExecutionID:
 		v, ok := value.(string)
@@ -1796,6 +1924,9 @@ func (m *AgentExecutionMutation) ClearedFields() []string {
 	if m.FieldCleared(agentexecution.FieldModelName) {
 		fields = append(fields, agentexecution.FieldModelName)
 	}
+	if m.FieldCleared(agentexecution.FieldReasoningEffort) {
+		fields = append(fields, agentexecution.FieldReasoningEffort)
+	}
 	if m.FieldCleared(agentexecution.FieldOriginalLlmProvider) {
 		fields = append(fields, agentexecution.FieldOriginalLlmProvider)
 	}
@@ -1804,6 +1935,9 @@ func (m *AgentExecutionMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(agentexecution.FieldOriginalModelName) {
 		fields = append(fields, agentexecution.FieldOriginalModelName)
+	}
+	if m.FieldCleared(agentexecution.FieldOriginalReasoningEffort) {
+		fields = append(fields, agentexecution.FieldOriginalReasoningEffort)
 	}
 	if m.FieldCleared(agentexecution.FieldParentExecutionID) {
 		fields = append(fields, agentexecution.FieldParentExecutionID)
@@ -1843,6 +1977,9 @@ func (m *AgentExecutionMutation) ClearField(name string) error {
 	case agentexecution.FieldModelName:
 		m.ClearModelName()
 		return nil
+	case agentexecution.FieldReasoningEffort:
+		m.ClearReasoningEffort()
+		return nil
 	case agentexecution.FieldOriginalLlmProvider:
 		m.ClearOriginalLlmProvider()
 		return nil
@@ -1851,6 +1988,9 @@ func (m *AgentExecutionMutation) ClearField(name string) error {
 		return nil
 	case agentexecution.FieldOriginalModelName:
 		m.ClearOriginalModelName()
+		return nil
+	case agentexecution.FieldOriginalReasoningEffort:
+		m.ClearOriginalReasoningEffort()
 		return nil
 	case agentexecution.FieldParentExecutionID:
 		m.ClearParentExecutionID()
@@ -1902,6 +2042,9 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 	case agentexecution.FieldModelName:
 		m.ResetModelName()
 		return nil
+	case agentexecution.FieldReasoningEffort:
+		m.ResetReasoningEffort()
+		return nil
 	case agentexecution.FieldOriginalLlmProvider:
 		m.ResetOriginalLlmProvider()
 		return nil
@@ -1910,6 +2053,9 @@ func (m *AgentExecutionMutation) ResetField(name string) error {
 		return nil
 	case agentexecution.FieldOriginalModelName:
 		m.ResetOriginalModelName()
+		return nil
+	case agentexecution.FieldOriginalReasoningEffort:
+		m.ResetOriginalReasoningEffort()
 		return nil
 	case agentexecution.FieldParentExecutionID:
 		m.ResetParentExecutionID()
@@ -9018,6 +9164,7 @@ type LLMInteractionMutation struct {
 	created_at               *time.Time
 	interaction_type         *llminteraction.InteractionType
 	model_name               *string
+	reasoning_effort         *string
 	llm_request              *map[string]interface{}
 	llm_response             *map[string]interface{}
 	thinking_content         *string
@@ -9400,6 +9547,55 @@ func (m *LLMInteractionMutation) OldModelName(ctx context.Context) (v string, er
 // ResetModelName resets all changes to the "model_name" field.
 func (m *LLMInteractionMutation) ResetModelName() {
 	m.model_name = nil
+}
+
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (m *LLMInteractionMutation) SetReasoningEffort(s string) {
+	m.reasoning_effort = &s
+}
+
+// ReasoningEffort returns the value of the "reasoning_effort" field in the mutation.
+func (m *LLMInteractionMutation) ReasoningEffort() (r string, exists bool) {
+	v := m.reasoning_effort
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReasoningEffort returns the old "reasoning_effort" field's value of the LLMInteraction entity.
+// If the LLMInteraction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LLMInteractionMutation) OldReasoningEffort(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReasoningEffort is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReasoningEffort requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReasoningEffort: %w", err)
+	}
+	return oldValue.ReasoningEffort, nil
+}
+
+// ClearReasoningEffort clears the value of the "reasoning_effort" field.
+func (m *LLMInteractionMutation) ClearReasoningEffort() {
+	m.reasoning_effort = nil
+	m.clearedFields[llminteraction.FieldReasoningEffort] = struct{}{}
+}
+
+// ReasoningEffortCleared returns if the "reasoning_effort" field was cleared in this mutation.
+func (m *LLMInteractionMutation) ReasoningEffortCleared() bool {
+	_, ok := m.clearedFields[llminteraction.FieldReasoningEffort]
+	return ok
+}
+
+// ResetReasoningEffort resets all changes to the "reasoning_effort" field.
+func (m *LLMInteractionMutation) ResetReasoningEffort() {
+	m.reasoning_effort = nil
+	delete(m.clearedFields, llminteraction.FieldReasoningEffort)
 }
 
 // SetLastMessageID sets the "last_message_id" field.
@@ -10439,7 +10635,7 @@ func (m *LLMInteractionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LLMInteractionMutation) Fields() []string {
-	fields := make([]string, 0, 20)
+	fields := make([]string, 0, 21)
 	if m.session != nil {
 		fields = append(fields, llminteraction.FieldSessionID)
 	}
@@ -10457,6 +10653,9 @@ func (m *LLMInteractionMutation) Fields() []string {
 	}
 	if m.model_name != nil {
 		fields = append(fields, llminteraction.FieldModelName)
+	}
+	if m.reasoning_effort != nil {
+		fields = append(fields, llminteraction.FieldReasoningEffort)
 	}
 	if m.last_message != nil {
 		fields = append(fields, llminteraction.FieldLastMessageID)
@@ -10520,6 +10719,8 @@ func (m *LLMInteractionMutation) Field(name string) (ent.Value, bool) {
 		return m.InteractionType()
 	case llminteraction.FieldModelName:
 		return m.ModelName()
+	case llminteraction.FieldReasoningEffort:
+		return m.ReasoningEffort()
 	case llminteraction.FieldLastMessageID:
 		return m.LastMessageID()
 	case llminteraction.FieldLlmRequest:
@@ -10569,6 +10770,8 @@ func (m *LLMInteractionMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldInteractionType(ctx)
 	case llminteraction.FieldModelName:
 		return m.OldModelName(ctx)
+	case llminteraction.FieldReasoningEffort:
+		return m.OldReasoningEffort(ctx)
 	case llminteraction.FieldLastMessageID:
 		return m.OldLastMessageID(ctx)
 	case llminteraction.FieldLlmRequest:
@@ -10647,6 +10850,13 @@ func (m *LLMInteractionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetModelName(v)
+		return nil
+	case llminteraction.FieldReasoningEffort:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReasoningEffort(v)
 		return nil
 	case llminteraction.FieldLastMessageID:
 		v, ok := value.(string)
@@ -10881,6 +11091,9 @@ func (m *LLMInteractionMutation) ClearedFields() []string {
 	if m.FieldCleared(llminteraction.FieldExecutionID) {
 		fields = append(fields, llminteraction.FieldExecutionID)
 	}
+	if m.FieldCleared(llminteraction.FieldReasoningEffort) {
+		fields = append(fields, llminteraction.FieldReasoningEffort)
+	}
 	if m.FieldCleared(llminteraction.FieldLastMessageID) {
 		fields = append(fields, llminteraction.FieldLastMessageID)
 	}
@@ -10936,6 +11149,9 @@ func (m *LLMInteractionMutation) ClearField(name string) error {
 		return nil
 	case llminteraction.FieldExecutionID:
 		m.ClearExecutionID()
+		return nil
+	case llminteraction.FieldReasoningEffort:
+		m.ClearReasoningEffort()
 		return nil
 	case llminteraction.FieldLastMessageID:
 		m.ClearLastMessageID()
@@ -10998,6 +11214,9 @@ func (m *LLMInteractionMutation) ResetField(name string) error {
 		return nil
 	case llminteraction.FieldModelName:
 		m.ResetModelName()
+		return nil
+	case llminteraction.FieldReasoningEffort:
+		m.ResetReasoningEffort()
 		return nil
 	case llminteraction.FieldLastMessageID:
 		m.ResetLastMessageID()

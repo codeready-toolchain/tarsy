@@ -29,6 +29,7 @@ import type { SessionDetailResponse, StageOverview, ExecutionOverview } from '..
 import { EXECUTION_STATUS } from '../../constants/sessionStatus';
 import { LLM_INTERACTION_TYPE, MCP_INTERACTION_TYPE, MCP_LIST_TOOLS_NAME } from '../../constants/interactionTypes';
 import { formatDurationMs, formatTimestamp, formatTokensCompact } from '../../utils/format';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 
 // ────────────────────────────────────────────────────────────
 // Content serialization
@@ -187,7 +188,7 @@ export function getStageStatusDisplayName(status: string): string {
 export function computeLLMStepDescription(interaction: LLMInteractionListItem): string {
   const label = getInteractionTypeLabel(interaction.interaction_type);
   if (interaction.model_name) {
-    return `${label} — ${interaction.model_name}`;
+    return `${label} — ${formatModelWithEffort(interaction.model_name, interaction.reasoning_effort)}`;
   }
   return label;
 }
@@ -217,6 +218,7 @@ export interface UnifiedInteraction {
   error_message?: string;
   // LLM-specific
   model_name?: string;
+  reasoning_effort?: string | null;
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
@@ -237,6 +239,7 @@ export function mergeAndSortInteractions(execution: TraceExecutionGroup): Unifie
     duration_ms: i.duration_ms,
     error_message: i.error_message,
     model_name: i.model_name,
+    reasoning_effort: i.reasoning_effort,
     input_tokens: i.input_tokens,
     output_tokens: i.output_tokens,
     total_tokens: i.total_tokens,
@@ -513,7 +516,7 @@ export function formatStageForCopy(
 /** Format a single LLM interaction for copy. */
 function formatLLMInteractionForCopy(interaction: LLMInteractionListItem): string {
   let content = `[LLM] ${getInteractionTypeLabel(interaction.interaction_type)}`;
-  content += ` — ${interaction.model_name}`;
+  content += ` — ${formatModelWithEffort(interaction.model_name, interaction.reasoning_effort)}`;
   if (interaction.total_tokens != null) {
     content += ` (${formatTokensCompact(interaction.total_tokens)} tokens)`;
   }
@@ -542,7 +545,7 @@ export function formatLLMDetailForCopy(detail: LLMInteractionDetailResponse): st
   }
 
   content += `--- METADATA ---\n`;
-  content += `Model: ${detail.model_name}\n`;
+  content += `Model: ${formatModelWithEffort(detail.model_name, detail.reasoning_effort)}\n`;
   content += `Type: ${getInteractionTypeLabel(detail.interaction_type)}\n`;
   if (detail.total_tokens != null) content += `Tokens: ${detail.total_tokens.toLocaleString()}\n`;
   if (detail.cache_read_tokens != null) content += `Cache read: ${detail.cache_read_tokens.toLocaleString()}\n`;

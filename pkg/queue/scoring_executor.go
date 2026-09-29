@@ -263,13 +263,14 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 	// 8. Create AgentExecution record (outside tx — stage already committed)
 	scoringProviderName := resolveScoringProviderName(e.cfg.Defaults, chain, chain.Scoring)
 	_, err = e.stageService.CreateAgentExecution(ctx, models.CreateAgentExecutionRequest{
-		StageID:     stageID,
-		SessionID:   sessionID,
-		AgentName:   resolvedConfig.AgentName,
-		AgentIndex:  1,
-		LLMBackend:  resolvedConfig.LLMBackend,
-		LLMProvider: scoringProviderName,
-		ModelName:   resolvedConfig.ModelName(),
+		StageID:         stageID,
+		SessionID:       sessionID,
+		AgentName:       resolvedConfig.AgentName,
+		AgentIndex:      1,
+		LLMBackend:      resolvedConfig.LLMBackend,
+		LLMProvider:     scoringProviderName,
+		ModelName:       resolvedConfig.ModelName(),
+		ReasoningEffort: resolvedConfig.LLMProvider.EffectiveReasoningEffort(),
 	})
 	if err != nil {
 		e.failScore(scoreID, "failed to create agent execution: "+err.Error())

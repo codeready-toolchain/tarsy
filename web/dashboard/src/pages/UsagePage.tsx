@@ -54,6 +54,7 @@ import { websocketService } from '../services/websocket.ts';
 import { EVENT_SESSION_STATUS } from '../constants/eventTypes.ts';
 import { isTerminalStatus, type SessionStatus } from '../constants/sessionStatus.ts';
 import { formatEstimatedCostUsd, formatTimestamp, formatTokens, formatTokensCompact } from '../utils/format.ts';
+import { formatModelWithEffort } from '../utils/modelLabel.ts';
 import {
   loadUsageFiltersFromStorage,
   saveUsageFiltersToStorage,
@@ -533,8 +534,8 @@ export function UsagePage() {
                 empty={summary.by_model.length === 0}
               >
                 {summary.by_model.map((row) => (
-                  <TableRow key={row.model_name} hover>
-                    <TableCell>{row.model_name}</TableCell>
+                  <TableRow key={`${row.model_name}:${row.reasoning_effort ?? ''}`} hover>
+                    <TableCell>{formatModelWithEffort(row.model_name, row.reasoning_effort)}</TableCell>
                     <TableCell align="right">{formatTokens(row.total_tokens)}</TableCell>
                     <TableCell align="right">{formatTokens(row.input_tokens)}</TableCell>
                     <TableCell align="right">{formatTokens(row.output_tokens)}</TableCell>

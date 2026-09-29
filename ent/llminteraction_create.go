@@ -85,6 +85,20 @@ func (_c *LLMInteractionCreate) SetModelName(v string) *LLMInteractionCreate {
 	return _c
 }
 
+// SetReasoningEffort sets the "reasoning_effort" field.
+func (_c *LLMInteractionCreate) SetReasoningEffort(v string) *LLMInteractionCreate {
+	_c.mutation.SetReasoningEffort(v)
+	return _c
+}
+
+// SetNillableReasoningEffort sets the "reasoning_effort" field if the given value is not nil.
+func (_c *LLMInteractionCreate) SetNillableReasoningEffort(v *string) *LLMInteractionCreate {
+	if v != nil {
+		_c.SetReasoningEffort(*v)
+	}
+	return _c
+}
+
 // SetLastMessageID sets the "last_message_id" field.
 func (_c *LLMInteractionCreate) SetLastMessageID(v string) *LLMInteractionCreate {
 	_c.mutation.SetLastMessageID(v)
@@ -427,6 +441,10 @@ func (_c *LLMInteractionCreate) createSpec() (*LLMInteraction, *sqlgraph.CreateS
 	if value, ok := _c.mutation.ModelName(); ok {
 		_spec.SetField(llminteraction.FieldModelName, field.TypeString, value)
 		_node.ModelName = value
+	}
+	if value, ok := _c.mutation.ReasoningEffort(); ok {
+		_spec.SetField(llminteraction.FieldReasoningEffort, field.TypeString, value)
+		_node.ReasoningEffort = &value
 	}
 	if value, ok := _c.mutation.LlmRequest(); ok {
 		_spec.SetField(llminteraction.FieldLlmRequest, field.TypeJSON, value)

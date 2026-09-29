@@ -4,6 +4,7 @@ import { SwapHoriz, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { highlightSearchTermNodes } from '../../utils/search';
 import CopyLinkButton from '../shared/CopyLinkButton';
 import type { FlowItem } from '../../utils/timelineParser';
+import { formatModelWithEffort } from '../../utils/modelLabel';
 
 interface ProviderFallbackItemProps {
   item: FlowItem;
@@ -51,8 +52,14 @@ function ProviderFallbackItem({ item, searchTerm, forceExpanded = false, linkUrl
   const meta = item.metadata || {};
   const originalModel = safeString(meta.original_model);
   const fallbackModel = safeString(meta.fallback_model);
-  const from = originalModel || safeString(meta.original_provider) || '?';
-  const to = fallbackModel || safeString(meta.fallback_provider) || '?';
+  const originalEffort = typeof meta.original_reasoning_effort === 'string' ? meta.original_reasoning_effort : '';
+  const fallbackEffort = typeof meta.fallback_reasoning_effort === 'string' ? meta.fallback_reasoning_effort : '';
+  const from = originalModel
+    ? formatModelWithEffort(originalModel, originalEffort)
+    : (safeString(meta.original_provider) || '?');
+  const to = fallbackModel
+    ? formatModelWithEffort(fallbackModel, fallbackEffort)
+    : (safeString(meta.fallback_provider) || '?');
   const originalKind = originalModel ? 'model' : 'provider';
   const fromBackend = safeString(meta.original_backend);
   const toBackend = safeString(meta.fallback_backend);

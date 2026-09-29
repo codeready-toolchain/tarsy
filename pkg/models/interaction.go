@@ -7,6 +7,7 @@ type CreateLLMInteractionRequest struct {
 	ExecutionID         *string        `json:"execution_id,omitempty"` // nil for session-level interactions
 	InteractionType     string         `json:"interaction_type"`       // "iteration", "final_analysis", "executive_summary", "chat_response"
 	ModelName           string         `json:"model_name"`
+	ReasoningEffort     string         `json:"reasoning_effort,omitempty"`
 	LastMessageID       *string        `json:"last_message_id,omitempty"`
 	LLMRequest          map[string]any `json:"llm_request"`
 	LLMResponse         map[string]any `json:"llm_response"`
@@ -74,6 +75,7 @@ type LLMInteractionListItem struct {
 	ID                  string  `json:"id"`
 	InteractionType     string  `json:"interaction_type"`
 	ModelName           string  `json:"model_name"`
+	ReasoningEffort     *string `json:"reasoning_effort,omitempty"`
 	InputTokens         *int    `json:"input_tokens,omitempty"`
 	OutputTokens        *int    `json:"output_tokens,omitempty"`
 	TotalTokens         *int    `json:"total_tokens,omitempty"`
@@ -104,6 +106,7 @@ type LLMInteractionDetailResponse struct {
 	ID                  string                `json:"id"`
 	InteractionType     string                `json:"interaction_type"`
 	ModelName           string                `json:"model_name"`
+	ReasoningEffort     *string               `json:"reasoning_effort,omitempty"`
 	ThinkingContent     *string               `json:"thinking_content,omitempty"`
 	InputTokens         *int                  `json:"input_tokens,omitempty"`
 	OutputTokens        *int                  `json:"output_tokens,omitempty"`

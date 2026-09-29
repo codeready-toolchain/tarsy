@@ -141,6 +141,9 @@ func (s *StageService) CreateAgentExecution(httpCtx context.Context, req models.
 	if req.ModelName != "" {
 		builder.SetModelName(req.ModelName)
 	}
+	if req.ReasoningEffort != "" {
+		builder.SetReasoningEffort(req.ReasoningEffort)
+	}
 	if req.ParentExecutionID != nil {
 		parent, err := s.client.AgentExecution.Get(ctx, *req.ParentExecutionID)
 		if err != nil {
@@ -224,14 +227,15 @@ func (s *StageService) UpdateAgentExecutionStatus(ctx context.Context, execution
 }
 
 // UpdateExecutionProviderFallback records a provider fallback on an execution.
-// Sets original_llm_provider/original_llm_backend/original_model_name (only on
-// first fallback) and updates llm_provider/llm_backend/model_name to the new
-// fallback values.
+// Sets original provider, backend, model, and effort (only on the first
+// fallback) and updates the current values to the fallback provider.
+// An empty new effort clears the current effort so a later model is not
+// labeled with the previous provider's effort.
 func (s *StageService) UpdateExecutionProviderFallback(
 	ctx context.Context,
 	executionID string,
-	originalProvider, originalBackend, originalModel string,
-	newProvider, newBackend, newModel string,
+	originalProvider, originalBackend, originalModel, originalEffort string,
+	newProvider, newBackend, newModel, newEffort string,
 ) error {
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -250,6 +254,11 @@ func (s *StageService) UpdateExecutionProviderFallback(
 	if newModel != "" {
 		update = update.SetModelName(newModel)
 	}
+	if newEffort != "" {
+		update = update.SetReasoningEffort(newEffort)
+	} else {
+		update = update.ClearReasoningEffort()
+	}
 
 	// Only set originals on the first fallback (preserve the true primary)
 	if exec.OriginalLlmProvider == nil {
@@ -258,6 +267,9 @@ func (s *StageService) UpdateExecutionProviderFallback(
 			SetOriginalLlmBackend(originalBackend)
 		if originalModel != "" {
 			update = update.SetOriginalModelName(originalModel)
+		}
+		if originalEffort != "" {
+			update = update.SetOriginalReasoningEffort(originalEffort)
 		}
 	}
 
