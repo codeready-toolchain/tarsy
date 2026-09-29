@@ -224,6 +224,8 @@ Startup logs one warning per provider and still boots when the configured value 
 
 A custom `base_url` skips the documented-set warning. A recognized model below its floor, a GPT ID containing `-chat` or `-main`, or a Gemini ID containing `image` has no documented set, so any configured value warns. Eligible built-in providers set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8. Built-ins below the floor leave the field unset.
 
+The value sent on a call is stored on that agent execution and on each LLM interaction. Session detail shows it on every stage execution, including the original effort after a provider fallback. The dashboard appends a stored effort to the model label as `model (effort)` on those executions, in the trace view, and on the Usage page. A call that sent no effort, and a row written before the column existed, stays unlabeled.
+
 ### .env
 
 Environment variables:
