@@ -20,7 +20,7 @@
     "@mui/x-date-pickers": "^9.0.0",
     "axios": "^1.18.0",
     "date-fns": "^4.1.0",
-    "js-yaml": "^5.2.2",
+    "js-yaml": "^5.4.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-json-view-lite": "^2.5.0",
