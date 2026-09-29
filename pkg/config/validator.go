@@ -832,6 +832,10 @@ func (v *Validator) validateLLMProviders() error {
 				}
 			}
 		}
+
+		if err := checkReasoningEffort(name, provider); err != nil {
+			return err
+		}
 	}
 
 	return nil

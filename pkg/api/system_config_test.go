@@ -613,6 +613,45 @@ func TestSystemConfigHandler(t *testing.T) {
 		assert.NotContains(t, string(raw), "E2E_SENTINEL_QUERY")
 	})
 
+	t.Run("reasoning effort matches the proto effective value", func(t *testing.T) {
+		resp := buildSystemConfigResponse(&config.Config{
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"set": {
+					Type:            config.LLMProviderTypeGoogle,
+					Model:           "gemini-3.8-flash",
+					ReasoningEffort: "medium",
+				},
+				"eligible": {
+					Type:  config.LLMProviderTypeOpenAI,
+					Model: "gpt-5.6",
+				},
+				"legacy": {
+					Type:  config.LLMProviderTypeAnthropic,
+					Model: "claude-sonnet-4-6",
+				},
+				"raw": {
+					Type:            config.LLMProviderTypeAnthropic,
+					Model:           "claude-sonnet-4-6",
+					ReasoningEffort: " high ",
+				},
+			}),
+		}, nil)
+
+		assert.Equal(t, "medium", resp.LLMProviders["set"].ReasoningEffort)
+		assert.Equal(t, "high", resp.LLMProviders["eligible"].ReasoningEffort)
+		assert.Empty(t, resp.LLMProviders["legacy"].ReasoningEffort)
+		assert.Equal(t, " high ", resp.LLMProviders["raw"].ReasoningEffort)
+
+		for _, id := range []string{"set", "eligible", "raw"} {
+			raw, err := json.Marshal(resp.LLMProviders[id])
+			require.NoError(t, err)
+			assert.Contains(t, string(raw), `"reasoning_effort"`)
+		}
+		raw, err := json.Marshal(resp.LLMProviders["legacy"])
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), "reasoning_effort")
+	})
+
 	t.Run("omitted fallback backend is langchain in the config view", func(t *testing.T) {
 		resp := buildSystemConfigResponse(&config.Config{
 			Defaults: &config.Defaults{

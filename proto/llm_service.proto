@@ -206,4 +206,5 @@ message LLMConfig {
   string project = 8;            // GCP project (for VertexAI)
   string location = 9;           // GCP location (for VertexAI)
   string backend = 10;           // Provider backend: "google-native", "langchain" (default)
+  string reasoning_effort = 11;  // Effective effort: configured string, "high", or empty
 }

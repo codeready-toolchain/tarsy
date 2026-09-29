@@ -222,10 +222,11 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 	return map[string]LLMProviderConfig{
 		// --- Google Gemini ---
 		"google-default": {
-			Type:        LLMProviderTypeGoogle,
-			Model:       "gemini-3.8-flash",
-			APIKeyEnv:   "GOOGLE_API_KEY",
-			NativeTools: geminiNativeTools(),
+			Type:            LLMProviderTypeGoogle,
+			Model:           "gemini-3.8-flash",
+			APIKeyEnv:       "GOOGLE_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
+			NativeTools:     geminiNativeTools(),
 		},
 		"google-image-flash": {
 			Type:        LLMProviderTypeGoogle,
@@ -252,10 +253,11 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			NativeTools: geminiNativeTools(),
 		},
 		"gemini-3.8-flash": {
-			Type:        LLMProviderTypeGoogle,
-			Model:       "gemini-3.8-flash",
-			APIKeyEnv:   "GOOGLE_API_KEY",
-			NativeTools: geminiNativeTools(),
+			Type:            LLMProviderTypeGoogle,
+			Model:           "gemini-3.8-flash",
+			APIKeyEnv:       "GOOGLE_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
+			NativeTools:     geminiNativeTools(),
 		},
 		"gemini-3.7-flash": {
 			Type:        LLMProviderTypeGoogle,
@@ -278,39 +280,46 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 
 		// --- OpenAI ---
 		"openai-default": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-6-sol",
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-6-sol",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-5.6": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-5.6", // unsuffixed alias of gpt-5.6-sol
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-5.6", // unsuffixed alias of gpt-5.6-sol
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-5.6-sol": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-5.6-sol",
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-5.6-sol",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-5.6-terra": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-5.6-terra",
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-5.6-terra",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-5.6-luna": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-5.6-luna",
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-5.6-luna",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-6-sol": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-6-sol",
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-6-sol",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-6-luna": {
-			Type:      LLMProviderTypeOpenAI,
-			Model:     "gpt-6-luna",
-			APIKeyEnv: "OPENAI_API_KEY",
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-6-luna",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
 		},
 		"gpt-5.2": {
 			Type:      LLMProviderTypeOpenAI,
@@ -320,39 +329,51 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 
 		// --- Anthropic ---
 		"anthropic-default": {
-			Type:      LLMProviderTypeAnthropic,
-			Model:     "claude-sonnet-5", // Dateless canonical model ID
-			APIKeyEnv: "ANTHROPIC_API_KEY",
+			Type:            LLMProviderTypeAnthropic,
+			Model:           "claude-sonnet-5", // Dateless canonical model ID
+			APIKeyEnv:       "ANTHROPIC_API_KEY",
+			ReasoningEffort: ReasoningEffortXHigh,
+		},
+		"claude-sonnet-5-5": {
+			Type:            LLMProviderTypeAnthropic,
+			Model:           "claude-sonnet-5-5",
+			APIKeyEnv:       "ANTHROPIC_API_KEY",
+			ReasoningEffort: ReasoningEffortXHigh,
 		},
 		"claude-opus-5-5": {
-			Type:      LLMProviderTypeAnthropic,
-			Model:     "claude-opus-5-5",
-			APIKeyEnv: "ANTHROPIC_API_KEY",
+			Type:            LLMProviderTypeAnthropic,
+			Model:           "claude-opus-5-5",
+			APIKeyEnv:       "ANTHROPIC_API_KEY",
+			ReasoningEffort: ReasoningEffortXHigh,
 		},
 
 		// --- xAI ---
 		"xai-default": {
-			Type:      LLMProviderTypeXAI,
-			Model:     "grok-4.7",
-			APIKeyEnv: "XAI_API_KEY",
+			Type:            LLMProviderTypeXAI,
+			Model:           "grok-4.7",
+			APIKeyEnv:       "XAI_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
 		},
 		"grok-4.7": {
-			Type:      LLMProviderTypeXAI,
-			Model:     "grok-4.7",
-			APIKeyEnv: "XAI_API_KEY",
+			Type:            LLMProviderTypeXAI,
+			Model:           "grok-4.7",
+			APIKeyEnv:       "XAI_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
 		},
 		"grok-4.6": {
-			Type:      LLMProviderTypeXAI,
-			Model:     "grok-4.6",
-			APIKeyEnv: "XAI_API_KEY",
+			Type:            LLMProviderTypeXAI,
+			Model:           "grok-4.6",
+			APIKeyEnv:       "XAI_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
 		},
 
 		// --- Vertex AI ---
 		"vertexai-default": {
-			Type:        LLMProviderTypeVertexAI,
-			Model:       "claude-sonnet-5",       // Claude Sonnet 5 on Vertex AI
-			ProjectEnv:  "GOOGLE_CLOUD_PROJECT",  // Standard GCP project ID env var
-			LocationEnv: "GOOGLE_CLOUD_LOCATION", // Standard GCP location env var
+			Type:            LLMProviderTypeVertexAI,
+			Model:           "claude-sonnet-5",       // Claude Sonnet 5 on Vertex AI
+			ProjectEnv:      "GOOGLE_CLOUD_PROJECT",  // Standard GCP project ID env var
+			LocationEnv:     "GOOGLE_CLOUD_LOCATION", // Standard GCP location env var
+			ReasoningEffort: ReasoningEffortXHigh,
 		},
 	}
 }

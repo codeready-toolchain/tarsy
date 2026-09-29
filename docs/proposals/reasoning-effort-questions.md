@@ -140,14 +140,16 @@ _Considered and rejected: Option A (hard family allowlist), Option B (hard famil
 
 Eligible builtins would otherwise inherit the omitted-field default of `high`. That is the top of Gemini's set and below the top of GPT (`max`), Grok (`xhigh`), and Claude (`max`).
 
-### Highest documented level on eligible builtins
+### Quality default on eligible builtins
 
-Set the field in `initBuiltinLLMProviders` for models at or above the family floor. GPT 5.6+ and Claude 4.8+ (including Sonnet 5, Sonnet 5.5, and Opus 5.5) use `max`. Grok 4.6+ uses `xhigh`. Gemini 3.8 uses `high`. Builtins below the floor leave the field unset. A user provider that omits the field still gets `high` when eligible. Replacing a builtin by name does not inherit the builtin value. `claude-sonnet-5-5` is added as its own builtin. `anthropic-default` stays on Sonnet 5.
+Set the field in `initBuiltinLLMProviders` for models at or above the family floor. GPT 5.6+ uses `max`. Claude 4.8+ (including Sonnet 5, Sonnet 5.5, and Opus 5.5) uses `xhigh`. Grok 4.6+ and Gemini 3.8 use `high`. Builtins below the floor leave the field unset. A user provider that omits the field still gets `high` when eligible. Replacing a builtin by name does not inherit the builtin value. `claude-sonnet-5-5` is added as its own builtin. `anthropic-default` stays on Sonnet 5.
 
-- **Pro:** The providers TARSy ships for current models run at the deepest effort those models document.
+- **Pro:** GPT runs at the top of a ladder that still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality.
 - **Pro:** Gemini stays at `high`, which is already what the code sends, because that family has nothing above `high`.
-- **Con:** GPT, Grok, and Claude builtins spend more reasoning tokens than today's `high` (or, for Grok, more than the vendor default of `high`).
+- **Con:** GPT builtins spend more reasoning tokens than today's `high`. Claude builtins spend more than the omitted-field `high`.
 
-**Decision:** Eligible builtins set the highest documented effort for their family. User providers that omit the field stay at `high`.
+**Decision:** Eligible builtins set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8. User providers that omit the field stay at `high`.
 
-_Considered and rejected: leaving builtins unset so they inherit `high` (GPT, Grok, and Claude would not run at the top of their sets)._
+_Revised after the first pin to each family's top level. Grok `xhigh` ties `high` on the Intelligence Index and scores worse on terminal-agent benches. Claude `max` does not reliably beat `xhigh` (Opus 5.5 Terminal-Bench peaks at `xhigh`; Sonnet 5.5 FrontierCode is lower at `max`) and spends far more tokens. GPT `max` still climbs on the Sol agentic ladder, so those builtins stay at `max`. Gemini's set already stops at `high`._
+
+_Considered and rejected: leaving builtins unset so they inherit `high` (GPT and Claude would not run at the levels above); pinning every family to its highest documented level (Grok and Claude spend the last step without a reliable quality gain)._

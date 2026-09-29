@@ -405,6 +405,7 @@ llm_providers:
     type: google
     model: test-model
     api_key_env: TEST_API_KEY
+    reasoning_effort: " high "
 `
 	err := os.WriteFile(filepath.Join(configDir, "llm-providers.yaml"), []byte(config), 0644)
 	require.NoError(t, err)
@@ -418,6 +419,7 @@ llm_providers:
 	assert.Equal(t, LLMProviderTypeGoogle, provider.Type)
 	assert.Equal(t, "test-model", provider.Model)
 	assert.Equal(t, "TEST_API_KEY", provider.APIKeyEnv)
+	assert.Equal(t, " high ", provider.ReasoningEffort)
 }
 
 func TestEnvironmentVariableInterpolationInConfig(t *testing.T) {

@@ -315,6 +315,7 @@ export interface LLMProviderConfigView {
   project_env?: string;
   location_env?: string;
   base_url?: string;
+  reasoning_effort?: string;
   native_tools?: Record<string, boolean>;
 }
 

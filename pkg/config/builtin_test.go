@@ -283,13 +283,15 @@ func TestBuiltinLLMProviders(t *testing.T) {
 		providerID  string
 		wantType    LLMProviderType
 		wantModel   string // if set, exact model ID (else only non-empty)
-		checkAPIKey bool   // VertexAI uses ProjectEnv/LocationEnv instead
+		wantEffort  string
+		checkAPIKey bool // VertexAI uses ProjectEnv/LocationEnv instead
 	}{
 		{
 			name:        "google-default",
 			providerID:  "google-default",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-3.8-flash",
+			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -304,6 +306,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "openai-default",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-6-sol",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -311,6 +314,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gpt-5.6",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-5.6",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -318,6 +322,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gpt-5.6-sol",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-5.6-sol",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -325,6 +330,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gpt-5.6-terra",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-5.6-terra",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -332,6 +338,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gpt-5.6-luna",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-5.6-luna",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -339,6 +346,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gpt-6-sol",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-6-sol",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -346,6 +354,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gpt-6-luna",
 			wantType:    LLMProviderTypeOpenAI,
 			wantModel:   "gpt-6-luna",
+			wantEffort:  ReasoningEffortMax,
 			checkAPIKey: true,
 		},
 		{
@@ -360,6 +369,15 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "anthropic-default",
 			wantType:    LLMProviderTypeAnthropic,
 			wantModel:   "claude-sonnet-5",
+			wantEffort:  ReasoningEffortXHigh,
+			checkAPIKey: true,
+		},
+		{
+			name:        "claude-sonnet-5-5",
+			providerID:  "claude-sonnet-5-5",
+			wantType:    LLMProviderTypeAnthropic,
+			wantModel:   "claude-sonnet-5-5",
+			wantEffort:  ReasoningEffortXHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -367,6 +385,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "claude-opus-5-5",
 			wantType:    LLMProviderTypeAnthropic,
 			wantModel:   "claude-opus-5-5",
+			wantEffort:  ReasoningEffortXHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -392,6 +411,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gemini-3.8-flash",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-3.8-flash",
+			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -419,6 +439,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "xai-default",
 			wantType:    LLMProviderTypeXAI,
 			wantModel:   "grok-4.7",
+			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -426,6 +447,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "grok-4.7",
 			wantType:    LLMProviderTypeXAI,
 			wantModel:   "grok-4.7",
+			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -433,6 +455,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "grok-4.6",
 			wantType:    LLMProviderTypeXAI,
 			wantModel:   "grok-4.6",
+			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},
 		{
@@ -440,6 +463,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "vertexai-default",
 			wantType:    LLMProviderTypeVertexAI,
 			wantModel:   "claude-sonnet-5",
+			wantEffort:  ReasoningEffortXHigh,
 			checkAPIKey: false, // VertexAI uses ProjectEnv/LocationEnv
 		},
 	}
@@ -454,6 +478,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			} else {
 				assert.NotEmpty(t, provider.Model)
 			}
+			assert.Equal(t, tt.wantEffort, provider.ReasoningEffort)
 			if tt.checkAPIKey {
 				assert.NotEmpty(t, provider.APIKeyEnv)
 			}

@@ -121,11 +121,12 @@ func toProtoMessages(msgs []ConversationMessage) []*llmv1.ConversationMessage {
 
 func toProtoLLMConfig(cfg *config.LLMProviderConfig) *llmv1.LLMConfig {
 	pc := &llmv1.LLMConfig{
-		Provider:       string(cfg.Type),
-		Model:          cfg.Model,
-		ApiKeyEnv:      cfg.APIKeyEnv,      // Sent as env-var name; Python resolves the secret
-		CredentialsEnv: cfg.CredentialsEnv, // Sent as env-var name; Python resolves the credentials file path
-		BaseUrl:        cfg.BaseURL,
+		Provider:        string(cfg.Type),
+		Model:           cfg.Model,
+		ApiKeyEnv:       cfg.APIKeyEnv,      // Sent as env-var name; Python resolves the secret
+		CredentialsEnv:  cfg.CredentialsEnv, // Sent as env-var name; Python resolves the credentials file path
+		BaseUrl:         cfg.BaseURL,
+		ReasoningEffort: config.EffectiveReasoningEffort(cfg.Model, cfg.ReasoningEffort),
 	}
 	// Resolve VertexAI fields — values (not env names) are sent over gRPC
 	if cfg.ProjectEnv != "" {

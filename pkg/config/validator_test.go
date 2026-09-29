@@ -2,8 +2,10 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -6163,5 +6165,118 @@ func TestValidateAll_LabelMaps(t *testing.T) {
 			"ops-attention": {Labels: []LabelSpec{{Label: "page", Description: "Page the on-call."}}},
 		})).ValidateAll()
 		require.NoError(t, err)
+	})
+}
+
+func TestReasoningEffortValidation(t *testing.T) {
+	captureLogs := func(t *testing.T) (*bytes.Buffer, func()) {
+		t.Helper()
+		var buf bytes.Buffer
+		old := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		return &buf, func() { slog.SetDefault(old) }
+	}
+
+	cfgWith := func(providers map[string]*LLMProviderConfig) *Config {
+		return &Config{
+			Queue:               DefaultQueueConfig(),
+			AgentRegistry:       NewAgentRegistry(map[string]*AgentConfig{}),
+			MCPServerRegistry:   NewMCPServerRegistry(map[string]*MCPServerConfig{}),
+			ChainRegistry:       NewChainRegistry(map[string]*ChainConfig{}),
+			LLMProviderRegistry: NewLLMProviderRegistry(providers),
+		}
+	}
+
+	provider := func(model, effort, baseURL string) *LLMProviderConfig {
+		return &LLMProviderConfig{
+			Type:            LLMProviderTypeOpenAI,
+			Model:           model,
+			APIKeyEnv:       "UNUSED_KEY",
+			BaseURL:         baseURL,
+			ReasoningEffort: effort,
+		}
+	}
+
+	t.Run("whitespace fails ValidateAll", func(t *testing.T) {
+		for _, effort := range []string{" ", "\t", "\n"} {
+			err := NewValidator(cfgWith(map[string]*LLMProviderConfig{
+				"p": provider("gpt-5.6", effort, ""),
+			})).ValidateAll()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "LLM provider validation failed")
+			ve, ok := errors.AsType[*ValidationError](err)
+			require.True(t, ok)
+			assert.Equal(t, "reasoning_effort", ve.Field)
+			assert.Equal(t, "p", ve.ID)
+		}
+	})
+
+	t.Run("omitted effort passes without a warning", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		err := NewValidator(cfgWith(map[string]*LLMProviderConfig{
+			"p": provider("gpt-5.6", "", ""),
+		})).ValidateAll()
+		require.NoError(t, err)
+		assert.NotContains(t, buf.String(), reasoningEffortWarnMsg)
+	})
+
+	tests := []struct {
+		name       string
+		model      string
+		effort     string
+		baseURL    string
+		wantWarns  int
+		wantLevels string
+	}{
+		{name: "spaced high", model: "company-reasoner", effort: " high ", wantWarns: 1, wantLevels: "low, medium, high, xhigh, max"},
+		{name: "capital High", model: "company-reasoner", effort: "High", wantWarns: 1, wantLevels: "low, medium, high, xhigh, max"},
+		{name: "high below claude floor", model: "claude-sonnet-4-6", effort: ReasoningEffortHigh, wantWarns: 1, wantLevels: "none"},
+		{name: "medium on below-floor model with base_url", model: "claude-sonnet-4-6", effort: ReasoningEffortMedium, baseURL: "https://proxy.example", wantWarns: 0},
+		{name: "xhigh on gemini 3.8", model: "gemini-3.8-flash", effort: ReasoningEffortXHigh, wantWarns: 1, wantLevels: "low, medium, high"},
+		{name: "xhigh on sonnet 4.8", model: "claude-sonnet-4-8", effort: ReasoningEffortXHigh, wantWarns: 1, wantLevels: "low, medium, high, max"},
+		{name: "xhigh on gemini 3.8 with base_url", model: "gemini-3.8-flash", effort: ReasoningEffortXHigh, baseURL: "https://proxy.example", wantWarns: 0},
+		{name: "medium on unrecognized model", model: "company-reasoner", effort: ReasoningEffortMedium, wantWarns: 0},
+		{name: "high on gemini 3.8", model: "gemini-3.8-flash", effort: ReasoningEffortHigh, wantWarns: 0},
+		{name: "max on gpt 5.6", model: "gpt-5.6", effort: ReasoningEffortMax, wantWarns: 0},
+		{name: "xhigh on grok 4.6", model: "grok-4.6", effort: ReasoningEffortXHigh, wantWarns: 0},
+		{name: "xhigh on sonnet 5", model: "claude-sonnet-5", effort: ReasoningEffortXHigh, wantWarns: 0},
+		{name: "extra-high is one warning", model: "gemini-3.8-flash", effort: "extra-high", wantWarns: 1, wantLevels: "low, medium, high"},
+		{name: "extra-high with base_url still warns", model: "company-reasoner", effort: "extra-high", baseURL: "https://proxy.example", wantWarns: 1, wantLevels: "low, medium, high, xhigh, max"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf, restore := captureLogs(t)
+			t.Cleanup(restore)
+
+			err := NewValidator(cfgWith(map[string]*LLMProviderConfig{
+				"p": provider(tt.model, tt.effort, tt.baseURL),
+			})).ValidateAll()
+			require.NoError(t, err)
+			logs := buf.String()
+			assert.Equal(t, tt.wantWarns, strings.Count(logs, reasoningEffortWarnMsg))
+			if tt.wantWarns == 0 {
+				return
+			}
+			assert.Contains(t, logs, "provider=p")
+			assert.Contains(t, logs, "model="+tt.model)
+			assert.Contains(t, logs, tt.effort)
+			assert.Contains(t, logs, "documented_levels=")
+			assert.Contains(t, logs, tt.wantLevels)
+		})
+	}
+
+	t.Run("one warning per provider", func(t *testing.T) {
+		buf, restore := captureLogs(t)
+		t.Cleanup(restore)
+
+		err := NewValidator(cfgWith(map[string]*LLMProviderConfig{
+			"a": provider("gemini-3.8-flash", ReasoningEffortXHigh, ""),
+			"b": provider("claude-sonnet-4-6", ReasoningEffortHigh, ""),
+		})).ValidateAll()
+		require.NoError(t, err)
+		assert.Equal(t, 2, strings.Count(buf.String(), reasoningEffortWarnMsg))
 	})
 }
