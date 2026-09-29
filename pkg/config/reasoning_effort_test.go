@@ -17,6 +17,7 @@ func TestClassifyModel(t *testing.T) {
 		checkVersion bool
 	}{
 		{model: "gpt-5.6-sol", recognized: true, eligible: true, major: 5, minor: 6, checkVersion: true},
+		{model: "gpt-6.1-sol", recognized: true, eligible: true, major: 6, minor: 1, checkVersion: true},
 		{model: "gpt-6", recognized: true, eligible: true, major: 6, checkVersion: true},
 		{model: "gpt-5.10", recognized: true, eligible: true, major: 5, minor: 10, checkVersion: true},
 		{model: "gpt-5.5", recognized: true, eligible: false, major: 5, minor: 5, checkVersion: true},

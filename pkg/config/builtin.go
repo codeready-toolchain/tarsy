@@ -281,7 +281,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- OpenAI ---
 		"openai-default": {
 			Type:            LLMProviderTypeOpenAI,
-			Model:           "gpt-6-sol",
+			Model:           "gpt-6.1-sol",
 			APIKeyEnv:       "OPENAI_API_KEY",
 			ReasoningEffort: ReasoningEffortMax,
 		},
@@ -306,6 +306,12 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		"gpt-5.6-luna": {
 			Type:            LLMProviderTypeOpenAI,
 			Model:           "gpt-5.6-luna",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
+		},
+		"gpt-6.1-sol": {
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-6.1-sol",
 			APIKeyEnv:       "OPENAI_API_KEY",
 			ReasoningEffort: ReasoningEffortMax,
 		},
