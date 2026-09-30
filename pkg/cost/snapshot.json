@@ -241,6 +241,18 @@
     "cache_read_input_token_cost": 2e-08,
     "cache_creation_input_token_cost": 2.5e-07
   },
+  "gpt-6.1-sol": {
+    "input_cost_per_token": 2e-06,
+    "max_input_tokens": 1050000,
+    "litellm_provider": "openai",
+    "max_output_tokens": 128000,
+    "mode": "chat",
+    "output_cost_per_token": 1e-05,
+    "input_cost_per_token_above_272k_tokens": 4e-06,
+    "output_cost_per_token_above_272k_tokens": 1.5e-05,
+    "cache_read_input_token_cost": 1e-07,
+    "cache_creation_input_token_cost": 2.5e-06
+  },
   "gpt-6-sol": {
     "input_cost_per_token": 2e-06,
     "max_input_tokens": 1050000,

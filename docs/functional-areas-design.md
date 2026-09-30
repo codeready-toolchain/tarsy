@@ -864,11 +864,12 @@ Shared convention between Go and Python:
 |------|------|-------|---------|
 | `google-default` | google | gemini-3.8-flash | 1M |
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
-| `openai-default` | openai | gpt-6-sol | 1.05M |
+| `openai-default` | openai | gpt-6.1-sol | 1.05M |
 | `gpt-5.6` | openai | gpt-5.6 | 1.05M |
 | `gpt-5.6-sol` | openai | gpt-5.6-sol | 1.05M |
 | `gpt-5.6-terra` | openai | gpt-5.6-terra | 1.05M |
 | `gpt-5.6-luna` | openai | gpt-5.6-luna | 1.05M |
+| `gpt-6.1-sol` | openai | gpt-6.1-sol | 1.05M |
 | `gpt-6-sol` | openai | gpt-6-sol | 1.05M |
 | `gpt-6-luna` | openai | gpt-6-luna | 1.05M |
 | `gpt-5.2` | openai | gpt-5.2 | 400K |

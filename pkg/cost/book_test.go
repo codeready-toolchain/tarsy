@@ -780,6 +780,34 @@ func TestEstimate_GPT6AndGrokSnapshotRates(t *testing.T) {
 		wantProv Provenance
 	}{
 		{
+			name:     "sol 6.1 short context",
+			model:    "gpt-6.1-sol",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*2e-6 + 1000*1e-5,
+			wantProv: Provenance("snapshot:gpt-6.1-sol"),
+		},
+		{
+			name:     "sol 6.1 long context",
+			model:    "gpt-6.1-sol",
+			tokens:   Tokens{Input: 272_000, Output: 1000},
+			wantUSD:  272_000*4e-6 + 1000*1.5e-5,
+			wantProv: Provenance("snapshot:gpt-6.1-sol"),
+		},
+		{
+			name:     "sol 6.1 cache read",
+			model:    "gpt-6.1-sol",
+			tokens:   Tokens{CacheRead: 1_000_000},
+			wantUSD:  0.10,
+			wantProv: Provenance("snapshot:gpt-6.1-sol"),
+		},
+		{
+			name:     "sol 6.1 cache write",
+			model:    "gpt-6.1-sol",
+			tokens:   Tokens{CacheCreation: 1_000_000},
+			wantUSD:  2.5,
+			wantProv: Provenance("snapshot:gpt-6.1-sol"),
+		},
+		{
 			name:     "sol short context",
 			model:    "gpt-6-sol",
 			tokens:   Tokens{Input: 100_000, Output: 1000},
