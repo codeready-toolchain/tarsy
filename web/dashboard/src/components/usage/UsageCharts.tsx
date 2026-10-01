@@ -197,11 +197,13 @@ function averageCostAxis(points: UsageSeriesPoint[]) {
   return costAxis(hasPositive ? { min: 0 } : { min: 0, max: ZERO_WINDOW_AXIS_MAX });
 }
 
-function CostChart({ series }: { series: UsageSeriesResponse }) {
+export function CostChart({ series, width }: { series: UsageSeriesResponse; width?: number }) {
   const points = series.points ?? [];
   const timeZone = series.timezone || 'UTC';
   const bands = cumulativeCostBands(series);
   const models = series.models ?? [];
+  // A line needs two days. One day still gets a mark, since there is no segment to draw.
+  const showMark = points.length === 1;
 
   function TooltipSlot() {
     const axes = useAxesTooltip();
@@ -232,20 +234,23 @@ function CostChart({ series }: { series: UsageSeriesResponse }) {
           stack: COST_STACK_ID,
           area: true,
           curve: 'linear' as const,
-          showMark: false,
+          // Otherwise MUI cycles circle, square, diamond, and so on across bands.
+          shape: 'circle' as const,
+          showMark,
         }))
       : [
           {
             id: 'zero',
             data: points.map(() => 0),
             color: '#6B7280',
-            showMark: false,
+            showMark,
             curve: 'linear' as const,
           },
         ];
 
   return (
     <LineChart
+      width={width}
       height={CHART_HEIGHT}
       skipAnimation
       hideLegend

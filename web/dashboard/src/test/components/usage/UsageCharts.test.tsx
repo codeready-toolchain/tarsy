@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from '../../../theme';
-import { AverageChart, AverageCostColumn, CostTooltipBody } from '../../../components/usage/UsageCharts';
+import { AverageChart, AverageCostColumn, CostChart, CostTooltipBody } from '../../../components/usage/UsageCharts';
 import type { UsageSeriesPoint, UsageSeriesResponse } from '../../../types/api';
 
 function renderWithTheme(ui: ReactElement) {
@@ -78,6 +78,79 @@ function columnBottom(name: string): { bottom: number; svg: SVGElement } {
     svg,
   };
 }
+
+function costSeries(points: UsageSeriesPoint[], models: string[]): UsageSeriesResponse {
+  return {
+    cost_estimation_enabled: true,
+    timezone: 'UTC',
+    models,
+    points,
+  };
+}
+
+function costDay(start: string, end: string, byModel: Record<string, number>): UsageSeriesPoint {
+  const total = Object.values(byModel).reduce((sum, value) => sum + value, 0);
+  return {
+    start,
+    end,
+    session_count: 1,
+    estimated_cost_usd: total,
+    average_cost_usd: total,
+    by_model: byModel,
+  };
+}
+
+function costMarks(container: HTMLElement): Element[] {
+  return [...container.querySelectorAll('.MuiLineChart-mark')];
+}
+
+describe('CostChart', () => {
+  it('draws a mark per model when the window is a single day', () => {
+    const { container } = renderWithTheme(
+      <CostChart
+        width={640}
+        series={costSeries(
+          [
+            costDay('2024-06-01T00:00:00.000Z', '2024-06-02T00:00:00.000Z', {
+              'model-a': 28.64,
+              'model-b': 3.84,
+            }),
+          ],
+          ['model-a', 'model-b'],
+        )}
+      />,
+    );
+
+    const marks = costMarks(container);
+    expect(marks.map((mark) => mark.getAttribute('data-series'))).toEqual([
+      'model:model-a',
+      'model:model-b',
+    ]);
+    for (const mark of marks) {
+      expect(Number(mark.getAttribute('r'))).toBeGreaterThan(0);
+      expect(Number(mark.getAttribute('opacity'))).toBe(1);
+    }
+    const [lower, upper] = marks.map((mark) => Number(mark.getAttribute('cy')));
+    expect(upper).toBeLessThan(lower);
+  });
+
+  it('leaves a multi-day cost chart as an area without marks', () => {
+    const { container } = renderWithTheme(
+      <CostChart
+        width={640}
+        series={costSeries(
+          [
+            costDay('2024-06-01T00:00:00.000Z', '2024-06-02T00:00:00.000Z', { 'model-a': 1 }),
+            costDay('2024-06-02T00:00:00.000Z', '2024-06-03T00:00:00.000Z', { 'model-a': 2 }),
+          ],
+          ['model-a'],
+        )}
+      />,
+    );
+
+    expect(costMarks(container)).toHaveLength(0);
+  });
+});
 
 describe('AverageChart axis', () => {
   it('keeps an all-zero window on the baseline under a positive maximum', () => {
