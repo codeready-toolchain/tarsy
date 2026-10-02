@@ -35,6 +35,9 @@ type Config struct {
 	// Prompt caching configuration (resolved from system.prompt_caching)
 	PromptCaching *PromptCachingConfig
 
+	// Optional shadow label evaluation (resolved from system.experimental_jev_labels).
+	ExperimentalJEVLabels *ExperimentalJEVLabelsConfig
+
 	// Retention and cleanup configuration (resolved from system.retention)
 	Retention *RetentionConfig
 

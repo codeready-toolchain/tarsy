@@ -24,7 +24,7 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 
 ## Prerequisites
 
-- **Go 1.26+** -- Backend orchestrator
+- **Go 1.27.1+** -- Backend orchestrator (required by the Jev dependency, even when its experiment is disabled)
 - **Python 3.13+** -- LLM service runtime
 - **Node.js 24+** -- Dashboard development and build tools
 - **uv** -- Modern Python package manager
@@ -140,7 +140,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 
 | Component | Location | Tech |
 |-----------|----------|------|
-| **Go Orchestrator** | `cmd/tarsy/`, `pkg/` | Go 1.26, Echo v5, Ent ORM, gRPC |
+| **Go Orchestrator** | `cmd/tarsy/`, `pkg/` | Go 1.27.1+, Echo v5, Ent ORM, gRPC |
 | **Python LLM Service** | `llm-service/` | Python 3.13, gRPC, Gemini, LangChain |
 | **Dashboard** | `web/dashboard/` | React 19, TypeScript, Vite 7, MUI 7 |
 | **Database** | `ent/` | PostgreSQL 17, Ent ORM with migrations |

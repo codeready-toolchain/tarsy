@@ -24,10 +24,12 @@ Edit `deploy/config/.env` with your API keys and database credentials. See [depl
 
 | Tool | Version | Required by |
 |------|---------|-------------|
-| Go | 1.26+ | Host dev, container build |
+| Go | 1.27.1+ | Host dev, container build |
 | Python + uv | 3.13+ | Host dev, container build |
 | Node.js | 24+ | Host dev (dashboard), container build |
 | Podman (or Docker) | -- | All modes (DB in host dev, full stack in container/OpenShift) |
+
+The Jev production dependency requires Go 1.27.1 even when the optional [shadow label experiment](config/README.md#experimental-jev-shadow-labels) is disabled.
 
 ---
 
@@ -151,6 +153,8 @@ export GOOGLE_API_KEY=...
 export GITHUB_TOKEN=...
 export OAUTH2_CLIENT_ID=...
 export OAUTH2_CLIENT_SECRET=...
+# Optional, only for system.experimental_jev_labels.enabled: true
+# export TYPESAFE_API_KEY=...
 
 make openshift-deploy
 ```

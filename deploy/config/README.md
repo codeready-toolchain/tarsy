@@ -195,6 +195,30 @@ agent_chains:
           - name: "custom-agent"
 ```
 
+### Experimental Jev shadow labels
+
+`system.experimental_jev_labels` is disabled by default. When enabled, it asks TypeSafe's Jev model to classify each completed investigation using the chain's resolved exclusive label map, then records a comparison with the production labels. It preserves the session's labels and review state; accepted no-label decisions do not close alerts.
+
+```yaml
+system:
+  experimental_jev_labels:
+    enabled: true             # omitted/false disables the experiment
+    model: jev-1.13.0          # default; pin the model for comparisons
+    api_key_env: TYPESAFE_API_KEY
+    timeout: 5s               # default; must be >0 and <=30s
+    min_confidence: 0.9        # default; finite value in [0,1]
+```
+
+Set `TYPESAFE_API_KEY` in the **Go backend** environment (`deploy/config/.env` for local development or Compose). OpenShift's secret template accepts the optional `TYPESAFE_API_KEY` parameter and mounts `tarsy-secrets.typesafe-api-key` into that container. A custom `api_key_env` requires a matching environment variable. Keys stay out of YAML. If client initialization fails, startup logs a warning and continues with the experiment disabled.
+
+Opting in sends the generated `final_analysis`, label descriptions, and map instructions to TypeSafe and incurs API charges. The analysis reflects TARSy's configured masking of its source data; masking is not a guarantee that all sensitive information has been removed. The classifier excludes raw tool history, the executive summary, and existing labels from its input. It skips multi-label maps, maps with more than 254 labels, and combined JSON inputs over 24 KiB instead of truncating them.
+
+The worker evaluates labels synchronously **after session completion is persisted and published**. The evaluation has the configured deadline (5 seconds by default), followed by at most 5 seconds for its trace write; HTTP retries are disabled. This can occupy the worker for up to those additional budgets without delaying the completed-session notification. Evaluation errors leave the completed result intact, and skipped inputs are logged without an API request.
+
+In the session **Trace**, open the Jev model entry categorized as **Executive Summary**, then inspect **Response Summary** and **Response Metadata**. Metadata identifies `kind: jev_shadow_labels` and a comparison of `agree`, `disagree`, `uncertain`, `baseline_unavailable`, or `error`. The trace retains the request, returned model/request ID and token usage when available, candidate probabilities and confidence, and the original `production_labels`: `null` means unavailable, while `[]` means an explicit empty label set. Confidence is a model statistic, not a guarantee of correctness; agreement with production labels is not a human correctness assessment.
+
+Token usage is recorded, but Jev calls remain **unpriced** unless the price book knows the returned model or an exact `system.cost_estimation.model_rates` override supplies its rates. No Jev price is hardcoded. See [Session Usage Cost](../../docs/session-usage-cost.md#configuration) for overrides. Building TARSy requires Go 1.27.1+ because of the Jev dependency, including when this runtime feature is off.
+
 ### llm-providers.yaml
 
 LLM provider configurations:

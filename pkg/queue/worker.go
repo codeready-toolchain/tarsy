@@ -280,6 +280,15 @@ func (w *Worker) pollAndProcess(ctx context.Context) error {
 	// to receive final events before they are deleted.
 	w.scheduleEventCleanup(session.ID)
 
+	// Run the optional shadow experiment only after winning terminal persistence.
+	// Use the worker context: a classifier timeout must not time out the session.
+	// Keeping this bounded work on the worker also makes shutdown wait for it.
+	if result.Status == alertsession.StatusCompleted {
+		if evaluator, ok := w.sessionExecutor.(SessionLabelEvaluator); ok {
+			evaluator.EvaluateSessionLabels(ctx, session.ID)
+		}
+	}
+
 	w.mu.Lock()
 	w.sessionsProcessed++
 	w.mu.Unlock()
