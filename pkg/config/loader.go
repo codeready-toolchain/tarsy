@@ -52,6 +52,8 @@ type SystemYAMLConfig struct {
 	CostEstimation   *CostEstimationYAMLConfig `yaml:"cost_estimation"`
 	PromptCaching    *PromptCachingYAMLConfig  `yaml:"prompt_caching"`
 	Retention        *RetentionConfig          `yaml:"retention"`
+
+	ExperimentalJEVLabels *ExperimentalJEVLabelsYAMLConfig `yaml:"experimental_jev_labels"`
 	// Holidays replaces the built-in global holiday list when non-empty.
 	// Each entry is year-agnostic MM-DD (UTC) used for Tier 0 calendar context.
 	Holidays []Holiday `yaml:"holidays,omitempty"`
@@ -241,12 +243,13 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		}
 	}
 
-	// Resolve system config (GitHub + Runbooks + Slack + CostEstimation + PromptCaching + Retention + DashboardURL + WS Origins + Holidays)
+	// Resolve system config.
 	githubCfg := resolveGitHubConfig(tarsyConfig.System)
 	runbooksCfg := resolveRunbooksConfig(tarsyConfig.System)
 	slackCfg := resolveSlackConfig(tarsyConfig.System)
 	costEstimationCfg := resolveCostEstimationConfig(tarsyConfig.System)
 	promptCachingCfg := resolvePromptCachingConfig(tarsyConfig.System)
+	experimentalJEVLabelsCfg := resolveExperimentalJEVLabelsConfig(tarsyConfig.System)
 	retentionCfg := resolveRetentionConfig(tarsyConfig.System)
 	dashboardURL := resolveDashboardURL(tarsyConfig.System)
 	allowedWSOrigins := resolveAllowedWSOrigins(tarsyConfig.System)
@@ -277,6 +280,8 @@ func load(_ context.Context, configDir string) (*Config, error) {
 		MCPServerRegistry:   mcpServerRegistry,
 		LLMProviderRegistry: llmProviderRegistry,
 		SkillRegistry:       skillRegistry,
+
+		ExperimentalJEVLabels: experimentalJEVLabelsCfg,
 	}, nil
 }
 

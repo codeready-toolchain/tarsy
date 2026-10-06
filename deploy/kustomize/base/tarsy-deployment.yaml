@@ -52,6 +52,12 @@ spec:
                   name: tarsy-secrets
                   key: google-api-key
                   optional: true
+            - name: TYPESAFE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tarsy-secrets
+                  key: typesafe-api-key
+                  optional: true
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:

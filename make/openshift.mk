@@ -133,6 +133,7 @@ openshift-create-secrets: openshift-check openshift-create-namespace ## Create s
 		-p OPENAI_API_KEY="$$OPENAI_API_KEY" \
 		-p ANTHROPIC_API_KEY="$$ANTHROPIC_API_KEY" \
 		-p XAI_API_KEY="$$XAI_API_KEY" \
+		-p TYPESAFE_API_KEY="$$TYPESAFE_API_KEY" \
 		-p VERTEX_AI_PROJECT="$$VERTEX_AI_PROJECT" \
 		-p GOOGLE_SERVICE_ACCOUNT_KEY="$$GOOGLE_SERVICE_ACCOUNT_KEY" \
 		-p SLACK_BOT_TOKEN="$$SLACK_BOT_TOKEN" \

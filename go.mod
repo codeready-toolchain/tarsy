@@ -1,11 +1,12 @@
 module github.com/codeready-toolchain/tarsy
 
-go 1.26.8
+go 1.27.1
 
 require (
 	dario.cat/mergo v1.0.2
 	entgo.io/ent v0.14.5
 	github.com/coder/websocket v1.8.14
+	github.com/drpaneas/jev v0.0.0-20260927092724-d861b9f09608
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2

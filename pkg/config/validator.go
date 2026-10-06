@@ -78,6 +78,10 @@ func (v *Validator) ValidateAll() error {
 		return fmt.Errorf("cost estimation validation failed: %w", err)
 	}
 
+	if err := v.validateExperimentalJEVLabels(); err != nil {
+		return fmt.Errorf("experimental Jev labels validation failed: %w", err)
+	}
+
 	return nil
 }
 

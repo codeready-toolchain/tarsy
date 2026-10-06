@@ -315,6 +315,13 @@ func main() {
 
 	executor := queue.NewRealSessionExecutor(cfg, dbClient.Client, llmClient, eventPublisher, mcpFactory, runbookService, memoryService, memCfg)
 	executor.SetCostBook(costBook)
+	labelClassifier, labelErr := newJEVLabelClassifier(cfg.ExperimentalJEVLabels)
+	if labelErr != nil {
+		slog.Warn("Experimental JEV labels unavailable; continuing without the experiment", "error", labelErr)
+	} else if labelClassifier != nil {
+		executor.SetLabelClassifier(labelClassifier)
+		slog.Info("Experimental JEV shadow labels enabled", "model", cfg.ExperimentalJEVLabels.Model)
+	}
 	scoringExecutor := queue.NewScoringExecutor(cfg, dbClient.Client, llmClient, eventPublisher, runbookService, memoryService)
 	scoringExecutor.SetCostBook(costBook)
 
