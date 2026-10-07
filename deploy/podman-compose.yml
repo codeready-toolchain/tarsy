@@ -35,6 +35,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        GO_VERSION: ${GO_VERSION:-1.26.8}
     container_name: tarsy-app
     env_file:
       - ./config/.env

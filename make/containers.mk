@@ -9,7 +9,7 @@ COMPOSE ?= COMPOSE_PROJECT_NAME=tarsy podman compose -f deploy/podman-compose.ym
 .PHONY: containers-build
 containers-build: ## Build tarsy and llm-service container images
 	@echo -e "$(YELLOW)Building container images...$(NC)"
-	@podman build -t tarsy:dev -f Dockerfile .
+	@podman build --build-arg GO_VERSION=$(GO_VERSION) -t tarsy:dev -f Dockerfile .
 	@podman build -t tarsy-llm:dev -f llm-service/Dockerfile llm-service/
 	@echo -e "$(GREEN)✅ Container images built: tarsy:dev, tarsy-llm:dev$(NC)"
 

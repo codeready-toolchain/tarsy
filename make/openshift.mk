@@ -66,7 +66,7 @@ openshift-create-namespace: openshift-check ## Create namespace if needed
 .PHONY: openshift-build-tarsy
 openshift-build-tarsy: openshift-login-registry ## Build tarsy image for OpenShift
 	@echo -e "$(BLUE)Building tarsy image...$(NC)"
-	@podman build -t localhost/tarsy:latest -f Dockerfile .
+	@podman build --build-arg GO_VERSION=$(GO_VERSION) -t localhost/tarsy:latest -f Dockerfile .
 	@echo -e "$(GREEN)✅ tarsy image built$(NC)"
 
 .PHONY: openshift-build-llm

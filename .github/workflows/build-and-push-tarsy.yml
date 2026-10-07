@@ -38,6 +38,14 @@ jobs:
           echo "COMMIT_SHORT_SHA=${COMMIT_SHORT_SHA}" >> "${GITHUB_ENV}"
           echo "DASHBOARD_SHORT_SHA=${DASHBOARD_SHORT_SHA}" >> "${GITHUB_ENV}"
 
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Go version from go.mod
+        run: echo "GO_VERSION=$(go mod edit -json | jq -r .Go)" >> "${GITHUB_ENV}"
+
       - name: Build image
         id: build-image
         uses: redhat-actions/buildah-build@v2
@@ -47,6 +55,7 @@ jobs:
           context: .
           containerfiles: ./Dockerfile
           build-args: |
+            GO_VERSION=${{ env.GO_VERSION }}
             VERSION=${{ env.COMMIT_SHORT_SHA }}
             DASHBOARD_VERSION=${{ env.DASHBOARD_SHORT_SHA }}
 
