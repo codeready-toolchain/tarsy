@@ -1,5 +1,5 @@
 # Stage 1: Build Go binary
-ARG GO_VERSION=1.26.8
+ARG GO_VERSION=1.26.9
 FROM mirror.gcr.io/library/golang:${GO_VERSION}-alpine AS go-builder
 
 RUN apk add --no-cache git
