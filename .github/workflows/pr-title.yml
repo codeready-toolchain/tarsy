@@ -1,13 +1,16 @@
 name: pr-title
 
+# pull_request_target runs with a token that can comment, including on fork PRs.
+# Do not check out pull request code in this workflow; it only reads the event title.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
 jobs:
   conventional:
     runs-on: ubuntu-latest
     permissions:
+      issues: write
       pull-requests: write
     steps:
       - uses: actions/github-script@v7
@@ -17,7 +20,7 @@ jobs:
             const warning =
               `${marker}\nPlease rename this PR to conventional commit form, e.g. \`fix: ...\` or \`feat(scope): ...\`. See CONTRIBUTING.md.`;
             const title = context.payload.pull_request.title || '';
-            const ok = /^(feat|fix|docs|chore|refactor|test)\s*(\([a-zA-Z0-9._-]+\))?\s*:\s+\S.*$/.test(title);
+            const ok = /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)\s*(\([a-zA-Z0-9._-]+\))?\s*:\s+\S.*$/.test(title);
             const { owner, repo } = context.repo;
             const issue_number = context.payload.pull_request.number;
 
@@ -60,8 +63,8 @@ jobs:
                   body: warning,
                 });
               } catch (err) {
-                // Fork PRs get a read-only token; keep the title check as the source of truth.
-                core.warning(`Could not update PR title comment (likely fork/read-only token): ${err.message || err}`);
+                // Title validity is the check result. Comment updates are best-effort.
+                core.warning(`Could not update PR title comment: ${err.message || err}`);
               }
             }
 
