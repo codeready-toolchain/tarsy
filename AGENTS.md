@@ -36,7 +36,7 @@ Project skills live in `.cursor/skills/` (symlinked as `.claude/skills/`). Load 
 - Never commit, amend, or push unless the user explicitly asks in this turn
 - “Make the change”, “fix the tests”, or finishing a task is not permission to commit
 - If it is unclear, leave changes uncommitted and ask
-- Conventional commits: `feat|fix|docs|chore|refactor|test(scope): summary`
+- Conventional commits: `build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test(scope): summary`
 - Prefer small, focused PRs
 - Fixes should reference an issue: `Fixes #123`
 
