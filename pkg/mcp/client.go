@@ -282,7 +282,7 @@ func (c *Client) CallTool(ctx context.Context, serverID, toolName string, args m
 		"action", action, "error", err)
 
 	// Jittered backoff
-	backoff := RetryBackoffMin + time.Duration(rand.Int64N(int64(RetryBackoffMax-RetryBackoffMin)))
+	backoff := RetryBackoffMinimum + time.Duration(rand.Int64N(int64(RetryBackoffMaximum-RetryBackoffMinimum)))
 	select {
 	case <-time.After(backoff):
 	case <-ctx.Done():

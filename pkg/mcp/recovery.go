@@ -38,11 +38,11 @@ const (
 	// applied in the controller layer; this remains as defense-in-depth.
 	OperationTimeout = 90 * time.Second
 
-	// RetryBackoffMin is the minimum jittered backoff between retries.
-	RetryBackoffMin = 250 * time.Millisecond
+	// RetryBackoffMinimum is the minimum jittered backoff between retries.
+	RetryBackoffMinimum = 250 * time.Millisecond
 
-	// RetryBackoffMax is the maximum jittered backoff between retries.
-	RetryBackoffMax = 750 * time.Millisecond
+	// RetryBackoffMaximum is the maximum jittered backoff between retries.
+	RetryBackoffMaximum = 750 * time.Millisecond
 
 	// MCPInitTimeout is the per-server initialization timeout (transport + handshake).
 	MCPInitTimeout = 30 * time.Second
