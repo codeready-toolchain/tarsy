@@ -259,6 +259,13 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			ReasoningEffort: ReasoningEffortHigh,
 			NativeTools:     geminiNativeTools(),
 		},
+		"gemini-4-argon": {
+			Type:            LLMProviderTypeGoogle,
+			Model:           "gemini-4-argon",
+			APIKeyEnv:       "GOOGLE_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
+			NativeTools:     geminiNativeTools(),
+		},
 		"gemini-3.7-flash": {
 			Type:        LLMProviderTypeGoogle,
 			Model:       "gemini-3.7-flash",
@@ -312,6 +319,18 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		"gpt-6.1-sol": {
 			Type:            LLMProviderTypeOpenAI,
 			Model:           "gpt-6.1-sol",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
+		},
+		"gpt-6.1-terra": {
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-6.1-terra",
+			APIKeyEnv:       "OPENAI_API_KEY",
+			ReasoningEffort: ReasoningEffortMax,
+		},
+		"gpt-6-astra": {
+			Type:            LLMProviderTypeOpenAI,
+			Model:           "gpt-6-astra",
 			APIKeyEnv:       "OPENAI_API_KEY",
 			ReasoningEffort: ReasoningEffortMax,
 		},

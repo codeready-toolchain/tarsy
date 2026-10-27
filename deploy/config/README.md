@@ -289,9 +289,12 @@ agent_chains:
 ### Built-in LLM Providers
 
 - **google-default** - Gemini 3.8 Flash
+- **gemini-4-argon** - Gemini 4 Argon
 - **openai-default** - GPT-6.1 Sol
 - **gpt-5.6**, **gpt-5.6-sol**, **gpt-5.6-terra**, **gpt-5.6-luna** - GPT-5.6 family
 - **gpt-6.1-sol** - GPT-6.1 Sol
+- **gpt-6.1-terra** - GPT-6.1 Terra
+- **gpt-6-astra** - GPT-6 Astra
 - **gpt-6-sol**, **gpt-6-luna** - GPT-6 family
 - **gpt-5.2** - previous generation (OpenAI recommends GPT-5.6)
 - **anthropic-default** - Claude Sonnet 5
