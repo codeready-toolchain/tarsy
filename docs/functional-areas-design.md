@@ -863,6 +863,7 @@ Shared convention between Go and Python:
 | Name | Type | Model | Context |
 |------|------|-------|---------|
 | `google-default` | google | gemini-3.8-flash | 1M |
+| `gemini-4-argon` | google | gemini-4-argon | 1M |
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
 | `openai-default` | openai | gpt-6.1-sol | 1.05M |
 | `gpt-5.6` | openai | gpt-5.6 | 1.05M |
@@ -870,6 +871,8 @@ Shared convention between Go and Python:
 | `gpt-5.6-terra` | openai | gpt-5.6-terra | 1.05M |
 | `gpt-5.6-luna` | openai | gpt-5.6-luna | 1.05M |
 | `gpt-6.1-sol` | openai | gpt-6.1-sol | 1.05M |
+| `gpt-6.1-terra` | openai | gpt-6.1-terra | 1.05M |
+| `gpt-6-astra` | openai | gpt-6-astra | 1.05M |
 | `gpt-6-sol` | openai | gpt-6-sol | 1.05M |
 | `gpt-6-luna` | openai | gpt-6-luna | 1.05M |
 | `gpt-5.2` | openai | gpt-5.2 | 400K |
@@ -883,7 +886,7 @@ Shared convention between Go and Python:
 
 Google providers include native tools (google_search, url_context enabled; code_execution disabled by default). Native tools are disabled when MCP tools are present.
 
-Eligible built-in providers set `reasoning_effort`: `max` for GPT 5.6 and newer, `xhigh` for Claude Sonnet 5, Sonnet 5.5, and Opus 5.5, and `high` for Grok 4.6+ and Gemini 3.8. `gpt-5.2` and Gemini builtins below 3.8 leave the field unset. A user provider that replaces a builtin by name does not inherit that value. GPT stays at `max` because that ladder still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality. Gemini's documented set already stops at `high`.
+Eligible built-in providers set `reasoning_effort`: `max` for GPT 5.6 and newer, `xhigh` for Claude Sonnet 5, Sonnet 5.5, and Opus 5.5, and `high` for Grok 4.6+, Gemini 3.8, and Gemini 4 Argon. `gpt-5.2` and Gemini builtins below 3.8 leave the field unset. A user provider that replaces a builtin by name does not inherit that value. GPT stays at `max` because that ladder still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality. Gemini's documented set already stops at `high`.
 
 **Key Implementation Files**:
 - `pkg/agent/llm_client.go` -- GRPCLLMClient, GenerateInput, Chunk types
