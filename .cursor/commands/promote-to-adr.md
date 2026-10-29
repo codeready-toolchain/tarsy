@@ -1,3 +1,7 @@
+---
+description: Promote an implemented proposal into a numbered architecture decision record
+---
+
 # Promote Proposal to ADR
 
 Move an implemented proposal from `docs/proposals/` to `docs/adr/` as a numbered Architecture Decision Record.

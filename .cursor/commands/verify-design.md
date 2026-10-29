@@ -1,3 +1,7 @@
+---
+description: Review a design document against the codebase and fix clear gaps
+---
+
 # Verify Design Document
 
 Carefully and systematically review the provided design document to verify it is

@@ -1,3 +1,7 @@
+---
+description: Run make lint and fix the issues it reports
+---
+
 # Lint and Fix
 
 Run `make lint` and fix all identified issues.

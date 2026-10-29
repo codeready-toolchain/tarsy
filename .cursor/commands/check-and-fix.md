@@ -1,3 +1,7 @@
+---
+description: Run make check-all and fix compile, lint, and test failures
+---
+
 # Check and Fix
 
 Run `make check-all` and fix all issues including failed tests.

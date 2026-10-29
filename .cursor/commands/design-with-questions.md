@@ -1,3 +1,7 @@
+---
+description: Draft a design and questions document, then walk through the questions
+---
+
 # /design-with-questions
 
 You are in design mode. Generate **two documents** and then walk through the questions together.

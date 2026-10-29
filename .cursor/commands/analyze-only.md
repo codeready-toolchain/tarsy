@@ -1,3 +1,7 @@
+---
+description: Analyze a request and recommend changes without editing code
+---
+
 # Comprehensive Analysis Only
 
 **DO NOT CHANGE ANY CODE.** Perform analysis and provide recommendations only.
