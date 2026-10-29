@@ -88,3 +88,4 @@ web/dashboard/dist/
 
 # Temporary files
 temp/
+.cache/
