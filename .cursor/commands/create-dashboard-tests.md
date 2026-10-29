@@ -1,3 +1,7 @@
+---
+description: Write dashboard tests for new or changed functionality
+---
+
 # Writing Tests for Dashboard Functionality
 
 ## When to Use This Command

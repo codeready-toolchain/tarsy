@@ -1,3 +1,7 @@
+---
+description: Commit current changes with a structured message and create a branch when needed
+---
+
 # Commit Changes
 
 Analyze uncommitted changes, create a branch if needed, and commit with a well-structured message.
