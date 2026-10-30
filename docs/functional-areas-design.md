@@ -1046,7 +1046,7 @@ AlertSession (session metadata, status, alert data)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/v1/sessions` | Paginated session list with filtering (`label=` contains a stored canonical name. `label_scope=any` matches non-empty labels, `label_scope=none` matches unlabeled sessions, and `label_scope=names_or_none` matches names or unlabeled sessions) |
+| GET | `/api/v1/sessions` | Paginated session list with filtering (`label=` contains a stored canonical name. `label_scope=any` matches non-empty labels, `label_scope=none` matches unlabeled sessions, and `label_scope=names_or_none` matches names or unlabeled sessions). See [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md) |
 | GET | `/api/v1/sessions/active` | Active + queued sessions |
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types, chain IDs, and stored labels |
 | GET | `/api/v1/sessions/:id` | Session details (includes `labels`) |
@@ -1164,6 +1164,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
 | `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, failure tags, tool improvement report), re-score trigger |
 | `/usage` | UsagePage | Fleet token/cost dig-in over date windows (hamburger → Usage) |
+| `/settings` | SettingsPage | Review notifications: tab counter, desktop toasts, label selection, browser permission |
 | `/system` | SystemStatusPage | MCP health + read-only Config Viewer (tabs) |
 
 #### Data Flow
@@ -1176,7 +1177,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider, model, reasoning effort, and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component). A stored effort is appended to the model label as `model (effort)`.
 - **Reasoning effort**: Session detail shows the effective effort on each stage execution (and the original effort after fallback). Trace list and detail show the effort stored on each LLM interaction. Summarization captions include the summarizer's effort. Labels with no stored effort stay as the bare model name.
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
-- **Session labels**: Historical list and triage have a Labels column between Type and Submitted by. Session detail shows stored `labels` as chips next to the alert type. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. `label_scope=any` matches a non-empty labels array, `label_scope=none` matches null or empty labels, and `label_scope=names_or_none` ORs `label=` with unlabeled sessions. Sessions and Triage do not send `label_scope`. Triage has no label query param. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- **Session labels**: Historical list and triage have a Labels column between Type and Submitted by. Session detail shows stored `labels` as chips next to the alert type. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. `label_scope=any` matches a non-empty labels array, `label_scope=none` matches null or empty labels, and `label_scope=names_or_none` ORs `label=` with unlabeled sessions. Sessions and Triage do not send `label_scope`. Triage has no label query param. See [ADR-0031: Session Labels](adr/0031-session-labels.md) and [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md).
 - **Cancel attribution**: Session and queued-alert cancel dialogs take an optional reason. Cancelled status tooltips (list, triage, header) and Slack show `Cancelled by {actor}` plus an optional reason. Timeline, trace, chat, and sub-agent cards render `cancelled` as cancelled, not failed. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 - **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`, plus estimated-cost charts via `GET /api/v1/usage/series`. The by-model table and cost chart split a model by stored reasoning effort (`model (effort)`). Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). Usage totals and by-model include cache-read / cache-creation SUMs (session list / header / `ExecutionOverview` do not). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), and [ADR-0033: Usage Charts](adr/0033-usage-charts.md).
@@ -1198,13 +1199,23 @@ Shareable anchors into the session timeline (dashboard-only; no API changes). Se
 - **Open behavior**: After REST load, expand the timeline/stage (and collapsible event when targeting an event), then `scrollIntoView`. Stage-only links focus the first real event in the stage (or the stage separator when empty). Invalid anchors show a page-local snackbar; a valid stage with a bad event falls back to stage focus.
 - **Copy-only**: The address bar is not live-synced while browsing; focus runs once after the initial load so live WebSocket updates continue normally.
 
+#### Review notifications
+
+A tab counter and a desktop toast for completed sessions that still need review, while a dashboard tab is open. See [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md).
+
+- **Qualifier**: `status=completed`, `review_status=needs_review`, and one label selection. Default chips are `ban` and `action`. **Any label**, **No label**, and typed names are choices in that field. An empty field matches nothing. The same selection feeds the counter and the toast, and it is independent of the Sessions and Triage filters.
+- **Counter**: The tab icon, the title (`(N) TARSy`), and the header switch show the live backlog (`total_items`), including sessions that finished before the tab opened. `100` or more is `99+` on the icon and the real total in the title and on the switch. Focusing the tab does not clear it.
+- **Toast**: One OS notification per newly matching session, and only while the tab is in the background. The title is the alert type and labels; the body is the executive summary shortened to about 180 characters. Activating it opens that session. Tabs in this browser share the announced set, so two open tabs produce one toast.
+- **Controls**: The header switch, immediately before the theme switch, suspends or resumes both signals. Left nav → **Settings** (`/settings`) holds the two signal switches, the label field, and browser permission. Both signals and the master switch default to on. Loading the page does not ask for notification permission. Settings is available when login is not configured.
+- **Wake-up**: A completed session or a review change refreshes the list. The list, not the websocket payload, decides what is new. Labels stay off the websocket payload. Slack terminal messages are unchanged.
+
 #### State Management
 
 No global state library. State is local `useState` per page + two React Contexts:
 - **AuthContext**: User identity, auth availability
 - **VersionContext**: Polls `/health` and `index.html` for version mismatch detection
 
-Filter state, pagination, and sort preferences persist in `localStorage`.
+Filter state, pagination, sort preferences, and review-notification settings persist in `localStorage`.
 
 #### Static Serving from Go
 
@@ -1214,7 +1225,7 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - API routes registered first take priority over the SPA fallback
 
 **Key Implementation Files**:
-- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx`, `UsagePage.tsx`)
+- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx`, `UsagePage.tsx`, `SettingsPage.tsx`)
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
 - `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
 - `web/dashboard/src/components/session/SessionSearchBar.tsx` -- In-session search bar with match navigation
@@ -1227,8 +1238,9 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - `web/dashboard/src/components/dashboard/TriageGroupedList.tsx` -- Triage grouped list with collapsible sections
 - `web/dashboard/src/components/dashboard/TriageFilterBar.tsx` -- Triage filter bar with assignee filter
 - `web/dashboard/src/components/common/SessionLabelChips.tsx` -- Display-only chips for stored session labels
+- `web/dashboard/src/components/layout/NotificationWatcher.tsx` -- App-shell review backlog counter and desktop toasts
 - `web/dashboard/src/hooks/` -- useChatState, useVersionMonitor, useAdvancedAutoScroll
-- `web/dashboard/src/contexts/` -- AuthContext, VersionContext
+- `web/dashboard/src/contexts/` -- AuthContext, VersionContext, NotificationSettingsContext
 
 ---
 
