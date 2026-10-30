@@ -54,7 +54,7 @@ type SessionListResponse struct {
 type DashboardListParams struct {
 	Page          int        `json:"page"`       // 1-based
 	PageSize      int        `json:"page_size"`  // max 100
-	SortBy        string     `json:"sort_by"`    // created_at, status, alert_type, author, duration, score
+	SortBy        string     `json:"sort_by"`    // created_at, completed_at, status, alert_type, author, duration, score, quality_rating
 	SortOrder     string     `json:"sort_order"` // asc or desc
 	Status        string     `json:"status"`     // comma-separated status filter
 	AlertType     string     `json:"alert_type"`
@@ -67,6 +67,30 @@ type DashboardListParams struct {
 	Assignee      string     `json:"assignee"`       // exact match filter
 	QualityRating string     `json:"quality_rating"` // accurate, partially_accurate, inaccurate
 	Label         string     `json:"label"`          // comma-separated; session labels JSON contains any
+	LabelScope    LabelScope `json:"label_scope"`    // any, none, names_or_none; empty keeps label= behavior
+}
+
+// LabelScope selects how the session list matches the labels column.
+// Empty means the historical label= contains filter, with no extra scope.
+type LabelScope string
+
+const (
+	// LabelScopeAny matches a non-empty labels array.
+	LabelScopeAny LabelScope = "any"
+	// LabelScopeNone matches SQL NULL, JSON null, or an empty array.
+	LabelScopeNone LabelScope = "none"
+	// LabelScopeNamesOrNone ORs the label= names with unlabeled sessions.
+	LabelScopeNamesOrNone LabelScope = "names_or_none"
+)
+
+// ParseLabelScope validates a raw label_scope query value.
+func ParseLabelScope(s string) (LabelScope, error) {
+	switch LabelScope(s) {
+	case LabelScopeAny, LabelScopeNone, LabelScopeNamesOrNone:
+		return LabelScope(s), nil
+	default:
+		return "", fmt.Errorf("unknown label_scope %q", s)
+	}
 }
 
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.

@@ -169,7 +169,10 @@ export interface DashboardListParams {
   start_date?: string;
   end_date?: string;
   scoring_status?: string;
+  review_status?: string;
   label?: string;
+  /** any | none | names_or_none. Omitted keeps the historical label= filter. */
+  label_scope?: 'any' | 'none' | 'names_or_none';
 }
 
 /**

@@ -16,6 +16,7 @@ import { useColorScheme, useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { LoginButton } from '../auth/LoginButton.tsx';
 import { UserMenu } from '../auth/UserMenu.tsx';
+import { NotificationMasterSwitch } from './NotificationMasterSwitch.tsx';
 import { appBarSx, glassIconButtonSx, logoBoxSx, titleSx, themeToggleSx } from '../../theme/headerStyles';
 
 /**
@@ -124,6 +125,8 @@ export function SharedHeader() {
         </Typography>
 
         {!isMobile && actions}
+
+        <NotificationMasterSwitch />
 
         <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
           <IconButton

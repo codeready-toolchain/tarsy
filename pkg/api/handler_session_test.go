@@ -109,6 +109,34 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			errMsg:  "invalid label: must match [A-Za-z][A-Za-z0-9_-]*",
 			exact:   true,
 		},
+		{
+			name:    "unknown label_scope",
+			query:   "label_scope=bogus",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label_scope: must be any, none, or names_or_none",
+			exact:   true,
+		},
+		{
+			name:    "label_scope any rejects label names",
+			query:   "label_scope=any&label=page",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label_scope: label must be empty",
+			exact:   true,
+		},
+		{
+			name:    "label_scope none rejects label names",
+			query:   "label_scope=none&label=page",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label_scope: label must be empty",
+			exact:   true,
+		},
+		{
+			name:    "label_scope names_or_none requires label",
+			query:   "label_scope=names_or_none",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid label_scope: label is required",
+			exact:   true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -134,7 +162,7 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 	}
 
 	t.Run("valid sort_by values pass validation", func(t *testing.T) {
-		validValues := []string{"created_at", "status", "alert_type", "author", "duration", "score", "quality_rating"}
+		validValues := []string{"created_at", "completed_at", "status", "alert_type", "author", "duration", "score", "quality_rating"}
 		for _, v := range validValues {
 			t.Run(v, func(t *testing.T) {
 				e := echo.New()
@@ -177,6 +205,31 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 					if ok {
 						assert.NotContains(t, he.Message, "invalid label",
 							"label=%s should be accepted", v)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("valid label_scope values pass validation", func(t *testing.T) {
+		validValues := []string{"label_scope=any", "label_scope=none", "label=page&label_scope=names_or_none"}
+		for _, v := range validValues {
+			t.Run(v, func(t *testing.T) {
+				e := echo.New()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions?"+v, nil)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+
+				err := func() (retErr error) {
+					defer func() { recover() }()
+					return s.listSessionsHandler(c)
+				}()
+
+				if err != nil {
+					he, ok := err.(*echo.HTTPError)
+					if ok {
+						assert.NotContains(t, he.Message, "invalid label_scope",
+							"%s should be accepted", v)
 					}
 				}
 			})

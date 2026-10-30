@@ -1013,6 +1013,87 @@ func parseLLMListTokenSums(raw []byte) (llmListTokenSums, error) {
 	return sums, nil
 }
 
+// applyDashboardLabelFilter adds the label / label_scope predicate.
+// An empty scope keeps the historical label= contains filter.
+func applyDashboardLabelFilter(query *ent.AlertSessionQuery, params models.DashboardListParams) (*ent.AlertSessionQuery, error) {
+	switch params.LabelScope {
+	case models.LabelScopeAny:
+		return query.Where(func(sel *sql.Selector) {
+			sel.Where(labelAnyPredicate(sel))
+		}), nil
+	case models.LabelScopeNone:
+		return query.Where(func(sel *sql.Selector) {
+			sel.Where(labelNonePredicate(sel))
+		}), nil
+	case models.LabelScopeNamesOrNone, "":
+		if params.Label == "" {
+			return query, nil
+		}
+		payloads, err := labelContainsPayloads(params.Label)
+		if err != nil {
+			return nil, err
+		}
+		includeNone := params.LabelScope == models.LabelScopeNamesOrNone
+		return query.Where(func(sel *sql.Selector) {
+			t := sel.TableName()
+			preds := make([]*sql.Predicate, 0, len(payloads)+1)
+			for _, payload := range payloads {
+				p := payload
+				preds = append(preds, sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
+					b.Arg(p)
+					b.WriteString("::jsonb")
+				}))
+			}
+			if includeNone {
+				preds = append(preds, labelNonePredicate(sel))
+			}
+			sel.Where(sql.Or(preds...))
+		}), nil
+	default:
+		return nil, fmt.Errorf("invalid label_scope %q", params.LabelScope)
+	}
+}
+
+func labelContainsPayloads(label string) ([]string, error) {
+	payloads := make([]string, 0)
+	for name := range strings.SplitSeq(label, ",") {
+		payload, err := json.Marshal([]string{name})
+		if err != nil {
+			return nil, fmt.Errorf("marshal label filter: %w", err)
+		}
+		payloads = append(payloads, string(payload))
+	}
+	return payloads, nil
+}
+
+func labelsColumn(sel *sql.Selector) string {
+	return fmt.Sprintf("%q.%q", sel.TableName(), alertsession.FieldLabels)
+}
+
+// labelNonePredicate matches SQL NULL, JSON null, a non-array, or an empty array.
+// jsonb_array_length errors on non-arrays, so the length check stays inside CASE.
+func labelNonePredicate(sel *sql.Selector) *sql.Predicate {
+	col := labelsColumn(sel)
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString(fmt.Sprintf(
+			"(%s IS NULL OR CASE WHEN jsonb_typeof(%s) = 'array' THEN jsonb_array_length(%s) = 0 ELSE TRUE END)",
+			col, col, col,
+		))
+	})
+}
+
+// labelAnyPredicate matches a labels array with at least one element.
+func labelAnyPredicate(sel *sql.Selector) *sql.Predicate {
+	col := labelsColumn(sel)
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString(fmt.Sprintf(
+			"(CASE WHEN jsonb_typeof(%s) = 'array' THEN jsonb_array_length(%s) > 0 ELSE FALSE END)",
+			col, col,
+		))
+	})
+}
+
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
 // All aggregated statistics are computed via SQL subqueries in a single query to avoid N+1.
 func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params models.DashboardListParams) (*models.DashboardListResponse, error) {
@@ -1099,28 +1180,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.QualityRating != "" {
 		query = query.Where(alertsession.QualityRatingEQ(alertsession.QualityRating(params.QualityRating)))
 	}
-	if params.Label != "" {
-		payloads := make([]string, 0)
-		for label := range strings.SplitSeq(params.Label, ",") {
-			payload, err := json.Marshal([]string{label})
-			if err != nil {
-				return nil, fmt.Errorf("marshal label filter: %w", err)
-			}
-			payloads = append(payloads, string(payload))
-		}
-		query = query.Where(func(sel *sql.Selector) {
-			t := sel.TableName()
-			preds := make([]*sql.Predicate, 0, len(payloads))
-			for _, payload := range payloads {
-				p := payload
-				preds = append(preds, sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
-					b.Arg(p)
-					b.WriteString("::jsonb")
-				}))
-			}
-			sel.Where(sql.Or(preds...))
-		})
+	query, err := applyDashboardLabelFilter(query, params)
+	if err != nil {
+		return nil, err
 	}
 
 	// Count total (before pagination).
@@ -1129,8 +1191,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		return nil, fmt.Errorf("failed to count sessions: %w", err)
 	}
 
-	// Apply sorting. Duration and score sort use computed expressions; others use Ent helpers.
-	isComputedSort := params.SortBy == "duration" || params.SortBy == "score"
+	// Apply sorting. Duration, score, and completed_at use ORDER BY expressions
+	// (completed_at needs NULLS LAST). The others use Ent helpers.
+	isComputedSort := params.SortBy == "duration" || params.SortBy == "score" || params.SortBy == "completed_at"
 	if !isComputedSort {
 		orderFunc := ent.Desc(alertsession.FieldCreatedAt)
 		switch params.SortBy {
@@ -1309,6 +1372,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				dir = "ASC"
 			}
 			switch params.SortBy {
+			case "completed_at":
+				sel.OrderExpr(sql.Expr(fmt.Sprintf("completed_at %s NULLS LAST", dir)))
 			case "duration":
 				sel.OrderExpr(sql.Expr(fmt.Sprintf("(completed_at - started_at) %s NULLS LAST", dir)))
 			case "score":
