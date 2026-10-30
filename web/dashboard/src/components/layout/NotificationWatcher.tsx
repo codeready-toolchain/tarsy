@@ -61,7 +61,8 @@ export function NotificationWatcher() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let previousTotal: number | null = null;
     let baseline = true;
-    let requestVersion = 0;
+    let inFlight: Promise<void> | null = null;
+    let rerun = false;
     let unsubChannel = () => {};
     let unsubConn = () => {};
 
@@ -75,14 +76,12 @@ export function NotificationWatcher() {
       }
     };
 
-    const refresh = async () => {
-      const version = ++requestVersion;
+    const runRefresh = async () => {
       const isBaseline = baseline;
-      const current = () => !cancelled && version === requestVersion;
       try {
         const request = qualifierParams(labels);
+        if (cancelled) return;
         if (request.kind === 'empty') {
-          if (!current()) return;
           previousTotal = 0;
           baseline = false;
           applyCount(0);
@@ -90,7 +89,7 @@ export function NotificationWatcher() {
         }
 
         const first = await getSessions({ ...request.params, page: 1 });
-        if (!current()) return;
+        if (cancelled) return;
         let rows = first.sessions;
         const total = first.pagination.total_items;
         let page = 1;
@@ -106,7 +105,7 @@ export function NotificationWatcher() {
         })) {
           page += 1;
           const next = await getSessions({ ...request.params, page });
-          if (!current()) return;
+          if (cancelled) return;
           rows = rows.concat(next.sessions);
         }
 
@@ -136,6 +135,25 @@ export function NotificationWatcher() {
       } catch {
         // Keep the previous count and seen set until the next wake-up.
       }
+    };
+
+    const refresh = (): Promise<void> => {
+      if (cancelled) return Promise.resolve();
+      if (inFlight) {
+        rerun = true;
+        return inFlight;
+      }
+      const run = (async () => {
+        do {
+          rerun = false;
+          await runRefresh();
+        } while (rerun && !cancelled);
+      })();
+      inFlight = run.finally(() => {
+        inFlight = null;
+        if (rerun && !cancelled) void refresh();
+      });
+      return inFlight;
     };
 
     const schedule = () => {

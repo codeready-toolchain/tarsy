@@ -110,12 +110,10 @@ describe('NotificationWatcher', () => {
     expect(mockGetSessions).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the newer list when an older request finishes last', async () => {
+  it('keeps a successful list when the follow-up refresh fails', async () => {
     const slow = deferred<DashboardListResponse>();
-    mockGetSessions.mockImplementation(() => {
-      if (mockGetSessions.mock.calls.length === 1) return slow.promise;
-      return Promise.resolve(listWith(7));
-    });
+    mockGetSessions.mockImplementationOnce(() => slow.promise);
+    mockGetSessions.mockRejectedValueOnce(new Error('unavailable'));
 
     render(
       <MemoryRouter>
@@ -132,16 +130,17 @@ describe('NotificationWatcher', () => {
     act(() => {
       ws.handler?.({ type: EVENT_SESSION_STATUS, status: SESSION_STATUS.COMPLETED });
     });
-
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
-    expect(document.title).toBe('(7) TARSy');
+    expect(mockGetSessions).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      slow.resolve(listWith(1));
+      slow.resolve(listWith(4));
       await slow.promise;
     });
-    expect(document.title).toBe('(7) TARSy');
+
+    expect(mockGetSessions).toHaveBeenCalledTimes(2);
+    expect(document.title).toBe('(4) TARSy');
   });
 });
