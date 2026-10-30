@@ -1,0 +1,170 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { NotificationLabelField } from '../../components/settings/NotificationLabelField';
+import { NotificationMasterSwitch } from '../../components/layout/NotificationMasterSwitch';
+import { SettingsPage } from '../../pages/SettingsPage';
+import { NotificationSettingsProvider, useNotificationSettings } from '../../contexts/NotificationSettingsContext';
+import { PageHeaderProvider } from '../../contexts/PageHeaderContext';
+import { LABEL_ANY, LABEL_NONE, saveNotificationSettings } from '../../utils/notificationSettings';
+
+vi.mock('../../services/api.ts', () => ({
+  getSystemConfig: vi.fn().mockResolvedValue({
+    label_maps: {
+      builtin: { labels: [{ label: 'watch' }, { label: 'action' }, { label: 'noise' }] },
+    },
+  }),
+  getFilterOptions: vi.fn().mockResolvedValue({ labels: ['action', 'stored'] }),
+}));
+
+vi.mock('../../contexts/VersionContext.tsx', () => ({
+  useVersion: () => ({ backendVersion: 'test', backendStatus: 'ok' }),
+}));
+
+function renderSettings() {
+  return render(
+    <MemoryRouter>
+      <PageHeaderProvider>
+        <NotificationSettingsProvider>
+          <SettingsPage />
+        </NotificationSettingsProvider>
+      </PageHeaderProvider>
+    </MemoryRouter>,
+  );
+}
+
+describe('notification controls', () => {
+  afterEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not ask for notification permission on load', () => {
+    const requestPermission = vi.fn();
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission });
+    renderSettings();
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Allow notifications' })).toBeInTheDocument();
+  });
+
+  it('asks from the settings button and says when the browser is blocking toasts', async () => {
+    const user = userEvent.setup();
+    const requestPermission = vi.fn().mockResolvedValue('granted');
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission });
+    const { unmount } = renderSettings();
+
+    await user.click(screen.getByRole('button', { name: 'Allow notifications' }));
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(await screen.findByText('Desktop notifications are allowed.')).toBeInTheDocument();
+
+    unmount();
+    vi.stubGlobal('Notification', { permission: 'denied', requestPermission: vi.fn() });
+    renderSettings();
+    expect(screen.getByText('The browser is blocking toasts.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Allow notifications' })).not.toBeInTheDocument();
+  });
+
+  it('replaces names with Any label in the label field', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <NotificationLabelField
+        value={['ban', 'action']}
+        options={['action', 'ban', 'watch']}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Labels' }));
+    await user.click(screen.getByRole('option', { name: 'Any label' }));
+    expect(onChange).toHaveBeenCalledWith([LABEL_ANY]);
+  });
+
+  it('stacks No label with a name', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <NotificationLabelField value={['ban']} options={['ban']} onChange={onChange} />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Labels' }));
+    await user.click(screen.getByRole('option', { name: 'No label' }));
+    expect(onChange).toHaveBeenCalledWith(['ban', LABEL_NONE]);
+  });
+
+  it('commits a typed label and hides an invalid token', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <NotificationLabelField value={[LABEL_ANY, LABEL_NONE]} options={[]} onChange={onChange} />,
+    );
+
+    const input = screen.getByRole('combobox', { name: 'Labels' });
+    await user.type(input, '1bad');
+    expect(screen.queryByRole('option', { name: '1bad' })).not.toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, 'watch{Enter}');
+    expect(onChange).toHaveBeenCalledWith(['watch', LABEL_NONE]);
+  });
+
+  it('toggles the master switch without editing labels and shows the backlog count', async () => {
+    const user = userEvent.setup();
+    const requestPermission = vi.fn().mockResolvedValue('granted');
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission });
+    saveNotificationSettings({
+      master: false,
+      tabCounter: true,
+      desktop: true,
+      labels: ['ban'],
+    });
+
+    function Harness() {
+      const { setBacklogCount } = useNotificationSettings();
+      return (
+        <>
+          <button type="button" onClick={() => setBacklogCount(12)}>set count</button>
+          <NotificationMasterSwitch />
+        </>
+      );
+    }
+
+    render(
+      <NotificationSettingsProvider>
+        <Harness />
+      </NotificationSettingsProvider>,
+    );
+
+    expect(requestPermission).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Review notifications off' }));
+    expect(requestPermission).toHaveBeenCalledOnce();
+
+    const saved = JSON.parse(localStorage.getItem('tarsy-notification-settings') ?? '{}') as { labels: string[]; master: boolean };
+    expect(saved.master).toBe(true);
+    expect(saved.labels).toEqual(['ban']);
+
+    await user.click(screen.getByRole('button', { name: 'set count' }));
+    expect(screen.getByRole('button', { name: 'Review notifications on, 12 waiting' })).toHaveTextContent('12');
+  });
+
+  it('does not ask for permission when desktop notifications are off', async () => {
+    const user = userEvent.setup();
+    const requestPermission = vi.fn();
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission });
+    saveNotificationSettings({
+      master: false,
+      tabCounter: true,
+      desktop: false,
+      labels: ['ban', 'action'],
+    });
+
+    render(
+      <NotificationSettingsProvider>
+        <NotificationMasterSwitch />
+      </NotificationSettingsProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Review notifications off' }));
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+});

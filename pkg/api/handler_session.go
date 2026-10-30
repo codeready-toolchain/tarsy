@@ -63,10 +63,10 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 	// Parse sorting.
 	if v := c.QueryParam("sort_by"); v != "" {
 		switch v {
-		case "created_at", "status", "alert_type", "author", "duration", "score", "quality_rating":
+		case "created_at", "completed_at", "status", "alert_type", "author", "duration", "score", "quality_rating":
 			params.SortBy = v
 		default:
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, status, alert_type, author, duration, score, or quality_rating")
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort_by: must be created_at, completed_at, status, alert_type, author, duration, score, or quality_rating")
 		}
 	}
 	if v := c.QueryParam("sort_order"); v != "" {
@@ -106,6 +106,23 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 			}
 		}
 		params.Label = v
+	}
+	if v := c.QueryParam("label_scope"); v != "" {
+		scope, err := models.ParseLabelScope(v)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid label_scope: must be any, none, or names_or_none")
+		}
+		switch scope {
+		case models.LabelScopeAny, models.LabelScopeNone:
+			if params.Label != "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid label_scope: label must be empty")
+			}
+		case models.LabelScopeNamesOrNone:
+			if params.Label == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid label_scope: label is required")
+			}
+		}
+		params.LabelScope = scope
 	}
 	if v := c.QueryParam("search"); v != "" {
 		if len(v) < 3 {

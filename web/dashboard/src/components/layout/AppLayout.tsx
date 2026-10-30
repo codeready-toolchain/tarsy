@@ -2,8 +2,10 @@ import { Outlet } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import { NavDrawerProvider } from '../../contexts/NavDrawerContext.tsx';
 import { PageHeaderProvider } from '../../contexts/PageHeaderContext.tsx';
+import { NotificationSettingsProvider } from '../../contexts/NotificationSettingsContext.tsx';
 import { SharedHeader } from './SharedHeader.tsx';
 import { NavigationDrawer } from './NavigationDrawer.tsx';
+import { NotificationWatcher } from './NotificationWatcher.tsx';
 
 /**
  * App shell — OpenShift-style layout: one header spanning the full width
@@ -16,6 +18,7 @@ import { NavigationDrawer } from './NavigationDrawer.tsx';
 function AppLayoutShell() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <NotificationWatcher />
       <SharedHeader />
       <Box sx={{ display: 'flex', flexGrow: 1 }}>
         <NavigationDrawer />
@@ -31,7 +34,9 @@ export function AppLayout() {
   return (
     <NavDrawerProvider>
       <PageHeaderProvider>
-        <AppLayoutShell />
+        <NotificationSettingsProvider>
+          <AppLayoutShell />
+        </NotificationSettingsProvider>
       </PageHeaderProvider>
     </NavDrawerProvider>
   );

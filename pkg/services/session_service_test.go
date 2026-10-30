@@ -3278,6 +3278,176 @@ func TestSessionService_ListSessionsForDashboard_LabelFilter(t *testing.T) {
 	})
 }
 
+func TestSessionService_ListSessionsForDashboard_LabelScope(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := t.Context()
+
+	idPage := seedDashboardSession(t, client.Client, "page-only", "pod-crash", "k8s-analysis", 10, 5, 15, 0)
+	idWatch := seedDashboardSession(t, client.Client, "watch-only", "oom-kill", "k8s-analysis", 20, 10, 30, 0)
+	idEmpty := seedDashboardSession(t, client.Client, "empty-labels", "pod-crash", "k8s-analysis", 30, 15, 45, 0)
+	idNull := seedDashboardSession(t, client.Client, "null-labels", "pod-crash", "k8s-analysis", 40, 20, 60, 0)
+	idFailed := seedDashboardSession(t, client.Client, "failed-page", "pod-crash", "k8s-analysis", 50, 25, 75, 0)
+	idReviewed := seedDashboardSession(t, client.Client, "reviewed-page", "pod-crash", "k8s-analysis", 60, 30, 90, 0)
+
+	needsReview := alertsession.ReviewStatusNeedsReview
+	reviewed := alertsession.ReviewStatusReviewed
+	client.AlertSession.UpdateOneID(idPage).SetLabels([]string{"page"}).SetReviewStatus(needsReview).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idWatch).SetLabels([]string{"watch"}).SetReviewStatus(needsReview).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idEmpty).SetLabels([]string{}).SetReviewStatus(needsReview).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idNull).SetReviewStatus(needsReview).ExecX(ctx)
+	client.AlertSession.UpdateOneID(idFailed).
+		SetLabels([]string{"page"}).
+		SetStatus(alertsession.StatusFailed).
+		SetReviewStatus(needsReview).
+		ExecX(ctx)
+	client.AlertSession.UpdateOneID(idReviewed).
+		SetLabels([]string{"page"}).
+		SetReviewStatus(reviewed).
+		ExecX(ctx)
+
+	base := models.DashboardListParams{Page: 1, PageSize: 25, SortBy: "created_at", SortOrder: "desc"}
+
+	idsOf := func(t *testing.T, result *models.DashboardListResponse) map[string]bool {
+		t.Helper()
+		ids := make(map[string]bool, len(result.Sessions))
+		for _, s := range result.Sessions {
+			ids[s.ID] = true
+		}
+		return ids
+	}
+
+	t.Run("none matches null and empty", func(t *testing.T) {
+		params := base
+		params.LabelScope = models.LabelScopeNone
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		ids := idsOf(t, result)
+		assert.Equal(t, map[string]bool{idEmpty: true, idNull: true}, ids)
+		assert.Equal(t, 2, result.Pagination.TotalItems)
+	})
+
+	t.Run("any matches non-empty labels", func(t *testing.T) {
+		params := base
+		params.LabelScope = models.LabelScopeAny
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		ids := idsOf(t, result)
+		assert.Equal(t, map[string]bool{idPage: true, idWatch: true, idFailed: true, idReviewed: true}, ids)
+		assert.Equal(t, 4, result.Pagination.TotalItems)
+	})
+
+	t.Run("names or none includes unlabeled", func(t *testing.T) {
+		params := base
+		params.Label = "page"
+		params.LabelScope = models.LabelScopeNamesOrNone
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		ids := idsOf(t, result)
+		assert.Equal(t, map[string]bool{idPage: true, idEmpty: true, idNull: true, idFailed: true, idReviewed: true}, ids)
+		assert.False(t, ids[idWatch])
+		assert.Equal(t, 5, result.Pagination.TotalItems)
+	})
+
+	t.Run("label without scope still excludes unlabeled", func(t *testing.T) {
+		params := base
+		params.Label = "page"
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		ids := idsOf(t, result)
+		assert.Equal(t, map[string]bool{idPage: true, idFailed: true, idReviewed: true}, ids)
+		assert.False(t, ids[idEmpty])
+		assert.False(t, ids[idNull])
+	})
+
+	t.Run("completed needs_review and label", func(t *testing.T) {
+		params := base
+		params.Status = string(alertsession.StatusCompleted)
+		params.ReviewStatus = string(alertsession.ReviewStatusNeedsReview)
+		params.Label = "page"
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, idPage, result.Sessions[0].ID)
+		assert.Equal(t, 1, result.Pagination.TotalItems)
+	})
+
+	t.Run("any total counts past the page", func(t *testing.T) {
+		params := base
+		params.LabelScope = models.LabelScopeAny
+		params.PageSize = 1
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, result.Sessions, 1)
+		assert.Equal(t, 4, result.Pagination.TotalItems)
+	})
+
+	t.Run("completed needs_review and none", func(t *testing.T) {
+		params := base
+		params.Status = string(alertsession.StatusCompleted)
+		params.ReviewStatus = string(alertsession.ReviewStatusNeedsReview)
+		params.LabelScope = models.LabelScopeNone
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]bool{idEmpty: true, idNull: true}, idsOf(t, result))
+		assert.Equal(t, 2, result.Pagination.TotalItems)
+	})
+
+	t.Run("completed_at desc puts the newest first and nulls last", func(t *testing.T) {
+		client.AlertSession.UpdateOneID(idWatch).SetCompletedAt(time.Now().Add(time.Hour)).ExecX(ctx)
+		client.AlertSession.UpdateOneID(idNull).ClearCompletedAt().ExecX(ctx)
+		params := base
+		params.SortBy = "completed_at"
+		params.SortOrder = "desc"
+		params.PageSize = 100
+		result, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		require.NotEmpty(t, result.Sessions)
+		assert.Equal(t, idWatch, result.Sessions[0].ID)
+		assert.Equal(t, idNull, result.Sessions[len(result.Sessions)-1].ID)
+	})
+
+	t.Run("json null and non-array stay unlabeled", func(t *testing.T) {
+		const alertType = "label-shape"
+		idArray := seedDashboardSession(t, client.Client, "array", alertType, "k8s-analysis", 10, 5, 15, 0)
+		idShapeEmpty := seedDashboardSession(t, client.Client, "shape-empty", alertType, "k8s-analysis", 10, 5, 15, 0)
+		idJSONNull := seedDashboardSession(t, client.Client, "json-null", alertType, "k8s-analysis", 10, 5, 15, 0)
+		idObject := seedDashboardSession(t, client.Client, "object", alertType, "k8s-analysis", 10, 5, 15, 0)
+		idScalar := seedDashboardSession(t, client.Client, "scalar", alertType, "k8s-analysis", 10, 5, 15, 0)
+		idDeleted := seedDashboardSession(t, client.Client, "deleted", alertType, "k8s-analysis", 10, 5, 15, 0)
+
+		client.AlertSession.UpdateOneID(idArray).SetLabels([]string{"page"}).ExecX(ctx)
+		client.AlertSession.UpdateOneID(idShapeEmpty).SetLabels([]string{}).ExecX(ctx)
+		client.AlertSession.UpdateOneID(idDeleted).SetLabels([]string{}).SetDeletedAt(time.Now()).ExecX(ctx)
+		setRawLabels := func(t *testing.T, id, raw string) {
+			t.Helper()
+			_, err := client.DB().ExecContext(ctx,
+				"UPDATE "+alertsession.Table+" SET "+alertsession.FieldLabels+" = $1::jsonb WHERE "+alertsession.FieldID+" = $2",
+				raw, id)
+			require.NoError(t, err)
+		}
+		setRawLabels(t, idJSONNull, "null")
+		setRawLabels(t, idObject, `{"nested":true}`)
+		setRawLabels(t, idScalar, `"page"`)
+
+		params := base
+		params.AlertType = alertType
+		params.LabelScope = models.LabelScopeNone
+		none, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]bool{
+			idShapeEmpty: true, idJSONNull: true, idObject: true, idScalar: true,
+		}, idsOf(t, none))
+		assert.Equal(t, 4, none.Pagination.TotalItems)
+
+		params.LabelScope = models.LabelScopeAny
+		labeled, err := service.ListSessionsForDashboard(ctx, params)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]bool{idArray: true}, idsOf(t, labeled))
+		assert.Equal(t, 1, labeled.Pagination.TotalItems)
+	})
+}
+
 func TestUnmarshalLabels(t *testing.T) {
 	tests := []struct {
 		name string

@@ -14,6 +14,7 @@ import { SubmitAlertPage } from './pages/SubmitAlertPage.tsx';
 import { SystemStatusPage } from './pages/SystemStatusPage.tsx';
 import { ScoringPage } from './pages/ScoringPage.tsx';
 import { UsagePage } from './pages/UsagePage.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 
 const router = createBrowserRouter([
@@ -57,6 +58,10 @@ const router = createBrowserRouter([
       {
         path: '/usage',
         element: <UsagePage />,
+      },
+      {
+        path: '/settings',
+        element: <SettingsPage />,
       },
       {
         path: '*',

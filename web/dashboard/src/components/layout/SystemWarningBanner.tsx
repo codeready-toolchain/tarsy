@@ -26,7 +26,9 @@ export function SystemWarningBanner() {
     const fetchWarnings = async () => {
       try {
         const data = await getSystemWarnings();
-        setWarnings(data.warnings);
+        if (Array.isArray(data.warnings)) {
+          setWarnings(data.warnings);
+        }
       } catch {
         // Don't show error to user — warnings are non-critical
       }
