@@ -104,6 +104,26 @@ describe('notification controls', () => {
     expect(screen.queryByRole('button', { name: 'Allow notifications' })).not.toBeInTheDocument();
   });
 
+  it('shows both signals paused while the header switch is off', () => {
+    saveNotificationSettings({
+      master: false,
+      tabCounter: true,
+      desktop: true,
+      labels: ['ban', 'action'],
+    });
+    renderSettings();
+
+    expect(screen.getByRole('switch', { name: 'Tab counter' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Tab counter' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Desktop notifications' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Desktop notifications' })).toBeDisabled();
+    expect(screen.getByText(/The header switch is off, so both signals are paused/)).toBeInTheDocument();
+
+    const saved = JSON.parse(localStorage.getItem('tarsy-notification-settings') ?? '{}') as { tabCounter: boolean; desktop: boolean };
+    expect(saved.tabCounter).toBe(true);
+    expect(saved.desktop).toBe(true);
+  });
+
   it('resets the switches and labels to the defaults', async () => {
     const user = userEvent.setup();
     saveNotificationSettings({
@@ -189,6 +209,7 @@ describe('notification controls', () => {
       return (
         <>
           <button type="button" onClick={() => setBacklogCount(12)}>set count</button>
+          <button type="button" onClick={() => setBacklogCount(0)}>clear count</button>
           <NotificationMasterSwitch />
         </>
       );
@@ -210,6 +231,10 @@ describe('notification controls', () => {
 
     await user.click(screen.getByRole('button', { name: 'set count' }));
     expect(screen.getByRole('button', { name: 'Review notifications on, 12 waiting' })).toHaveTextContent('12');
+
+    await user.click(screen.getByRole('button', { name: 'clear count' }));
+    const cleared = screen.getByRole('button', { name: 'Review notifications on' });
+    expect(cleared).not.toHaveTextContent('0');
   });
 
   it('does not ask for permission when desktop notifications are off', async () => {

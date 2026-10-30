@@ -5,9 +5,15 @@
 
 export const APP_TITLE = 'TARSy';
 
+function shownCount(count: number | null): number | null {
+  if (count == null || count <= 0) return null;
+  return count;
+}
+
 export function tabTitle(count: number | null): string {
-  if (count == null) return APP_TITLE;
-  return `(${count}) ${APP_TITLE}`;
+  const shown = shownCount(count);
+  if (shown == null) return APP_TITLE;
+  return `(${shown}) ${APP_TITLE}`;
 }
 
 export function faviconBadgeText(count: number): string {
@@ -67,9 +73,10 @@ function drawBadge(ctx: CanvasRenderingContext2D, text: string): void {
 }
 
 export function applyTabIndicator(count: number | null): void {
-  document.title = tabTitle(count);
+  const shown = shownCount(count);
+  document.title = tabTitle(shown);
   const link = iconLink();
-  if (count == null) {
+  if (shown == null) {
     drawToken += 1;
     if (originalHref) link.href = originalHref;
     return;
@@ -84,7 +91,7 @@ export function applyTabIndicator(count: number | null): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(img, 0, 0, 32, 32);
-    drawBadge(ctx, faviconBadgeText(count));
+    drawBadge(ctx, faviconBadgeText(shown));
     link.href = canvas.toDataURL('image/png');
   }).catch(() => {
     // The title still carries the count when the icon cannot be drawn.

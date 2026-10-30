@@ -130,6 +130,7 @@ export function SettingsPage() {
   }, []);
 
   const options = mergeLabelSuggestions(suggestions, [], settings.labels);
+  const paused = !settings.master;
 
   return (
     <Box sx={{ backgroundColor: 'background.default' }}>
@@ -138,22 +139,25 @@ export function SettingsPage() {
           Review notifications
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Completed sessions that still need review. The header switch turns both signals on or off without changing this.
+          Completed sessions that still need review.
+          {paused && ' The header switch is off, so both signals are paused.'}
         </Typography>
         <Stack spacing={2} sx={{ maxWidth: 480 }}>
           <FormControlLabel
+            disabled={paused}
             control={(
               <Switch
-                checked={settings.tabCounter}
+                checked={!paused && settings.tabCounter}
                 onChange={(_, checked) => updateSettings({ tabCounter: checked })}
               />
             )}
             label="Tab counter"
           />
           <FormControlLabel
+            disabled={paused}
             control={(
               <Switch
-                checked={settings.desktop}
+                checked={!paused && settings.desktop}
                 onChange={(_, checked) => updateSettings({ desktop: checked })}
               />
             )}

@@ -91,7 +91,7 @@ describe('notification decision', () => {
 
   it('shows the real total in the title and 99+ on the icon', () => {
     expect(tabTitle(null)).toBe('TARSy');
-    expect(tabTitle(0)).toBe('(0) TARSy');
+    expect(tabTitle(0)).toBe('TARSy');
     expect(tabTitle(120)).toBe('(120) TARSy');
     expect(faviconBadgeText(99)).toBe('99');
     expect(faviconBadgeText(100)).toBe('99+');

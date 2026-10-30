@@ -22,8 +22,9 @@ export function NotificationMasterSwitch() {
     }
   };
 
+  const shownCount = backlogCount != null && backlogCount > 0 ? backlogCount : null;
   const label = settings.master
-    ? `Review notifications on${backlogCount != null ? `, ${backlogCount} waiting` : ''}`
+    ? `Review notifications on${shownCount != null ? `, ${shownCount} waiting` : ''}`
     : 'Review notifications off';
 
   return (
@@ -39,16 +40,16 @@ export function NotificationMasterSwitch() {
           ...themeToggleSx,
           width: 'auto',
           minWidth: 40,
-          px: backlogCount == null ? 0 : 1,
+          px: shownCount == null ? 0 : 1,
           gap: 0.5,
         }}
       >
         {settings.master
           ? <NotificationsIcon fontSize="small" />
           : <NotificationsOffIcon fontSize="small" />}
-        {backlogCount != null && (
+        {shownCount != null && (
           <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, lineHeight: 1 }}>
-            {backlogCount}
+            {shownCount}
           </Box>
         )}
       </IconButton>
