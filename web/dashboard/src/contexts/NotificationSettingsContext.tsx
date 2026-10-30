@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  defaultNotificationSettings,
   loadNotificationSettings,
   NOTIFICATION_SETTINGS_KEY,
   saveNotificationSettings,
@@ -10,6 +11,7 @@ interface NotificationSettingsContextValue {
   settings: NotificationSettings;
   setMaster: (on: boolean) => void;
   updateSettings: (patch: Partial<Omit<NotificationSettings, 'master'>>) => void;
+  resetSettings: () => void;
   backlogCount: number | null;
   setBacklogCount: (count: number | null) => void;
 }
@@ -37,6 +39,12 @@ export function NotificationSettingsProvider({ children }: { children: ReactNode
     });
   }, []);
 
+  const resetSettings = useCallback(() => {
+    const next = defaultNotificationSettings();
+    saveNotificationSettings(next);
+    setSettings(next);
+  }, []);
+
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== NOTIFICATION_SETTINGS_KEY) return;
@@ -47,8 +55,8 @@ export function NotificationSettingsProvider({ children }: { children: ReactNode
   }, []);
 
   const value = useMemo(
-    () => ({ settings, setMaster, updateSettings, backlogCount, setBacklogCount }),
-    [settings, setMaster, updateSettings, backlogCount],
+    () => ({ settings, setMaster, updateSettings, resetSettings, backlogCount, setBacklogCount }),
+    [settings, setMaster, updateSettings, resetSettings, backlogCount],
   );
 
   return (

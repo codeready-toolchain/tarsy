@@ -5,6 +5,7 @@ import { PageHeaderProvider } from '../../contexts/PageHeaderContext.tsx';
 import { NotificationSettingsProvider } from '../../contexts/NotificationSettingsContext.tsx';
 import { SharedHeader } from './SharedHeader.tsx';
 import { NavigationDrawer } from './NavigationDrawer.tsx';
+import { NotificationPermissionPrompt } from './NotificationPermissionPrompt.tsx';
 import { NotificationWatcher } from './NotificationWatcher.tsx';
 
 /**
@@ -18,6 +19,7 @@ import { NotificationWatcher } from './NotificationWatcher.tsx';
 function AppLayoutShell() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <NotificationPermissionPrompt />
       <NotificationWatcher />
       <SharedHeader />
       <Box sx={{ display: 'flex', flexGrow: 1 }}>

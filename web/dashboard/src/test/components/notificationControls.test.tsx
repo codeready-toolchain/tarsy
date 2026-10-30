@@ -3,10 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NotificationLabelField } from '../../components/settings/NotificationLabelField';
 import { NotificationMasterSwitch } from '../../components/layout/NotificationMasterSwitch';
+import { NotificationPermissionPrompt } from '../../components/layout/NotificationPermissionPrompt';
 import { SettingsPage } from '../../pages/SettingsPage';
 import { NotificationSettingsProvider, useNotificationSettings } from '../../contexts/NotificationSettingsContext';
 import { PageHeaderProvider } from '../../contexts/PageHeaderContext';
-import { LABEL_ANY, LABEL_NONE, saveNotificationSettings } from '../../utils/notificationSettings';
+import { defaultNotificationSettings, LABEL_ANY, LABEL_NONE, saveNotificationSettings } from '../../utils/notificationSettings';
 
 vi.mock('../../services/api.ts', () => ({
   getSystemConfig: vi.fn().mockResolvedValue({
@@ -39,7 +40,46 @@ describe('notification controls', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not ask for notification permission on load', () => {
+  it('asks for notification permission when the dashboard opens', () => {
+    const requestPermission = vi.fn().mockResolvedValue('default');
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission });
+    render(
+      <NotificationSettingsProvider>
+        <NotificationPermissionPrompt />
+      </NotificationSettingsProvider>,
+    );
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it('does not ask when the browser has already been answered', () => {
+    const requestPermission = vi.fn();
+    vi.stubGlobal('Notification', { permission: 'granted', requestPermission });
+    render(
+      <NotificationSettingsProvider>
+        <NotificationPermissionPrompt />
+      </NotificationSettingsProvider>,
+    );
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('does not ask on open when desktop notifications are off', () => {
+    const requestPermission = vi.fn();
+    vi.stubGlobal('Notification', { permission: 'default', requestPermission });
+    saveNotificationSettings({
+      master: true,
+      tabCounter: true,
+      desktop: false,
+      labels: ['ban', 'action'],
+    });
+    render(
+      <NotificationSettingsProvider>
+        <NotificationPermissionPrompt />
+      </NotificationSettingsProvider>,
+    );
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for notification permission from the settings page itself', () => {
     const requestPermission = vi.fn();
     vi.stubGlobal('Notification', { permission: 'default', requestPermission });
     renderSettings();
@@ -62,6 +102,31 @@ describe('notification controls', () => {
     renderSettings();
     expect(screen.getByText('The browser is blocking toasts.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Allow notifications' })).not.toBeInTheDocument();
+  });
+
+  it('resets the switches and labels to the defaults', async () => {
+    const user = userEvent.setup();
+    saveNotificationSettings({
+      master: false,
+      tabCounter: false,
+      desktop: false,
+      labels: ['watch'],
+    });
+    renderSettings();
+
+    expect(screen.getByRole('switch', { name: 'Tab counter' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Desktop notifications' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'watch' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reset to defaults' }));
+
+    expect(screen.getByRole('switch', { name: 'Tab counter' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Desktop notifications' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'ban' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'action' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'watch' })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('tarsy-notification-settings') ?? '{}')).toEqual(defaultNotificationSettings());
+    expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeDisabled();
   });
 
   it('replaces names with Any label in the label field', async () => {

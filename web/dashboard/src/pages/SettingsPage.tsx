@@ -2,7 +2,10 @@
  * Review-notification settings. Reachable with or without login.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import CancelIcon from '@mui/icons-material/Cancel';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -16,12 +19,33 @@ import { VersionFooter } from '../components/layout/VersionFooter.tsx';
 import { FloatingSubmitAlertFab } from '../components/common/FloatingSubmitAlertFab.tsx';
 import { NotificationLabelField } from '../components/settings/NotificationLabelField.tsx';
 import { getFilterOptions, getSystemConfig } from '../services/api.ts';
-import { mergeLabelSuggestions } from '../utils/notificationSettings.ts';
+import {
+  defaultNotificationSettings,
+  mergeLabelSuggestions,
+  type NotificationSettings,
+} from '../utils/notificationSettings.ts';
 import {
   notificationPermission,
   requestNotificationPermission,
   type BrowserNotificationPermission,
 } from '../utils/notificationPermission.ts';
+
+function sameSettings(left: NotificationSettings, right: NotificationSettings): boolean {
+  return left.master === right.master
+    && left.tabCounter === right.tabCounter
+    && left.desktop === right.desktop
+    && left.labels.length === right.labels.length
+    && left.labels.every((label, index) => label === right.labels[index]);
+}
+
+function PermissionNote({ icon, children }: { icon: ReactNode; children: string }) {
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', pl: 1.5 }}>
+      {icon}
+      <Typography variant="body2" color="text.secondary">{children}</Typography>
+    </Stack>
+  );
+}
 
 function PermissionStatus({
   permission,
@@ -39,16 +63,16 @@ function PermissionStatus({
   }
   if (permission === 'denied') {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <PermissionNote icon={<CancelIcon sx={{ fontSize: 16, color: 'error.main' }} />}>
         The browser is blocking toasts.
-      </Typography>
+      </PermissionNote>
     );
   }
   if (permission === 'granted') {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <PermissionNote icon={<CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />}>
         Desktop notifications are allowed.
-      </Typography>
+      </PermissionNote>
     );
   }
   return (
@@ -60,9 +84,29 @@ function PermissionStatus({
 
 export function SettingsPage() {
   usePageHeader({ title: 'Settings' });
-  const { settings, updateSettings } = useNotificationSettings();
+  const { settings, updateSettings, resetSettings } = useNotificationSettings();
   const [permission, setPermission] = useState(notificationPermission);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    const permissions = navigator.permissions;
+    if (!permissions?.query) return;
+    let status: globalThis.PermissionStatus | undefined;
+    let cancelled = false;
+    void permissions.query({ name: 'notifications' }).then((result) => {
+      if (cancelled) return;
+      status = result;
+      result.onchange = () => {
+        setPermission(notificationPermission());
+      };
+    }).catch(() => {
+      // This browser does not expose notification permission changes.
+    });
+    return () => {
+      cancelled = true;
+      if (status) status.onchange = null;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,12 +164,29 @@ export function SettingsPage() {
             options={options}
             onChange={(labels) => updateSettings({ labels })}
           />
-          <PermissionStatus
-            permission={permission}
-            onAllow={() => {
-              void requestNotificationPermission().then(setPermission);
-            }}
-          />
+          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+            <PermissionStatus
+              permission={permission}
+              onAllow={() => {
+                void requestNotificationPermission().then(setPermission);
+              }}
+            />
+            <Button
+              size="small"
+              startIcon={<RestartAltIcon sx={{ fontSize: 16 }} />}
+              onClick={resetSettings}
+              disabled={sameSettings(settings, defaultNotificationSettings())}
+              sx={{
+                textTransform: 'none',
+                minWidth: 0,
+                p: (theme) => theme.spacing(0.5, 0, 0.5, 1.5),
+                '& .MuiButton-startIcon': { ml: 0, mr: 1 },
+                '& .MuiButton-startIcon > *:nth-of-type(1)': { fontSize: 16 },
+              }}
+            >
+              Reset to defaults
+            </Button>
+          </Stack>
         </Stack>
         <VersionFooter />
       </Container>

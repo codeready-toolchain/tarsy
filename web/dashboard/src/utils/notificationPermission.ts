@@ -1,5 +1,7 @@
 /**
- * Page Notification permission. Loading the app never calls requestPermission.
+ * Page Notification permission. The app shell asks while desktop notifications
+ * are on and the browser has not been asked yet. Settings and the header
+ * switch can ask too.
  */
 
 import type { BrowserNotificationPermission, ToastCandidate } from './notificationDecision.ts';
