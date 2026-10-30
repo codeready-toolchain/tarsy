@@ -10,9 +10,11 @@ import { SESSION_STATUS } from '../constants/sessionStatus.ts';
 export const NOTIFICATION_SETTINGS_KEY = 'tarsy-notification-settings';
 export const NOTIFICATION_SEEN_KEY = 'tarsy-notification-seen';
 
-/** Not a valid label token, so it cannot collide with a stored name. */
+/** Every qualifying session, labeled or not. Not a valid label token. */
+export const LABEL_ALL = '__all__';
+/** The session has a label, whatever the name. Not a valid label token. */
 export const LABEL_ANY = '__any__';
-/** Not a valid label token, so it cannot collide with a stored name. */
+/** The session has no labels. Not a valid label token. */
 export const LABEL_NONE = '__none__';
 
 export const LABEL_TOKEN_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
@@ -42,10 +44,15 @@ export function defaultNotificationSettings(): NotificationSettings {
 export function normalizeLabelSelection(labels: readonly string[]): string[] {
   const names: string[] = [];
   const seen = new Set<string>();
+  let all = false;
   let any = false;
   let none = false;
   for (const raw of labels) {
     const token = raw.trim();
+    if (token === LABEL_ALL) {
+      all = true;
+      continue;
+    }
     if (token === LABEL_ANY) {
       any = true;
       continue;
@@ -58,10 +65,9 @@ export function normalizeLabelSelection(labels: readonly string[]): string[] {
     seen.add(token);
     names.push(token);
   }
-  // Any label already covers every name, so a stored mix keeps Any label.
-  if (any) {
-    return none ? [LABEL_ANY, LABEL_NONE] : [LABEL_ANY];
-  }
+  // Any label already covers every name. Any label together with No label is every session.
+  if (all || (any && none)) return [LABEL_ALL];
+  if (any) return [LABEL_ANY];
   return none ? [...names, LABEL_NONE] : names;
 }
 
@@ -70,7 +76,7 @@ function uniqueSelection(labels: readonly string[]): string[] {
   const seen = new Set<string>();
   for (const raw of labels) {
     const token = raw.trim();
-    if (token !== LABEL_ANY && token !== LABEL_NONE && !isLabelName(token)) continue;
+    if (token !== LABEL_ALL && token !== LABEL_ANY && token !== LABEL_NONE && !isLabelName(token)) continue;
     if (seen.has(token)) continue;
     seen.add(token);
     out.push(token);
@@ -79,26 +85,37 @@ function uniqueSelection(labels: readonly string[]): string[] {
 }
 
 /**
- * Apply a multi-select change. Any label and specific names replace each other.
- * No label stacks with either. An empty selection stays empty.
+ * Apply a multi-select change. All sessions replaces every other chip.
+ * Any label and specific names replace each other. No label stacks with either.
+ * Any label together with No label becomes All sessions. An empty selection stays empty.
  */
 export function applyLabelSelection(previous: readonly string[], next: readonly string[]): string[] {
+  const prevAll = previous.includes(LABEL_ALL);
   const prevAny = previous.includes(LABEL_ANY);
   const tokens = uniqueSelection(next);
-  const nextAny = tokens.includes(LABEL_ANY);
-  const nextNone = tokens.includes(LABEL_NONE);
-  const nextNames = tokens.filter((token) => token !== LABEL_ANY && token !== LABEL_NONE);
+  const pickedAll = tokens.includes(LABEL_ALL);
+  const pickedAny = tokens.includes(LABEL_ANY);
+  const pickedNone = tokens.includes(LABEL_NONE);
+  const pickedNames = tokens.filter((token) => token !== LABEL_ALL && token !== LABEL_ANY && token !== LABEL_NONE);
 
-  if (nextAny && !prevAny) {
-    return nextNone ? [LABEL_ANY, LABEL_NONE] : [LABEL_ANY];
+  if (pickedAll && !prevAll) return [LABEL_ALL];
+
+  let any = pickedAny;
+  const none = pickedNone;
+  let names = pickedNames;
+  if (prevAll) {
+    if (!any && !none && names.length === 0) return [LABEL_ALL];
+  } else if (any && !prevAny) {
+    names = [];
+  } else if (prevAny && names.some((name) => !previous.includes(name))) {
+    any = false;
+  } else if (any) {
+    names = [];
   }
-  if (prevAny && nextNames.some((name) => !previous.includes(name))) {
-    return nextNone ? [...nextNames, LABEL_NONE] : nextNames;
-  }
-  if (nextAny) {
-    return nextNone ? [LABEL_ANY, LABEL_NONE] : [LABEL_ANY];
-  }
-  return nextNone ? [...nextNames, LABEL_NONE] : nextNames;
+
+  if (any && none) return [LABEL_ALL];
+  if (any) return [LABEL_ANY];
+  return none ? [...names, LABEL_NONE] : names;
 }
 
 export function mergeLabelSuggestions(
@@ -204,10 +221,11 @@ export type QualifierRequest =
 /** Map the label field onto the session list. An empty field matches nothing. */
 export function qualifierParams(labels: readonly string[], page = 1): QualifierRequest {
   const normalized = normalizeLabelSelection(labels);
-  const names = normalized.filter((token) => token !== LABEL_ANY && token !== LABEL_NONE);
+  const names = normalized.filter((token) => token !== LABEL_ALL && token !== LABEL_ANY && token !== LABEL_NONE);
+  const all = normalized.includes(LABEL_ALL);
   const any = normalized.includes(LABEL_ANY);
   const none = normalized.includes(LABEL_NONE);
-  if (!any && !none && names.length === 0) return { kind: 'empty' };
+  if (!all && !any && !none && names.length === 0) return { kind: 'empty' };
 
   const params: DashboardListParams = {
     status: SESSION_STATUS.COMPLETED,
@@ -217,7 +235,7 @@ export function qualifierParams(labels: readonly string[], page = 1): QualifierR
     sort_by: 'completed_at',
     sort_order: 'desc',
   };
-  if (any && none) return { kind: 'query', params };
+  if (all) return { kind: 'query', params };
   if (any) return { kind: 'query', params: { ...params, label_scope: 'any' } };
   if (none && names.length === 0) return { kind: 'query', params: { ...params, label_scope: 'none' } };
   if (none) {

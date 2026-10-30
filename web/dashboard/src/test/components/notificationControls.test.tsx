@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { NotificationLabelField } from '../../components/settings/NotificationLabelField';
@@ -7,7 +7,7 @@ import { NotificationPermissionPrompt } from '../../components/layout/Notificati
 import { SettingsPage } from '../../pages/SettingsPage';
 import { NotificationSettingsProvider, useNotificationSettings } from '../../contexts/NotificationSettingsContext';
 import { PageHeaderProvider } from '../../contexts/PageHeaderContext';
-import { defaultNotificationSettings, LABEL_ANY, LABEL_NONE, saveNotificationSettings } from '../../utils/notificationSettings';
+import { defaultNotificationSettings, LABEL_ALL, LABEL_ANY, LABEL_NONE, saveNotificationSettings } from '../../utils/notificationSettings';
 
 vi.mock('../../services/api.ts', () => ({
   getSystemConfig: vi.fn().mockResolvedValue({
@@ -163,6 +163,34 @@ describe('notification controls', () => {
     await user.click(screen.getByRole('combobox', { name: 'Labels' }));
     await user.click(screen.getByRole('option', { name: 'Any label' }));
     expect(onChange).toHaveBeenCalledWith([LABEL_ANY]);
+  });
+
+  it('replaces the selection with All sessions', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <NotificationLabelField value={['ban', 'action']} options={['action', 'ban']} onChange={onChange} />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Labels' }));
+    await user.click(screen.getByRole('option', { name: 'All sessions' }));
+    expect(onChange).toHaveBeenCalledWith([LABEL_ALL]);
+  });
+
+  it('selects All sessions from the clear button and leaves a removed chip empty', async () => {
+    const user = userEvent.setup();
+    const onClear = vi.fn();
+    const { rerender } = render(
+      <NotificationLabelField value={['ban', 'action']} options={['action', 'ban']} onChange={onClear} />,
+    );
+
+    fireEvent.click(screen.getByTitle('Clear'));
+    expect(onClear).toHaveBeenCalledWith([LABEL_ALL]);
+
+    const onRemove = vi.fn();
+    rerender(<NotificationLabelField value={['ban']} options={['ban']} onChange={onRemove} />);
+    await user.click(screen.getByTestId('CancelIcon'));
+    expect(onRemove).toHaveBeenCalledWith([]);
   });
 
   it('stacks No label with a name', async () => {

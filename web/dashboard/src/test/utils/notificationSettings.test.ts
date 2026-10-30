@@ -2,6 +2,7 @@ import {
   applyLabelSelection,
   claimSeenId,
   defaultNotificationSettings,
+  LABEL_ALL,
   LABEL_ANY,
   LABEL_NONE,
   loadNotificationSettings,
@@ -45,20 +46,27 @@ describe('notification settings', () => {
     expect(loadNotificationSettings()).toEqual(defaultNotificationSettings());
   });
 
-  it('normalizes a stored mix of Any label and names to Any label', () => {
+  it('stores Any label together with No label as All sessions', () => {
     saveNotificationSettings({
       master: true,
       tabCounter: true,
       desktop: true,
       labels: [LABEL_ANY, 'ban', LABEL_NONE],
     });
-    expect(loadNotificationSettings().labels).toEqual([LABEL_ANY, LABEL_NONE]);
+    expect(loadNotificationSettings().labels).toEqual([LABEL_ALL]);
   });
 
   describe('applyLabelSelection', () => {
-    it('lets Any label replace specific names and keep No label', () => {
-      expect(applyLabelSelection(['ban', 'action', LABEL_NONE], ['ban', 'action', LABEL_NONE, LABEL_ANY]))
-        .toEqual([LABEL_ANY, LABEL_NONE]);
+    it('lets Any label replace specific names', () => {
+      expect(applyLabelSelection(['ban', 'action'], ['ban', 'action', LABEL_ANY])).toEqual([LABEL_ANY]);
+    });
+
+    it('lets All sessions replace the other chips', () => {
+      expect(applyLabelSelection(['ban', LABEL_NONE], ['ban', LABEL_NONE, LABEL_ALL])).toEqual([LABEL_ALL]);
+    });
+
+    it('lets a specific name replace All sessions', () => {
+      expect(applyLabelSelection([LABEL_ALL], [LABEL_ALL, 'ban'])).toEqual(['ban']);
     });
 
     it('lets a specific name replace Any label and keep No label', () => {
@@ -106,7 +114,7 @@ describe('notification settings', () => {
       });
     });
 
-    it('sends none, names or none, any, and both', () => {
+    it('sends none, names or none, any label, and all sessions', () => {
       expect(qualifierParams([LABEL_NONE])).toEqual({
         kind: 'query',
         params: { ...base, label_scope: 'none' },
@@ -118,6 +126,10 @@ describe('notification settings', () => {
       expect(qualifierParams([LABEL_ANY])).toEqual({
         kind: 'query',
         params: { ...base, label_scope: 'any' },
+      });
+      expect(qualifierParams([LABEL_ALL])).toEqual({
+        kind: 'query',
+        params: base,
       });
       expect(qualifierParams([LABEL_ANY, LABEL_NONE])).toEqual({
         kind: 'query',
