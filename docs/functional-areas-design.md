@@ -1046,7 +1046,7 @@ AlertSession (session metadata, status, alert data)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/v1/sessions` | Paginated session list with filtering (`label=` contains a stored canonical name; `label_scope=any|none|names_or_none` matches any non-empty labels, unlabeled sessions, or names OR unlabeled) |
+| GET | `/api/v1/sessions` | Paginated session list with filtering (`label=` contains a stored canonical name. `label_scope=any` matches non-empty labels, `label_scope=none` matches unlabeled sessions, and `label_scope=names_or_none` matches names or unlabeled sessions) |
 | GET | `/api/v1/sessions/active` | Active + queued sessions |
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types, chain IDs, and stored labels |
 | GET | `/api/v1/sessions/:id` | Session details (includes `labels`) |

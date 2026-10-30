@@ -143,7 +143,6 @@ export function NotificationWatcher() {
     };
 
     const arm = async () => {
-      await refresh();
       if (cancelled) return;
       unsubChannel = websocketService.subscribeToChannel('sessions', (data) => {
         if (shouldRefreshSessionEvent(data)) schedule();
@@ -152,6 +151,7 @@ export function NotificationWatcher() {
         if (connected) schedule();
       });
       websocketService.connect();
+      await refresh();
     };
 
     void arm();
