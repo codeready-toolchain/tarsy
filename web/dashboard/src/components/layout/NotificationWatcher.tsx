@@ -61,6 +61,7 @@ export function NotificationWatcher() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let previousTotal: number | null = null;
     let baseline = true;
+    let requestVersion = 0;
     let unsubChannel = () => {};
     let unsubConn = () => {};
 
@@ -75,11 +76,13 @@ export function NotificationWatcher() {
     };
 
     const refresh = async () => {
+      const version = ++requestVersion;
       const isBaseline = baseline;
+      const current = () => !cancelled && version === requestVersion;
       try {
         const request = qualifierParams(labels);
         if (request.kind === 'empty') {
-          if (cancelled) return;
+          if (!current()) return;
           previousTotal = 0;
           baseline = false;
           applyCount(0);
@@ -87,7 +90,7 @@ export function NotificationWatcher() {
         }
 
         const first = await getSessions({ ...request.params, page: 1 });
-        if (cancelled) return;
+        if (!current()) return;
         let rows = first.sessions;
         const total = first.pagination.total_items;
         let page = 1;
@@ -103,7 +106,7 @@ export function NotificationWatcher() {
         })) {
           page += 1;
           const next = await getSessions({ ...request.params, page });
-          if (cancelled) return;
+          if (!current()) return;
           rows = rows.concat(next.sessions);
         }
 

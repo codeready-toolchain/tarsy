@@ -37,10 +37,14 @@ import { getSessions } from '../../services/api';
 
 const mockGetSessions = vi.mocked(getSessions);
 
-const emptyList: DashboardListResponse = {
-  sessions: [],
-  pagination: { page: 1, page_size: 100, total_items: 0, total_pages: 1 },
-};
+function listWith(total: number): DashboardListResponse {
+  return {
+    sessions: [],
+    pagination: { page: 1, page_size: 100, total_items: total, total_pages: 1 },
+  };
+}
+
+const emptyList = listWith(0);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -53,10 +57,12 @@ function deferred<T>() {
 describe('NotificationWatcher', () => {
   beforeEach(() => {
     localStorage.clear();
+    document.title = 'TARSy';
     ws.fetchStarted = false;
     ws.subscribedBeforeFetch = false;
     ws.connectedBeforeFetch = false;
     ws.handler = null;
+    mockGetSessions.mockReset();
     vi.useFakeTimers();
   });
 
@@ -102,5 +108,40 @@ describe('NotificationWatcher', () => {
     });
 
     expect(mockGetSessions).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the newer list when an older request finishes last', async () => {
+    const slow = deferred<DashboardListResponse>();
+    mockGetSessions.mockImplementation(() => {
+      if (mockGetSessions.mock.calls.length === 1) return slow.promise;
+      return Promise.resolve(listWith(7));
+    });
+
+    render(
+      <MemoryRouter>
+        <NotificationSettingsProvider>
+          <NotificationWatcher />
+        </NotificationSettingsProvider>
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      ws.handler?.({ type: EVENT_SESSION_STATUS, status: SESSION_STATUS.COMPLETED });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(document.title).toBe('(7) TARSy');
+
+    await act(async () => {
+      slow.resolve(listWith(1));
+      await slow.promise;
+    });
+    expect(document.title).toBe('(7) TARSy');
   });
 });
