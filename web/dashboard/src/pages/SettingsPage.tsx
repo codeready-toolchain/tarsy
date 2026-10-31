@@ -134,7 +134,7 @@ export function SettingsPage() {
 
   return (
     <Box sx={{ backgroundColor: 'background.default' }}>
-      <Container maxWidth="md" sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
+      <Container maxWidth="md" sx={{ py: 2, px: { xs: 1, sm: 2 }, ml: 0, mr: 'auto' }}>
         <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
           Review notifications
         </Typography>
