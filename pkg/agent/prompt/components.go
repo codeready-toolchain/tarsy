@@ -39,17 +39,18 @@ func FormatAlertSection(alertType, alertData string) string {
 	}
 
 	sb.WriteString("<!-- ALERT_DATA_START -->\n")
-	sb.WriteString(promptAlertData(alertData))
+	sb.WriteString(AlertDataForPrompt(alertData))
 	sb.WriteString("\n<!-- ALERT_DATA_END -->\n")
 
 	return sb.String()
 }
 
-// promptAlertData returns alert text for the user message. Valid JSON,
+// AlertDataForPrompt returns the prompt copy of alert text. Valid JSON,
 // including whitespace around one value, is returned unchanged. Anything
-// else becomes one JSON object. Encoding this struct into a bytes.Buffer
-// does not fail; there is no fallback to the raw alert text.
-func promptAlertData(alertData string) string {
+// else becomes one JSON object. The stored alert is not modified.
+// Encoding this struct into a bytes.Buffer does not fail; there is no
+// fallback to the raw alert text.
+func AlertDataForPrompt(alertData string) string {
 	if json.Valid([]byte(alertData)) {
 		return alertData
 	}

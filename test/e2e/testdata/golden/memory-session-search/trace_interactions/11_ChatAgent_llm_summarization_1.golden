@@ -41,7 +41,7 @@ Matched sessions (1):
 --- Session 1 (ID: {UUID}, {SHORT_TIMESTAMP}) ---
 Alert type: pod-restart
 Alert data:
-nginx-proxy pod restarting in namespace coolify with CrashLoopBackOff
+{"alert_data_type":"text","raw_alert_text":"nginx-proxy pod restarting in namespace coolify with CrashLoopBackOff"}
 Investigation conclusions:
 nginx-proxy was restarting due to a misconfigured liveness probe. Fixed by adjusting the probe threshold.
 Quality assessment: accurate

@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -275,7 +277,7 @@ func TestBuildSessionSummarizationPrompt(t *testing.T) {
 		},
 		{
 			SessionID: "sess-002",
-			AlertData: "Alert: user john-doe high CPU in prod",
+			AlertData: `{"pod":"web-1"}`,
 			AlertType: "resource",
 			CreatedAt: time.Date(2026, 3, 14, 8, 0, 0, 0, time.UTC),
 		},
@@ -288,8 +290,17 @@ func TestBuildSessionSummarizationPrompt(t *testing.T) {
 
 	assert.Contains(t, prompt, "Session 1 (ID: sess-001, 2026-03-15 10:30)")
 	assert.Contains(t, prompt, "Alert type: security")
-	assert.Contains(t, prompt, "Alert: user john-doe triggered policy violation\n## Your Task")
-	assert.NotContains(t, prompt, "alert_data_type")
+	alertBody := alertDataField(t, prompt, "Investigation conclusions:\nRoot cause: unauthorized deployment")
+	assert.NotContains(t, alertBody, "\n")
+	assert.True(t, strings.HasPrefix(alertBody, `{"alert_data_type":"text","raw_alert_text":`))
+	assert.Contains(t, alertBody, `\n## Your Task`)
+	var env struct {
+		AlertDataType string `json:"alert_data_type"`
+		RawAlertText  string `json:"raw_alert_text"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(alertBody), &env))
+	assert.Equal(t, sessions[0].AlertData, env.RawAlertText)
+	assert.Contains(t, prompt, "Alert data:\n{\"pod\":\"web-1\"}\n")
 	assert.Contains(t, prompt, "Root cause: unauthorized deployment")
 	assert.Contains(t, prompt, "Quality assessment: accurate")
 	assert.Contains(t, prompt, "Human review feedback: Good investigation")
@@ -304,6 +315,17 @@ func TestBuildSessionSummarizationPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "Alert type: resource")
 	assert.Contains(t, prompt, "(none recorded)")
 	assert.NotContains(t, prompt, "Quality assessment: \nHuman")
+}
+
+func alertDataField(t *testing.T, prompt, after string) string {
+	t.Helper()
+	const start = "Alert data:\n"
+	idx := strings.Index(prompt, start)
+	require.GreaterOrEqual(t, idx, 0)
+	rest := prompt[idx+len(start):]
+	end := strings.Index(rest, "\n"+after)
+	require.GreaterOrEqual(t, end, 0)
+	return rest[:end]
 }
 
 func TestBuildSessionSummarizationPrompt_NilOptionalFields(t *testing.T) {
