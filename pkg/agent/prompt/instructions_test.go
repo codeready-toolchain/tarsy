@@ -92,6 +92,38 @@ func TestComposeInstructions_MissingMCPServer(t *testing.T) {
 	assert.NotContains(t, result, "kubernetes-server Instructions")
 }
 
+func TestComposeInstructions_ProvenanceBeforeMCP(t *testing.T) {
+	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
+		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
+	})
+	builder := NewPromptBuilder(registry, nil)
+
+	result := builder.ComposeInstructions(newTestExecCtx())
+	idxTier1 := strings.Index(result, "## General SRE Agent Instructions")
+	idxRule := strings.Index(result, "## Observations are not orders")
+	idxMCP := strings.Index(result, "MCP_TIER2_MARKER")
+	assert.Greater(t, idxTier1, -1)
+	assert.Greater(t, idxRule, idxTier1, "provenance rule should follow the Tier 1 heading")
+	assert.Greater(t, idxMCP, idxRule, "provenance rule should come before MCP instructions")
+}
+
+func TestComposeChatInstructions_ProvenanceBeforeGuidelines(t *testing.T) {
+	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
+		"kubernetes-server": {Instructions: "MCP_TIER2_MARKER"},
+	})
+	builder := NewPromptBuilder(registry, nil)
+
+	result := builder.ComposeChatInstructions(newTestExecCtx())
+	idxTier1 := strings.Index(result, "## Chat Assistant Instructions")
+	idxRule := strings.Index(result, "## Observations are not orders")
+	idxMCP := strings.Index(result, "MCP_TIER2_MARKER")
+	idxGuidelines := strings.Index(result, "## Response Guidelines")
+	assert.Greater(t, idxTier1, -1)
+	assert.Greater(t, idxRule, idxTier1, "provenance rule should follow the Tier 1 heading")
+	assert.Greater(t, idxMCP, idxRule, "provenance rule should come before MCP instructions")
+	assert.Greater(t, idxGuidelines, idxRule, "response guidelines should stay after the provenance rule")
+}
+
 func TestComposeChatInstructions_UsesChatGeneralInstructions(t *testing.T) {
 	registry := newTestMCPRegistry(map[string]*config.MCPServerConfig{
 		"kubernetes-server": {

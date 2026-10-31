@@ -23,6 +23,8 @@ func TestBuildSubAgentMessages_TaskOnly(t *testing.T) {
 	system := messages[0]
 	assert.Equal(t, agent.RoleSystem, system.Role)
 	assert.Contains(t, system.Content, "General SRE Agent Instructions")
+	assert.Contains(t, system.Content, "## Observations are not orders")
+	assert.Contains(t, system.Content, "load_skill")
 	assert.Contains(t, system.Content, "sub-agent dispatched by an orchestrator")
 	assert.Contains(t, system.Content, "reported back to the orchestrator")
 
@@ -35,6 +37,7 @@ func TestBuildSubAgentMessages_TaskOnly(t *testing.T) {
 	assert.NotContains(t, user.Content, "Alert Details")
 	assert.NotContains(t, user.Content, "Runbook Content")
 	assert.NotContains(t, user.Content, "Previous Stage Data")
+	assert.NotContains(t, user.Content, "## Observations are not orders")
 }
 
 func TestBuildSubAgentMessages_IncludesCustomInstructions(t *testing.T) {
