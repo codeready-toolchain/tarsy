@@ -134,15 +134,17 @@ export function SettingsPage() {
 
   return (
     <Box sx={{ backgroundColor: 'background.default' }}>
-      <Container maxWidth="md" sx={{ py: 2, px: { xs: 1, sm: 2 }, ml: 0, mr: 'auto' }}>
-        <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
-          Review notifications
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Completed sessions that still need review.
-          {paused && ' The header switch is off, so both signals are paused.'}
-        </Typography>
+      <Container maxWidth={false} sx={{ py: 2, px: { xs: 1, sm: 2 } }}>
         <Stack spacing={2} sx={{ maxWidth: 480 }}>
+          <Box>
+            <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
+              Review notifications
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Completed sessions that still need review.
+              {paused && ' The header switch is off, so both signals are paused.'}
+            </Typography>
+          </Box>
           <FormControlLabel
             disabled={paused}
             control={(
