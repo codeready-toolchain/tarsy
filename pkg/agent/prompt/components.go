@@ -1,9 +1,23 @@
 package prompt
 
-import "strings"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
+
+// alertTextEnvelope is the prompt-only wrapper for alert text that is not
+// already JSON. Field order is the struct order so the same alert encodes
+// to the same bytes on every build.
+type alertTextEnvelope struct {
+	AlertDataType string `json:"alert_data_type"`
+	RawAlertText  string `json:"raw_alert_text"`
+}
 
 // FormatAlertSection builds the alert details section.
-// alertType may be empty; alertData is opaque text from the session.
+// alertType may be empty. alertData is opaque text from the session.
+// Valid JSON is pasted unchanged. Other text is JSON-encoded in this
+// prompt copy only; the stored alert is not modified.
 func FormatAlertSection(alertType, alertData string) string {
 	var sb strings.Builder
 	sb.WriteString("## Alert Details\n\n")
@@ -16,7 +30,8 @@ func FormatAlertSection(alertType, alertData string) string {
 		sb.WriteString("\n\n")
 	}
 
-	// Alert data (opaque text, passed as-is)
+	// Alert data. Valid JSON stays byte-for-byte. Other text is encoded
+	// so a line in the alert cannot impersonate the next section.
 	sb.WriteString("### Alert Data\n")
 	if alertData == "" {
 		sb.WriteString("No additional alert data provided.\n")
@@ -24,10 +39,29 @@ func FormatAlertSection(alertType, alertData string) string {
 	}
 
 	sb.WriteString("<!-- ALERT_DATA_START -->\n")
-	sb.WriteString(alertData)
+	sb.WriteString(promptAlertData(alertData))
 	sb.WriteString("\n<!-- ALERT_DATA_END -->\n")
 
 	return sb.String()
+}
+
+// promptAlertData returns alert text for the user message. Valid JSON,
+// including whitespace around one value, is returned unchanged. Anything
+// else becomes one JSON object. Encoding this struct into a bytes.Buffer
+// does not fail; there is no fallback to the raw alert text.
+func promptAlertData(alertData string) string {
+	if json.Valid([]byte(alertData)) {
+		return alertData
+	}
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(alertTextEnvelope{
+		AlertDataType: "text",
+		RawAlertText:  alertData,
+	})
+	return strings.TrimSuffix(buf.String(), "\n")
 }
 
 // FormatRunbookSection builds the runbook section.
