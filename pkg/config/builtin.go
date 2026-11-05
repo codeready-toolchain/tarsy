@@ -1,6 +1,10 @@
 package config
 
 import (
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -160,20 +164,56 @@ Complete the assigned task thoroughly and concisely.`,
 	}
 }
 
+// kubernetes-mcp-server v0.1+ takes runtime settings from TOML. The CLI
+// only accepts --config, and relative paths resolve against the server's
+// working directory, so the file is written to an absolute cache path.
+const (
+	kubernetesMCPServerPackage = "kubernetes-mcp-server@0.1.2"
+	kubernetesMCPServerConfig  = `read_only = true
+disable_destructive = true
+log_file = "stderr"
+`
+)
+
+func kubernetesMCPServerArgs() []string {
+	configPath, err := writeKubernetesMCPConfig()
+	if err != nil {
+		slog.Error("Failed to write kubernetes MCP config", "error", err)
+	}
+	return []string{
+		"-y",
+		kubernetesMCPServerPackage,
+		"--config",
+		configPath,
+	}
+}
+
+func writeKubernetesMCPConfig() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("user cache dir: %w", err)
+	}
+	dir := filepath.Join(cacheDir, "tarsy")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create kubernetes MCP config dir: %w", err)
+	}
+	path := filepath.Join(dir, "kubernetes-mcp-server.toml")
+	if err := os.WriteFile(path, []byte(kubernetesMCPServerConfig), 0o600); err != nil {
+		return "", fmt.Errorf("write kubernetes MCP config: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return "", fmt.Errorf("chmod kubernetes MCP config: %w", err)
+	}
+	return path, nil
+}
+
 func initBuiltinMCPServers() map[string]MCPServerConfig {
 	return map[string]MCPServerConfig{
 		"kubernetes-server": {
 			Transport: TransportConfig{
 				Type:    TransportTypeStdio,
 				Command: "npx",
-				Args: []string{
-					"-y",
-					"kubernetes-mcp-server@0.0.67",
-					"--read-only",
-					"--disable-destructive",
-					"--log-file",
-					"stderr",
-				},
+				Args:    kubernetesMCPServerArgs(),
 			},
 			Instructions: `For Kubernetes operations:
 - **IMPORTANT: In multi-cluster environments** (when the 'configuration_contexts_list' tool is available):
