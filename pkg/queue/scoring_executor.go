@@ -453,9 +453,15 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 
 	stageEventStatus := mapScoringAgentStatus(agentStatus)
 
-	// Record gate misses before the scoring stage event. That event refetches
-	// the session, and a miss creates no stage of its own to refetch later.
+	// Cleanup deletes every session event at or before the cutoff. RunAsync
+	// publishes post-investigation events immediately, so the cutoff is taken
+	// before that launch and those events stay for their own cleanup. Runs
+	// that do not launch keep the cutoff after the scoring events below.
+	var cleanupCutoff time.Time
+	// Gate misses are stored before the scoring stage event. That event
+	// refetches the session, and a miss creates no stage of its own.
 	if autoTriggered && scoreCompleted && e.postInvestigation != nil && len(chain.PostInvestigation) > 0 {
+		cleanupCutoff = time.Now()
 		e.postInvestigation.RunAsync(sessionID, scoreID)
 	}
 
@@ -474,8 +480,10 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	}
 	e.publishScoreUpdated(sessionID, scoringStatus)
 
-	// Schedule event cleanup
-	e.scheduleEventCleanup(stageID, time.Now())
+	if cleanupCutoff.IsZero() {
+		cleanupCutoff = time.Now()
+	}
+	e.scheduleEventCleanup(stageID, cleanupCutoff)
 }
 
 // runMemoryExtraction runs the Reflector to extract memories from a completed investigation.
