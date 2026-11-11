@@ -327,6 +327,13 @@ func TestIteratingController_ForcedConclusion_Eligibility(t *testing.T) {
 			promptCache: false,
 		},
 		{
+			name: "post-investigation agent does not request prompt cache",
+			mutate: func(c *agent.ResolvedAgentConfig) {
+				c.Type = config.AgentTypePostInvestigation
+			},
+			promptCache: false,
+		},
+		{
 			name: "cluster toggle AND disables prompt cache",
 			mutate: func(c *agent.ResolvedAgentConfig) {
 				c.PromptCachingEnabled = false

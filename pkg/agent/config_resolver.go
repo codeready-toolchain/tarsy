@@ -301,6 +301,91 @@ func ResolveChatAgentConfig(
 	}, cfg), nil
 }
 
+// ResolvePostInvestigationConfig builds the agent configuration for a
+// post-investigation entry. Hierarchy: defaults → agent definition → chain →
+// defaults.agents.<name> → entry. MCP servers come only from the agent
+// definition and the entry: chain-level servers (and the session's per-alert
+// MCP override) target the investigation, not the post-investigation task.
+func ResolvePostInvestigationConfig(
+	cfg *config.Config,
+	chain *config.ChainConfig,
+	entry config.PostInvestigationConfig,
+) (*ResolvedAgentConfig, error) {
+	if chain == nil {
+		return nil, fmt.Errorf("chain configuration cannot be nil")
+	}
+
+	var defaults config.Defaults
+	if cfg.Defaults != nil {
+		defaults = *cfg.Defaults
+	}
+
+	agentDef, err := cfg.GetAgent(entry.Agent)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q not found: %w", entry.Agent, err)
+	}
+
+	provider, providerName, backend, err := ResolveLLMPair(cfg,
+		LLMLayer{Provider: defaults.LLMProvider, Backend: defaults.LLMBackend},
+		LLMLayer{Provider: agentDef.LLMProvider, Backend: agentDef.LLMBackend},
+		LLMLayer{Provider: chain.LLMProvider, Backend: chain.LLMBackend},
+		namedAgentLLMLayer(&defaults, entry.Agent),
+		LLMLayer{Provider: entry.LLMProvider, Backend: entry.LLMBackend},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	maxIter := resolveMaxIterations(
+		defaults.MaxIterations, agentDef.MaxIterations,
+		chain.MaxIterations, entry.MaxIterations,
+	)
+
+	mcpServers := agentDef.MCPServers
+	if len(entry.MCPServers) > 0 {
+		mcpServers = entry.MCPServers
+	}
+
+	fallbackProviders, err := config.ResolveFallbackLayers(cfg.FallbackLists,
+		defaultsFallbackLayer(&defaults),
+		chainFallbackLayer(chain),
+		namedAgentFallbackLayer(&defaults, entry.Agent),
+		config.FallbackLayer{ListName: entry.FallbackList},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resolvedProvider := applyAgentNativeTools(provider, agentDef.NativeTools)
+
+	resolvedFallback := resolveFullFallbackEntries(cfg, fallbackProviders, agentDef.NativeTools)
+
+	requiredSkills, onDemandSkills := resolveSkills(cfg, agentDef)
+
+	return withPromptCaching(&ResolvedAgentConfig{
+		AgentName: entry.Agent,
+		// Validation allows only type post_investigation or no type here;
+		// either way the entry runs with the post-investigation prompt layer.
+		Type:                      config.AgentTypePostInvestigation,
+		LLMBackend:                backend,
+		LLMProvider:               resolvedProvider,
+		LLMProviderName:           providerName,
+		MaxIterations:             maxIter,
+		IterationTimeout:          DefaultIterationTimeout,
+		LLMCallTimeout:            DefaultLLMCallTimeout,
+		ToolCallTimeout:           DefaultToolCallTimeout,
+		MCPServers:                mcpServers,
+		CustomInstructions:        agentDef.CustomInstructions,
+		FallbackProviders:         fallbackProviders,
+		ResolvedFallbackProviders: resolvedFallback,
+		InitialResponseTimeout:    DefaultInitialResponseTimeout,
+		StallTimeout:              DefaultStallTimeout,
+		RequiresNativeTools:       requiresNativeTools(agentDef.NativeTools),
+		RequiredSkillContent:      requiredSkills,
+		OnDemandSkills:            onDemandSkills,
+	}, cfg), nil
+}
+
 // ResolveScoringConfig builds the agent configuration for a scoring execution.
 // Hierarchy: defaults → agent definition → chain → scoring config.
 // Similar to ResolveChatAgentConfig but without stage aggregation for MCP servers

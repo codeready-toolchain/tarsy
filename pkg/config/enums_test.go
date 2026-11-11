@@ -18,6 +18,7 @@ func TestAgentTypeIsValid(t *testing.T) {
 		{"scoring", AgentTypeScoring, true},
 		{"action", AgentTypeAction, true},
 		{"compose", AgentTypeCompose, true},
+		{"post_investigation", AgentTypePostInvestigation, true},
 		{"invalid", AgentType("invalid"), false},
 		{"orchestrator is now invalid", AgentType("orchestrator"), false},
 	}

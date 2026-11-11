@@ -141,6 +141,9 @@ func (v *Validator) validateDefaults() error {
 					fmt.Errorf("agent '%s' not found", defaults.Scoring.Agent))
 			}
 		}
+		if v.isPostInvestigationAgent(defaults.Scoring.Agent) {
+			return NewValidationError("defaults", "", "scoring.agent", errPostInvestigationOnly(defaults.Scoring.Agent))
+		}
 		if defaults.Scoring.LLMBackend != "" && !defaults.Scoring.LLMBackend.IsValid() {
 			return NewValidationError("defaults", "", "scoring.llm_backend",
 				fmt.Errorf("invalid LLM backend: %s", defaults.Scoring.LLMBackend))
@@ -466,6 +469,9 @@ func (v *Validator) validateChains() error {
 					return NewValidationError("chain", chainID, "chat.agent", fmt.Errorf("agent '%s' not found", chatAgent))
 				}
 			}
+			if v.isPostInvestigationAgent(chatAgent) {
+				return NewValidationError("chain", chainID, "chat.agent", errPostInvestigationOnly(chatAgent))
+			}
 
 			// Validate chat LLM backend if specified
 			if chain.Chat.LLMBackend != "" && !chain.Chat.LLMBackend.IsValid() {
@@ -502,6 +508,9 @@ func (v *Validator) validateChains() error {
 					return NewValidationError("chain", chainID, "scoring.agent", fmt.Errorf("agent '%s' not found", scoringAgent))
 				}
 			}
+			if v.isPostInvestigationAgent(scoringAgent) {
+				return NewValidationError("chain", chainID, "scoring.agent", errPostInvestigationOnly(scoringAgent))
+			}
 
 			// Validate scoring LLM backend if specified
 			if chain.Scoring.LLMBackend != "" && !chain.Scoring.LLMBackend.IsValid() {
@@ -527,6 +536,10 @@ func (v *Validator) validateChains() error {
 					return NewValidationError("chain", chainID, "scoring.mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
 				}
 			}
+		}
+
+		if err := v.validatePostInvestigation(chainID, chain); err != nil {
+			return err
 		}
 
 		// Validate chain-level LLM provider if specified
@@ -595,6 +608,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		}
 		if agentConfig.Type == AgentTypeCompose {
 			return fmt.Errorf("%s: agent '%s' has type %q which is executor-only and cannot be used in chain YAML", stageRef, agentConfig.Name, agentConfig.Type)
+		}
+		if agentConfig.Type == AgentTypePostInvestigation || v.isPostInvestigationAgent(agentConfig.Name) {
+			return fmt.Errorf("%s: %w", stageRef, errPostInvestigationOnly(agentConfig.Name))
 		}
 
 		// Validate agent-level LLM backend if specified
@@ -676,6 +692,9 @@ func (v *Validator) validateStage(chainID string, stageIndex int, stage *StageCo
 		if stage.Synthesis.Agent != "" && !v.cfg.AgentRegistry.Has(stage.Synthesis.Agent) {
 			return fmt.Errorf("%s: synthesis agent '%s' not found", stageRef, stage.Synthesis.Agent)
 		}
+		if v.isPostInvestigationAgent(stage.Synthesis.Agent) {
+			return fmt.Errorf("%s: synthesis: %w", stageRef, errPostInvestigationOnly(stage.Synthesis.Agent))
+		}
 
 		// Validate synthesis LLM backend if specified
 		if stage.Synthesis.LLMBackend != "" && !stage.Synthesis.LLMBackend.IsValid() {
@@ -721,6 +740,116 @@ func (v *Validator) warnMixedActionStage(stg *StageConfig, stageRef string) {
 		slog.Warn("Stage has mixed action and non-action agents — stage type will be 'investigation', action-stage benefits (dashboard, audit) will not apply",
 			"stage", stageRef, "stage_name", stg.Name)
 	}
+}
+
+// validatePostInvestigation validates the chain's post_investigation entries.
+// Entries fire only after automatic scoring, so scoring must be enabled
+// (defaults.scoring is already applied to chains without their own block).
+func (v *Validator) validatePostInvestigation(chainID string, chain *ChainConfig) error {
+	if len(chain.PostInvestigation) == 0 {
+		return nil
+	}
+	if chain.Scoring == nil || !chain.Scoring.Enabled {
+		return NewValidationError("chain", chainID, "post_investigation",
+			fmt.Errorf("requires scoring to be enabled for the chain (post-investigation agents run after automatic scoring)"))
+	}
+
+	var defaultLabelMap string
+	if v.cfg.Defaults != nil {
+		defaultLabelMap = v.cfg.Defaults.LabelMap
+	}
+	labelMap, err := ResolveLabelMap(v.cfg.LabelMaps, defaultLabelMap, chain.LabelMap)
+	if err != nil {
+		return NewValidationError("chain", chainID, "post_investigation", err)
+	}
+	knownLabels := make(map[string]bool, len(labelMap.Labels))
+	for _, spec := range labelMap.Labels {
+		knownLabels[strings.ToLower(spec.Label)] = true
+	}
+
+	names := make(map[string]bool, len(chain.PostInvestigation))
+	for i, entry := range chain.PostInvestigation {
+		if entry.Name == "" {
+			return NewValidationError("chain", chainID, fmt.Sprintf("post_investigation[%d].name", i), fmt.Errorf("name required"))
+		}
+		if names[entry.Name] {
+			return NewValidationError("chain", chainID, "post_investigation", fmt.Errorf("duplicate entry name '%s'", entry.Name))
+		}
+		names[entry.Name] = true
+		field := fmt.Sprintf("post_investigation[%s]", entry.Name)
+
+		if entry.Agent == "" {
+			return NewValidationError("chain", chainID, field+".agent", fmt.Errorf("agent required"))
+		}
+		agentDef, err := v.cfg.AgentRegistry.Get(entry.Agent)
+		if err != nil {
+			return NewValidationError("chain", chainID, field+".agent", fmt.Errorf("agent '%s' not found", entry.Agent))
+		}
+		if agentDef.Type != AgentTypeDefault && agentDef.Type != AgentTypePostInvestigation {
+			return NewValidationError("chain", chainID, field+".agent",
+				fmt.Errorf("agent '%s' has type %q; post_investigation entries require type %q or no type", entry.Agent, agentDef.Type, AgentTypePostInvestigation))
+		}
+
+		if entry.MinScore != nil && (*entry.MinScore < 0 || *entry.MinScore > 100) {
+			return NewValidationError("chain", chainID, field+".min_score", fmt.Errorf("must be between 0 and 100, got %d", *entry.MinScore))
+		}
+		if entry.Timeout < 0 {
+			return NewValidationError("chain", chainID, field+".timeout", fmt.Errorf("must not be negative, got %v", entry.Timeout))
+		}
+		if entry.MaxIterations != nil && *entry.MaxIterations < 1 {
+			return NewValidationError("chain", chainID, field+".max_iterations", fmt.Errorf("must be at least 1"))
+		}
+
+		if entry.LLMBackend != "" && !entry.LLMBackend.IsValid() {
+			return NewValidationError("chain", chainID, field+".llm_backend", fmt.Errorf("invalid LLM backend: %s", entry.LLMBackend))
+		}
+		if entry.LLMProvider != "" && !v.cfg.LLMProviderRegistry.Has(entry.LLMProvider) {
+			return NewValidationError("chain", chainID, field+".llm_provider", fmt.Errorf("LLM provider '%s' not found", entry.LLMProvider))
+		}
+		if err := v.googleNativeRequiresGoogleProvider(entry.LLMProvider, entry.LLMBackend); err != nil {
+			return NewValidationError("chain", chainID, field+".llm_backend", err)
+		}
+
+		for _, serverID := range entry.MCPServers {
+			if !v.cfg.MCPServerRegistry.Has(serverID) {
+				return NewValidationError("chain", chainID, field+".mcp_servers", fmt.Errorf("MCP server '%s' not found", serverID))
+			}
+		}
+		if err := v.validateSubAgentRefs(entry.SubAgents, "chain", chainID, field+".sub_agents"); err != nil {
+			return err
+		}
+
+		anyLabels := make(map[string]bool, len(entry.LabelsAny))
+		for _, label := range entry.LabelsAny {
+			if !knownLabels[strings.ToLower(label)] {
+				return NewValidationError("chain", chainID, field+".labels_any", fmt.Errorf("label '%s' not found in the chain's label map", label))
+			}
+			anyLabels[strings.ToLower(label)] = true
+		}
+		for _, label := range entry.LabelsNone {
+			if !knownLabels[strings.ToLower(label)] {
+				return NewValidationError("chain", chainID, field+".labels_none", fmt.Errorf("label '%s' not found in the chain's label map", label))
+			}
+			if anyLabels[strings.ToLower(label)] {
+				return NewValidationError("chain", chainID, field+".labels_none", fmt.Errorf("label '%s' is also in labels_any", label))
+			}
+		}
+	}
+	return nil
+}
+
+// isPostInvestigationAgent reports whether the named agent definition has
+// type post_investigation. Unknown agents return false (reported elsewhere).
+func (v *Validator) isPostInvestigationAgent(name string) bool {
+	if name == "" || v.cfg.AgentRegistry == nil {
+		return false
+	}
+	def, err := v.cfg.AgentRegistry.Get(name)
+	return err == nil && def.Type == AgentTypePostInvestigation
+}
+
+func errPostInvestigationOnly(agentName string) error {
+	return fmt.Errorf("agent '%s' has type %q, which can only be used in post_investigation entries", agentName, AgentTypePostInvestigation)
 }
 
 func (v *Validator) validateMCPServers() error {
@@ -929,6 +1058,18 @@ func (v *Validator) collectReferencedLLMProviders() map[string]bool {
 			referenced[chain.Scoring.LLMProvider] = true
 		}
 
+		// Post-investigation entry providers and their sub-agent overrides
+		for _, entry := range chain.PostInvestigation {
+			if entry.LLMProvider != "" {
+				referenced[entry.LLMProvider] = true
+			}
+			for _, ref := range entry.SubAgents {
+				if ref.LLMProvider != "" {
+					referenced[ref.LLMProvider] = true
+				}
+			}
+		}
+
 		// Stage-level LLM providers
 		for _, stage := range chain.Stages {
 			// Stage-level fallback providers
@@ -997,6 +1138,12 @@ func (v *Validator) addReachableBuiltinLLMProviders(referenced map[string]bool) 
 				add(ref.Name)
 			}
 		}
+		for _, entry := range chain.PostInvestigation {
+			add(entry.Agent)
+			for _, ref := range entry.SubAgents {
+				add(ref.Name)
+			}
+		}
 		for _, stage := range chain.Stages {
 			for _, ref := range stage.SubAgents {
 				add(ref.Name)
@@ -1027,6 +1174,9 @@ func (v *Validator) validateSubAgentRefs(subAgents SubAgentRefs, section, name, 
 			return NewValidationError(section, name, field, fmt.Errorf("agent '%s' not found", ref.Name))
 		}
 		agentDef, _ := v.cfg.AgentRegistry.Get(ref.Name)
+		if agentDef != nil && agentDef.Type == AgentTypePostInvestigation {
+			return NewValidationError(section, name, field, errPostInvestigationOnly(ref.Name))
+		}
 		if agentDef != nil && agentDef.Description == "" {
 			return NewValidationError(section, name, field,
 				fmt.Errorf("agent '%s' has no description (required for sub-agent catalog)", ref.Name))
@@ -1231,6 +1381,16 @@ func (v *Validator) validateNamedFallbackLists() error {
 				return err
 			}
 		}
+		for _, entry := range chain.PostInvestigation {
+			field := fmt.Sprintf("post_investigation[%s]", entry.Name)
+			if err := v.validateFallbackSelector(entry.FallbackList, nil,
+				"chain", chainID, field+".fallback_list"); err != nil {
+				return err
+			}
+			if err := validateRefSelectors(entry.SubAgents, "chain", chainID, field+".sub_agents"); err != nil {
+				return err
+			}
+		}
 		for i, stage := range chain.Stages {
 			stageRef := fmt.Sprintf("chain '%s' stage %d", chainID, i)
 			if err := v.validateFallbackSelector(stage.FallbackList, stage.FallbackProviders,
@@ -1386,6 +1546,12 @@ func (v *Validator) referencedFallbackListNames() map[string]bool {
 		}
 		if chain.Scoring != nil {
 			add(chain.Scoring.FallbackList)
+		}
+		for _, entry := range chain.PostInvestigation {
+			add(entry.FallbackList)
+			for _, ref := range entry.SubAgents {
+				add(ref.FallbackList)
+			}
 		}
 		for _, ref := range chain.SubAgents {
 			add(ref.FallbackList)
@@ -1722,6 +1888,11 @@ func (v *Validator) warnNativeToolAgentsWithoutCompatibleFallback() {
 		}
 		if chain.Chat != nil {
 			for _, ref := range chain.Chat.SubAgents {
+				v.warnNativeToolSubAgentRef(chainID, defaultsLayer, chainLayer, ref)
+			}
+		}
+		for _, entry := range chain.PostInvestigation {
+			for _, ref := range entry.SubAgents {
 				v.warnNativeToolSubAgentRef(chainID, defaultsLayer, chainLayer, ref)
 			}
 		}

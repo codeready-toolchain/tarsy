@@ -1114,6 +1114,64 @@ func TestBuildChatView(t *testing.T) {
 	})
 }
 
+func TestBuildPostInvestigationViews(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no entries yields nil and is omitted from the chain view", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, buildPostInvestigationViews(nil))
+
+		raw, err := json.Marshal(buildChainView(&config.ChainConfig{AlertTypes: []string{"a"}}))
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), "post_investigation")
+	})
+
+	t.Run("all fields are mapped", func(t *testing.T) {
+		t.Parallel()
+		views := buildChainView(&config.ChainConfig{
+			PostInvestigation: []config.PostInvestigationConfig{{
+				Name:                 "tuning",
+				Agent:                "Proposer",
+				MinScore:             new(60),
+				LabelsAny:            []string{"action", "noise"},
+				LabelsNone:           []string{"watch"},
+				IncludeInvestigation: true,
+				Timeout:              5 * time.Minute,
+				LLMProvider:          "fast",
+				LLMBackend:           config.LLMBackendLangChain,
+				FallbackList:         "mid",
+				MaxIterations:        new(8),
+				MCPServers:           []string{"tickets"},
+				SubAgents:            config.SubAgentRefs{{Name: "WebResearcher"}},
+			}},
+		}).PostInvestigation
+
+		require.Len(t, views, 1)
+		assert.Equal(t, PostInvestigationView{
+			Name:                 "tuning",
+			Agent:                "Proposer",
+			MinScore:             new(60),
+			LabelsAny:            []string{"action", "noise"},
+			LabelsNone:           []string{"watch"},
+			IncludeInvestigation: true,
+			Timeout:              "5m",
+			LLMProvider:          "fast",
+			LLMBackend:           "langchain",
+			FallbackList:         "mid",
+			MaxIterations:        new(8),
+			MCPServers:           []string{"tickets"},
+			SubAgents:            []SubAgentView{{Name: "WebResearcher"}},
+		}, views[0])
+	})
+
+	t.Run("unset timeout is omitted", func(t *testing.T) {
+		t.Parallel()
+		views := buildPostInvestigationViews([]config.PostInvestigationConfig{{Name: "tuning", Agent: "Proposer"}})
+		require.Len(t, views, 1)
+		assert.Empty(t, views[0].Timeout)
+	})
+}
+
 func TestSystemConfigSkillHandler(t *testing.T) {
 	s := &Server{
 		cfg: &config.Config{
