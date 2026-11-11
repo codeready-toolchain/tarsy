@@ -141,7 +141,7 @@ export function SessionListItem({
       </TableCell>
 
       {/* Session indicators: parallel, sub-agents, fallback, chat */}
-      <TableCell sx={{ width: 130, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
+      <TableCell sx={{ width: 156, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">

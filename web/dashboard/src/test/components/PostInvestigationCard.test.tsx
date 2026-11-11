@@ -135,7 +135,7 @@ describe('PostInvestigationCard', () => {
     expect(screen.queryByText('Sub-agent answer')).not.toBeInTheDocument();
   });
 
-  it('shows a running placeholder while the stage is active', () => {
+  it('shows a running placeholder and header spinner while the stage is active', () => {
     render(
       <PostInvestigationCard
         stages={[makeStage('s2', 'file-ticket', 2, { status: EXECUTION_STATUS.ACTIVE })]}
@@ -144,6 +144,65 @@ describe('PostInvestigationCard', () => {
     );
     expect(screen.getByText('Running')).toBeInTheDocument();
     expect(screen.getByText('Running…')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Post-investigation in progress' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+  });
+
+  it('starts folded when every stage finished with no action', async () => {
+    const user = userEvent.setup();
+    const stages = [makeStage('s2', 'file-ticket', 2, { actions_executed: false })];
+    const { rerender } = render(
+      <PostInvestigationCard
+        stages={stages}
+        timelineEvents={[makeMemo('m1', 's2', 'No issue was created.')]}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Expand post-investigation' })).toBeInTheDocument();
+    expect(screen.getByTestId('post-investigation-header-outcome')).toHaveTextContent('No action');
+
+    await user.click(screen.getByText('Post-investigation'));
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+    expect(screen.queryByTestId('post-investigation-header-outcome')).not.toBeInTheDocument();
+    expect(screen.getByText('No issue was created.')).toBeInTheDocument();
+
+    rerender(
+      <PostInvestigationCard
+        stages={stages}
+        timelineEvents={[makeMemo('m1', 's2', 'No issue was created.')]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+  });
+
+  it('folds when a running stage finishes with no action, unless the user toggled', async () => {
+    const user = userEvent.setup();
+    const running = [makeStage('s2', 'file-ticket', 2, { status: EXECUTION_STATUS.ACTIVE })];
+    const quiet = [makeStage('s2', 'file-ticket', 2, { actions_executed: false })];
+    const { rerender } = render(
+      <PostInvestigationCard stages={running} timelineEvents={[]} />,
+    );
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+
+    rerender(<PostInvestigationCard stages={quiet} timelineEvents={[]} />);
+    expect(screen.getByRole('button', { name: 'Expand post-investigation' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Expand post-investigation' }));
+    rerender(<PostInvestigationCard stages={running} timelineEvents={[]} />);
+    rerender(<PostInvestigationCard stages={quiet} timelineEvents={[]} />);
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+  });
+
+  it('stays open when a finished stage has no YES/NO marker', () => {
+    render(
+      <PostInvestigationCard
+        stages={[makeStage('s2', 'file-ticket', 2, { actions_executed: null })]}
+        timelineEvents={[makeMemo('m1', 's2', 'Marker missing.')]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+    expect(screen.queryByTestId('post-investigation-header-outcome')).not.toBeInTheDocument();
+    expect(screen.getByText('Marker missing.')).toBeInTheDocument();
   });
 
   it('collapses when collapseCounter changes and expands on header click', async () => {

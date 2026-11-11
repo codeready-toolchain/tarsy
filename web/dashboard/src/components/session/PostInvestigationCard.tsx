@@ -4,11 +4,15 @@
  *
  * The memo is the stage's top-level final_analysis timeline event; sub-agent
  * final answers are skipped. The full trace stays in the conversation timeline.
+ *
+ * A finished all-no-action card starts folded, with the outcome chip on the
+ * header. A running card stays open and shows the same info spinner the
+ * final-analysis card uses for scoring. A manual toggle is kept across refetch.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { AnchorHTMLAttributes } from 'react';
-import { Paper, Typography, Box, Chip, IconButton, Collapse, Divider } from '@mui/material';
+import { Paper, Typography, Box, Chip, IconButton, Collapse, Divider, CircularProgress, Tooltip } from '@mui/material';
 import type { ChipProps } from '@mui/material';
 import { ExpandLess, UnfoldMore, AssignmentTurnedInOutlined } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
@@ -46,6 +50,23 @@ const memoMarkdownComponents = {
   ),
 };
 
+function postInvestigationEntries(stages: StageOverview[]): StageOverview[] {
+  return stages
+    .filter((s) => s.stage_type === STAGE_TYPE.POST_INVESTIGATION)
+    .sort((a, b) => a.stage_index - b.stage_index);
+}
+
+/** Every entry finished and explicitly took no action. A missing YES/NO marker stays open. */
+function allNoAction(entries: StageOverview[]): boolean {
+  return entries.length > 0 && entries.every(
+    (s) => TERMINAL_EXECUTION_STATUSES.has(s.status) && s.actions_executed === false,
+  );
+}
+
+function anyRunning(entries: StageOverview[]): boolean {
+  return entries.some((s) => !TERMINAL_EXECUTION_STATUSES.has(s.status));
+}
+
 /** Latest top-level final_analysis content per post-investigation stage. */
 function memosByStage(timelineEvents: TimelineEvent[]): Map<string, string> {
   const latest = new Map<string, TimelineEvent>();
@@ -66,7 +87,13 @@ export default function PostInvestigationCard({
   timelineEvents,
   collapseCounter = 0,
 }: PostInvestigationCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const entries = useMemo(() => postInvestigationEntries(stages), [stages]);
+  const quiet = allNoAction(entries);
+  const running = anyRunning(entries);
+  // Start folded only when the loaded data is already a no-action outcome.
+  const [isExpanded, setIsExpanded] = useState(() => !allNoAction(postInvestigationEntries(stages)));
+  // A manual toggle wins over a later refetch that is still no-action.
+  const userToggled = useRef(false);
 
   const [prevCollapseCounter, setPrevCollapseCounter] = useState(collapseCounter);
   if (collapseCounter !== prevCollapseCounter) {
@@ -74,14 +101,17 @@ export default function PostInvestigationCard({
     if (collapseCounter > 0) setIsExpanded(false);
   }
 
-  const entries = useMemo(
-    () =>
-      stages
-        .filter((s) => s.stage_type === STAGE_TYPE.POST_INVESTIGATION)
-        .sort((a, b) => a.stage_index - b.stage_index),
-    [stages],
-  );
+  const [seenQuiet, setSeenQuiet] = useState(quiet);
+  if (quiet !== seenQuiet) {
+    setSeenQuiet(quiet);
+    if (quiet && !userToggled.current) setIsExpanded(false);
+  }
+
   const memos = useMemo(() => memosByStage(timelineEvents), [timelineEvents]);
+  const toggleExpanded = () => {
+    userToggled.current = true;
+    setIsExpanded((open) => !open);
+  };
 
   if (entries.length === 0) {
     return null;
@@ -90,7 +120,7 @@ export default function PostInvestigationCard({
   return (
     <Paper sx={{ p: 2.5 }} data-testid="post-investigation-card">
       <Box
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggleExpanded}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -124,10 +154,14 @@ export default function PostInvestigationCard({
             variant="outlined"
             sx={{ ml: 0.5, height: 20, fontSize: '0.75rem' }}
           />
+          {running && <RunningPill />}
+          {!isExpanded && quiet && (
+            <Chip label="No action" color="default" size="small" data-testid="post-investigation-header-outcome" />
+          )}
         </Box>
         <IconButton
           size="small"
-          onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
+          onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
           aria-label={isExpanded ? 'Collapse post-investigation' : 'Expand post-investigation'}
           sx={{
             bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
@@ -149,6 +183,31 @@ export default function PostInvestigationCard({
         </Box>
       </Collapse>
     </Paper>
+  );
+}
+
+/** Same info pill as the eval-score spinner on the final-analysis card. */
+function RunningPill() {
+  return (
+    <Tooltip title="Post-investigation in progress">
+      <Box
+        sx={(theme) => ({
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 32,
+          px: 1,
+          boxSizing: 'border-box',
+          backgroundColor: alpha(theme.palette.info.main, 0.08),
+          borderRadius: '16px',
+          border: '1px solid',
+          borderColor: alpha(theme.palette.info.main, 0.25),
+          color: 'info.main',
+        })}
+      >
+        <CircularProgress size={16} color="inherit" aria-label="Post-investigation in progress" />
+      </Box>
+    </Tooltip>
   );
 }
 
