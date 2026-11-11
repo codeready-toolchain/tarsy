@@ -452,6 +452,13 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 	}
 
 	stageEventStatus := mapScoringAgentStatus(agentStatus)
+
+	// Record gate misses before the scoring stage event. That event refetches
+	// the session, and a miss creates no stage of its own to refetch later.
+	if autoTriggered && scoreCompleted && e.postInvestigation != nil && len(chain.PostInvestigation) > 0 {
+		e.postInvestigation.RunAsync(sessionID, scoreID)
+	}
+
 	publishStageStatus(context.Background(), e.eventPublisher, sessionID, stageID, scoringStageName, stg.StageIndex, stage.StageTypeScoring, nil, stageEventStatus)
 
 	if scoreCompleted {
@@ -469,10 +476,6 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 
 	// Schedule event cleanup
 	e.scheduleEventCleanup(stageID, time.Now())
-
-	if autoTriggered && scoreCompleted && e.postInvestigation != nil && len(chain.PostInvestigation) > 0 {
-		e.postInvestigation.RunAsync(sessionID, scoreID)
-	}
 }
 
 // runMemoryExtraction runs the Reflector to extract memories from a completed investigation.

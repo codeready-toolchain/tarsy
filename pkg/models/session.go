@@ -273,6 +273,10 @@ type SessionDetailResponse struct {
 	ScoringStatus *string `json:"scoring_status"`
 	ScoreID       *string `json:"score_id"`
 
+	// Post-investigation entries that were configured and did not run.
+	// Empty when every configured entry ran, or the chain has none.
+	PostInvestigationSkips []PostInvestigationSkip `json:"post_investigation_skips,omitempty"`
+
 	// Review fields
 	ReviewStatus          *string    `json:"review_status"`
 	Assignee              *string    `json:"assignee"`
@@ -285,6 +289,12 @@ type SessionDetailResponse struct {
 
 	// Stage list
 	Stages []StageOverview `json:"stages"`
+}
+
+// PostInvestigationSkip is why one configured post-investigation entry did not run.
+type PostInvestigationSkip struct {
+	Name   string `json:"name"`
+	Detail string `json:"detail"`
 }
 
 // StageOverview is a summary of a stage within the session detail.

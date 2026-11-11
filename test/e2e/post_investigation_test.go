@@ -168,6 +168,13 @@ func TestE2E_PostInvestigation_AutoScoringRunsGatedEntries(t *testing.T) {
 	assert.Equal(t, true, piStage["actions_executed"])
 	assert.Equal(t, false, detail["has_action_stages"], "post-investigation is not an action stage")
 
+	skips, _ := detail["post_investigation_skips"].([]interface{})
+	require.Len(t, skips, 1, "the gated-out entry should explain why it did not run")
+	skip := skips[0].(map[string]interface{})
+	assert.Equal(t, "noise-follow-up", skip["name"])
+	assert.Contains(t, skip["detail"].(string), "noise")
+	assert.Contains(t, skip["detail"].(string), "action")
+
 	acted := app.GetSessionList(t, "post_investigation=acted")
 	items := acted["sessions"].([]interface{})
 	require.Len(t, items, 1)

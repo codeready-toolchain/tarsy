@@ -205,6 +205,45 @@ describe('PostInvestigationCard', () => {
     expect(screen.getByText('Marker missing.')).toBeInTheDocument();
   });
 
+  it('shows a skipped entry in the regular card', async () => {
+    const user = userEvent.setup();
+    render(
+      <PostInvestigationCard
+        stages={[]}
+        timelineEvents={[]}
+        skips={[{ name: 'file-smoke-issue', detail: 'needs a label in action (session has watch)' }]}
+      />,
+    );
+    expect(screen.getByTestId('post-investigation-card')).toHaveTextContent('Post-investigation');
+    expect(screen.getByRole('button', { name: 'Expand post-investigation' })).toBeInTheDocument();
+    expect(screen.getByTestId('post-investigation-header-skipped')).toHaveTextContent('Skipped');
+
+    await user.click(screen.getByText('Post-investigation'));
+    expect(screen.getByTestId('post-investigation-skip-file-smoke-issue')).toHaveTextContent('Skipped');
+    expect(screen.getByTestId('post-investigation-skip-file-smoke-issue')).toHaveTextContent(
+      'needs a label in action (session has watch)',
+    );
+  });
+
+  it('shows a Skipped chip on a folded card that also took no action', async () => {
+    const user = userEvent.setup();
+    render(
+      <PostInvestigationCard
+        stages={[makeStage('s2', 'file-ticket', 2, { actions_executed: false })]}
+        timelineEvents={[makeMemo('m1', 's2', 'No issue was created.')]}
+        skips={[{ name: 'noise-follow-up', detail: 'needs a label in noise (session has action)' }]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Expand post-investigation' })).toBeInTheDocument();
+    expect(screen.getByTestId('post-investigation-header-outcome')).toHaveTextContent('No action');
+    expect(screen.getByTestId('post-investigation-header-skipped')).toHaveTextContent('Skipped');
+
+    await user.click(screen.getByText('Post-investigation'));
+    expect(screen.getByTestId('post-investigation-skip-noise-follow-up')).toHaveTextContent(
+      'needs a label in noise (session has action)',
+    );
+  });
+
   it('collapses when collapseCounter changes and expands on header click', async () => {
     const user = userEvent.setup();
     const stages = [makeStage('s2', 'file-ticket', 2, { actions_executed: true })];

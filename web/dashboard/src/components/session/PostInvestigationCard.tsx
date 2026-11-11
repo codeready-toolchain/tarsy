@@ -8,6 +8,10 @@
  * A finished all-no-action card starts folded, with the outcome chip on the
  * header. A running card stays open and shows the same info spinner the
  * final-analysis card uses for scoring. A manual toggle is kept across refetch.
+ *
+ * An entry the gate turned away is not a stage. It uses this same card, with
+ * a Skipped chip on the folded header and the reason in the body. A skip-only
+ * card starts folded.
  */
 
 import { useMemo, useRef, useState } from 'react';
@@ -21,11 +25,13 @@ import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { remarkPlugins, finalAnswerMarkdownComponents } from '../../utils/markdownComponents.tsx';
 import { STAGE_TYPE, TIMELINE_EVENT_TYPES } from '../../constants/eventTypes.ts';
 import { EXECUTION_STATUS, TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus.ts';
-import type { StageOverview, TimelineEvent } from '../../types/session.ts';
+import type { PostInvestigationSkip, StageOverview, TimelineEvent } from '../../types/session.ts';
 
 interface PostInvestigationCardProps {
   stages: StageOverview[];
   timelineEvents: TimelineEvent[];
+  /** Entries the gate turned away. Not stages. */
+  skips?: PostInvestigationSkip[];
   /** Increment to collapse from outside. */
   collapseCounter?: number;
 }
@@ -85,13 +91,18 @@ function memosByStage(timelineEvents: TimelineEvent[]): Map<string, string> {
 export default function PostInvestigationCard({
   stages,
   timelineEvents,
+  skips = [],
   collapseCounter = 0,
 }: PostInvestigationCardProps) {
   const entries = useMemo(() => postInvestigationEntries(stages), [stages]);
   const quiet = allNoAction(entries);
   const running = anyRunning(entries);
-  // Start folded only when the loaded data is already a no-action outcome.
-  const [isExpanded, setIsExpanded] = useState(() => !allNoAction(postInvestigationEntries(stages)));
+  // No-action and skip-only start folded. A running or acted card stays open.
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const initial = postInvestigationEntries(stages);
+    if (initial.length === 0) return false;
+    return !allNoAction(initial);
+  });
   // A manual toggle wins over a later refetch that is still no-action.
   const userToggled = useRef(false);
 
@@ -113,7 +124,7 @@ export default function PostInvestigationCard({
     setIsExpanded((open) => !open);
   };
 
-  if (entries.length === 0) {
+  if (entries.length === 0 && skips.length === 0) {
     return null;
   }
 
@@ -149,7 +160,7 @@ export default function PostInvestigationCard({
           </Box>
           <Typography variant="h6">Post-investigation</Typography>
           <Chip
-            label={entries.length}
+            label={entries.length + skips.length}
             size="small"
             variant="outlined"
             sx={{ ml: 0.5, height: 20, fontSize: '0.75rem' }}
@@ -157,6 +168,9 @@ export default function PostInvestigationCard({
           {running && <RunningPill />}
           {!isExpanded && quiet && (
             <Chip label="No action" color="default" size="small" data-testid="post-investigation-header-outcome" />
+          )}
+          {!isExpanded && skips.length > 0 && (
+            <Chip label="Skipped" color="default" size="small" data-testid="post-investigation-header-skipped" />
           )}
         </Box>
         <IconButton
@@ -180,9 +194,31 @@ export default function PostInvestigationCard({
               <EntryRow stage={stage} memo={memos.get(stage.id)} />
             </Box>
           ))}
+          {skips.map((skip, idx) => (
+            <Box key={skip.name}>
+              {(entries.length > 0 || idx > 0) && <Divider sx={{ mb: 2 }} />}
+              <SkipRow skip={skip} />
+            </Box>
+          ))}
         </Box>
       </Collapse>
     </Paper>
+  );
+}
+
+function SkipRow({ skip }: { skip: PostInvestigationSkip }) {
+  return (
+    <Box data-testid={`post-investigation-skip-${skip.name}`}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+          {skip.name}
+        </Typography>
+        <Chip label="Skipped" color="default" size="small" />
+      </Box>
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        {skip.detail}
+      </Typography>
+    </Box>
   );
 }
 

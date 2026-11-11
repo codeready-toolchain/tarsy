@@ -13,6 +13,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/agentexecution"
 	"github.com/codeready-toolchain/tarsy/ent/event"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
@@ -134,9 +135,10 @@ type postInvestigationRun struct {
 	execID     string
 }
 
-// RunAsync evaluates the gates of the session's chain entries and runs every
-// passing entry in the background. It is trigger-agnostic: the caller decides
-// when post-investigation should run. A no-op once the executor is stopped.
+// RunAsync evaluates the gates of the session's chain entries, records why
+// any entry did not run, and runs every passing entry in the background.
+// Gate notes are written before this returns, so a session refetch triggered
+// by the caller already includes them. A no-op once the executor is stopped.
 func (e *PostInvestigationExecutor) RunAsync(sessionID, scoreID string) {
 	e.mu.RLock()
 	if e.stopped {
@@ -145,13 +147,13 @@ func (e *PostInvestigationExecutor) RunAsync(sessionID, scoreID string) {
 			"session_id", sessionID, "score_id", scoreID)
 		return
 	}
+	// Hold a wait count across prepare so Stop cannot return before gate
+	// notes are recorded and entries are launched.
 	e.wg.Add(1)
 	e.mu.RUnlock()
+	defer e.wg.Done()
 
-	go func() {
-		defer e.wg.Done()
-		e.run(sessionID, scoreID)
-	}()
+	e.run(sessionID, scoreID)
 }
 
 // run loads the session and score, evaluates gates, creates records
@@ -186,10 +188,12 @@ func (e *PostInvestigationExecutor) run(sessionID, scoreID string) {
 	}
 
 	var runs []postInvestigationRun
+	var skips []schema.PostInvestigationSkip
 	for _, entry := range chain.PostInvestigation {
-		if ok, reason := evaluatePostInvestigationGate(entry, score.TotalScore, session.Labels); !ok {
-			logger.Info("Post-investigation gate not met", "entry", entry.Name, "reason", reason)
+		if ok, skip := evaluatePostInvestigationGate(entry, score.TotalScore, session.Labels); !ok {
+			logger.Info("Post-investigation gate not met", "entry", entry.Name, "reason", skip.Detail)
 			recordPostInvestigationOutcome(session.ChainID, entry.Name, postInvestigationOutcomeSkippedGate)
+			skips = append(skips, skip)
 			continue
 		}
 		run, err := e.prepareEntry(ctx, session, chain, entry)
@@ -200,9 +204,16 @@ func (e *PostInvestigationExecutor) run(sessionID, scoreID string) {
 		}
 		runs = append(runs, run)
 	}
+	if len(skips) > 0 {
+		if err := e.dbClient.AlertSession.UpdateOneID(session.ID).
+			SetPostInvestigationSkips(skips).
+			Exec(ctx); err != nil {
+			logger.Error("Post-investigation: failed to record gate misses", "error", err)
+		}
+	}
 
-	// Safe to Add here: this goroutine still holds a wg count, so Stop's
-	// Wait cannot return before the entries are tracked.
+	// Safe to Add here: RunAsync still holds a wg count, so Stop's Wait
+	// cannot return before the entries are tracked.
 	for _, r := range runs {
 		e.wg.Add(1)
 		go e.executeEntry(session, score, chain, r)
@@ -462,24 +473,47 @@ func (e *PostInvestigationExecutor) runEntry(
 // ────────────────────────────────────────────────────────────
 
 // evaluatePostInvestigationGate applies an entry's optional gate (AND of all
-// set conditions). Returns false and a reason when the gate is not met.
-// Labels compare case-insensitively; unlabeled sessions never match labels_any.
-func evaluatePostInvestigationGate(entry config.PostInvestigationConfig, totalScore *int, labels []string) (bool, string) {
+// set conditions). Returns false and a session-detail note when the gate is
+// not met. Labels compare case-insensitively; unlabeled sessions never match
+// labels_any. The note's detail is the wording shown in the dashboard.
+func evaluatePostInvestigationGate(entry config.PostInvestigationConfig, totalScore *int, labels []string) (bool, schema.PostInvestigationSkip) {
+	miss := func(detail string) (bool, schema.PostInvestigationSkip) {
+		return false, schema.PostInvestigationSkip{Name: entry.Name, Detail: detail}
+	}
 	if entry.MinScore != nil {
 		if totalScore == nil {
-			return false, "no total score"
+			return miss(fmt.Sprintf("needs a score of at least %d (session has no score)", *entry.MinScore))
 		}
 		if *totalScore < *entry.MinScore {
-			return false, fmt.Sprintf("total score %d is below min_score %d", *totalScore, *entry.MinScore)
+			return miss(fmt.Sprintf("needs a score of at least %d (session scored %d)", *entry.MinScore, *totalScore))
 		}
 	}
 	if len(entry.LabelsAny) > 0 && !hasAnyLabel(labels, entry.LabelsAny) {
-		return false, "session has none of labels_any"
+		have := "session has no labels"
+		if len(labels) > 0 {
+			have = "session has " + strings.Join(labels, ", ")
+		}
+		return miss(fmt.Sprintf("needs a label in %s (%s)", strings.Join(entry.LabelsAny, ", "), have))
 	}
 	if len(entry.LabelsNone) > 0 && hasAnyLabel(labels, entry.LabelsNone) {
-		return false, "session has a label from labels_none"
+		return miss("does not run when the session has " + strings.Join(matchingLabels(labels, entry.LabelsNone), ", "))
 	}
-	return true, ""
+	return true, schema.PostInvestigationSkip{}
+}
+
+// matchingLabels returns session labels that appear in blocked, keeping the
+// session's spelling.
+func matchingLabels(labels, blocked []string) []string {
+	var matched []string
+	for _, l := range labels {
+		for _, b := range blocked {
+			if strings.EqualFold(l, b) {
+				matched = append(matched, l)
+				break
+			}
+		}
+	}
+	return matched
 }
 
 func hasAnyLabel(labels, want []string) bool {

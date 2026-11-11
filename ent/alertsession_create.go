@@ -18,6 +18,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
@@ -172,6 +173,12 @@ func (_c *AlertSessionCreate) SetNillableExecutiveSummaryError(v *string) *Alert
 // SetLabels sets the "labels" field.
 func (_c *AlertSessionCreate) SetLabels(v []string) *AlertSessionCreate {
 	_c.mutation.SetLabels(v)
+	return _c
+}
+
+// SetPostInvestigationSkips sets the "post_investigation_skips" field.
+func (_c *AlertSessionCreate) SetPostInvestigationSkips(v []schema.PostInvestigationSkip) *AlertSessionCreate {
+	_c.mutation.SetPostInvestigationSkips(v)
 	return _c
 }
 
@@ -780,6 +787,10 @@ func (_c *AlertSessionCreate) createSpec() (*AlertSession, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Labels(); ok {
 		_spec.SetField(alertsession.FieldLabels, field.TypeJSON, value)
 		_node.Labels = value
+	}
+	if value, ok := _c.mutation.PostInvestigationSkips(); ok {
+		_spec.SetField(alertsession.FieldPostInvestigationSkips, field.TypeJSON, value)
+		_node.PostInvestigationSkips = value
 	}
 	if value, ok := _c.mutation.SessionMetadata(); ok {
 		_spec.SetField(alertsession.FieldSessionMetadata, field.TypeJSON, value)

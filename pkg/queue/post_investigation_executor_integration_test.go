@@ -196,6 +196,12 @@ func TestPostInvestigationExecutor_RunsPassingEntries(t *testing.T) {
 
 	skippedAfter := testutil.ToFloat64(metrics.PostInvestigationRunsTotal.WithLabelValues(chainID, "gated-out", string(postInvestigationOutcomeSkippedGate)))
 	assert.Equal(t, skippedBefore+1, skippedAfter)
+
+	fresh, err := entClient.AlertSession.Get(context.Background(), session.ID)
+	require.NoError(t, err)
+	require.Len(t, fresh.PostInvestigationSkips, 1)
+	assert.Equal(t, "gated-out", fresh.PostInvestigationSkips[0].Name)
+	assert.Equal(t, "needs a label in action (session has noise)", fresh.PostInvestigationSkips[0].Detail)
 	assert.Equal(t, float64(2), testutil.ToFloat64(metrics.PostInvestigationRunsTotal.WithLabelValues(chainID, "first", string(postInvestigationOutcomeCompletedNoAction)))+
 		testutil.ToFloat64(metrics.PostInvestigationRunsTotal.WithLabelValues(chainID, "second", string(postInvestigationOutcomeCompletedNoAction))))
 

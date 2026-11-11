@@ -19,22 +19,23 @@ func TestEvaluatePostInvestigationGate(t *testing.T) {
 		totalScore *int
 		labels     []string
 		want       bool
+		wantDetail string
 	}{
 		{name: "no gate fields", entry: config.PostInvestigationConfig{}, want: true},
 		{name: "no gate fields and unlabeled", entry: config.PostInvestigationConfig{}, labels: nil, want: true},
 
-		{name: "min_score below", entry: config.PostInvestigationConfig{MinScore: score(60)}, totalScore: score(59), want: false},
+		{name: "min_score below", entry: config.PostInvestigationConfig{Name: "file-issue", MinScore: score(60)}, totalScore: score(59), want: false, wantDetail: "needs a score of at least 60 (session scored 59)"},
 		{name: "min_score equal", entry: config.PostInvestigationConfig{MinScore: score(60)}, totalScore: score(60), want: true},
 		{name: "min_score above", entry: config.PostInvestigationConfig{MinScore: score(60)}, totalScore: score(90), want: true},
-		{name: "min_score without score", entry: config.PostInvestigationConfig{MinScore: score(0)}, totalScore: nil, want: false},
+		{name: "min_score without score", entry: config.PostInvestigationConfig{MinScore: score(60)}, totalScore: nil, want: false, wantDetail: "needs a score of at least 60 (session has no score)"},
 
 		{name: "labels_any hit", entry: config.PostInvestigationConfig{LabelsAny: []string{"action", "noise"}}, labels: []string{"noise"}, want: true},
 		{name: "labels_any case-insensitive", entry: config.PostInvestigationConfig{LabelsAny: []string{"noise"}}, labels: []string{"Noise"}, want: true},
-		{name: "labels_any miss", entry: config.PostInvestigationConfig{LabelsAny: []string{"action"}}, labels: []string{"watch"}, want: false},
-		{name: "labels_any unknown labels", entry: config.PostInvestigationConfig{LabelsAny: []string{"action"}}, labels: nil, want: false},
-		{name: "labels_any empty labels", entry: config.PostInvestigationConfig{LabelsAny: []string{"action"}}, labels: []string{}, want: false},
+		{name: "labels_any miss", entry: config.PostInvestigationConfig{Name: "file-issue", LabelsAny: []string{"action"}}, labels: []string{"watch"}, want: false, wantDetail: "needs a label in action (session has watch)"},
+		{name: "labels_any unknown labels", entry: config.PostInvestigationConfig{LabelsAny: []string{"action"}}, labels: nil, want: false, wantDetail: "needs a label in action (session has no labels)"},
+		{name: "labels_any empty labels", entry: config.PostInvestigationConfig{LabelsAny: []string{"action"}}, labels: []string{}, want: false, wantDetail: "needs a label in action (session has no labels)"},
 
-		{name: "labels_none hit", entry: config.PostInvestigationConfig{LabelsNone: []string{"noise"}}, labels: []string{"watch", "NOISE"}, want: false},
+		{name: "labels_none hit", entry: config.PostInvestigationConfig{LabelsNone: []string{"noise"}}, labels: []string{"watch", "NOISE"}, want: false, wantDetail: "does not run when the session has NOISE"},
 		{name: "labels_none miss", entry: config.PostInvestigationConfig{LabelsNone: []string{"noise"}}, labels: []string{"watch"}, want: true},
 		{name: "labels_none unlabeled passes", entry: config.PostInvestigationConfig{LabelsNone: []string{"noise"}}, labels: nil, want: true},
 
@@ -47,21 +48,23 @@ func TestEvaluatePostInvestigationGate(t *testing.T) {
 		},
 		{
 			name:       "one failing condition fails the gate",
-			entry:      config.PostInvestigationConfig{MinScore: score(60), LabelsAny: []string{"action"}, LabelsNone: []string{"noise"}},
+			entry:      config.PostInvestigationConfig{Name: "file-issue", MinScore: score(60), LabelsAny: []string{"action"}, LabelsNone: []string{"noise"}},
 			totalScore: score(70),
 			labels:     []string{"action", "noise"},
 			want:       false,
+			wantDetail: "does not run when the session has noise",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, reason := evaluatePostInvestigationGate(tt.entry, tt.totalScore, tt.labels)
+			got, skip := evaluatePostInvestigationGate(tt.entry, tt.totalScore, tt.labels)
 			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.wantDetail, skip.Detail)
 			if got {
-				assert.Empty(t, reason)
+				assert.Empty(t, skip.Name)
 			} else {
-				assert.NotEmpty(t, reason)
+				assert.Equal(t, tt.entry.Name, skip.Name)
 			}
 		})
 	}

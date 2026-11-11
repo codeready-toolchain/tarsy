@@ -1886,11 +1886,12 @@ export function SessionDetailPage() {
               />
             </Suspense>
 
-            {/* Post-investigation outcomes (renders nothing without post_investigation stages) */}
+            {/* Post-investigation outcomes. Renders nothing when the chain did not run or skip any. */}
             <Suspense fallback={null}>
               <PostInvestigationCard
                 stages={session.stages ?? []}
                 timelineEvents={timelineEvents}
+                skips={session.post_investigation_skips ?? []}
                 collapseCounter={cardsCollapseCounter}
               />
             </Suspense>

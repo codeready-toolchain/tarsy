@@ -118,7 +118,7 @@ Gate semantics:
 - Unset gate field = no condition; empty list = unset. With no gate fields the agent runs after every completed auto-scoring.
 - `labels_any` does not match unlabeled sessions (labels empty or unknown/NULL). `labels_none` skips sessions that have any listed label; unlabeled sessions pass it.
 - Label names match case-insensitively (stored session labels use the label map's canonical spelling).
-- A gate miss creates **no stage** (logged + metric), not a failed stage.
+- A gate miss creates **no stage** (logged + metric), not a failed stage. The session stores a short note — entry name and why — written when the gate is checked. Session detail shows it in the post-investigation card with a Skipped chip and the reason in the body. The list indicator is unchanged: no icon means it did not run.
 
 Load-time validation:
 - `post_investigation` requires `chain.Scoring.Enabled` — checked after the loader applies `defaults.scoring` to chains without their own block (`pkg/config/loader.go`) — otherwise the entries could never fire.
@@ -177,13 +177,14 @@ Post-investigation stages do not leak into other contexts, with no code change n
 - One agent execution per stage (plus sub-agent executions when used).
 - The YES/NO marker is parsed with `controller.ExtractActionsTaken` into the stage's existing `actions_executed` column (`StageService.SetActionsExecuted`, widened from action-only to action and post_investigation stages), and stripped from the timeline with `stripActionMarkerFromTimeline` — the same calls the action path makes in `executeStage`. On parse failure: warn, leave `actions_executed` NULL, keep the memo as-is. Session-level `actions_executed` / `has_action_stages` and the `ActionOutcomesByAgent` metric keep counting **only** `stage_type = action` (no change needed) — post-investigation side effects are not incident remediation.
 - No new table; the memo (with any created links) is the stage's `final_analysis` timeline event.
+- A gate miss is stored on the session as `post_investigation_skips` (entry name and caption text), not as a stage.
 - Session `total_stages` / `completed_stages` already count every stage type (scoring and chat included); post-investigation stages are counted the same way.
 - Events: existing `stage.status` / `execution.status` publishing.
 
 ### Dashboard and API
 
 - **Timeline:** post-investigation stages rendered after the Reflection (scoring) stage with their own separator.
-- **Session detail:** "Post-investigation" section — per entry: name, status, acted / no-action chip, memo rendered as markdown with clickable links. Live updates on `stage.status` for `post_investigation` stages: a terminal status re-fetches the session (for `actions_executed`) and the timeline (the YES/NO marker is stripped from the memo without a timeline event). Needs a per-stage `actions_executed` field on `models.StageOverview` (today only the session-level aggregate exists).
+- **Session detail:** "Post-investigation" section — per entry: name, status, acted / no-action chip, memo rendered as markdown with clickable links. Live updates on `stage.status` for `post_investigation` stages: a terminal status re-fetches the session (for `actions_executed`) and the timeline (the YES/NO marker is stripped from the memo without a timeline event). Needs a per-stage `actions_executed` field on `models.StageOverview` (today only the session-level aggregate exists). Gate misses are rows in that same card, not a timeline stage: `post_investigation_skips` on the session detail (`name`, `detail`), recorded before the scoring stage event so that refetch includes them. "Skipped" is the gate; "No action" is an agent that ran and chose not to act.
 - **Session list:** indicator when post-investigation ran — green when any agent acted, grey otherwise (same styling as the action-stage chip) — and filter `post_investigation`:
   - `acted` — at least one post-investigation stage with `actions_executed = true`;
   - `ran` — at least one post-investigation stage exists (any status);

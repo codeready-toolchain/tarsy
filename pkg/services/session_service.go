@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
@@ -713,6 +714,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		LatestScore:             latestScore,
 		ScoringStatus:           scoringStatus,
 		ScoreID:                 scoreID,
+		PostInvestigationSkips:  postInvestigationSkips(session.PostInvestigationSkips),
 		ReviewStatus:            ptrStringFromReviewStatus(session.ReviewStatus),
 		Assignee:                session.Assignee,
 		QualityRating:           ptrStringFromQualityRating(session.QualityRating),
@@ -727,6 +729,19 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		applySessionCostFields(resp, llmStats)
 	}
 	return resp, nil
+}
+
+// postInvestigationSkips copies gate-miss notes onto the session detail DTO.
+// A nil or empty column stays absent from the JSON.
+func postInvestigationSkips(in []schema.PostInvestigationSkip) []models.PostInvestigationSkip {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]models.PostInvestigationSkip, len(in))
+	for i, skip := range in {
+		out[i] = models.PostInvestigationSkip{Name: skip.Name, Detail: skip.Detail}
+	}
+	return out
 }
 
 // GetSessionSummary returns lightweight statistics for a session.
