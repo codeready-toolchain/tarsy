@@ -12,6 +12,12 @@ mcp_servers:
     transport:
       type: stdio
       command: mock
+  # Present on one chain only, so a post-investigation agent that inherited
+  # chain MCP servers would see chain_only_tool.
+  chain-only-mcp:
+    transport:
+      type: stdio
+      command: mock
   # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
   kubernetes-server:
     transport:
@@ -21,19 +27,37 @@ mcp_servers:
 agents:
   Investigator:
     mcp_servers: [test-mcp]
+    skills: []
     custom_instructions: "You are Investigator, gathering evidence about the alert."
   PostInvestigator:
     type: post_investigation
     description: "Files follow-up tickets for confirmed findings"
     mcp_servers: [ticket-mcp]
+    skills: []
     orchestrator:
       agent_timeout: 300s
     custom_instructions: "You are PostInvestigator, filing a ticket for confirmed findings that need human follow-up."
   Researcher:
     description: "Looks up existing tickets"
     mcp_servers: [ticket-mcp]
-    max_iterations: 2
+    max_iterations: 3
+    required_skills: [kubernetes-basics]
+    skills: [kubernetes-basics, networking]
     custom_instructions: "You are Researcher, looking up existing tickets."
+  SkillFiler:
+    type: post_investigation
+    description: "Files a follow-up ticket using skills and ticket tools"
+    mcp_servers: [ticket-mcp]
+    required_skills: [kubernetes-basics]
+    skills: [kubernetes-basics, networking]
+    custom_instructions: "You are SkillFiler, filing a ticket for confirmed findings that need human follow-up."
+  PodChecker:
+    type: post_investigation
+    description: "Checks live pod state before deciding on follow-up"
+    # The capabilities chain overrides this with test-mcp.
+    mcp_servers: [ticket-mcp]
+    skills: []
+    custom_instructions: "You are PodChecker, checking pod state before any follow-up."
 
 agent_chains:
   post-investigation-chain:
@@ -71,3 +95,28 @@ agent_chains:
         agent: PostInvestigator
         sub_agents:
           - name: Researcher
+
+  # Two entries run after the same score. Chain MCP servers and sub-agents
+  # are investigation wiring and must not be inherited. PodChecker replaces
+  # its agent-level ticket servers. SkillFiler keeps ticket-mcp and loads skills.
+  post-investigation-capabilities-chain:
+    alert_types: [test-post-investigation-capabilities]
+    executive_summary:
+      llm_provider: "test-provider"
+    scoring:
+      enabled: true
+    mcp_servers: [chain-only-mcp]
+    sub_agents:
+      - name: Researcher
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
+            mcp_servers: [test-mcp]
+    post_investigation:
+      - name: file-from-skill
+        agent: SkillFiler
+        include_investigation: true
+      - name: check-pods
+        agent: PodChecker
+        mcp_servers: [test-mcp]
