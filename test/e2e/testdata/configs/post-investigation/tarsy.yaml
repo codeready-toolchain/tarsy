@@ -1,0 +1,73 @@
+defaults:
+  llm_provider: "test-provider"
+  llm_backend: "google-native"
+  max_iterations: 3
+
+mcp_servers:
+  test-mcp:
+    transport:
+      type: stdio
+      command: mock
+  ticket-mcp:
+    transport:
+      type: stdio
+      command: mock
+  # Dummy entry so built-in agents (KubernetesAgent, etc.) pass validation.
+  kubernetes-server:
+    transport:
+      type: stdio
+      command: mock
+
+agents:
+  Investigator:
+    mcp_servers: [test-mcp]
+    custom_instructions: "You are Investigator, gathering evidence about the alert."
+  PostInvestigator:
+    type: post_investigation
+    description: "Files follow-up tickets for confirmed findings"
+    mcp_servers: [ticket-mcp]
+    orchestrator:
+      agent_timeout: 300s
+    custom_instructions: "You are PostInvestigator, filing a ticket for confirmed findings that need human follow-up."
+  Researcher:
+    description: "Looks up existing tickets"
+    mcp_servers: [ticket-mcp]
+    max_iterations: 2
+    custom_instructions: "You are Researcher, looking up existing tickets."
+
+agent_chains:
+  post-investigation-chain:
+    alert_types: [test-post-investigation]
+    executive_summary:
+      llm_provider: "test-provider"
+    scoring:
+      enabled: true
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
+    post_investigation:
+      - name: file-ticket
+        agent: PostInvestigator
+        min_score: 60
+        labels_any: [action]
+      # Gate never matches in these tests (sessions are labeled "action").
+      - name: noise-follow-up
+        agent: PostInvestigator
+        labels_any: [noise]
+
+  post-investigation-subagent-chain:
+    alert_types: [test-post-investigation-subagent]
+    executive_summary:
+      llm_provider: "test-provider"
+    scoring:
+      enabled: true
+    stages:
+      - name: investigation
+        agents:
+          - name: Investigator
+    post_investigation:
+      - name: research-and-file
+        agent: PostInvestigator
+        sub_agents:
+          - name: Researcher

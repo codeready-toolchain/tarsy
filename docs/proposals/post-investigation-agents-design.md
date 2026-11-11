@@ -73,7 +73,7 @@ sequenceDiagram
 - **Fail-open:** any error marks only that entry's stage/execution failed.
 - **Event cleanup:** schedule transient `events` cleanup after the runs finish, like scoring's `scheduleEventCleanup`.
 - **Shutdown:** new `queue.post_investigation_shutdown_timeout` (default 3m, like `scoring_shutdown_timeout`). Stopped in parallel with the scoring executor in `cmd/tarsy/main.go`; a scoring run that finishes during shutdown finds the post-investigation executor stopped and skips (at-most-once).
-- **Orphan recovery:** mirror scoring's two paths (`pkg/queue/orphan.go`): a startup cleanup marking `post_investigation` stages in `pending`/`active` for sessions owned by this pod (`alert_sessions.pod_id`) as failed (with their active executions and streaming timeline events), and periodic stale recovery for stages active longer than their timeout plus a margin.
+- **Orphan recovery:** mirror scoring's two paths (`pkg/queue/orphan.go`): a startup cleanup marking `post_investigation` stages in `pending`/`active` for sessions owned by this pod (`alert_sessions.pod_id`) as failed (with their active executions and streaming timeline events), and periodic stale recovery for stages active longer than the longest entry timeout plus a margin. Stages have no `created_at` and get `started_at` only when their execution starts, so stale `pending` stages are aged by the session's `completed_at` (plus scoring's timeout, since runs start after auto-scoring).
 - **Concurrency:** no global limit (same as scoring); every completed session can start its gated entries.
 
 ### Configuration
@@ -162,20 +162,20 @@ Built by a new context builder in the executor:
 | Section | Source | Default |
 |---|---|---|
 | Session metadata + link | session ID, alert type, chain ID, `{system.dashboard_url}/sessions/{id}` ([ADR-0021](../adr/0021-session-deep-links.md)); link omitted when `dashboard_url` is unset | ✓ |
-| Alert data | `alert_sessions.alert_data` (already masked) | ✓ |
+| Alert data | `alert_sessions.alert_data` (already masked) — rendered by the prompt builder's alert section, not repeated in the context | ✓ |
 | Final report | latest compose report if present, else `final_analysis` | ✓ |
 | Executive summary | `executive_summary` | ✓ |
 | Session labels | `alert_sessions.labels` ([ADR-0031](../adr/0031-session-labels.md)) | ✓ |
 | Scoring verdict | `total_score`, `score_analysis`, `failure_tags`, `tool_improvement_report` | ✓ |
-| Full investigation timeline | existing `InvestigationContextBuilder` (same as scoring) | only with `include_investigation: true` |
+| Full investigation timeline | `InvestigationContextBuilder.BuildInvestigation` — tool inventory + timeline as for scoring, without the alert and runbook sections | only with `include_investigation: true` |
 
 Post-investigation stages do not leak into other contexts, with no code change needed: `InvestigationContextBuilder` (scoring, re-scoring) only includes `investigation`, `exec_summary` and `action` stages, and chat context skips unknown stage types. Consequence: chat cannot see post-investigation memos in v1.
 
 ### Persistence
 
-- New `stage_type` enum value `post_investigation` (`ent/schema/stage.go`, Atlas migration). Stage name = entry `name`; stage index = next after the current max (scoring stage comes first).
+- New `stage_type` enum value `post_investigation` (`ent/schema/stage.go` + `make ent-generate`). No SQL migration: `stages.stage_type` is a `character varying` column, as for earlier additions (`action`, `compose`). Stage name = entry `name`; stage index = next after the current max (scoring stage comes first).
 - One agent execution per stage (plus sub-agent executions when used).
-- The YES/NO marker is parsed with `controller.ExtractActionsTaken` into the stage's existing `actions_executed` column (`StageService.SetActionsExecuted`), and stripped from the timeline with `stripActionMarkerFromTimeline` — the same calls the action path makes in `executeStage`. On parse failure: warn, leave `actions_executed` NULL, keep the memo as-is. Session-level `actions_executed` / `has_action_stages` and the `ActionOutcomesByAgent` metric keep counting **only** `stage_type = action` (no change needed) — post-investigation side effects are not incident remediation.
+- The YES/NO marker is parsed with `controller.ExtractActionsTaken` into the stage's existing `actions_executed` column (`StageService.SetActionsExecuted`, widened from action-only to action and post_investigation stages), and stripped from the timeline with `stripActionMarkerFromTimeline` — the same calls the action path makes in `executeStage`. On parse failure: warn, leave `actions_executed` NULL, keep the memo as-is. Session-level `actions_executed` / `has_action_stages` and the `ActionOutcomesByAgent` metric keep counting **only** `stage_type = action` (no change needed) — post-investigation side effects are not incident remediation.
 - No new table; the memo (with any created links) is the stage's `final_analysis` timeline event.
 - Session `total_stages` / `completed_stages` already count every stage type (scoring and chat included); post-investigation stages are counted the same way.
 - Events: existing `stage.status` / `execution.status` publishing.
@@ -236,8 +236,8 @@ Why this split: PR 1 groups everything that is pure definition (config schema, v
 - Keeps TARSy working: existing configs load unchanged; the new validation applies only to the new block and new type; the prompt code is unreachable until PR 2; the config API gains an optional field the dashboard ignores.
 
 **PR 2 — Executor, persistence, trigger** — `feat(queue)`
-- Suggested commit order for review: (1) refactor — extract chat's sub-agent wiring into a shared helper in `pkg/queue/` (behavior unchanged, covered by existing chat tests); (2) migration; (3) executor; (4) trigger + wiring + ops; (5) dashboard stage type + docs.
-- `ent/schema/stage.go`: `post_investigation` in `stage_type`; `make migrate-create NAME=add_post_investigation_stage_type`, apply the `db-migration-review` skill; `make ent-generate`.
+- Suggested commit order for review: (1) refactor — extract chat's sub-agent wiring into a shared helper in `pkg/queue/` (behavior unchanged, covered by existing chat tests); (2) stage type; (3) executor; (4) trigger + wiring + ops; (5) dashboard stage type + docs.
+- `ent/schema/stage.go`: `post_investigation` in `stage_type`; `make ent-generate` (no SQL migration, see Persistence). `StageService.SetActionsExecuted` accepts post_investigation stages.
 - `pkg/queue/post_investigation_executor.go`: gate evaluation, sequential Stage + AgentExecution creation with index-conflict retry, context builder (compact + `include_investigation`), MCP tool executor (resolved servers, no session override), sub-agents, on-demand skills, memory tool wrapper (when memory is enabled, no briefing), agent execution with per-entry timeout, YES/NO → stage `actions_executed` + marker stripping, terminal status + events, event cleanup, cancel registry, `SetCostBook`, `Stop(grace)`.
 - `pkg/queue/scoring_executor.go`: carry the trigger source through `executeScoring`; call `RunAsync` at the end only for auto-triggered, completed scores of chains that have `post_investigation` entries.
 - `pkg/queue/orphan.go`: startup (pod-scoped) and stale recovery for `post_investigation` stages; startup cleanup called from `cmd/tarsy/main.go` next to `CleanupStartupScoringOrphans`.

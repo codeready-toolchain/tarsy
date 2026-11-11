@@ -242,7 +242,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention, CostEstimation, PromptCaching)
-- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `compose`, `synthesis`, `scoring`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `compose`, `synthesis`, `scoring`, `post_investigation`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
 - `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing (directory and flat file layouts)
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
@@ -374,7 +374,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"` | `"post_investigation"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -456,6 +456,7 @@ type Controller interface {
 |-----------|-----------|---------|----------|
 | `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents (+ implicit orchestration when sub-agents present) |
 | `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
+| `"post_investigation"` | IteratingController | Iterating (multi-turn with tools) + post-investigation guidelines | Follow-through outside TARSy after auto-scoring (issues, tickets) |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
 | `"compose"` | SingleShotController | Single-shot (one LLM call, no tools) | Copy-edit upstream report + action memo into session report |
@@ -507,7 +508,7 @@ ScoringExecutor.ScoreSession(sessionID)
 
 Turn 1 uses an outcome-first ceiling mechanic: conclusion quality determines the score range (60-100 correct / 35-59 partial / 0-34 wrong), then process quality places the score within that range. A failure vocabulary (defined as a Go slice in `pkg/agent/prompt/vocabulary.go`) is dynamically injected into the prompt; after scoring, `scanFailureTags()` extracts matched terms into a `failure_tags` JSON column. Turn 2 covers both missing MCP tools and improvements to existing tools.
 
-Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled via per-chain `scoring:` block or globally via `defaults.scoring`) or on-demand via `POST /api/v1/sessions/:id/score`. The `defaults.scoring` block also supports `llm_provider` and `llm_backend` overrides specific to scoring, inserted into the resolution hierarchy between global defaults and chain-level settings. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
+Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled via per-chain `scoring:` block or globally via `defaults.scoring`) or on-demand via `POST /api/v1/sessions/:id/score`. After an auto-triggered score completes, the chain's `post_investigation` entries (if any) are handed to `PostInvestigationExecutor`; re-scores never start them. The `defaults.scoring` block also supports `llm_provider` and `llm_backend` overrides specific to scoring, inserted into the resolution hierarchy between global defaults and chain-level settings. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
 
 #### Implicit Orchestration (`pkg/agent/orchestrator/`)
 
@@ -634,6 +635,7 @@ No-partial provider errors emit a timeline `error` event and are not appended to
 - `pkg/agent/prompt/skills.go` -- formatRequiredSkill(), formatSkillCatalog() for Tier 2.5/2.6
 - `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
 - `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow + memory extraction orchestration)
+- `pkg/queue/post_investigation_executor.go` -- PostInvestigationExecutor (gates, stage/execution records, context, MCP/sub-agent/memory wiring, YES/NO → stage `actions_executed`, shutdown)
 - `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts, stage-level skill merging)
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
@@ -1017,7 +1019,7 @@ AlertSession (session metadata, status, alert data)
 `id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels; GIN `idx_alert_sessions_labels_gin` for `label=` contains), `mcp_selection`, `author`, `cancelled_by` (optional — proxy identity, or `system`), `cancel_reason` (optional text, max 500 runes), `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 
 **Stage** (`ent/schema/stage.go`):
-`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose/post_investigation), `actions_executed` (YES/NO marker of action and post_investigation stages), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `model_name` (nullable — model at execution time), `reasoning_effort` (nullable — effective effort of the current provider; null when unset or recorded before the column existed), `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `original_model_name` (nullable — set on fallback), `original_reasoning_effort` (nullable — primary effort, set on fallback; null when there was no fallback or the primary effort was unset), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps.
@@ -1110,7 +1112,7 @@ graph TB
 - Spawns one goroutine per message (no pool -- chats are rare, one-at-a-time per chat enforced)
 - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
 - Creates Stage (type: `chat`) and AgentExecution records (reusing existing audit trail infrastructure)
-- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only). The posted `executive_summary` is a footer; the exec-summary stage is skipped; session `labels` are not injected. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only). The posted `executive_summary` is a footer; the exec-summary stage is skipped (as are scoring and post_investigation stages); session `labels` are not injected. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - Runs `agent.Execute()` with same controllers as investigation
 
 **Chat Service** (`pkg/services/chat_service.go`):

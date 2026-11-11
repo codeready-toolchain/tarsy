@@ -42,6 +42,11 @@ queue:
   # during shutdown before cancelling them.
   scoring_shutdown_timeout: 3m
 
+  # How long to wait for in-flight post-investigation agents to complete
+  # naturally during shutdown before cancelling them. Stopped in parallel with
+  # scoring, so shutdown waits for the longer of the two.
+  post_investigation_shutdown_timeout: 3m
+
   # Orphan detection: scans for stuck in_progress sessions with stale heartbeats
   orphan_detection_interval: 5m
   orphan_threshold: 5m

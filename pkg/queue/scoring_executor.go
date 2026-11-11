@@ -57,6 +57,9 @@ type ScoringExecutor struct {
 	memoryConfig   *config.MemoryConfig
 	contextBuilder *InvestigationContextBuilder
 
+	// postInvestigation is notified after auto-triggered scoring completes; may be nil.
+	postInvestigation postInvestigationRunner
+
 	mu            sync.RWMutex
 	wg            sync.WaitGroup
 	stopped       bool
@@ -112,6 +115,17 @@ func (e *ScoringExecutor) SetCostBook(book *cost.Book) {
 	e.interactionService = services.NewInteractionService(e.dbClient, e.messageService, book)
 }
 
+// postInvestigationRunner starts post-investigation agents for a scored session.
+type postInvestigationRunner interface {
+	RunAsync(sessionID, scoreID string)
+}
+
+// SetPostInvestigationExecutor sets the runner started after auto-triggered
+// scoring completes. Must be called before scoring starts.
+func (e *ScoringExecutor) SetPostInvestigationExecutor(r postInvestigationRunner) {
+	e.postInvestigation = r
+}
+
 // ScoreSessionAsync launches scoring in a background goroutine.
 // Silently returns if scoring is disabled or the executor is stopped.
 // Used by the worker for auto-trigger after session completion.
@@ -140,7 +154,7 @@ func (e *ScoringExecutor) ScoreSessionAsync(sessionID, triggeredBy string, check
 		}
 		e.trackCancel(scoreID, cancel)
 		defer e.removeCancel(scoreID)
-		e.executeScoring(ctx, scoreID, stageID, sessionID)
+		e.executeScoring(ctx, scoreID, stageID, sessionID, true)
 	}()
 }
 
@@ -170,7 +184,7 @@ func (e *ScoringExecutor) SubmitScoring(ctx context.Context, sessionID, triggere
 		execCtx, cancel := context.WithTimeout(context.Background(), scoringTimeout)
 		e.trackCancel(scoreID, cancel)
 		defer e.removeCancel(scoreID)
-		e.executeScoring(execCtx, scoreID, stageID, sessionID)
+		e.executeScoring(execCtx, scoreID, stageID, sessionID, false)
 	}()
 
 	return scoreID, nil
@@ -282,7 +296,9 @@ func (e *ScoringExecutor) prepareScoring(ctx context.Context, sessionID, trigger
 }
 
 // executeScoring runs the LLM evaluation phase for a previously prepared scoring.
-func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, sessionID string) {
+// autoTriggered is true for the worker's auto-trigger after session completion;
+// only then are post-investigation agents started (API re-scores never start them).
+func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, sessionID string, autoTriggered bool) {
 	logger := slog.With("session_id", sessionID, "score_id", scoreID, "stage_id", stageID)
 	logger.Info("Scoring executor: starting evaluation")
 
@@ -453,6 +469,10 @@ func (e *ScoringExecutor) executeScoring(ctx context.Context, scoreID, stageID, 
 
 	// Schedule event cleanup
 	e.scheduleEventCleanup(stageID, time.Now())
+
+	if autoTriggered && scoreCompleted && e.postInvestigation != nil && len(chain.PostInvestigation) > 0 {
+		e.postInvestigation.RunAsync(sessionID, scoreID)
+	}
 }
 
 // runMemoryExtraction runs the Reflector to extract memories from a completed investigation.
@@ -620,9 +640,18 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.
 	result := e.contextBuilder.Build(ctx, session)
 	result += formatPersistedSessionLabels(session.Labels)
 
-	stages, err := e.stageService.GetStagesBySession(ctx, session.ID, true)
+	if fa := latestComposeReport(ctx, e.stageService, e.timelineService, session.ID); fa != "" {
+		result += "\n\n## AMENDED REPORT\n\n" + fa
+	}
+	return result
+}
+
+// latestComposeReport returns the final analysis of the session's latest
+// compose stage (the amended report), or "" when there is none.
+func latestComposeReport(ctx context.Context, stageService *services.StageService, timelineService *services.TimelineService, sessionID string) string {
+	stages, err := stageService.GetStagesBySession(ctx, sessionID, true)
 	if err != nil {
-		return result
+		return ""
 	}
 	var latestCompose *ent.Stage
 	for _, stg := range stages {
@@ -633,25 +662,27 @@ func (e *ScoringExecutor) buildScoringContext(ctx context.Context, session *ent.
 			latestCompose = stg
 		}
 	}
-	if latestCompose != nil {
-		if fa := extractFinalAnalysisFromStage(ctx, e.timelineService, latestCompose); fa != "" {
-			result += "\n\n## AMENDED REPORT\n\n" + fa
-		}
+	if latestCompose == nil {
+		return ""
 	}
-	return result
+	return extractFinalAnalysisFromStage(ctx, timelineService, latestCompose)
 }
 
 func formatPersistedSessionLabels(labels []string) string {
-	var value string
+	return "## Session Labels\n\nLabels: " + persistedLabelsValue(labels) + "\n"
+}
+
+// persistedLabelsValue renders stored session labels, keeping unknown (NULL)
+// distinct from an empty label set.
+func persistedLabelsValue(labels []string) string {
 	switch {
 	case labels == nil:
-		value = "(unknown)"
+		return "(unknown)"
 	case len(labels) == 0:
-		value = "(none)"
+		return "(none)"
 	default:
-		value = strings.Join(labels, ", ")
+		return strings.Join(labels, ", ")
 	}
-	return "## Session Labels\n\nLabels: " + value + "\n"
 }
 
 // ────────────────────────────────────────────────────────────

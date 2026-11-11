@@ -310,9 +310,11 @@ type QueueView struct {
 	SessionTimeout          string `json:"session_timeout"`
 	GracefulShutdownTimeout string `json:"graceful_shutdown_timeout"`
 	ScoringShutdownTimeout  string `json:"scoring_shutdown_timeout"`
-	OrphanDetectionInterval string `json:"orphan_detection_interval"`
-	OrphanThreshold         string `json:"orphan_threshold"`
-	HeartbeatInterval       string `json:"heartbeat_interval"`
+	// PostInvestigationShutdownTimeout is the post-investigation drain window during shutdown.
+	PostInvestigationShutdownTimeout string `json:"post_investigation_shutdown_timeout"`
+	OrphanDetectionInterval          string `json:"orphan_detection_interval"`
+	OrphanThreshold                  string `json:"orphan_threshold"`
+	HeartbeatInterval                string `json:"heartbeat_interval"`
 }
 
 // SystemView is GitHub/Slack/runbooks/retention/dashboard settings.
@@ -512,16 +514,17 @@ func buildQueueView(q *config.QueueConfig) *QueueView {
 		return nil
 	}
 	return &QueueView{
-		WorkerCount:             q.WorkerCount,
-		MaxConcurrentSessions:   q.MaxConcurrentSessions,
-		PollInterval:            durationString(q.PollInterval),
-		PollIntervalJitter:      durationString(q.PollIntervalJitter),
-		SessionTimeout:          durationString(q.SessionTimeout),
-		GracefulShutdownTimeout: durationString(q.GracefulShutdownTimeout),
-		ScoringShutdownTimeout:  durationString(q.ScoringShutdownTimeout),
-		OrphanDetectionInterval: durationString(q.OrphanDetectionInterval),
-		OrphanThreshold:         durationString(q.OrphanThreshold),
-		HeartbeatInterval:       durationString(q.HeartbeatInterval),
+		WorkerCount:                      q.WorkerCount,
+		MaxConcurrentSessions:            q.MaxConcurrentSessions,
+		PollInterval:                     durationString(q.PollInterval),
+		PollIntervalJitter:               durationString(q.PollIntervalJitter),
+		SessionTimeout:                   durationString(q.SessionTimeout),
+		GracefulShutdownTimeout:          durationString(q.GracefulShutdownTimeout),
+		ScoringShutdownTimeout:           durationString(q.ScoringShutdownTimeout),
+		PostInvestigationShutdownTimeout: durationString(q.PostInvestigationShutdownTimeout),
+		OrphanDetectionInterval:          durationString(q.OrphanDetectionInterval),
+		OrphanThreshold:                  durationString(q.OrphanThreshold),
+		HeartbeatInterval:                durationString(q.HeartbeatInterval),
 	}
 }
 

@@ -246,13 +246,14 @@ const DefaultStageType = StageTypeInvestigation
 
 // StageType values.
 const (
-	StageTypeInvestigation StageType = "investigation"
-	StageTypeSynthesis     StageType = "synthesis"
-	StageTypeChat          StageType = "chat"
-	StageTypeExecSummary   StageType = "exec_summary"
-	StageTypeScoring       StageType = "scoring"
-	StageTypeAction        StageType = "action"
-	StageTypeCompose       StageType = "compose"
+	StageTypeInvestigation     StageType = "investigation"
+	StageTypeSynthesis         StageType = "synthesis"
+	StageTypeChat              StageType = "chat"
+	StageTypeExecSummary       StageType = "exec_summary"
+	StageTypeScoring           StageType = "scoring"
+	StageTypeAction            StageType = "action"
+	StageTypeCompose           StageType = "compose"
+	StageTypePostInvestigation StageType = "post_investigation"
 )
 
 func (st StageType) String() string {
@@ -262,7 +263,7 @@ func (st StageType) String() string {
 // StageTypeValidator is a validator for the "stage_type" field enum values. It is called by the builders before save.
 func StageTypeValidator(st StageType) error {
 	switch st {
-	case StageTypeInvestigation, StageTypeSynthesis, StageTypeChat, StageTypeExecSummary, StageTypeScoring, StageTypeAction, StageTypeCompose:
+	case StageTypeInvestigation, StageTypeSynthesis, StageTypeChat, StageTypeExecSummary, StageTypeScoring, StageTypeAction, StageTypeCompose, StageTypePostInvestigation:
 		return nil
 	default:
 		return fmt.Errorf("stage: invalid enum value for stage_type field: %q", st)

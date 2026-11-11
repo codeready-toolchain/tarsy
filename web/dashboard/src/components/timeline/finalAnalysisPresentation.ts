@@ -22,7 +22,8 @@ function wrapUpBadgeLabel(metadata: Record<string, unknown> | undefined): string
 
 /**
  * Returns context-aware label, emoji, and color for a final_analysis timeline event.
- * Handles synthesis (from metadata), then stage type (chat, action), defaulting to
+ * Handles synthesis (from metadata), then stage type (chat, action, compose,
+ * post_investigation), defaulting to
  * investigation/conclusion. Does NOT handle reflector/memory_extraction — callers
  * branch on that separately since it uses a completely different UI.
  */
@@ -40,6 +41,7 @@ export function getFinalAnalysisPresentation(
     case STAGE_TYPE.CHAT:
       return { label: 'ANSWER', emoji: '🎯', color: 'success.main', wrapUpBadge };
     case STAGE_TYPE.ACTION:
+    case STAGE_TYPE.POST_INVESTIGATION:
       return { label: 'RESULT', emoji: '🎯', color: 'success.main', wrapUpBadge };
     case STAGE_TYPE.COMPOSE:
       return { label: 'AMENDED REPORT', emoji: '🎯', color: 'success.main', wrapUpBadge };
