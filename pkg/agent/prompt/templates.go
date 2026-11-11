@@ -38,6 +38,24 @@ When you are done, write a short action memo covering: the decision, the evidenc
 
 ` + ActionOutputSchema
 
+// postInvestigationOutputSchema uses the same last-line YES/NO marker as
+// ActionOutputSchema (parsed by the same code), but YES means a side-effecting
+// follow-through: post-investigation agents also call read-only research tools.
+const postInvestigationOutputSchema = `End your response with YES or NO on the very last line: YES only if you carried out the follow-through with a tool that has side effects (e.g. created or updated something), NO otherwise. Read-only tool calls do not count.
+The last line must contain ONLY YES or NO — no formatting, no markdown, no extra text.`
+
+// postInvestigationTask is the post-investigation task instruction appended to the user message.
+const postInvestigationTask = `## Your Task
+Review the completed investigation above and decide whether the follow-through defined by your instructions is warranted.
+
+1. State the evidence from the investigation that supports it
+2. Gather any extra context your task needs with your tools
+3. Carry it out via your available tools, or explain why you chose not to
+
+When you are done, write a short memo covering: the decision, the evidence, tools used (or why none), the outcome, and links to anything you created. Do not copy the investigation report.
+
+` + postInvestigationOutputSchema
+
 // synthesisTask is the synthesis task instruction for combining parallel results.
 const synthesisTask = `Synthesize the investigation results and provide your comprehensive analysis.`
 

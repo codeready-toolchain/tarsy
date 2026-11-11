@@ -47,16 +47,21 @@ const (
 // BuildFunctionCallingMessages builds the initial conversation for a function calling investigation.
 // Used by both google-native (Google SDK) and langchain (multi-provider) backends.
 //
-// Dispatches to specialized builders for action and sub-agent modes,
-// then falls through to chat / investigation paths. Orchestrator sections
-// are injected additively when SubAgentCatalog is non-empty, including
-// action agents (the executor already attaches dispatch tools in that case).
+// Dispatches to specialized builders for action, post-investigation and
+// sub-agent modes, then falls through to chat / investigation paths.
+// Orchestrator sections are injected additively when SubAgentCatalog is
+// non-empty, including action and post-investigation agents (the executor
+// already attaches dispatch tools in that case). For post-investigation
+// agents prevStageContext carries the completed-investigation context.
 func (b *PromptBuilder) BuildFunctionCallingMessages(
 	execCtx *agent.ExecutionContext,
 	prevStageContext string,
 ) []agent.ConversationMessage {
-	if execCtx.Config.Type == config.AgentTypeAction {
+	switch execCtx.Config.Type {
+	case config.AgentTypeAction:
 		return b.buildActionMessages(execCtx, prevStageContext)
+	case config.AgentTypePostInvestigation:
+		return b.buildPostInvestigationMessages(execCtx, prevStageContext)
 	}
 	if execCtx.SubAgent != nil {
 		return b.buildSubAgentMessages(execCtx)

@@ -571,6 +571,20 @@ agents:
   #     You are a session quality evaluator.
   #     Score the investigation based on thoroughness, accuracy, and actionability.
 
+  # Example: Post-investigation agent (used in a chain's post_investigation: block)
+  # Runs after automatic scoring and acts outside the investigation (e.g. files an
+  # issue or ticket). type: post_investigation is optional — agents with no type are
+  # treated as post-investigation agents there — but a typed agent cannot be used
+  # in stages, chat, scoring or sub_agents.
+  # DetectionTuningProposer:
+  #   type: post_investigation
+  #   description: "Proposes detector configuration changes as issues"
+  #   mcp_servers: ["github"]
+  #   max_iterations: 15
+  #   custom_instructions: |
+  #     Decide whether the investigation shows a precise, reusable detection change.
+  #     If so, search existing issues first, then file one with the evidence.
+
 # =============================================================================
 # AGENT CHAIN DEFINITIONS
 # =============================================================================
@@ -617,6 +631,21 @@ agent_chains:
       llm_backend: "langchain"            # Override LLM backend (default: global default)
       llm_provider: "google-default"      # Override LLM provider (default: global default)
       # fallback_list: mid                  # Optional; beats investigation chain list
+    # Post-investigation agents — run after automatic scoring (requires scoring enabled;
+    # API re-scores do not trigger them). Each entry is independent and fail-open.
+    # post_investigation:
+    #   - name: "detection-tuning"          # Stage name; unique within the chain
+    #     agent: "DetectionTuningProposer"
+    #     # Gate — every field optional; all set conditions must pass
+    #     min_score: 60                     # total_score >= 60
+    #     labels_any: [action, noise]       # Session has at least one of these labels
+    #     # labels_none: [watch]            # Session has none of these labels
+    #     # include_investigation: true     # Also pass the full investigation timeline
+    #     # timeout: 10m                    # Default 10m
+    #     # llm_provider / llm_backend / fallback_list / max_iterations: optional overrides
+    #     # mcp_servers: ["github"]         # Overrides the agent's servers (chain mcp_servers not used)
+    #     # sub_agents:                     # Entry-level only (chain sub_agents not inherited)
+    #     #   - name: WebResearcher
 
   # Multi-stage chain with different strategies
   kubernetes-deep-troubleshooting:

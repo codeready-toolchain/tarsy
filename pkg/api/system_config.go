@@ -79,21 +79,22 @@ type OrchestratorView struct {
 
 // ChainView is the chain config view.
 type ChainView struct {
-	AlertTypes        []string               `json:"alert_types"`
-	Description       string                 `json:"description,omitempty"`
-	Stages            []StageView            `json:"stages"`
-	Chat              *ChatView              `json:"chat,omitempty"`
-	Scoring           *ScoringView           `json:"scoring,omitempty"`
-	LLMProvider       string                 `json:"llm_provider,omitempty"`
-	ExecutiveSummary  *JobPairingView        `json:"executive_summary,omitempty"`
-	Compose           *JobPairingView        `json:"compose,omitempty"`
-	LLMBackend        string                 `json:"llm_backend,omitempty"`
-	FallbackList      string                 `json:"fallback_list,omitempty"`
-	LabelMap          string                 `json:"label_map,omitempty"`
-	FallbackProviders []FallbackProviderView `json:"fallback_providers,omitempty"`
-	MaxIterations     *int                   `json:"max_iterations,omitempty"`
-	MCPServers        []string               `json:"mcp_servers,omitempty"`
-	SubAgents         []SubAgentView         `json:"sub_agents,omitempty"`
+	AlertTypes        []string                `json:"alert_types"`
+	Description       string                  `json:"description,omitempty"`
+	Stages            []StageView             `json:"stages"`
+	Chat              *ChatView               `json:"chat,omitempty"`
+	Scoring           *ScoringView            `json:"scoring,omitempty"`
+	PostInvestigation []PostInvestigationView `json:"post_investigation,omitempty"`
+	LLMProvider       string                  `json:"llm_provider,omitempty"`
+	ExecutiveSummary  *JobPairingView         `json:"executive_summary,omitempty"`
+	Compose           *JobPairingView         `json:"compose,omitempty"`
+	LLMBackend        string                  `json:"llm_backend,omitempty"`
+	FallbackList      string                  `json:"fallback_list,omitempty"`
+	LabelMap          string                  `json:"label_map,omitempty"`
+	FallbackProviders []FallbackProviderView  `json:"fallback_providers,omitempty"`
+	MaxIterations     *int                    `json:"max_iterations,omitempty"`
+	MCPServers        []string                `json:"mcp_servers,omitempty"`
+	SubAgents         []SubAgentView          `json:"sub_agents,omitempty"`
 }
 
 // StageView is a chain stage.
@@ -191,6 +192,23 @@ type ScoringView struct {
 	MCPServers    []string `json:"mcp_servers,omitempty"`
 	MaxIterations *int     `json:"max_iterations,omitempty"`
 	FallbackList  string   `json:"fallback_list,omitempty"`
+}
+
+// PostInvestigationView is one chain post_investigation entry.
+type PostInvestigationView struct {
+	Name                 string         `json:"name"`
+	Agent                string         `json:"agent"`
+	MinScore             *int           `json:"min_score,omitempty"`
+	LabelsAny            []string       `json:"labels_any,omitempty"`
+	LabelsNone           []string       `json:"labels_none,omitempty"`
+	IncludeInvestigation bool           `json:"include_investigation"`
+	Timeout              string         `json:"timeout,omitempty"`
+	LLMProvider          string         `json:"llm_provider,omitempty"`
+	LLMBackend           string         `json:"llm_backend,omitempty"`
+	FallbackList         string         `json:"fallback_list,omitempty"`
+	MaxIterations        *int           `json:"max_iterations,omitempty"`
+	MCPServers           []string       `json:"mcp_servers,omitempty"`
+	SubAgents            []SubAgentView `json:"sub_agents,omitempty"`
 }
 
 // SummarizationView is defaults.summarization (named provider/backend/list).
@@ -702,6 +720,7 @@ func buildChainView(c *config.ChainConfig) ChainView {
 		Stages:            stages,
 		Chat:              buildChatView(c.Chat),
 		Scoring:           buildScoringView(c.Scoring),
+		PostInvestigation: buildPostInvestigationViews(c.PostInvestigation),
 		LLMProvider:       c.LLMProvider,
 		ExecutiveSummary:  buildJobPairingView(c.ExecutiveSummary),
 		Compose:           buildJobPairingView(c.Compose),
@@ -784,6 +803,35 @@ func buildScoringView(s *config.ScoringConfig) *ScoringView {
 		MaxIterations: s.MaxIterations,
 		FallbackList:  s.FallbackList,
 	}
+}
+
+func buildPostInvestigationViews(entries []config.PostInvestigationConfig) []PostInvestigationView {
+	if len(entries) == 0 {
+		return nil
+	}
+	views := make([]PostInvestigationView, 0, len(entries))
+	for _, e := range entries {
+		var timeout string
+		if e.Timeout > 0 {
+			timeout = durationString(e.Timeout)
+		}
+		views = append(views, PostInvestigationView{
+			Name:                 e.Name,
+			Agent:                e.Agent,
+			MinScore:             e.MinScore,
+			LabelsAny:            e.LabelsAny,
+			LabelsNone:           e.LabelsNone,
+			IncludeInvestigation: e.IncludeInvestigation,
+			Timeout:              timeout,
+			LLMProvider:          e.LLMProvider,
+			LLMBackend:           string(e.LLMBackend),
+			FallbackList:         e.FallbackList,
+			MaxIterations:        e.MaxIterations,
+			MCPServers:           e.MCPServers,
+			SubAgents:            buildSubAgentViews(e.SubAgents),
+		})
+	}
+	return views
 }
 
 func buildSummarizationView(s *config.SummarizationConfig) *SummarizationView {

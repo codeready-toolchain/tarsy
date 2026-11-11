@@ -16,12 +16,14 @@ const (
 	AgentTypeAction AgentType = "action"
 	// AgentTypeCompose copy-edits an upstream report with an action memo (single-shot)
 	AgentTypeCompose AgentType = "compose"
+	// AgentTypePostInvestigation runs after scoring and acts outside the investigation (iterating controller)
+	AgentTypePostInvestigation AgentType = "post_investigation"
 )
 
 // IsValid checks if the agent type is valid (empty string is valid — means default).
 func (t AgentType) IsValid() bool {
 	switch t {
-	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeExecSummary, AgentTypeScoring, AgentTypeAction, AgentTypeCompose:
+	case AgentTypeDefault, AgentTypeSynthesis, AgentTypeExecSummary, AgentTypeScoring, AgentTypeAction, AgentTypeCompose, AgentTypePostInvestigation:
 		return true
 	default:
 		return false

@@ -832,6 +832,178 @@ func TestResolveChatAgentConfig(t *testing.T) {
 	})
 }
 
+func TestResolvePostInvestigationConfig(t *testing.T) {
+	googleProvider := &config.LLMProviderConfig{Type: config.LLMProviderTypeGoogle, Model: "gemini-2.5-pro"}
+	openaiProvider := &config.LLMProviderConfig{Type: config.LLMProviderTypeOpenAI, Model: "gpt-5"}
+	anthropicProvider := &config.LLMProviderConfig{Type: config.LLMProviderTypeAnthropic, Model: "claude"}
+
+	newCfg := func(defaults *config.Defaults) *config.Config {
+		return &config.Config{
+			Defaults: defaults,
+			FallbackLists: map[string][]config.FallbackProviderEntry{
+				"chain-list": {{Provider: "openai-default"}},
+				"named-list": {{Provider: "anthropic-default"}},
+				"entry-list": {{Provider: "google-default", Backend: config.LLMBackendNativeGemini}},
+			},
+			AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
+				"Proposer": {
+					Type:               config.AgentTypePostInvestigation,
+					MCPServers:         []string{"tickets"},
+					MaxIterations:      intPtr(12),
+					CustomInstructions: "Propose changes",
+				},
+				"Untyped": {},
+			}),
+			LLMProviderRegistry: config.NewLLMProviderRegistry(map[string]*config.LLMProviderConfig{
+				"google-default":    googleProvider,
+				"openai-default":    openaiProvider,
+				"anthropic-default": anthropicProvider,
+			}),
+		}
+	}
+	baseDefaults := func() *config.Defaults {
+		return &config.Defaults{LLMProvider: "google-default", LLMBackend: config.LLMBackendLangChain, MaxIterations: intPtr(25)}
+	}
+
+	tests := []struct {
+		name         string
+		defaults     *config.Defaults
+		chain        *config.ChainConfig
+		entry        config.PostInvestigationConfig
+		wantProvider *config.LLMProviderConfig
+		wantBackend  config.LLMBackend
+		wantMaxIter  int
+		wantMCP      []string
+		wantFallback []string
+	}{
+		{
+			name:         "agent definition over defaults",
+			defaults:     baseDefaults(),
+			chain:        &config.ChainConfig{},
+			entry:        config.PostInvestigationConfig{Name: "p", Agent: "Proposer"},
+			wantProvider: googleProvider,
+			wantBackend:  config.LLMBackendLangChain,
+			wantMaxIter:  12,
+			wantMCP:      []string{"tickets"},
+		},
+		{
+			name:     "chain over agent definition; chain mcp_servers ignored",
+			defaults: baseDefaults(),
+			chain: &config.ChainConfig{
+				LLMProvider:   "openai-default",
+				MaxIterations: intPtr(20),
+				MCPServers:    []string{"investigation-server"},
+				FallbackList:  "chain-list",
+			},
+			entry:        config.PostInvestigationConfig{Name: "p", Agent: "Proposer"},
+			wantProvider: openaiProvider,
+			wantBackend:  config.LLMBackendLangChain,
+			wantMaxIter:  20,
+			wantMCP:      []string{"tickets"},
+			wantFallback: []string{"openai-default"},
+		},
+		{
+			name: "defaults.agents pairing over chain",
+			defaults: func() *config.Defaults {
+				d := baseDefaults()
+				d.Agents = map[string]config.NamedAgentPairing{
+					"Proposer": {LLMProvider: "anthropic-default", FallbackList: "named-list"},
+				}
+				return d
+			}(),
+			chain:        &config.ChainConfig{LLMProvider: "openai-default", FallbackList: "chain-list"},
+			entry:        config.PostInvestigationConfig{Name: "p", Agent: "Proposer"},
+			wantProvider: anthropicProvider,
+			wantBackend:  config.LLMBackendLangChain,
+			wantMaxIter:  12,
+			wantMCP:      []string{"tickets"},
+			wantFallback: []string{"anthropic-default"},
+		},
+		{
+			name: "entry overrides everything",
+			defaults: func() *config.Defaults {
+				d := baseDefaults()
+				d.Agents = map[string]config.NamedAgentPairing{
+					"Proposer": {LLMProvider: "anthropic-default", FallbackList: "named-list"},
+				}
+				return d
+			}(),
+			chain: &config.ChainConfig{LLMProvider: "openai-default", MaxIterations: intPtr(20), FallbackList: "chain-list"},
+			entry: config.PostInvestigationConfig{
+				Name:          "p",
+				Agent:         "Proposer",
+				LLMProvider:   "google-default",
+				LLMBackend:    config.LLMBackendNativeGemini,
+				MaxIterations: intPtr(4),
+				MCPServers:    []string{"other-server"},
+				FallbackList:  "entry-list",
+			},
+			wantProvider: googleProvider,
+			wantBackend:  config.LLMBackendNativeGemini,
+			wantMaxIter:  4,
+			wantMCP:      []string{"other-server"},
+			wantFallback: []string{"google-default"},
+		},
+		{
+			name:         "untyped agent without servers",
+			defaults:     baseDefaults(),
+			chain:        &config.ChainConfig{MCPServers: []string{"investigation-server"}},
+			entry:        config.PostInvestigationConfig{Name: "p", Agent: "Untyped"},
+			wantProvider: googleProvider,
+			wantBackend:  config.LLMBackendLangChain,
+			wantMaxIter:  25,
+			wantMCP:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := ResolvePostInvestigationConfig(newCfg(tt.defaults), tt.chain, tt.entry)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.entry.Agent, resolved.AgentName)
+			assert.Equal(t, config.AgentTypePostInvestigation, resolved.Type)
+			assert.Equal(t, tt.wantProvider, resolved.LLMProvider)
+			assert.Equal(t, tt.wantBackend, resolved.LLMBackend)
+			assert.Equal(t, tt.wantMaxIter, resolved.MaxIterations)
+			assert.Equal(t, tt.wantMCP, resolved.MCPServers)
+			fallbackNames := make([]string, 0, len(resolved.FallbackProviders))
+			for _, fb := range resolved.FallbackProviders {
+				fallbackNames = append(fallbackNames, fb.Provider)
+			}
+			if tt.wantFallback == nil {
+				assert.Empty(t, fallbackNames)
+			} else {
+				assert.Equal(t, tt.wantFallback, fallbackNames)
+			}
+		})
+	}
+
+	t.Run("custom instructions and skills come from the agent definition", func(t *testing.T) {
+		cfg := newCfg(baseDefaults())
+		cfg.SkillRegistry = config.NewSkillRegistry(map[string]*config.SkillConfig{
+			"ticketing": {Name: "ticketing", Description: "How to file tickets", Body: "Search before filing."},
+		})
+
+		resolved, err := ResolvePostInvestigationConfig(cfg, &config.ChainConfig{}, config.PostInvestigationConfig{Name: "p", Agent: "Proposer"})
+		require.NoError(t, err)
+		assert.Equal(t, "Propose changes", resolved.CustomInstructions)
+		require.Len(t, resolved.OnDemandSkills, 1)
+		assert.Equal(t, "ticketing", resolved.OnDemandSkills[0].Name)
+	})
+
+	t.Run("unknown agent", func(t *testing.T) {
+		_, err := ResolvePostInvestigationConfig(newCfg(baseDefaults()), &config.ChainConfig{}, config.PostInvestigationConfig{Name: "p", Agent: "Missing"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `agent "Missing" not found`)
+	})
+
+	t.Run("nil chain", func(t *testing.T) {
+		_, err := ResolvePostInvestigationConfig(newCfg(baseDefaults()), nil, config.PostInvestigationConfig{Name: "p", Agent: "Proposer"})
+		require.Error(t, err)
+	})
+}
+
 func TestResolveScoringConfig(t *testing.T) {
 	maxIter25 := 25
 	defaults := &config.Defaults{
