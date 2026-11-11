@@ -18,7 +18,7 @@ spec:
       labels:
         component: tarsy
     spec:
-      # session_timeout (2400s) + scoring_shutdown_timeout (180s) + http_shutdown (5s) + buffer (15s)
+      # session_timeout (2400s) + max(scoring_shutdown_timeout, post_investigation_shutdown_timeout) (180s) + http_shutdown (5s) + buffer (15s)
       terminationGracePeriodSeconds: 2600
       serviceAccountName: tarsy
       containers:

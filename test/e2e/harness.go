@@ -45,8 +45,10 @@ type TestApp struct {
 	NotifyListener  *events.NotifyListener
 	WorkerPool      *queue.WorkerPool
 	ScoringExecutor *queue.ScoringExecutor
-	ChatExecutor    *queue.ChatMessageExecutor
-	Server          *api.Server
+	// PostInvestigationExecutor is set when any chain has post_investigation entries.
+	PostInvestigationExecutor *queue.PostInvestigationExecutor
+	ChatExecutor              *queue.ChatMessageExecutor
+	Server                    *api.Server
 
 	// Runtime
 	BaseURL string // e.g. "http://127.0.0.1:54321"
@@ -264,6 +266,14 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		scoringExecutor.SetCostBook(costBook)
 	}
 
+	// 9b. Post-investigation executor — runs after auto-scoring for chains with entries.
+	var postInvestigationExecutor *queue.PostInvestigationExecutor
+	if scoringExecutor != nil && queue.MaxPostInvestigationTimeout(tc.cfg) > 0 {
+		postInvestigationExecutor = queue.NewPostInvestigationExecutor(tc.cfg, entClient, tc.llmClient, mcpFactory, eventPublisher, tc.memoryService, tc.memoryConfig)
+		postInvestigationExecutor.SetCostBook(costBook)
+		scoringExecutor.SetPostInvestigationExecutor(postInvestigationExecutor)
+	}
+
 	// 10. Worker pool.
 	podID := tc.podID
 	if podID == "" {
@@ -322,21 +332,22 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 	wsURL := fmt.Sprintf("ws://%s/api/v1/ws", addr)
 
 	app := &TestApp{
-		Config:          tc.cfg,
-		DBClient:        dbClient,
-		EntClient:       entClient,
-		LLMClient:       tc.llmClient,
-		MCPFactory:      mcpFactory,
-		EventPublisher:  eventPublisher,
-		ConnManager:     connManager,
-		NotifyListener:  notifyListener,
-		WorkerPool:      workerPool,
-		ScoringExecutor: scoringExecutor,
-		ChatExecutor:    chatExecutor,
-		Server:          server,
-		BaseURL:         baseURL,
-		WSURL:           wsURL,
-		t:               t,
+		Config:                    tc.cfg,
+		DBClient:                  dbClient,
+		EntClient:                 entClient,
+		LLMClient:                 tc.llmClient,
+		MCPFactory:                mcpFactory,
+		EventPublisher:            eventPublisher,
+		ConnManager:               connManager,
+		NotifyListener:            notifyListener,
+		WorkerPool:                workerPool,
+		ScoringExecutor:           scoringExecutor,
+		PostInvestigationExecutor: postInvestigationExecutor,
+		ChatExecutor:              chatExecutor,
+		Server:                    server,
+		BaseURL:                   baseURL,
+		WSURL:                     wsURL,
+		t:                         t,
 	}
 
 	// Register cleanup: stop workers first so in-flight sessions complete and
@@ -346,6 +357,9 @@ func NewTestApp(t *testing.T, opts ...TestAppOption) *TestApp {
 		workerPool.Stop()
 		if scoringExecutor != nil {
 			scoringExecutor.Stop(0)
+		}
+		if postInvestigationExecutor != nil {
+			postInvestigationExecutor.Stop(0)
 		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

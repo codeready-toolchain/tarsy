@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/codeready-toolchain/tarsy/ent"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
@@ -34,6 +35,10 @@ type WorkerPool struct {
 
 	// Orphan detection state
 	orphans orphanState
+
+	// postInvestigationMaxTimeout is the longest post-investigation entry
+	// timeout; 0 disables stale post-investigation recovery.
+	postInvestigationMaxTimeout time.Duration
 }
 
 // NewWorkerPool creates a new worker pool.
@@ -53,6 +58,12 @@ func NewWorkerPool(podID string, client *ent.Client, cfg *config.QueueConfig, ex
 		stopCh:          make(chan struct{}),
 		activeSessions:  make(map[string]context.CancelFunc),
 	}
+}
+
+// SetPostInvestigationMaxTimeout enables stale post-investigation recovery
+// using the longest configured entry timeout. Must be called before Start.
+func (p *WorkerPool) SetPostInvestigationMaxTimeout(d time.Duration) {
+	p.postInvestigationMaxTimeout = d
 }
 
 // Start spawns worker goroutines and the orphan detection background task.

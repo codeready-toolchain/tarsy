@@ -19,7 +19,6 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
 	agentctx "github.com/codeready-toolchain/tarsy/pkg/agent/context"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/controller"
-	"github.com/codeready-toolchain/tarsy/pkg/agent/orchestrator"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/prompt"
 	"github.com/codeready-toolchain/tarsy/pkg/agent/skill"
 	"github.com/codeready-toolchain/tarsy/pkg/config"
@@ -361,48 +360,36 @@ func (e *ChatMessageExecutor) execute(parentCtx context.Context, input ChatExecu
 	toolExecutor, failedServers := createToolExecutor(execCtx, e.mcpFactory, serverIDs, toolFilter, exec.ID, logger)
 	defer func() { _ = toolExecutor.Close() }()
 
-	var chatSubCollector agent.SubAgentResultCollector
-	var chatSubCatalog []config.SubAgentEntry
-
-	subAgentRefs := resolveChatSubAgents(chain, chain.Chat)
-	if len(subAgentRefs) > 0 {
-		reg := e.subAgentRegistry.Filter(subAgentRefs.Names())
-		if len(reg.Entries()) > 0 {
-			chatAgentDef, getErr := e.cfg.GetAgent(resolvedConfig.AgentName)
-			if getErr != nil {
-				failErr := fmt.Errorf("failed to get agent config for orchestration: %w", getErr)
-				logger.Error("Failed to get agent definition for orchestration", "error", getErr)
-				if updateErr := e.stageService.UpdateAgentExecutionStatus(execCtx, exec.ID, agentexecution.StatusFailed, failErr.Error()); updateErr != nil {
-					logger.Error("Failed to update agent execution status", "error", updateErr)
-				}
-				publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, 1, string(agentexecution.StatusFailed), failErr.Error())
-				e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, failErr.Error())
-				return
-			}
-			guardrails := resolveOrchestratorGuardrails(e.cfg, chatAgentDef)
-			runbookContent := e.resolveRunbook(execCtx, input.Session)
-			deps := &orchestrator.SubAgentDeps{
-				Config:             e.cfg,
-				Chain:              chain,
-				AgentFactory:       e.agentFactory,
-				MCPFactory:         e.mcpFactory,
-				LLMClient:          e.llmClient,
-				EventPublisher:     e.eventPublisher,
-				PromptBuilder:      e.promptBuilder,
-				StageService:       e.stageService,
-				TimelineService:    e.timelineService,
-				MessageService:     e.messageService,
-				InteractionService: e.interactionService,
-				AlertData:          input.Session.AlertData,
-				AlertType:          input.Session.AlertType,
-				RunbookContent:     runbookContent,
-				WrapToolExecutor:   MemorySubAgentWrap(e.memoryService, e.memoryConfig, input.Session.ID),
-			}
-			runner := orchestrator.NewSubAgentRunner(execCtx, deps, exec.ID, resolvedConfig.AgentName, input.Session.ID, stageID, reg, guardrails, subAgentRefs)
-			toolExecutor = orchestrator.NewCompositeToolExecutor(toolExecutor, runner, reg)
-			chatSubCollector = orchestrator.NewResultCollector(runner)
-			chatSubCatalog = applyCatalogOverrides(reg.Entries(), subAgentRefs)
+	toolExecutor, chatSubCollector, chatSubCatalog, err := attachSubAgents(execCtx, subAgentWiring{
+		cfg:                e.cfg,
+		chain:              chain,
+		registry:           e.subAgentRegistry,
+		refs:               resolveChatSubAgents(chain, chain.Chat),
+		agentName:          resolvedConfig.AgentName,
+		parentExecID:       exec.ID,
+		stageID:            stageID,
+		session:            input.Session,
+		runbookContent:     func() string { return e.resolveRunbook(execCtx, input.Session) },
+		agentFactory:       e.agentFactory,
+		mcpFactory:         e.mcpFactory,
+		llmClient:          e.llmClient,
+		eventPublisher:     e.eventPublisher,
+		promptBuilder:      e.promptBuilder,
+		stageService:       e.stageService,
+		timelineService:    e.timelineService,
+		messageService:     e.messageService,
+		interactionService: e.interactionService,
+		memoryService:      e.memoryService,
+		memoryConfig:       e.memoryConfig,
+	}, toolExecutor)
+	if err != nil {
+		logger.Error("Failed to get agent definition for orchestration", "error", err)
+		if updateErr := e.stageService.UpdateAgentExecutionStatus(execCtx, exec.ID, agentexecution.StatusFailed, err.Error()); updateErr != nil {
+			logger.Error("Failed to update agent execution status", "error", updateErr)
 		}
+		publishExecutionStatus(execCtx, e.eventPublisher, input.Session.ID, stageID, exec.ID, 1, string(agentexecution.StatusFailed), err.Error())
+		e.finishStage(stageID, input.Session.ID, "Chat", stageIndex, stage.StageTypeChat, events.StageStatusFailed, err.Error())
+		return
 	}
 
 	// Wrap with skill tool executor if on-demand skills are configured

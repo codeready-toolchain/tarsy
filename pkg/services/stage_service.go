@@ -473,15 +473,16 @@ func (s *StageService) ForceStageFailure(ctx context.Context, stageID string, er
 	return nil
 }
 
-// SetActionsExecuted records whether the action agent in this stage executed
-// any remediation tools. The update is constrained to action-type stages;
-// returns ErrNotFound if the stage doesn't exist or isn't an action stage.
+// SetActionsExecuted records whether the agent in this stage executed any
+// side-effecting tools. The update is constrained to action and
+// post_investigation stages; returns ErrNotFound if the stage doesn't exist
+// or has another type.
 func (s *StageService) SetActionsExecuted(_ context.Context, stageID string, executed bool) error {
 	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	n, err := s.client.Stage.Update().
-		Where(stage.IDEQ(stageID), stage.StageTypeEQ(stage.StageTypeAction)).
+		Where(stage.IDEQ(stageID), stage.StageTypeIn(stage.StageTypeAction, stage.StageTypePostInvestigation)).
 		SetActionsExecuted(executed).
 		Save(writeCtx)
 	if err != nil {

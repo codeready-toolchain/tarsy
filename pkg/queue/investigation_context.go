@@ -65,7 +65,18 @@ func (b *InvestigationContextBuilder) Build(ctx context.Context, session *ent.Al
 		sb.WriteString("\n\n")
 	}
 
-	timeline, toolsByExec := b.buildInvestigationData(ctx, session.ID, stringFromNillable(session.ExecutiveSummary))
+	sb.WriteString(b.BuildInvestigation(ctx, session.ID, stringFromNillable(session.ExecutiveSummary)))
+
+	return sb.String()
+}
+
+// BuildInvestigation returns the tool inventory and investigation timeline
+// sections only (no alert data or runbook). executiveSummary is included in
+// the timeline when non-empty.
+func (b *InvestigationContextBuilder) BuildInvestigation(ctx context.Context, sessionID, executiveSummary string) string {
+	var sb strings.Builder
+
+	timeline, toolsByExec := b.buildInvestigationData(ctx, sessionID, executiveSummary)
 
 	if len(toolsByExec) > 0 {
 		sb.WriteString("## AVAILABLE TOOLS PER AGENT\n\n")

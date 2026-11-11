@@ -105,7 +105,7 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 ### 3. Agent Chains & Orchestration
 
 - **Multi-stage workflows** where specialized agents build upon each other's work
-- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `compose`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
+- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `compose`, `chat`, `exec_summary`, `scoring`, `post_investigation`) with data accumulating between stages
 - **Flexible chain definitions** via YAML configuration without code changes
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
@@ -116,12 +116,12 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"` | `"post_investigation"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Three controller types** (text-based ReAct parsing was completely removed):
 
-- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
+- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM (default, action and post-investigation agents). Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action). The exec-summary path also parses a last-line `LABELS:` trailer and persists canonical `session.labels`. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
@@ -253,6 +253,18 @@ After an investigation completes, TARSy can automatically evaluate the quality o
 - **Session labels** — the judge sees stored `labels` (including `[]` / null) under the executive-summary footer, without the label-map catalog. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 
 **For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md)
+
+#### Post-Investigation Agents
+
+Chains can declare `post_investigation:` entries: agents (`type: post_investigation`) that run after **automatic** scoring completes and act outside the investigation through their own MCP servers — for example opening an issue or a ticket. TARSy ships only the mechanism; what an agent does is configuration.
+
+- **Trigger** — `ScoringExecutor` calls `PostInvestigationExecutor.RunAsync` (`pkg/queue/post_investigation_executor.go`) after an auto-triggered score completes. API re-scores never trigger it, so each session runs its entries at most once.
+- **Gate** — optional `min_score`, `labels_any`, `labels_none` (AND, labels case-insensitive). A gate miss creates no stage.
+- **Execution** — one `post_investigation` stage + agent execution per passing entry (created sequentially, then run concurrently with a per-entry `timeout`, default 10m). Context: session metadata and dashboard link, final report, executive summary, labels and the scoring verdict; `include_investigation: true` adds the full timeline. Entry-level `sub_agents` and memory tools (no briefing) are supported; the session's per-alert MCP override is not applied.
+- **Outcome** — the agent's memo is the stage's final analysis; its YES/NO marker is stored in the stage's `actions_executed`. Session-level `actions_executed` keeps counting action stages only.
+- **Fail-open** — failures mark only that entry's stage failed; session status, score and final analysis are never changed.
+- **Shutdown and recovery** — `queue.post_investigation_shutdown_timeout` (default 3m) drains in-flight runs in parallel with scoring; startup and periodic stale recovery fail abandoned stages.
+- **Metric** — `tarsy_post_investigation_runs_total{chain, name, outcome}`.
 
 ### 15. Investigation Memory
 
@@ -465,6 +477,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`; optional `agent_timeout` clamped to remaining parent — omit to use session/chat time). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md) and [ADR-0029](adr/0029-sub-agent-execution-limits.md)
 - **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream investigation, synthesis, or prior compose report with the action memo into session `final_analysis` (skipped on action-only chains; a later action may use the previous compose report; fail-open). See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
+- **Post-Investigation Agents**: Use `type: post_investigation` agents in a chain's `post_investigation:` block to act on finished, scored investigations outside TARSy (issues, tickets, notifications), gated by score and labels. See [Post-Investigation Agents](#post-investigation-agents)
 - **Session label maps**: Optional `label_maps` catalog plus last-non-empty `defaults.label_map` / `chain.label_map` (empty inherits; all empty → injected `builtin` watch/action/noise). See [ADR-0031](adr/0031-session-labels.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field
