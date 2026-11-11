@@ -68,6 +68,8 @@ type DashboardListParams struct {
 	QualityRating string     `json:"quality_rating"` // accurate, partially_accurate, inaccurate
 	Label         string     `json:"label"`          // comma-separated; session labels JSON contains any
 	LabelScope    LabelScope `json:"label_scope"`    // any, none, names_or_none; empty keeps label= behavior
+
+	PostInvestigation PostInvestigationFilter `json:"post_investigation"` // acted, ran, none; empty means no filter
 }
 
 // LabelScope selects how the session list matches the labels column.
@@ -93,53 +95,79 @@ func ParseLabelScope(s string) (LabelScope, error) {
 	}
 }
 
+// PostInvestigationFilter selects sessions by their post-investigation stages.
+// Empty means no filter.
+type PostInvestigationFilter string
+
+const (
+	// PostInvestigationActed matches sessions with at least one
+	// post-investigation stage whose actions_executed is true.
+	PostInvestigationActed PostInvestigationFilter = "acted"
+	// PostInvestigationRan matches sessions with any post-investigation stage.
+	PostInvestigationRan PostInvestigationFilter = "ran"
+	// PostInvestigationNone matches sessions without post-investigation stages.
+	PostInvestigationNone PostInvestigationFilter = "none"
+)
+
+// ParsePostInvestigationFilter validates a raw post_investigation query value.
+func ParsePostInvestigationFilter(s string) (PostInvestigationFilter, error) {
+	switch PostInvestigationFilter(s) {
+	case PostInvestigationActed, PostInvestigationRan, PostInvestigationNone:
+		return PostInvestigationFilter(s), nil
+	default:
+		return "", fmt.Errorf("unknown post_investigation %q", s)
+	}
+}
+
 // DashboardSessionItem is a single session in the dashboard list with pre-computed stats.
 type DashboardSessionItem struct {
-	ID                    string           `json:"id"`
-	AlertType             *string          `json:"alert_type"`
-	ChainID               string           `json:"chain_id"`
-	Status                string           `json:"status"`
-	Author                *string          `json:"author"`
-	CancelledBy           *string          `json:"cancelled_by"`
-	CancelReason          *string          `json:"cancel_reason"`
-	CreatedAt             time.Time        `json:"created_at"`
-	StartedAt             *time.Time       `json:"started_at"`
-	CompletedAt           *time.Time       `json:"completed_at"`
-	DurationMs            *int64           `json:"duration_ms"`
-	ErrorMessage          *string          `json:"error_message"`
-	ExecutiveSummary      *string          `json:"executive_summary"`
-	Labels                []string         `json:"labels"`
-	LLMInteractionCount   int              `json:"llm_interaction_count"`
-	MCPInteractionCount   int              `json:"mcp_interaction_count"`
-	InputTokens           int64            `json:"input_tokens"`
-	OutputTokens          int64            `json:"output_tokens"`
-	TotalTokens           int64            `json:"total_tokens"`
-	ThinkingTokens        int64            `json:"thinking_tokens"`
-	CacheReadTokens       int64            `json:"cache_read_tokens"`
-	CacheCreationTokens   int64            `json:"cache_creation_tokens"`
-	EstimatedCostUsd      *float64         `json:"estimated_cost_usd,omitempty"`
-	CostCompleteness      CostCompleteness `json:"cost_completeness,omitempty"`
-	TotalStages           int              `json:"total_stages"`
-	CompletedStages       int              `json:"completed_stages"`
-	HasParallelStages     bool             `json:"has_parallel_stages"`
-	HasSubAgents          bool             `json:"has_sub_agents"`
-	HasActionStages       bool             `json:"has_action_stages"`
-	ActionsExecuted       *bool            `json:"actions_executed"`
-	ChatMessageCount      int              `json:"chat_message_count"`
-	ProviderFallbackCount int              `json:"provider_fallback_count"`
-	CurrentStageIndex     *int             `json:"current_stage_index"`
-	CurrentStageID        *string          `json:"current_stage_id"`
-	MatchedInContent      bool             `json:"matched_in_content"`
-	LatestScore           *int             `json:"latest_score"`
-	ScoringStatus         *string          `json:"scoring_status"`
-	ReviewStatus          *string          `json:"review_status"`
-	Assignee              *string          `json:"assignee"`
-	QualityRating         *string          `json:"quality_rating"`
-	ActionTaken           *string          `json:"action_taken"`
-	InvestigationFeedback *string          `json:"investigation_feedback"`
-	FeedbackEdited        bool             `json:"feedback_edited"`
-	FeedbackEditedBy      *string          `json:"feedback_edited_by"`
-	FeedbackEditedAt      *time.Time       `json:"feedback_edited_at"`
+	ID                     string           `json:"id"`
+	AlertType              *string          `json:"alert_type"`
+	ChainID                string           `json:"chain_id"`
+	Status                 string           `json:"status"`
+	Author                 *string          `json:"author"`
+	CancelledBy            *string          `json:"cancelled_by"`
+	CancelReason           *string          `json:"cancel_reason"`
+	CreatedAt              time.Time        `json:"created_at"`
+	StartedAt              *time.Time       `json:"started_at"`
+	CompletedAt            *time.Time       `json:"completed_at"`
+	DurationMs             *int64           `json:"duration_ms"`
+	ErrorMessage           *string          `json:"error_message"`
+	ExecutiveSummary       *string          `json:"executive_summary"`
+	Labels                 []string         `json:"labels"`
+	LLMInteractionCount    int              `json:"llm_interaction_count"`
+	MCPInteractionCount    int              `json:"mcp_interaction_count"`
+	InputTokens            int64            `json:"input_tokens"`
+	OutputTokens           int64            `json:"output_tokens"`
+	TotalTokens            int64            `json:"total_tokens"`
+	ThinkingTokens         int64            `json:"thinking_tokens"`
+	CacheReadTokens        int64            `json:"cache_read_tokens"`
+	CacheCreationTokens    int64            `json:"cache_creation_tokens"`
+	EstimatedCostUsd       *float64         `json:"estimated_cost_usd,omitempty"`
+	CostCompleteness       CostCompleteness `json:"cost_completeness,omitempty"`
+	TotalStages            int              `json:"total_stages"`
+	CompletedStages        int              `json:"completed_stages"`
+	HasParallelStages      bool             `json:"has_parallel_stages"`
+	HasSubAgents           bool             `json:"has_sub_agents"`
+	HasActionStages        bool             `json:"has_action_stages"`
+	ActionsExecuted        *bool            `json:"actions_executed"`
+	HasPostInvestigation   bool             `json:"has_post_investigation"`
+	PostInvestigationActed bool             `json:"post_investigation_acted"`
+	ChatMessageCount       int              `json:"chat_message_count"`
+	ProviderFallbackCount  int              `json:"provider_fallback_count"`
+	CurrentStageIndex      *int             `json:"current_stage_index"`
+	CurrentStageID         *string          `json:"current_stage_id"`
+	MatchedInContent       bool             `json:"matched_in_content"`
+	LatestScore            *int             `json:"latest_score"`
+	ScoringStatus          *string          `json:"scoring_status"`
+	ReviewStatus           *string          `json:"review_status"`
+	Assignee               *string          `json:"assignee"`
+	QualityRating          *string          `json:"quality_rating"`
+	ActionTaken            *string          `json:"action_taken"`
+	InvestigationFeedback  *string          `json:"investigation_feedback"`
+	FeedbackEdited         bool             `json:"feedback_edited"`
+	FeedbackEditedBy       *string          `json:"feedback_edited_by"`
+	FeedbackEditedAt       *time.Time       `json:"feedback_edited_at"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.
@@ -271,6 +299,7 @@ type StageOverview struct {
 	ReferencedStageID  *string             `json:"referenced_stage_id,omitempty"`
 	StartedAt          *time.Time          `json:"started_at"`
 	CompletedAt        *time.Time          `json:"completed_at"`
+	ActionsExecuted    *bool               `json:"actions_executed,omitempty"` // action and post_investigation stages; nil until the YES/NO marker is parsed
 	Executions         []ExecutionOverview `json:"executions,omitempty"`
 }
 

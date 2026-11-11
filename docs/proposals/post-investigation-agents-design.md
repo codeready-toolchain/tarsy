@@ -183,14 +183,14 @@ Post-investigation stages do not leak into other contexts, with no code change n
 ### Dashboard and API
 
 - **Timeline:** post-investigation stages rendered after the Reflection (scoring) stage with their own separator.
-- **Session detail:** "Post-investigation" section — per entry: name, status, acted / no-action chip, memo rendered as markdown with clickable links. Live updates on `stage.status` for `post_investigation` stages. Needs a per-stage `actions_executed` field on `models.StageOverview` (today only the session-level aggregate exists).
-- **Session list:** indicator when any post-investigation agent acted, and filter `post_investigation`:
+- **Session detail:** "Post-investigation" section — per entry: name, status, acted / no-action chip, memo rendered as markdown with clickable links. Live updates on `stage.status` for `post_investigation` stages: a terminal status re-fetches the session (for `actions_executed`) and the timeline (the YES/NO marker is stripped from the memo without a timeline event). Needs a per-stage `actions_executed` field on `models.StageOverview` (today only the session-level aggregate exists).
+- **Session list:** indicator when post-investigation ran — green when any agent acted, grey otherwise (same styling as the action-stage chip) — and filter `post_investigation`:
   - `acted` — at least one post-investigation stage with `actions_executed = true`;
   - `ran` — at least one post-investigation stage exists (any status);
   - `none` — no post-investigation stage.
 
-  Implementation mirrors the existing per-session subqueries for `has_action_stages` / `actions_executed` (`pkg/services/session_service.go:1308-1315`) and adds a query param next to existing filters in `pkg/api/handler_session.go`.
-- **Config viewer (Settings):** `pkg/api/system_config.go` uses explicit view DTOs (`ChainView` has `Chat` / `Scoring` views), so a `PostInvestigation` view is added to `ChainView` and rendered on the Settings page.
+  Implementation mirrors the existing per-session subqueries for `has_action_stages` / `actions_executed` (`pkg/services/session_service.go:1308-1315`) and adds a query param next to existing filters in `pkg/api/handler_session.go`. The list DTO is shared with the triage view, so the triage query gets the same two subqueries and its rows show the same indicator (no triage filter).
+- **Config viewer:** `pkg/api/system_config.go` uses explicit view DTOs (`ChainView` has `Chat` / `Scoring` views), so a `PostInvestigation` view is added to `ChainView` and rendered in the Config Viewer tab of the System page ([ADR-0019](../adr/0019-config-viewer.md)).
 
 ### Metrics
 
@@ -230,7 +230,7 @@ Why this split: PR 1 groups everything that is pure definition (config schema, v
 - `pkg/agent/config_resolver.go`: `ResolvePostInvestigationConfig` (layers described under "Config resolution").
 - `pkg/agent/prompt/`: post-investigation behavioral layer, task focus, message builder and YES/NO wording (same marker format as `ActionOutputSchema`); dispatch in `BuildFunctionCallingMessages`; orchestrator sections when sub-agents are present.
 - `pkg/agent/controller/factory.go`: case → `NewIteratingController()`; `pkg/agent/controller/iterating.go`: prompt cache off for the new type (both `PromptCache` checks), like action.
-- Config viewer ([ADR-0019](../adr/0019-config-viewer.md)): `PostInvestigationView` on `ChainView` in `pkg/api/system_config.go` (Settings page rendering in PR 3).
+- Config viewer ([ADR-0019](../adr/0019-config-viewer.md)): `PostInvestigationView` on `ChainView` in `pkg/api/system_config.go` (Config Viewer rendering in PR 3).
 - `deploy/config/tarsy.yaml.example`: commented example.
 - Tests: loader + validator table tests (valid config, unknown agent, wrong type, new type in a stage/chat/scoring/sub-agent ref, bad score, unknown/overlapping labels, scoring disabled incl. via `defaults.scoring`, duplicate names, invalid sub-agents); resolver table tests (layer precedence; chain `mcp_servers` ignored); golden `testdata/function_calling_post_investigation.golden` + prompt unit tests (incl. orchestrator sections with sub-agents); factory test; prompt-cache eligibility case; `system_config_test.go` for the view.
 - Keeps TARSy working: existing configs load unchanged; the new validation applies only to the new block and new type; the prompt code is unreachable until PR 2; the config API gains an optional field the dashboard ignores.
@@ -252,9 +252,10 @@ Why this split: PR 1 groups everything that is pure definition (config schema, v
 **PR 3 — Session API and dashboard visibility** — `feat(dashboard)`
 - `pkg/models/session.go`: `ActionsExecuted *bool` on `StageOverview` (populated for action and post-investigation stages); `has_post_investigation` / `post_investigation_acted` on the list DTO.
 - `pkg/services/session_service.go`: per-session subqueries mirroring `has_action_stages` / `actions_executed`; filter on `post_investigation=acted|ran|none`. `pkg/api/handler_session.go`: parse/validate the query param.
-- Dashboard: "Post-investigation" section on session detail (status, acted chip, markdown memo, live updates); session list indicator + filter control; Settings page rendering of the chain's post-investigation config.
+- `pkg/services/session_service_review.go`: the same two subqueries for triage rows (shared DTO).
+- Dashboard: "Post-investigation" section on session detail (status, acted chip, markdown memo, live updates); session list and triage indicator + list filter control; Config Viewer rendering of the chain's post-investigation config.
 - Docs: dashboard paragraph in `docs/architecture-overview.md`.
-- Tests: service integration tests for the subqueries, each filter value and the stage field; handler param validation tests; dashboard unit tests for the section, live updates, list indicator and filter, Settings view.
+- Tests: service integration tests for the subqueries, each filter value and the stage field; handler param validation tests; dashboard unit tests for the section, live updates, list indicator and filter, Config Viewer.
 - Keeps TARSy working: additive API fields and an optional query param; existing list filters unchanged.
 
 **After rollout** — promote this proposal to an ADR via `/promote-to-adr`.

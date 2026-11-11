@@ -37,6 +37,8 @@ export interface DashboardSessionItem {
   has_sub_agents: boolean;
   has_action_stages: boolean;
   actions_executed: boolean | null;
+  has_post_investigation: boolean;
+  post_investigation_acted: boolean;
   chat_message_count: number;
   provider_fallback_count: number;
   current_stage_index: number | null;
@@ -177,6 +179,8 @@ export interface StageOverview {
   referenced_stage_id?: string;
   started_at: string | null;
   completed_at: string | null;
+  /** Set for action and post_investigation stages once the YES/NO marker is parsed. */
+  actions_executed?: boolean | null;
   executions?: ExecutionOverview[];
 }
 

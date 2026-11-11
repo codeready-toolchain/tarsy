@@ -5,6 +5,8 @@
  * These types represent UI-only state that drives API queries.
  */
 
+import type { PostInvestigationFilter } from './api.ts';
+
 /** Filter state for the session list. */
 export interface SessionFilter {
   search: string;
@@ -16,6 +18,7 @@ export interface SessionFilter {
   date_preset: string | null; // '10m' | '1h' | '12h' | '1d' | '7d' | '30d' | null (custom)
   scoring_status: string;
   label: string[];
+  post_investigation: PostInvestigationFilter | '';
 }
 
 /** Pagination state tracking both local page and backend totals. */

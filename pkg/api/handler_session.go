@@ -124,6 +124,13 @@ func (s *Server) listSessionsHandler(c *echo.Context) error {
 		}
 		params.LabelScope = scope
 	}
+	if v := c.QueryParam("post_investigation"); v != "" {
+		filter, err := models.ParsePostInvestigationFilter(v)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid post_investigation: must be acted, ran, or none")
+		}
+		params.PostInvestigation = filter
+	}
 	if v := c.QueryParam("search"); v != "" {
 		if len(v) < 3 {
 			return echo.NewHTTPError(http.StatusBadRequest, "search query must be at least 3 characters")

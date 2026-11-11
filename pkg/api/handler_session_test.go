@@ -137,6 +137,13 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 			errMsg:  "invalid label_scope: label is required",
 			exact:   true,
 		},
+		{
+			name:    "unknown post_investigation",
+			query:   "post_investigation=maybe",
+			wantErr: http.StatusBadRequest,
+			errMsg:  "invalid post_investigation: must be acted, ran, or none",
+			exact:   true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -230,6 +237,30 @@ func TestListSessionsHandler_Validation(t *testing.T) {
 					if ok {
 						assert.NotContains(t, he.Message, "invalid label_scope",
 							"%s should be accepted", v)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("valid post_investigation values pass validation", func(t *testing.T) {
+		for _, v := range []string{"acted", "ran", "none"} {
+			t.Run(v, func(t *testing.T) {
+				e := echo.New()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions?post_investigation="+v, nil)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+
+				err := func() (retErr error) {
+					defer func() { recover() }()
+					return s.listSessionsHandler(c)
+				}()
+
+				if err != nil {
+					he, ok := err.(*echo.HTTPError)
+					if ok {
+						assert.NotContains(t, he.Message, "invalid post_investigation",
+							"post_investigation=%s should be accepted", v)
 					}
 				}
 			})

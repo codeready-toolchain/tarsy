@@ -155,6 +155,30 @@ func TestE2E_PostInvestigation_AutoScoringRunsGatedEntries(t *testing.T) {
 	assert.Equal(t, alertsession.StatusCompleted, session.Status)
 	assert.Equal(t, "Investigation complete: pod-1 is OOMKilled.", strings.TrimSpace(*session.FinalAnalysis))
 
+	// ── Session API: per-stage outcome, list flags and filter ──
+	detail := app.GetSession(t, sessionID)
+	var piStage map[string]interface{}
+	for _, raw := range detail["stages"].([]interface{}) {
+		s := raw.(map[string]interface{})
+		if s["stage_type"] == "post_investigation" {
+			piStage = s
+		}
+	}
+	require.NotNil(t, piStage, "session detail should list the post-investigation stage")
+	assert.Equal(t, true, piStage["actions_executed"])
+	assert.Equal(t, false, detail["has_action_stages"], "post-investigation is not an action stage")
+
+	acted := app.GetSessionList(t, "post_investigation=acted")
+	items := acted["sessions"].([]interface{})
+	require.Len(t, items, 1)
+	item := items[0].(map[string]interface{})
+	assert.Equal(t, sessionID, item["id"])
+	assert.Equal(t, true, item["has_post_investigation"])
+	assert.Equal(t, true, item["post_investigation_acted"])
+
+	none := app.GetSessionList(t, "post_investigation=none")
+	assert.Empty(t, none["sessions"])
+
 	// ── API re-score does not start post-investigation agents ──
 	scriptScoringSuccess(llm)
 	scoreResp := app.postJSON(t, "/api/v1/sessions/"+sessionID+"/score", nil, http.StatusAccepted)
@@ -261,6 +285,40 @@ func TestE2E_PostInvestigation_SubAgent(t *testing.T) {
 	assert.Equal(t, "Researcher", sub.AgentName)
 	assert.Equal(t, parentID, *sub.ParentExecutionID)
 	assert.Equal(t, agentexecution.StatusCompleted, sub.Status)
+
+	// ── Timeline API: one top-level memo for the stage, marker stripped;
+	// sub-agent final answers are tagged with the parent execution ──
+	var topLevelMemos []string
+	subAgentAnswers := 0
+	for _, raw := range app.GetTimeline(t, sessionID) {
+		ev := raw.(map[string]interface{})
+		if ev["stage_id"] != stg.ID || ev["event_type"] != string(timelineevent.EventTypeFinalAnalysis) {
+			continue
+		}
+		if parent, ok := ev["parent_execution_id"].(string); ok {
+			assert.Equal(t, parentID, parent)
+			assert.Equal(t, sub.ID, ev["execution_id"])
+			subAgentAnswers++
+			continue
+		}
+		topLevelMemos = append(topLevelMemos, ev["content"].(string))
+	}
+	require.Len(t, topLevelMemos, 1, "post-investigation stage should have one top-level memo")
+	assert.Equal(t, 1, subAgentAnswers, "sub-agent final answer should be tagged with the parent execution")
+	assert.Contains(t, topLevelMemos[0], "An equivalent ticket already exists.")
+	assert.False(t, strings.HasSuffix(strings.TrimSpace(topLevelMemos[0]), "NO"), "NO marker must be stripped from the memo")
+
+	// ── Session list: ran without acting ──
+	ran := app.GetSessionList(t, "post_investigation=ran")
+	items := ran["sessions"].([]interface{})
+	require.Len(t, items, 1)
+	item := items[0].(map[string]interface{})
+	assert.Equal(t, sessionID, item["id"])
+	assert.Equal(t, true, item["has_post_investigation"])
+	assert.Equal(t, false, item["post_investigation_acted"])
+
+	acted := app.GetSessionList(t, "post_investigation=acted")
+	assert.Empty(t, acted["sessions"])
 
 	// The orchestrator sections were injected into the post-investigation prompt.
 	var piSystem string

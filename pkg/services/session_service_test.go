@@ -1781,6 +1781,38 @@ func TestSessionService_GetSessionDetail(t *testing.T) {
 		assert.True(t, *detail.ActionsExecuted, "should be true when any action stage took actions")
 	})
 
+	t.Run("stage overviews carry actions_executed for action and post_investigation stages", func(t *testing.T) {
+		sessionID := seedDashboardSession(t, client.Client,
+			"Stage actions data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+		seedTypedStage(t, client.Client, sessionID, "Remediation", 2, stage.StageTypeAction, new(false))
+		seedTypedStage(t, client.Client, sessionID, "file-ticket", 3, stage.StageTypePostInvestigation, new(true))
+		seedTypedStage(t, client.Client, sessionID, "notify", 4, stage.StageTypePostInvestigation, nil)
+
+		detail, err := service.GetSessionDetail(ctx, sessionID)
+		require.NoError(t, err)
+		require.Len(t, detail.Stages, 4)
+
+		byName := make(map[string]models.StageOverview, len(detail.Stages))
+		for _, s := range detail.Stages {
+			byName[s.StageName] = s
+		}
+		for name, s := range byName {
+			if s.StageIndex == 1 {
+				assert.Nil(t, s.ActionsExecuted, "investigation stage %q has no actions_executed", name)
+			}
+		}
+		require.NotNil(t, byName["Remediation"].ActionsExecuted)
+		assert.False(t, *byName["Remediation"].ActionsExecuted)
+		require.NotNil(t, byName["file-ticket"].ActionsExecuted)
+		assert.True(t, *byName["file-ticket"].ActionsExecuted)
+		assert.Nil(t, byName["notify"].ActionsExecuted)
+
+		// Session-level aggregates keep counting action stages only.
+		assert.True(t, detail.HasActionStages)
+		require.NotNil(t, detail.ActionsExecuted)
+		assert.False(t, *detail.ActionsExecuted)
+	})
+
 	t.Run("includes review fields when session has review data", func(t *testing.T) {
 		sessionID := seedDashboardSession(t, client.Client,
 			"reviewed session", "pod-crash", "k8s-analysis",
@@ -3446,6 +3478,94 @@ func TestSessionService_ListSessionsForDashboard_LabelScope(t *testing.T) {
 		assert.Equal(t, map[string]bool{idArray: true}, idsOf(t, labeled))
 		assert.Equal(t, 1, labeled.Pagination.TotalItems)
 	})
+}
+
+// seedTypedStage adds a completed stage of the given type to a session.
+func seedTypedStage(t *testing.T, client *ent.Client, sessionID, name string, index int, stageType stage.StageType, actionsExecuted *bool) {
+	t.Helper()
+	client.Stage.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageName(name).
+		SetStageIndex(index).
+		SetStageType(stageType).
+		SetNillableActionsExecuted(actionsExecuted).
+		SetExpectedAgentCount(1).
+		SetStatus(stage.StatusCompleted).
+		SaveX(context.Background())
+}
+
+func TestSessionService_ListSessionsForDashboard_PostInvestigation(t *testing.T) {
+	client := testdb.NewTestClient(t)
+	service := setupTestSessionService(t, client.Client)
+	ctx := context.Background()
+
+	acted := seedDashboardSession(t, client.Client, "Acted data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+	seedTypedStage(t, client.Client, acted, "file-ticket", 2, stage.StageTypePostInvestigation, new(true))
+	seedTypedStage(t, client.Client, acted, "notify", 3, stage.StageTypePostInvestigation, new(false))
+
+	noAction := seedDashboardSession(t, client.Client, "No action data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+	seedTypedStage(t, client.Client, noAction, "file-ticket", 2, stage.StageTypePostInvestigation, new(false))
+
+	// A failed run leaves actions_executed NULL; it still counts as ran.
+	failed := seedDashboardSession(t, client.Client, "Failed run data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+	seedTypedStage(t, client.Client, failed, "file-ticket", 2, stage.StageTypePostInvestigation, nil)
+
+	// An action stage that acted is not a post-investigation outcome.
+	actionOnly := seedDashboardSession(t, client.Client, "Action only data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+	seedTypedStage(t, client.Client, actionOnly, "Remediation", 2, stage.StageTypeAction, new(true))
+
+	plain := seedDashboardSession(t, client.Client, "Plain data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
+
+	list := func(t *testing.T, filter models.PostInvestigationFilter) *models.DashboardListResponse {
+		t.Helper()
+		result, err := service.ListSessionsForDashboard(ctx, models.DashboardListParams{
+			Page: 1, PageSize: 50, SortBy: "created_at", SortOrder: "desc", PostInvestigation: filter,
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	t.Run("list rows carry has_post_investigation and post_investigation_acted", func(t *testing.T) {
+		want := map[string][2]bool{
+			acted:      {true, true},
+			noAction:   {true, false},
+			failed:     {true, false},
+			actionOnly: {false, false},
+			plain:      {false, false},
+		}
+		result := list(t, "")
+		require.Len(t, result.Sessions, len(want))
+		for _, s := range result.Sessions {
+			w := want[s.ID]
+			assert.Equal(t, w[0], s.HasPostInvestigation, "has_post_investigation for %s", s.ID)
+			assert.Equal(t, w[1], s.PostInvestigationActed, "post_investigation_acted for %s", s.ID)
+			if s.ID == acted || s.ID == noAction || s.ID == failed {
+				assert.False(t, s.HasActionStages, "post-investigation stages are not action stages")
+				assert.Nil(t, s.ActionsExecuted)
+			}
+		}
+	})
+
+	tests := []struct {
+		filter models.PostInvestigationFilter
+		want   []string
+	}{
+		{models.PostInvestigationActed, []string{acted}},
+		{models.PostInvestigationRan, []string{acted, noAction, failed}},
+		{models.PostInvestigationNone, []string{actionOnly, plain}},
+	}
+	for _, tt := range tests {
+		t.Run("filter "+string(tt.filter), func(t *testing.T) {
+			result := list(t, tt.filter)
+			ids := make([]string, 0, len(result.Sessions))
+			for _, s := range result.Sessions {
+				ids = append(ids, s.ID)
+			}
+			assert.ElementsMatch(t, tt.want, ids)
+			assert.Equal(t, len(tt.want), result.Pagination.TotalItems)
+		})
+	}
 }
 
 func TestUnmarshalLabels(t *testing.T) {

@@ -42,6 +42,7 @@ export function hasActiveFilters(filters: SessionFilter): boolean {
       filters.end_date ||
       filters.date_preset ||
       filters.scoring_status ||
-      filters.label.length > 0,
+      filters.label.length > 0 ||
+      filters.post_investigation,
   );
 }
