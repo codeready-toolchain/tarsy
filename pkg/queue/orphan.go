@@ -20,6 +20,14 @@ import (
 // because the process stopped before scoring reached a terminal status.
 const orphanedScoringError = "Scoring interrupted: process stopped while scoring was in progress"
 
+// orphanedPostInvestigationError is stored on post-investigation stages and
+// executions abandoned because the process stopped mid-run.
+const orphanedPostInvestigationError = "Post-investigation interrupted: process stopped while the agent was running"
+
+// postInvestigationStaleMargin is added to the longest entry timeout before a
+// post-investigation stage is considered abandoned.
+const postInvestigationStaleMargin = 5 * time.Minute
+
 // orphanState tracks orphan detection metrics (thread-safe).
 type orphanState struct {
 	mu               sync.Mutex
@@ -52,6 +60,9 @@ func (p *WorkerPool) runOrphanDetection(ctx context.Context) {
 func (p *WorkerPool) detectAndRecoverOrphans(ctx context.Context) error {
 	if err := p.recoverStaleScoring(ctx); err != nil {
 		slog.Error("Stale scoring recovery failed", "error", err)
+	}
+	if err := p.recoverStalePostInvestigation(ctx); err != nil {
+		slog.Error("Stale post-investigation recovery failed", "error", err)
 	}
 
 	threshold := time.Now().Add(-p.config.OrphanThreshold)
@@ -328,42 +339,8 @@ func markOrphanedScoringFailed(ctx context.Context, client *ent.Client, score *e
 	}
 
 	if score.StageID != nil {
-		stageID := *score.StageID
-		n, err = tx.Stage.Update().
-			Where(
-				stage.IDEQ(stageID),
-				stage.StatusIn(stage.StatusPending, stage.StatusActive),
-			).
-			SetStatus(stage.StatusFailed).
-			SetCompletedAt(now).
-			SetErrorMessage(orphanedScoringError).
-			Save(ctx)
-		if err != nil {
-			return false, fmt.Errorf("failed to mark scoring stage as failed: %w", err)
-		}
-		if n > 0 {
-			if _, err := tx.AgentExecution.Update().
-				Where(
-					agentexecution.StageIDEQ(stageID),
-					agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
-				).
-				SetStatus(agentexecution.StatusFailed).
-				SetCompletedAt(now).
-				SetErrorMessage(orphanedScoringError).
-				Save(ctx); err != nil {
-				return false, fmt.Errorf("failed to mark scoring execution as failed: %w", err)
-			}
-
-			if _, err := tx.TimelineEvent.Update().
-				Where(
-					timelineevent.StageIDEQ(stageID),
-					timelineevent.StatusEQ(timelineevent.StatusStreaming),
-				).
-				SetStatus(timelineevent.StatusTimedOut).
-				SetUpdatedAt(now).
-				Save(ctx); err != nil {
-				return false, fmt.Errorf("failed to update scoring timeline events: %w", err)
-			}
+		if _, err := markOrphanedStageFailed(ctx, tx, *score.StageID, orphanedScoringError, now); err != nil {
+			return false, err
 		}
 	}
 
@@ -371,5 +348,173 @@ func markOrphanedScoringFailed(ctx context.Context, client *ent.Client, score *e
 		return false, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	return true, nil
+}
+
+// markOrphanedStageFailed marks a pending/active stage failed inside tx. When
+// the stage transitions, its pending/active executions (sub-agents included)
+// are failed and its streaming timeline events timed out. The stage update is
+// conditional so a run that finishes concurrently is left unchanged.
+func markOrphanedStageFailed(ctx context.Context, tx *ent.Tx, stageID, errMsg string, now time.Time) (bool, error) {
+	n, err := tx.Stage.Update().
+		Where(
+			stage.IDEQ(stageID),
+			stage.StatusIn(stage.StatusPending, stage.StatusActive),
+		).
+		SetStatus(stage.StatusFailed).
+		SetCompletedAt(now).
+		SetErrorMessage(errMsg).
+		Save(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to mark stage as failed: %w", err)
+	}
+	if n == 0 {
+		return false, nil
+	}
+
+	if _, err := tx.AgentExecution.Update().
+		Where(
+			agentexecution.StageIDEQ(stageID),
+			agentexecution.StatusIn(agentexecution.StatusPending, agentexecution.StatusActive),
+		).
+		SetStatus(agentexecution.StatusFailed).
+		SetCompletedAt(now).
+		SetErrorMessage(errMsg).
+		Save(ctx); err != nil {
+		return false, fmt.Errorf("failed to mark stage executions as failed: %w", err)
+	}
+
+	if _, err := tx.TimelineEvent.Update().
+		Where(
+			timelineevent.StageIDEQ(stageID),
+			timelineevent.StatusEQ(timelineevent.StatusStreaming),
+		).
+		SetStatus(timelineevent.StatusTimedOut).
+		SetUpdatedAt(now).
+		Save(ctx); err != nil {
+		return false, fmt.Errorf("failed to update stage timeline events: %w", err)
+	}
+
+	return true, nil
+}
+
+// CleanupStartupPostInvestigationOrphans marks post-investigation stages left
+// pending/active by a previous process of this pod as failed. They start after
+// the session is terminal, so CleanupStartupOrphans does not see them.
+// Called once during startup, before the worker pool begins processing.
+func CleanupStartupPostInvestigationOrphans(ctx context.Context, client *ent.Client, podID string) error {
+	stages, err := client.Stage.Query().
+		Where(
+			stage.StageTypeEQ(stage.StageTypePostInvestigation),
+			stage.StatusIn(stage.StatusPending, stage.StatusActive),
+			stage.HasSessionWith(
+				alertsession.PodIDEQ(podID),
+				alertsession.DeletedAtIsNil(),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to query startup post-investigation orphans: %w", err)
+	}
+	if len(stages) == 0 {
+		return nil
+	}
+
+	slog.Warn("Found startup post-investigation orphans from previous run",
+		"pod_id", podID,
+		"count", len(stages))
+
+	for _, stg := range stages {
+		updated, err := markOrphanedPostInvestigationFailed(ctx, client, stg.ID)
+		if err != nil {
+			slog.Error("Failed to mark startup post-investigation orphan",
+				"session_id", stg.SessionID,
+				"stage_id", stg.ID,
+				"error", err)
+			continue
+		}
+		if updated {
+			slog.Info("Startup post-investigation orphan recovered",
+				"session_id", stg.SessionID,
+				"stage_id", stg.ID)
+		}
+	}
+
+	return nil
+}
+
+// recoverStalePostInvestigation marks post-investigation stages that outlived
+// every possible run as failed (e.g. a pod crash while another replica keeps
+// running). Active stages are aged by started_at against the longest entry
+// timeout. Pending stages have no start time and are aged by the session's
+// completed_at, adding scoring's timeout since runs start after auto-scoring.
+func (p *WorkerPool) recoverStalePostInvestigation(ctx context.Context) error {
+	maxTimeout := p.postInvestigationMaxTimeout
+	if maxTimeout <= 0 {
+		return nil
+	}
+	now := time.Now()
+	activeThreshold := now.Add(-(maxTimeout + postInvestigationStaleMargin))
+	pendingThreshold := now.Add(-(scoringTimeout + maxTimeout + postInvestigationStaleMargin))
+
+	stages, err := p.client.Stage.Query().
+		Where(
+			stage.StageTypeEQ(stage.StageTypePostInvestigation),
+			stage.HasSessionWith(alertsession.DeletedAtIsNil()),
+			stage.Or(
+				stage.And(
+					stage.StatusEQ(stage.StatusActive),
+					stage.StartedAtLT(activeThreshold),
+				),
+				stage.And(
+					stage.StatusEQ(stage.StatusPending),
+					stage.HasSessionWith(alertsession.CompletedAtLT(pendingThreshold)),
+				),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to query stale post-investigation stages: %w", err)
+	}
+	if len(stages) == 0 {
+		return nil
+	}
+
+	slog.Warn("Detected stale post-investigation stages", "count", len(stages))
+
+	for _, stg := range stages {
+		updated, err := markOrphanedPostInvestigationFailed(ctx, p.client, stg.ID)
+		if err != nil {
+			slog.Error("Failed to recover stale post-investigation stage",
+				"session_id", stg.SessionID,
+				"stage_id", stg.ID,
+				"error", err)
+			continue
+		}
+		if updated {
+			slog.Info("Stale post-investigation stage marked as failed",
+				"session_id", stg.SessionID,
+				"stage_id", stg.ID)
+		}
+	}
+
+	return nil
+}
+
+func markOrphanedPostInvestigationFailed(ctx context.Context, client *ent.Client, stageID string) (bool, error) {
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	updated, err := markOrphanedStageFailed(ctx, tx, stageID, orphanedPostInvestigationError, time.Now())
+	if err != nil || !updated {
+		return false, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return true, nil
 }

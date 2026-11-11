@@ -177,9 +177,10 @@ func TestSystemConfigHandler(t *testing.T) {
 		s := &Server{
 			cfg: &config.Config{
 				Queue: &config.QueueConfig{
-					WorkerCount:    5,
-					PollInterval:   5 * time.Second,
-					SessionTimeout: 40 * time.Minute,
+					WorkerCount:                      5,
+					PollInterval:                     5 * time.Second,
+					SessionTimeout:                   40 * time.Minute,
+					PostInvestigationShutdownTimeout: 2 * time.Minute,
 				},
 				AgentRegistry: config.NewAgentRegistry(map[string]*config.AgentConfig{
 					"KubernetesAgent": {
@@ -269,6 +270,7 @@ func TestSystemConfigHandler(t *testing.T) {
 		require.NotNil(t, resp.Queue)
 		assert.Equal(t, "5s", resp.Queue.PollInterval)
 		assert.Equal(t, "40m", resp.Queue.SessionTimeout)
+		assert.Equal(t, "2m", resp.Queue.PostInvestigationShutdownTimeout)
 
 		require.NotNil(t, resp.System.Retention)
 		assert.Equal(t, "168h", resp.System.Retention.EventTTL)

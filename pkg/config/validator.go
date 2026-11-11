@@ -111,6 +111,9 @@ func (v *Validator) validateQueue() error {
 	if q.ScoringShutdownTimeout < 0 {
 		return fmt.Errorf("scoring_shutdown_timeout must be non-negative, got %v", q.ScoringShutdownTimeout)
 	}
+	if q.PostInvestigationShutdownTimeout < 0 {
+		return fmt.Errorf("post_investigation_shutdown_timeout must be non-negative, got %v", q.PostInvestigationShutdownTimeout)
+	}
 	if q.OrphanDetectionInterval <= 0 {
 		return fmt.Errorf("orphan_detection_interval must be positive, got %v", q.OrphanDetectionInterval)
 	}

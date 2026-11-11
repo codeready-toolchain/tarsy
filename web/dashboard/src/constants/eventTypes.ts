@@ -64,6 +64,7 @@ export const STAGE_TYPE = {
   SCORING: 'scoring',
   ACTION: 'action',
   COMPOSE: 'compose',
+  POST_INVESTIGATION: 'post_investigation',
 } as const;
 
 export type StageType = (typeof STAGE_TYPE)[keyof typeof STAGE_TYPE];
@@ -75,6 +76,7 @@ export const COLLAPSIBLE_STAGE_TYPES: ReadonlySet<string> = new Set<string>([
   STAGE_TYPE.ACTION,
   STAGE_TYPE.SCORING,
   STAGE_TYPE.COMPOSE,
+  STAGE_TYPE.POST_INVESTIGATION,
 ]);
 
 // Timeline event types (for routing to renderers)
