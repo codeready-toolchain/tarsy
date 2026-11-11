@@ -21,6 +21,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
 	"github.com/codeready-toolchain/tarsy/ent/message"
 	"github.com/codeready-toolchain/tarsy/ent/predicate"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
@@ -252,6 +253,24 @@ func (_u *AlertSessionUpdate) AppendLabels(v []string) *AlertSessionUpdate {
 // ClearLabels clears the value of the "labels" field.
 func (_u *AlertSessionUpdate) ClearLabels() *AlertSessionUpdate {
 	_u.mutation.ClearLabels()
+	return _u
+}
+
+// SetPostInvestigationSkips sets the "post_investigation_skips" field.
+func (_u *AlertSessionUpdate) SetPostInvestigationSkips(v []schema.PostInvestigationSkip) *AlertSessionUpdate {
+	_u.mutation.SetPostInvestigationSkips(v)
+	return _u
+}
+
+// AppendPostInvestigationSkips appends value to the "post_investigation_skips" field.
+func (_u *AlertSessionUpdate) AppendPostInvestigationSkips(v []schema.PostInvestigationSkip) *AlertSessionUpdate {
+	_u.mutation.AppendPostInvestigationSkips(v)
+	return _u
+}
+
+// ClearPostInvestigationSkips clears the value of the "post_investigation_skips" field.
+func (_u *AlertSessionUpdate) ClearPostInvestigationSkips() *AlertSessionUpdate {
+	_u.mutation.ClearPostInvestigationSkips()
 	return _u
 }
 
@@ -1196,6 +1215,17 @@ func (_u *AlertSessionUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.LabelsCleared() {
 		_spec.ClearField(alertsession.FieldLabels, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.PostInvestigationSkips(); ok {
+		_spec.SetField(alertsession.FieldPostInvestigationSkips, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedPostInvestigationSkips(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, alertsession.FieldPostInvestigationSkips, value)
+		})
+	}
+	if _u.mutation.PostInvestigationSkipsCleared() {
+		_spec.ClearField(alertsession.FieldPostInvestigationSkips, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.SessionMetadata(); ok {
 		_spec.SetField(alertsession.FieldSessionMetadata, field.TypeJSON, value)
 	}
@@ -2073,6 +2103,24 @@ func (_u *AlertSessionUpdateOne) AppendLabels(v []string) *AlertSessionUpdateOne
 // ClearLabels clears the value of the "labels" field.
 func (_u *AlertSessionUpdateOne) ClearLabels() *AlertSessionUpdateOne {
 	_u.mutation.ClearLabels()
+	return _u
+}
+
+// SetPostInvestigationSkips sets the "post_investigation_skips" field.
+func (_u *AlertSessionUpdateOne) SetPostInvestigationSkips(v []schema.PostInvestigationSkip) *AlertSessionUpdateOne {
+	_u.mutation.SetPostInvestigationSkips(v)
+	return _u
+}
+
+// AppendPostInvestigationSkips appends value to the "post_investigation_skips" field.
+func (_u *AlertSessionUpdateOne) AppendPostInvestigationSkips(v []schema.PostInvestigationSkip) *AlertSessionUpdateOne {
+	_u.mutation.AppendPostInvestigationSkips(v)
+	return _u
+}
+
+// ClearPostInvestigationSkips clears the value of the "post_investigation_skips" field.
+func (_u *AlertSessionUpdateOne) ClearPostInvestigationSkips() *AlertSessionUpdateOne {
+	_u.mutation.ClearPostInvestigationSkips()
 	return _u
 }
 
@@ -3046,6 +3094,17 @@ func (_u *AlertSessionUpdateOne) sqlSave(ctx context.Context) (_node *AlertSessi
 	}
 	if _u.mutation.LabelsCleared() {
 		_spec.ClearField(alertsession.FieldLabels, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PostInvestigationSkips(); ok {
+		_spec.SetField(alertsession.FieldPostInvestigationSkips, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedPostInvestigationSkips(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, alertsession.FieldPostInvestigationSkips, value)
+		})
+	}
+	if _u.mutation.PostInvestigationSkipsCleared() {
+		_spec.ClearField(alertsession.FieldPostInvestigationSkips, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.SessionMetadata(); ok {
 		_spec.SetField(alertsession.FieldSessionMetadata, field.TypeJSON, value)

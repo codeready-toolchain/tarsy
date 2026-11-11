@@ -103,6 +103,7 @@ const SessionHeader = lazy(() => import('../components/session/SessionHeader.tsx
 const FinalAnalysisCard = lazy(() => import('../components/session/FinalAnalysisCard.tsx'));
 const ReviewActivityCard = lazy(() => import('../components/session/ReviewActivityCard.tsx'));
 const ExtractedLearningsCard = lazy(() => import('../components/session/ExtractedLearningsCard.tsx'));
+const PostInvestigationCard = lazy(() => import('../components/session/PostInvestigationCard.tsx'));
 const ConversationTimeline = lazy(() => import('../components/session/ConversationTimeline.tsx'));
 const ChatPanel = lazy(() => import('../components/chat/ChatPanel.tsx'));
 
@@ -1113,6 +1114,19 @@ export function SessionDetailPage() {
             }, 500);
           }
 
+          // Post-investigation stage completion: re-fetch the session for the
+          // stage's actions_executed, and the timeline for the memo — the
+          // backend strips the YES/NO marker without a timeline event.
+          if (payload.stage_type === STAGE_TYPE.POST_INVESTIGATION && TERMINAL_EXECUTION_STATUSES.has(payload.status)) {
+            getSession(id).then((fresh) => {
+              if (currentIdRef.current !== id) return;
+              setSession(fresh);
+            }).catch((err) => {
+              console.warn('Failed to re-fetch session after post-investigation stage completion:', err);
+            });
+            refetchTimelineDebounced();
+          }
+
           // When a new stage starts, clear per-agent progress and execution
           // status maps from the previous (potentially parallel) stage.  This
           // mirrors the pattern of clearing agentProgressStatuses when
@@ -1869,6 +1883,16 @@ export function SessionDetailPage() {
                 qualityRating={session.quality_rating}
                 reviewStatus={session.review_status}
                 onReviewClick={handleReviewClick}
+              />
+            </Suspense>
+
+            {/* Post-investigation outcomes. Renders nothing when the chain did not run or skip any. */}
+            <Suspense fallback={null}>
+              <PostInvestigationCard
+                stages={session.stages ?? []}
+                timelineEvents={timelineEvents}
+                skips={session.post_investigation_skips ?? []}
+                collapseCounter={cardsCollapseCounter}
               />
             </Suspense>
 

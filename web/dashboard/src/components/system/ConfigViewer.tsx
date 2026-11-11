@@ -652,6 +652,16 @@ function ChainDetails({ chain }: { chain: ChainConfigView }) {
           <KeyValueBlock data={chain.scoring} />
         </Box>
       )}
+      {chain.post_investigation && chain.post_investigation.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" sx={{
+            color: 'text.secondary'
+          }}>
+            post_investigation
+          </Typography>
+          <KeyValueBlock data={chain.post_investigation} />
+        </Box>
+      )}
     </Box>
   );
 }

@@ -27,6 +27,7 @@ export function getDefaultFilters(): SessionFilter {
     date_preset: null,
     scoring_status: '',
     label: [],
+    post_investigation: '',
   };
 }
 

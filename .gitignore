@@ -65,6 +65,7 @@ deploy/.env
 # Keep .example files tracked, but ignore actual config files with secrets
 deploy/config/tarsy.yaml
 deploy/config/llm-providers.yaml
+deploy/config/post-investigation-local-test.md
 deploy/config/oauth2-proxy.cfg
 deploy/config/oauth.env
 deploy/config/.env

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/chat"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 )
 
 // AlertSession is the model entity for the AlertSession schema.
@@ -43,6 +44,8 @@ type AlertSession struct {
 	ExecutiveSummaryError *string `json:"executive_summary_error,omitempty"`
 	// Canonical session labels from exec-summary LABELS trailer; GIN idx_alert_sessions_labels_gin in CreateGINIndexes
 	Labels []string `json:"labels,omitempty"`
+	// Why configured post-investigation entries did not run. Gate misses are not stages.
+	PostInvestigationSkips []schema.PostInvestigationSkip `json:"post_investigation_skips,omitempty"`
 	// SessionMetadata holds the value of the "session_metadata" field.
 	SessionMetadata map[string]interface{} `json:"session_metadata,omitempty"`
 	// From oauth2-proxy
@@ -235,7 +238,7 @@ func (*AlertSession) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case alertsession.FieldLabels, alertsession.FieldSessionMetadata, alertsession.FieldMcpSelection:
+		case alertsession.FieldLabels, alertsession.FieldPostInvestigationSkips, alertsession.FieldSessionMetadata, alertsession.FieldMcpSelection:
 			values[i] = new([]byte)
 		case alertsession.FieldCurrentStageIndex:
 			values[i] = new(sql.NullInt64)
@@ -342,6 +345,14 @@ func (_m *AlertSession) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Labels); err != nil {
 					return fmt.Errorf("unmarshal field labels: %w", err)
+				}
+			}
+		case alertsession.FieldPostInvestigationSkips:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field post_investigation_skips", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.PostInvestigationSkips); err != nil {
+					return fmt.Errorf("unmarshal field post_investigation_skips: %w", err)
 				}
 			}
 		case alertsession.FieldSessionMetadata:
@@ -628,6 +639,9 @@ func (_m *AlertSession) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("labels=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Labels))
+	builder.WriteString(", ")
+	builder.WriteString("post_investigation_skips=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PostInvestigationSkips))
 	builder.WriteString(", ")
 	builder.WriteString("session_metadata=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SessionMetadata))

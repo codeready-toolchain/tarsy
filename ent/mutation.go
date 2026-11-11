@@ -2338,82 +2338,84 @@ func (m *AgentExecutionMutation) ResetEdge(name string) error {
 // AlertSessionMutation represents an operation that mutates the AlertSession nodes in the graph.
 type AlertSessionMutation struct {
 	config
-	op                        Op
-	typ                       string
-	id                        *string
-	alert_data                *string
-	agent_type                *string
-	alert_type                *string
-	status                    *alertsession.Status
-	created_at                *time.Time
-	started_at                *time.Time
-	completed_at              *time.Time
-	error_message             *string
-	final_analysis            *string
-	executive_summary         *string
-	executive_summary_error   *string
-	labels                    *[]string
-	appendlabels              []string
-	session_metadata          *map[string]interface{}
-	author                    *string
-	cancelled_by              *string
-	cancel_reason             *string
-	runbook_url               *string
-	mcp_selection             *map[string]interface{}
-	chain_id                  *string
-	current_stage_index       *int
-	addcurrent_stage_index    *int
-	current_stage_id          *string
-	pod_id                    *string
-	last_interaction_at       *time.Time
-	slack_message_fingerprint *string
-	deleted_at                *time.Time
-	review_status             *alertsession.ReviewStatus
-	assignee                  *string
-	assigned_at               *time.Time
-	reviewed_at               *time.Time
-	quality_rating            *alertsession.QualityRating
-	action_taken              *string
-	investigation_feedback    *string
-	clearedFields             map[string]struct{}
-	stages                    map[string]struct{}
-	removedstages             map[string]struct{}
-	clearedstages             bool
-	agent_executions          map[string]struct{}
-	removedagent_executions   map[string]struct{}
-	clearedagent_executions   bool
-	timeline_events           map[string]struct{}
-	removedtimeline_events    map[string]struct{}
-	clearedtimeline_events    bool
-	messages                  map[string]struct{}
-	removedmessages           map[string]struct{}
-	clearedmessages           bool
-	llm_interactions          map[string]struct{}
-	removedllm_interactions   map[string]struct{}
-	clearedllm_interactions   bool
-	mcp_interactions          map[string]struct{}
-	removedmcp_interactions   map[string]struct{}
-	clearedmcp_interactions   bool
-	events                    map[int]struct{}
-	removedevents             map[int]struct{}
-	clearedevents             bool
-	chat                      *string
-	clearedchat               bool
-	session_scores            map[string]struct{}
-	removedsession_scores     map[string]struct{}
-	clearedsession_scores     bool
-	review_activities         map[string]struct{}
-	removedreview_activities  map[string]struct{}
-	clearedreview_activities  bool
-	memories                  map[string]struct{}
-	removedmemories           map[string]struct{}
-	clearedmemories           bool
-	injected_memories         map[string]struct{}
-	removedinjected_memories  map[string]struct{}
-	clearedinjected_memories  bool
-	done                      bool
-	oldValue                  func(context.Context) (*AlertSession, error)
-	predicates                []predicate.AlertSession
+	op                             Op
+	typ                            string
+	id                             *string
+	alert_data                     *string
+	agent_type                     *string
+	alert_type                     *string
+	status                         *alertsession.Status
+	created_at                     *time.Time
+	started_at                     *time.Time
+	completed_at                   *time.Time
+	error_message                  *string
+	final_analysis                 *string
+	executive_summary              *string
+	executive_summary_error        *string
+	labels                         *[]string
+	appendlabels                   []string
+	post_investigation_skips       *[]schema.PostInvestigationSkip
+	appendpost_investigation_skips []schema.PostInvestigationSkip
+	session_metadata               *map[string]interface{}
+	author                         *string
+	cancelled_by                   *string
+	cancel_reason                  *string
+	runbook_url                    *string
+	mcp_selection                  *map[string]interface{}
+	chain_id                       *string
+	current_stage_index            *int
+	addcurrent_stage_index         *int
+	current_stage_id               *string
+	pod_id                         *string
+	last_interaction_at            *time.Time
+	slack_message_fingerprint      *string
+	deleted_at                     *time.Time
+	review_status                  *alertsession.ReviewStatus
+	assignee                       *string
+	assigned_at                    *time.Time
+	reviewed_at                    *time.Time
+	quality_rating                 *alertsession.QualityRating
+	action_taken                   *string
+	investigation_feedback         *string
+	clearedFields                  map[string]struct{}
+	stages                         map[string]struct{}
+	removedstages                  map[string]struct{}
+	clearedstages                  bool
+	agent_executions               map[string]struct{}
+	removedagent_executions        map[string]struct{}
+	clearedagent_executions        bool
+	timeline_events                map[string]struct{}
+	removedtimeline_events         map[string]struct{}
+	clearedtimeline_events         bool
+	messages                       map[string]struct{}
+	removedmessages                map[string]struct{}
+	clearedmessages                bool
+	llm_interactions               map[string]struct{}
+	removedllm_interactions        map[string]struct{}
+	clearedllm_interactions        bool
+	mcp_interactions               map[string]struct{}
+	removedmcp_interactions        map[string]struct{}
+	clearedmcp_interactions        bool
+	events                         map[int]struct{}
+	removedevents                  map[int]struct{}
+	clearedevents                  bool
+	chat                           *string
+	clearedchat                    bool
+	session_scores                 map[string]struct{}
+	removedsession_scores          map[string]struct{}
+	clearedsession_scores          bool
+	review_activities              map[string]struct{}
+	removedreview_activities       map[string]struct{}
+	clearedreview_activities       bool
+	memories                       map[string]struct{}
+	removedmemories                map[string]struct{}
+	clearedmemories                bool
+	injected_memories              map[string]struct{}
+	removedinjected_memories       map[string]struct{}
+	clearedinjected_memories       bool
+	done                           bool
+	oldValue                       func(context.Context) (*AlertSession, error)
+	predicates                     []predicate.AlertSession
 }
 
 var _ ent.Mutation = (*AlertSessionMutation)(nil)
@@ -3070,6 +3072,71 @@ func (m *AlertSessionMutation) ResetLabels() {
 	m.labels = nil
 	m.appendlabels = nil
 	delete(m.clearedFields, alertsession.FieldLabels)
+}
+
+// SetPostInvestigationSkips sets the "post_investigation_skips" field.
+func (m *AlertSessionMutation) SetPostInvestigationSkips(sis []schema.PostInvestigationSkip) {
+	m.post_investigation_skips = &sis
+	m.appendpost_investigation_skips = nil
+}
+
+// PostInvestigationSkips returns the value of the "post_investigation_skips" field in the mutation.
+func (m *AlertSessionMutation) PostInvestigationSkips() (r []schema.PostInvestigationSkip, exists bool) {
+	v := m.post_investigation_skips
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPostInvestigationSkips returns the old "post_investigation_skips" field's value of the AlertSession entity.
+// If the AlertSession object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AlertSessionMutation) OldPostInvestigationSkips(ctx context.Context) (v []schema.PostInvestigationSkip, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPostInvestigationSkips is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPostInvestigationSkips requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPostInvestigationSkips: %w", err)
+	}
+	return oldValue.PostInvestigationSkips, nil
+}
+
+// AppendPostInvestigationSkips adds sis to the "post_investigation_skips" field.
+func (m *AlertSessionMutation) AppendPostInvestigationSkips(sis []schema.PostInvestigationSkip) {
+	m.appendpost_investigation_skips = append(m.appendpost_investigation_skips, sis...)
+}
+
+// AppendedPostInvestigationSkips returns the list of values that were appended to the "post_investigation_skips" field in this mutation.
+func (m *AlertSessionMutation) AppendedPostInvestigationSkips() ([]schema.PostInvestigationSkip, bool) {
+	if len(m.appendpost_investigation_skips) == 0 {
+		return nil, false
+	}
+	return m.appendpost_investigation_skips, true
+}
+
+// ClearPostInvestigationSkips clears the value of the "post_investigation_skips" field.
+func (m *AlertSessionMutation) ClearPostInvestigationSkips() {
+	m.post_investigation_skips = nil
+	m.appendpost_investigation_skips = nil
+	m.clearedFields[alertsession.FieldPostInvestigationSkips] = struct{}{}
+}
+
+// PostInvestigationSkipsCleared returns if the "post_investigation_skips" field was cleared in this mutation.
+func (m *AlertSessionMutation) PostInvestigationSkipsCleared() bool {
+	_, ok := m.clearedFields[alertsession.FieldPostInvestigationSkips]
+	return ok
+}
+
+// ResetPostInvestigationSkips resets all changes to the "post_investigation_skips" field.
+func (m *AlertSessionMutation) ResetPostInvestigationSkips() {
+	m.post_investigation_skips = nil
+	m.appendpost_investigation_skips = nil
+	delete(m.clearedFields, alertsession.FieldPostInvestigationSkips)
 }
 
 // SetSessionMetadata sets the "session_metadata" field.
@@ -4727,7 +4794,7 @@ func (m *AlertSessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AlertSessionMutation) Fields() []string {
-	fields := make([]string, 0, 32)
+	fields := make([]string, 0, 33)
 	if m.alert_data != nil {
 		fields = append(fields, alertsession.FieldAlertData)
 	}
@@ -4763,6 +4830,9 @@ func (m *AlertSessionMutation) Fields() []string {
 	}
 	if m.labels != nil {
 		fields = append(fields, alertsession.FieldLabels)
+	}
+	if m.post_investigation_skips != nil {
+		fields = append(fields, alertsession.FieldPostInvestigationSkips)
 	}
 	if m.session_metadata != nil {
 		fields = append(fields, alertsession.FieldSessionMetadata)
@@ -4856,6 +4926,8 @@ func (m *AlertSessionMutation) Field(name string) (ent.Value, bool) {
 		return m.ExecutiveSummaryError()
 	case alertsession.FieldLabels:
 		return m.Labels()
+	case alertsession.FieldPostInvestigationSkips:
+		return m.PostInvestigationSkips()
 	case alertsession.FieldSessionMetadata:
 		return m.SessionMetadata()
 	case alertsession.FieldAuthor:
@@ -4929,6 +5001,8 @@ func (m *AlertSessionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldExecutiveSummaryError(ctx)
 	case alertsession.FieldLabels:
 		return m.OldLabels(ctx)
+	case alertsession.FieldPostInvestigationSkips:
+		return m.OldPostInvestigationSkips(ctx)
 	case alertsession.FieldSessionMetadata:
 		return m.OldSessionMetadata(ctx)
 	case alertsession.FieldAuthor:
@@ -5061,6 +5135,13 @@ func (m *AlertSessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetLabels(v)
+		return nil
+	case alertsession.FieldPostInvestigationSkips:
+		v, ok := value.([]schema.PostInvestigationSkip)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPostInvestigationSkips(v)
 		return nil
 	case alertsession.FieldSessionMetadata:
 		v, ok := value.(map[string]interface{})
@@ -5271,6 +5352,9 @@ func (m *AlertSessionMutation) ClearedFields() []string {
 	if m.FieldCleared(alertsession.FieldLabels) {
 		fields = append(fields, alertsession.FieldLabels)
 	}
+	if m.FieldCleared(alertsession.FieldPostInvestigationSkips) {
+		fields = append(fields, alertsession.FieldPostInvestigationSkips)
+	}
 	if m.FieldCleared(alertsession.FieldSessionMetadata) {
 		fields = append(fields, alertsession.FieldSessionMetadata)
 	}
@@ -5365,6 +5449,9 @@ func (m *AlertSessionMutation) ClearField(name string) error {
 		return nil
 	case alertsession.FieldLabels:
 		m.ClearLabels()
+		return nil
+	case alertsession.FieldPostInvestigationSkips:
+		m.ClearPostInvestigationSkips()
 		return nil
 	case alertsession.FieldSessionMetadata:
 		m.ClearSessionMetadata()
@@ -5466,6 +5553,9 @@ func (m *AlertSessionMutation) ResetField(name string) error {
 		return nil
 	case alertsession.FieldLabels:
 		m.ResetLabels()
+		return nil
+	case alertsession.FieldPostInvestigationSkips:
+		m.ResetPostInvestigationSkips()
 		return nil
 	case alertsession.FieldSessionMetadata:
 		m.ResetSessionMetadata()

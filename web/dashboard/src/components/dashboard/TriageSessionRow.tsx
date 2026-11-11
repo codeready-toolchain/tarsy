@@ -15,6 +15,7 @@ import {
   CallSplit,
   Hub,
   BuildOutlined,
+  AssignmentTurnedInOutlined,
   SwapHoriz,
   SmsOutlined as ChatIcon,
 } from '@mui/icons-material';
@@ -123,7 +124,7 @@ export function TriageSessionRow({
         </Box>
       </TableCell>
 
-      <TableCell sx={{ width: 130, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
+      <TableCell sx={{ width: 156, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">
@@ -146,6 +147,21 @@ export function TriageSessionRow({
                 sx={(theme) => ({
                   ...iconOnlyChipSx,
                   ...actionStageChipStyles(theme, !!session.actions_executed),
+                })}
+              />
+            </Tooltip>
+          )}
+          {session.has_post_investigation && (
+            <Tooltip title={session.post_investigation_acted ? 'Post-investigation agent acted' : 'Post-investigation agents ran — no action taken'}>
+              <Chip
+                icon={<AssignmentTurnedInOutlined sx={{ fontSize: '0.875rem' }} />}
+                label="Post-investigation"
+                size="small"
+                variant="outlined"
+                tabIndex={0}
+                sx={(theme) => ({
+                  ...iconOnlyChipSx,
+                  ...actionStageChipStyles(theme, session.post_investigation_acted),
                 })}
               />
             </Tooltip>

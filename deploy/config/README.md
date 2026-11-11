@@ -282,6 +282,24 @@ agent_chains:
 - MCP tools — union of investigation-stage servers unless `chat.mcp_servers` is set
 - **`sub_agents`** — `chat.sub_agents` overrides `chain.sub_agents`. Stage-agent `sub_agents` lists do not apply to chat
 
+### Post-investigation agents
+
+Optional. A chain's `post_investigation:` entries run after automatic scoring completes. Scoring must be enabled for that chain; an API re-score does not start them. Each entry names an agent, an optional gate (`min_score`, `labels_any`, `labels_none`), and can override that agent's MCP servers. TARSy supplies the mechanism. What the agent does is `custom_instructions` plus those servers. See [ADR-0035: Post-Investigation Agents](../../docs/adr/0035-post-investigation-agents.md) and the commented example in `tarsy.yaml.example`.
+
+```yaml
+agent_chains:
+  my-chain:
+    scoring:
+      enabled: true
+    post_investigation:
+      - name: detection-tuning
+        agent: DetectionTuningProposer
+        min_score: 60
+        labels_any: [action, noise]
+```
+
+`type: post_investigation` on the agent is optional when the agent is only referenced from this block. An agent with that type cannot be used in stages, chat, scoring, or `sub_agents`. Chain-level `mcp_servers` and `sub_agents` are not inherited. A gate miss creates no stage; session detail shows it as Skipped.
+
 ### Built-in MCP Servers
 
 - **kubernetes-server** - Kubernetes MCP server (stdio transport)

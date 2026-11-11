@@ -42,6 +42,8 @@ function makeSession(overrides: Partial<DashboardSessionItem> = {}): DashboardSe
     has_sub_agents: false,
     has_action_stages: false,
     actions_executed: null,
+    has_post_investigation: false,
+    post_investigation_acted: false,
     chat_message_count: 0,
     provider_fallback_count: 0,
     current_stage_index: null,
@@ -104,5 +106,24 @@ describe('SessionListItem token tooltip', () => {
     expect(tooltip).not.toHaveTextContent('cache read');
     expect(tooltip).not.toHaveTextContent('cache create');
     expect(tooltip).not.toHaveTextContent('thinking');
+  });
+});
+
+describe('SessionListItem post-investigation indicator', () => {
+  it('is hidden when no post-investigation stage ran', () => {
+    renderItem(makeSession());
+    expect(screen.queryByTestId('AssignmentTurnedInOutlinedIcon')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [true, 'Post-investigation agent acted'],
+    [false, 'Post-investigation agents ran — no action taken'],
+  ])('shows the indicator when acted=%s', async (acted, tooltipText) => {
+    const user = userEvent.setup();
+    renderItem(makeSession({ has_post_investigation: true, post_investigation_acted: acted }));
+
+    await user.hover(screen.getByTestId('AssignmentTurnedInOutlinedIcon'));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(tooltipText);
   });
 });

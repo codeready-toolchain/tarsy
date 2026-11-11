@@ -65,6 +65,7 @@ describe('getDefaultFilters', () => {
       date_preset: null,
       scoring_status: '',
       label: [],
+      post_investigation: '',
     });
   });
 });
@@ -132,6 +133,7 @@ describe('filter persistence', () => {
       date_preset: '1d',
       scoring_status: '',
       label: ['page'],
+      post_investigation: 'acted',
     };
     saveFiltersToStorage(filters);
     const loaded = loadFiltersFromStorage();

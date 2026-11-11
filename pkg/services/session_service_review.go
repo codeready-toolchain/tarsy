@@ -658,35 +658,37 @@ func triageGroupPredicates(group models.TriageGroupKey) []predicate.AlertSession
 
 // triageRow is the scan target for the triage group query.
 type triageRow struct {
-	ID                    string     `sql:"session_id"`
-	AlertType             *string    `sql:"alert_type"`
-	ChainID               string     `sql:"chain_id"`
-	Status                string     `sql:"status"`
-	Author                *string    `sql:"author"`
-	CancelledBy           *string    `sql:"cancelled_by"`
-	CancelReason          *string    `sql:"cancel_reason"`
-	CreatedAt             time.Time  `sql:"created_at"`
-	StartedAt             *time.Time `sql:"started_at"`
-	CompletedAt           *time.Time `sql:"completed_at"`
-	ErrorMessage          *string    `sql:"error_message"`
-	ExecutiveSummary      *string    `sql:"executive_summary"`
-	Labels                []byte     `sql:"labels"`
-	ReviewStatus          *string    `sql:"review_status"`
-	Assignee              *string    `sql:"assignee"`
-	QualityRating         *string    `sql:"quality_rating"`
-	ActionTaken           *string    `sql:"action_taken"`
-	InvestigationFeedback *string    `sql:"investigation_feedback"`
-	HasParallel           int        `sql:"has_parallel"`
-	HasSubAgents          int        `sql:"has_sub_agents"`
-	HasActionStages       int        `sql:"has_action_stages"`
-	ActionsExecuted       *bool      `sql:"actions_executed"`
-	ChatMsgCount          int        `sql:"chat_msg_count"`
-	FallbackCount         int        `sql:"fallback_count"`
-	LatestScore           *int       `sql:"latest_score"`
-	ScoringStatus         *string    `sql:"scoring_status"`
-	FeedbackEdited        int        `sql:"feedback_edited"`
-	FeedbackEditedBy      *string    `sql:"feedback_edited_by"`
-	FeedbackEditedAt      *time.Time `sql:"feedback_edited_at"`
+	ID                     string     `sql:"session_id"`
+	AlertType              *string    `sql:"alert_type"`
+	ChainID                string     `sql:"chain_id"`
+	Status                 string     `sql:"status"`
+	Author                 *string    `sql:"author"`
+	CancelledBy            *string    `sql:"cancelled_by"`
+	CancelReason           *string    `sql:"cancel_reason"`
+	CreatedAt              time.Time  `sql:"created_at"`
+	StartedAt              *time.Time `sql:"started_at"`
+	CompletedAt            *time.Time `sql:"completed_at"`
+	ErrorMessage           *string    `sql:"error_message"`
+	ExecutiveSummary       *string    `sql:"executive_summary"`
+	Labels                 []byte     `sql:"labels"`
+	ReviewStatus           *string    `sql:"review_status"`
+	Assignee               *string    `sql:"assignee"`
+	QualityRating          *string    `sql:"quality_rating"`
+	ActionTaken            *string    `sql:"action_taken"`
+	InvestigationFeedback  *string    `sql:"investigation_feedback"`
+	HasParallel            int        `sql:"has_parallel"`
+	HasSubAgents           int        `sql:"has_sub_agents"`
+	HasActionStages        int        `sql:"has_action_stages"`
+	ActionsExecuted        *bool      `sql:"actions_executed"`
+	HasPostInvestigation   int        `sql:"has_post_investigation"`
+	PostInvestigationActed int        `sql:"post_investigation_acted"`
+	ChatMsgCount           int        `sql:"chat_msg_count"`
+	FallbackCount          int        `sql:"fallback_count"`
+	LatestScore            *int       `sql:"latest_score"`
+	ScoringStatus          *string    `sql:"scoring_status"`
+	FeedbackEdited         int        `sql:"feedback_edited"`
+	FeedbackEditedBy       *string    `sql:"feedback_edited_by"`
+	FeedbackEditedAt       *time.Time `sql:"feedback_edited_at"`
 }
 
 // queryTriageGroup counts and fetches a paginated slice of sessions matching
@@ -771,6 +773,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 				fmt.Sprintf("(SELECT bool_or(actions_executed) FROM stages WHERE session_id = %s AND stage_type = '%s' AND actions_executed IS NOT NULL)", sid, stage.StageTypeAction),
 				"actions_executed",
 			)
+			appendPostInvestigationSelects(sel, sid)
 			sel.AppendSelectAs(
 				fmt.Sprintf("(SELECT COUNT(*) FROM chat_user_messages WHERE chat_id IN (SELECT chat_id FROM chats WHERE session_id = %s))", sid),
 				"chat_msg_count",
@@ -815,36 +818,38 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			durationMs = &ms
 		}
 		items = append(items, models.DashboardSessionItem{
-			ID:                    row.ID,
-			AlertType:             row.AlertType,
-			ChainID:               row.ChainID,
-			Status:                row.Status,
-			Author:                row.Author,
-			CancelledBy:           row.CancelledBy,
-			CancelReason:          row.CancelReason,
-			CreatedAt:             row.CreatedAt,
-			StartedAt:             row.StartedAt,
-			CompletedAt:           row.CompletedAt,
-			DurationMs:            durationMs,
-			ErrorMessage:          row.ErrorMessage,
-			ExecutiveSummary:      row.ExecutiveSummary,
-			Labels:                unmarshalLabels(row.Labels),
-			ReviewStatus:          row.ReviewStatus,
-			Assignee:              row.Assignee,
-			QualityRating:         row.QualityRating,
-			ActionTaken:           row.ActionTaken,
-			InvestigationFeedback: row.InvestigationFeedback,
-			FeedbackEdited:        row.FeedbackEdited != 0,
-			FeedbackEditedBy:      row.FeedbackEditedBy,
-			FeedbackEditedAt:      row.FeedbackEditedAt,
-			HasParallelStages:     row.HasParallel != 0,
-			HasSubAgents:          row.HasSubAgents != 0,
-			HasActionStages:       row.HasActionStages != 0,
-			ActionsExecuted:       row.ActionsExecuted,
-			ChatMessageCount:      row.ChatMsgCount,
-			ProviderFallbackCount: row.FallbackCount,
-			LatestScore:           row.LatestScore,
-			ScoringStatus:         row.ScoringStatus,
+			ID:                     row.ID,
+			AlertType:              row.AlertType,
+			ChainID:                row.ChainID,
+			Status:                 row.Status,
+			Author:                 row.Author,
+			CancelledBy:            row.CancelledBy,
+			CancelReason:           row.CancelReason,
+			CreatedAt:              row.CreatedAt,
+			StartedAt:              row.StartedAt,
+			CompletedAt:            row.CompletedAt,
+			DurationMs:             durationMs,
+			ErrorMessage:           row.ErrorMessage,
+			ExecutiveSummary:       row.ExecutiveSummary,
+			Labels:                 unmarshalLabels(row.Labels),
+			ReviewStatus:           row.ReviewStatus,
+			Assignee:               row.Assignee,
+			QualityRating:          row.QualityRating,
+			ActionTaken:            row.ActionTaken,
+			InvestigationFeedback:  row.InvestigationFeedback,
+			FeedbackEdited:         row.FeedbackEdited != 0,
+			FeedbackEditedBy:       row.FeedbackEditedBy,
+			FeedbackEditedAt:       row.FeedbackEditedAt,
+			HasParallelStages:      row.HasParallel != 0,
+			HasSubAgents:           row.HasSubAgents != 0,
+			HasActionStages:        row.HasActionStages != 0,
+			ActionsExecuted:        row.ActionsExecuted,
+			HasPostInvestigation:   row.HasPostInvestigation != 0,
+			PostInvestigationActed: row.PostInvestigationActed != 0,
+			ChatMessageCount:       row.ChatMsgCount,
+			ProviderFallbackCount:  row.FallbackCount,
+			LatestScore:            row.LatestScore,
+			ScoringStatus:          row.ScoringStatus,
 		})
 	}
 
