@@ -19,6 +19,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/stage"
 	"github.com/codeready-toolchain/tarsy/ent/timelineevent"
 	"github.com/codeready-toolchain/tarsy/pkg/agent"
+	"github.com/codeready-toolchain/tarsy/pkg/queue"
 	"github.com/codeready-toolchain/tarsy/test/e2e/testdata/configs"
 )
 
@@ -31,6 +32,7 @@ import (
 //   - Two entries run together, each with its own tools; skills load when
 //     the agent defines them; chain MCP servers and sub-agents are not inherited
 //   - API re-score does not start post-investigation agents
+//   - Shutdown: scoring that completes during its drain still runs the agents
 // ────────────────────────────────────────────────────────────
 
 // scriptScoredSession scripts investigation (2) + executive summary (1,
@@ -631,4 +633,67 @@ func finalAnalysisContent(t *testing.T, app *TestApp, executionID string) string
 		Only(context.Background())
 	require.NoError(t, err)
 	return memo.Content
+}
+
+func TestE2E_PostInvestigation_RunsWhenScoringCompletesDuringShutdown(t *testing.T) {
+	llm := NewScriptedLLMClient()
+	scriptScoredSession(llm)
+	// Hold the scoring evaluation (first of the two scoring calls) until shutdown has started.
+	release := make(chan struct{})
+	scoringBlocked := make(chan struct{}, 1)
+	scoringEval := &llm.sequential[len(llm.sequential)-2]
+	scoringEval.WaitCh = release
+	scoringEval.OnBlock = scoringBlocked
+	llm.AddRouted("PostInvestigator", LLMScriptEntry{
+		Text: "Decision: no ticket needed. Evidence: the OOM is already tracked.\n\nNO",
+	})
+
+	app := NewTestApp(t,
+		WithConfig(configs.Load(t, "post-investigation")),
+		WithLLMClient(llm),
+		WithMCPServers(postInvestigationMCPServers()),
+	)
+	require.NotNil(t, app.PostInvestigationExecutor)
+
+	resp := app.SubmitAlert(t, "test-post-investigation", "Pod OOMKilled")
+	sessionID := resp["session_id"].(string)
+	app.WaitForSessionStatus(t, sessionID, "completed")
+	select {
+	case <-scoringBlocked:
+	case <-time.After(30 * time.Second):
+		t.Fatal("scoring did not reach the LLM call")
+	}
+
+	// Shut down as cmd/tarsy does: worker pool first, then the scoring and
+	// post-investigation drains.
+	app.WorkerPool.Stop()
+	queueCfg := *app.Config.Queue
+	queueCfg.ScoringShutdownTimeout = 20 * time.Second
+	queueCfg.PostInvestigationShutdownTimeout = 20 * time.Second
+	drained := make(chan struct{})
+	go func() {
+		queue.DrainScoringAndPostInvestigation(context.Background(), &queueCfg, app.ScoringExecutor, app.PostInvestigationExecutor)
+		close(drained)
+	}()
+
+	// Let the drain start, then let scoring finish inside its drain window.
+	time.Sleep(500 * time.Millisecond)
+	close(release)
+
+	select {
+	case <-drained:
+	case <-time.After(60 * time.Second):
+		t.Fatal("drain did not finish")
+	}
+
+	score, err := app.EntClient.SessionScore.Query().
+		Where(sessionscore.SessionIDEQ(sessionID)).
+		Only(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, sessionscore.StatusCompleted, score.Status)
+
+	stg := app.waitForPostInvestigationStage(t, sessionID, "file-ticket")
+	assert.Equal(t, stage.StatusCompleted, stg.Status)
+	require.Len(t, stg.Edges.AgentExecutions, 1)
+	assert.Equal(t, agentexecution.StatusCompleted, stg.Edges.AgentExecutions[0].Status)
 }

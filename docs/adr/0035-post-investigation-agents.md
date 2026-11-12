@@ -81,7 +81,7 @@ When memory is enabled, the agent gets `recall_past_investigations` and `search_
 
 Any error marks only that entry's stage and execution failed. Transient timeline events are cleaned up after the runs finish, the same way scoring does.
 
-Shutdown waits `queue.post_investigation_shutdown_timeout` (default 3 minutes), in parallel with scoring, then cancels what is still running. Orphan recovery mirrors scoring: at startup, `pending` and `active` post-investigation stages for sessions owned by this pod are marked failed, along with their active executions and streaming timeline events; periodically, stages active longer than the longest entry timeout plus a margin are failed. A stage has no creation time and receives a start time only when its execution starts, so a stale `pending` stage is aged from the session's completion time plus scoring's timeout.
+Shutdown waits `queue.post_investigation_shutdown_timeout` (default 3 minutes) after scoring's drain, then cancels what is still running. (Originally in parallel with scoring; made sequential so a scoring run that completes during its drain still starts its agents.) Orphan recovery mirrors scoring: at startup, `pending` and `active` post-investigation stages for sessions owned by this pod are marked failed, along with their active executions and streaming timeline events; periodically, stages active longer than the longest entry timeout plus a margin are failed. A stage has no creation time and receives a start time only when its execution starts, so a stale `pending` stage is aged from the session's completion time plus scoring's timeout.
 
 ### Configuration
 

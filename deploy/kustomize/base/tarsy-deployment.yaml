@@ -18,8 +18,9 @@ spec:
       labels:
         component: tarsy
     spec:
-      # session_timeout (2400s) + max(scoring_shutdown_timeout, post_investigation_shutdown_timeout) (180s) + http_shutdown (5s) + buffer (15s)
-      terminationGracePeriodSeconds: 2600
+      # session_timeout (2400s) + scoring_shutdown_timeout (180s) + post_investigation_shutdown_timeout (180s)
+      # + drain buffers (2 x 15s) + http_shutdown (5s) + buffer (15s). Drains end early when idle.
+      terminationGracePeriodSeconds: 2810
       serviceAccountName: tarsy
       containers:
 
@@ -112,10 +113,8 @@ spec:
         - name: llm-service
           image: tarsy-llm:latest
           imagePullPolicy: Always
-          lifecycle:
-            preStop:
-              exec:
-                command: ["sleep", "200"]
+          # No preStop: on SIGTERM the LLM service keeps serving until tarsy's HTTP
+          # port (SHUTDOWN_WAIT_ADDR, default localhost:8080) closes, then stops.
           ports:
             - containerPort: 50051
           env:
@@ -173,6 +172,9 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+            # On a liveness restart SIGTERM would wait for tarsy to exit (see above):
+            # bound it instead of using the pod-level grace period.
+            terminationGracePeriodSeconds: 30
           startupProbe:
             grpc:
               port: 50051
