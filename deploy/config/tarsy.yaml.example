@@ -43,8 +43,10 @@ queue:
   scoring_shutdown_timeout: 3m
 
   # How long to wait for in-flight post-investigation agents to complete
-  # naturally during shutdown before cancelling them. Stopped in parallel with
-  # scoring, so shutdown waits for the longer of the two.
+  # naturally during shutdown before cancelling them. Drained after scoring, so a
+  # scoring run that completes during its drain still starts its agents.
+  # Kubernetes terminationGracePeriodSeconds must be >= graceful_shutdown_timeout
+  # + scoring_shutdown_timeout + post_investigation_shutdown_timeout (+ buffers).
   post_investigation_shutdown_timeout: 3m
 
   # Orphan detection: scans for stuck in_progress sessions with stale heartbeats

@@ -459,38 +459,9 @@ func main() {
 		slog.Warn("Shutdown timeout exceeded — incomplete sessions will be orphan-recovered")
 	}
 
-	// Then drain the scoring and post-investigation executors in parallel
-	// (goroutines spawned by completed sessions). Each Stop() waits up to its
-	// shutdown timeout for natural completion before force-cancelling. A scoring
-	// run that finishes after post-investigation stopped skips its agents.
-	scoringDone := make(chan struct{})
-	go func() {
-		scoringExecutor.Stop(cfg.Queue.ScoringShutdownTimeout)
-		close(scoringDone)
-	}()
-	postInvestigationDone := make(chan struct{})
-	go func() {
-		postInvestigationExecutor.Stop(cfg.Queue.PostInvestigationShutdownTimeout)
-		close(postInvestigationDone)
-	}()
-
-	// Outer budget: longer grace period + 15s cleanup buffer for post-cancel drain.
-	drainTimeout := max(cfg.Queue.ScoringShutdownTimeout, cfg.Queue.PostInvestigationShutdownTimeout) + 15*time.Second
-	scoringShutdownCtx, scoringCancel := context.WithTimeout(ctx, drainTimeout)
-	defer scoringCancel()
-
-	select {
-	case <-scoringDone:
-		slog.Info("Scoring executor stopped gracefully")
-	case <-scoringShutdownCtx.Done():
-		slog.Warn("Scoring executor shutdown timeout exceeded")
-	}
-	select {
-	case <-postInvestigationDone:
-		slog.Info("Post-investigation executor stopped gracefully")
-	case <-scoringShutdownCtx.Done():
-		slog.Warn("Post-investigation executor shutdown timeout exceeded")
-	}
+	// Then drain scoring, then post-investigation (goroutines spawned by
+	// completed sessions).
+	queue.DrainScoringAndPostInvestigation(ctx, cfg.Queue, scoringExecutor, postInvestigationExecutor)
 
 	// Stop HTTP server with its own timeout budget
 	httpShutdownCtx, httpCancel := context.WithTimeout(ctx, 5*time.Second)
