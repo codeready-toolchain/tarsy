@@ -172,6 +172,9 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+            # On a liveness restart SIGTERM would wait for tarsy to exit (see above):
+            # bound it instead of using the pod-level grace period.
+            terminationGracePeriodSeconds: 30
           startupProbe:
             grpc:
               port: 50051

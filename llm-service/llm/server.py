@@ -27,17 +27,30 @@ DEFAULT_SHUTDOWN_WAIT_ADDR = "localhost:8080"
 
 
 async def wait_until_closed(addr: str, interval: float = 2.0, connect_timeout: float = 1.0) -> None:
-    """Return once nothing accepts TCP connections on addr (host:port)."""
+    """Return once TCP connections to addr (host:port) are refused, i.e. nothing listens there.
+
+    Other errors keep the wait going: stopping early would cut off a backend that is
+    still draining, while waiting too long is bounded by the termination grace period.
+    """
     host, _, port = addr.rpartition(":")
+    warned = False
     while True:
         try:
             _, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, int(port)), timeout=connect_timeout
+                # all_errors: one error per resolved address (localhost is ::1 and 127.0.0.1);
+                # otherwise they are merged into a plain OSError.
+                asyncio.open_connection(host, int(port), all_errors=True),
+                timeout=connect_timeout,
             )
         except TimeoutError:  # a subclass of OSError: keep before it
             pass  # slow to accept, but still there
-        except OSError:
-            return
+        except (ExceptionGroup, OSError) as err:
+            errors = err.exceptions if isinstance(err, ExceptionGroup) else (err,)
+            if all(isinstance(e, ConnectionRefusedError) for e in errors):
+                return
+            if not warned:
+                logger.warning("Checking %s failed (%s), still waiting", addr, err)
+                warned = True
         else:
             writer.close()
             await writer.wait_closed()
