@@ -176,7 +176,10 @@ func TestE2E_PostInvestigation_AutoScoringRunsGatedEntries(t *testing.T) {
 			templateResult, _ = c.ToolResult["content"].(string)
 		}
 	}
-	assert.Equal(t, "downloaded text file\n## Impact\nTEMPLATE-BODY-OOM", templateResult)
+	assert.Equal(t,
+		"downloaded text file\n"+
+			"<resource uri=\"file:///templates/oom.md\" mime_type=\"text/plain\">\n## Impact\nTEMPLATE-BODY-OOM\n</resource>",
+		templateResult)
 
 	// ── The session itself is unchanged ──
 	session, err := app.EntClient.AlertSession.Get(context.Background(), sessionID)
