@@ -12,6 +12,8 @@
  * An entry the gate turned away is not a stage. It uses this same card, with
  * a Skipped chip on the folded header and the reason in the body. A skip-only
  * card starts folded.
+ *
+ * The header copy button copies every entry's memo (and skip reason) as markdown.
  */
 
 import { useMemo, useRef, useState } from 'react';
@@ -22,6 +24,7 @@ import { ExpandLess, UnfoldMore, AssignmentTurnedInOutlined } from '@mui/icons-m
 import { alpha } from '@mui/material/styles';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 
+import CopyButton from '../shared/CopyButton';
 import { remarkPlugins, finalAnswerMarkdownComponents } from '../../utils/markdownComponents.tsx';
 import { STAGE_TYPE, TIMELINE_EVENT_TYPES } from '../../constants/eventTypes.ts';
 import { EXECUTION_STATUS, TERMINAL_EXECUTION_STATUSES } from '../../constants/sessionStatus.ts';
@@ -88,6 +91,15 @@ function memosByStage(timelineEvents: TimelineEvent[]): Map<string, string> {
   return new Map([...latest].map(([stageId, ev]) => [stageId, ev.content]));
 }
 
+/** Markdown of the card body: one section per entry with its memo, then skips. */
+function copyText(entries: StageOverview[], memos: Map<string, string>, skips: PostInvestigationSkip[]): string {
+  const sections = [
+    ...entries.filter((s) => memos.get(s.id)).map((s) => `## ${s.stage_name}\n\n${memos.get(s.id)}`),
+    ...skips.map((skip) => `## ${skip.name} (skipped)\n\n${skip.detail}`),
+  ];
+  return sections.join('\n\n');
+}
+
 export default function PostInvestigationCard({
   stages,
   timelineEvents,
@@ -119,6 +131,7 @@ export default function PostInvestigationCard({
   }
 
   const memos = useMemo(() => memosByStage(timelineEvents), [timelineEvents]);
+  const cardText = copyText(entries, memos, skips);
   const toggleExpanded = () => {
     userToggled.current = true;
     setIsExpanded((open) => !open);
@@ -173,17 +186,24 @@ export default function PostInvestigationCard({
             <Chip label="Skipped" color="default" size="small" data-testid="post-investigation-header-skipped" />
           )}
         </Box>
-        <IconButton
-          size="small"
-          onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
-          aria-label={isExpanded ? 'Collapse post-investigation' : 'Expand post-investigation'}
-          sx={{
-            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
-            '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) },
-          }}
-        >
-          {isExpanded ? <ExpandLess /> : <UnfoldMore />}
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {cardText && (
+            <Box onClick={(e) => e.stopPropagation()}>
+              <CopyButton text={cardText} variant="icon" size="small" tooltip="Copy post-investigation" />
+            </Box>
+          )}
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
+            aria-label={isExpanded ? 'Collapse post-investigation' : 'Expand post-investigation'}
+            sx={{
+              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+              '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.22) },
+            }}
+          >
+            {isExpanded ? <ExpandLess /> : <UnfoldMore />}
+          </IconButton>
+        </Box>
       </Box>
 
       <Collapse in={isExpanded} timeout={400}>
