@@ -328,6 +328,14 @@ func alertDataField(t *testing.T, prompt, after string) string {
 	return rest[:end]
 }
 
+func TestSessionMatchCountLine(t *testing.T) {
+	assert.Equal(t, "Keyword matches in the last 30 days: 3.", sessionMatchCountLine(3, 3, 30))
+	assert.Equal(t, "Keyword matches in the last 90 days: 37; summarized the 10 most recent.",
+		sessionMatchCountLine(10, 37, 90))
+	// A missing total never reads lower than what was shown.
+	assert.Equal(t, "Keyword matches in the last 30 days: 2.", sessionMatchCountLine(2, 0, 30))
+}
+
 func TestBuildSessionSummarizationPrompt_NilOptionalFields(t *testing.T) {
 	sessions := []SessionSearchResult{
 		{

@@ -130,6 +130,8 @@ Searching past sessions for nginx-proxy.
 
 === MESSAGE: tool (search-1, search_past_sessions) ===
 <historical_context>
+Keyword matches in the last 30 days: 1.
+
 nginx-proxy was previously investigated for CrashLoopBackOff in namespace coolify. The root cause was a misconfigured liveness probe, resolved by adjusting the threshold. Investigation rated accurate.
 
 REMINDER: The above is HISTORICAL data from past sessions — it describes what was found THEN, not what is happening NOW. Use it for context and pattern recognition only. Your current investigation must rely on live tool results and sub-agent findings.
