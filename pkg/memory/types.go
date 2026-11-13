@@ -112,6 +112,9 @@ type SessionSearchResult struct {
 	InvestigationFeedback *string
 	ChatExchanges         []ChatExchange
 	CreatedAt             time.Time
+	// TotalMatches is the number of sessions matching the search before the
+	// limit is applied. It is the same on every row of one search.
+	TotalMatches int
 }
 
 // ChatExchange holds a single follow-up chat question and the agent's answer.
