@@ -66,6 +66,37 @@ func TestToolExecutor_Execute_JSON(t *testing.T) {
 	assert.Equal(t, "call-1", result.CallID)
 }
 
+func TestToolExecutor_Execute_EmbeddedResource(t *testing.T) {
+	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
+		"files": {
+			"read_file": func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+				return &mcpsdk.CallToolResult{
+					Content: []mcpsdk.Content{
+						&mcpsdk.TextContent{Text: "downloaded text file"},
+						&mcpsdk.EmbeddedResource{Resource: &mcpsdk.ResourceContents{
+							URI: "file:///config.yaml", MIMEType: "text/plain", Text: "key: value",
+						}},
+						&mcpsdk.EmbeddedResource{Resource: &mcpsdk.ResourceContents{
+							URI: "file:///logo.png", MIMEType: "image/png", Blob: []byte{0x89, 0x50},
+						}},
+						&mcpsdk.ImageContent{Data: []byte{0x89, 0x50}, MIMEType: "image/png"},
+					},
+				}, nil
+			},
+		},
+	})
+
+	result, err := executor.Execute(context.Background(), agent.ToolCall{
+		ID:        "call-1",
+		Name:      "files.read_file",
+		Arguments: `{"path": "config.yaml"}`,
+	})
+
+	require.NoError(t, err)
+	assert.False(t, result.IsError)
+	assert.Equal(t, "downloaded text file\nkey: value", result.Content)
+}
+
 func TestToolExecutor_Execute_KeyValue(t *testing.T) {
 	executor := newTestExecutor(t, map[string]map[string]mcpsdk.ToolHandler{
 		"kubernetes": {

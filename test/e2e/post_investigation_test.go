@@ -26,7 +26,8 @@ import (
 // ────────────────────────────────────────────────────────────
 // Post-investigation e2e tests — agents run after auto-scoring:
 //   - Gated entries: passing entry runs, gate miss creates no stage
-//   - MCP tool call, memo persisted, YES marker → actions_executed
+//   - MCP tool calls (one returns an embedded resource), memo persisted,
+//     YES marker → actions_executed
 //   - Sub-agents dispatched from a post-investigation agent, with that
 //     sub-agent's skills and tools
 //   - Two entries run together, each with its own tools; skills load when
@@ -51,6 +52,8 @@ func postInvestigationMCPServers() map[string]map[string]mcpsdk.ToolHandler {
 		"ticket-mcp": {
 			"search_tickets": StaticToolHandler(`[]`),
 			"create_ticket":  StaticToolHandler(`{"id":"TCK-1","url":"https://tracker.example.com/TCK-1"}`),
+			"get_ticket_template": ResourceToolHandler("downloaded text file",
+				"file:///templates/oom.md", "## Impact\nTEMPLATE-BODY-OOM"),
 		},
 	}
 }
@@ -82,7 +85,15 @@ func TestE2E_PostInvestigation_AutoScoringRunsGatedEntries(t *testing.T) {
 	llm := NewScriptedLLMClient()
 	scriptScoredSession(llm)
 
-	// PostInvestigator: create a ticket, then report it with the YES marker.
+	// PostInvestigator: read the ticket template, create a ticket, then report
+	// it with the YES marker.
+	llm.AddRouted("PostInvestigator", LLMScriptEntry{
+		Chunks: []agent.Chunk{
+			&agent.ToolCallChunk{CallID: "pi-call-0", Name: "ticket-mcp__get_ticket_template",
+				Arguments: `{"kind":"oom"}`},
+			&agent.UsageChunk{InputTokens: 250, OutputTokens: 20, TotalTokens: 270},
+		},
+	})
 	llm.AddRouted("PostInvestigator", LLMScriptEntry{
 		Chunks: []agent.Chunk{
 			&agent.TextChunk{Content: "The investigation confirmed an OOM; filing a ticket for the owning team."},
@@ -153,6 +164,19 @@ func TestE2E_PostInvestigation_AutoScoringRunsGatedEntries(t *testing.T) {
 		}
 	}
 	assert.Contains(t, toolNames, "create_ticket")
+
+	// ── Embedded resource text reaches the agent and the stored tool result ──
+	piInputs := agentInputs(llm, "You are PostInvestigator")
+	require.Len(t, piInputs, 3)
+	assertToolResultContains(t, piInputs[1], "ticket-mcp__get_ticket_template",
+		"TEMPLATE-BODY-OOM", "agent should receive the embedded resource text")
+	var templateResult string
+	for _, c := range calls {
+		if c.ToolName != nil && *c.ToolName == "get_ticket_template" {
+			templateResult, _ = c.ToolResult["content"].(string)
+		}
+	}
+	assert.Equal(t, "downloaded text file\n## Impact\nTEMPLATE-BODY-OOM", templateResult)
 
 	// ── The session itself is unchanged ──
 	session, err := app.EntClient.AlertSession.Get(context.Background(), sessionID)

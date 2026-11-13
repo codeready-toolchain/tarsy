@@ -195,14 +195,23 @@ func (e *ToolExecutor) resolveToolCall(name string) (serverID, toolName string, 
 }
 
 // extractTextContent extracts text from MCP CallToolResult.
-// Concatenates all TextContent items. Non-text content (images, embedded
-// resources) is logged at debug level and skipped.
+// Concatenates all TextContent items and the text of embedded resources
+// (e.g. a file returned as a resource next to a status message). Other
+// content (images, audio, binary resources, resource links) is logged at
+// debug level and skipped.
 func extractTextContent(result *mcpsdk.CallToolResult) string {
 	var parts []string
 	for _, c := range result.Content {
-		if tc, ok := c.(*mcpsdk.TextContent); ok {
-			parts = append(parts, tc.Text)
-		} else {
+		switch v := c.(type) {
+		case *mcpsdk.TextContent:
+			parts = append(parts, v.Text)
+		case *mcpsdk.EmbeddedResource:
+			if v.Resource != nil && v.Resource.Text != "" {
+				parts = append(parts, v.Resource.Text)
+				continue
+			}
+			slog.Debug("MCP tool returned non-text embedded resource, skipping")
+		default:
 			slog.Debug("MCP tool returned non-text content, skipping",
 				"content_type", fmt.Sprintf("%T", c))
 		}
