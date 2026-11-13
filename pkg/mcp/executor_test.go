@@ -94,7 +94,39 @@ func TestToolExecutor_Execute_EmbeddedResource(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
-	assert.Equal(t, "downloaded text file\nkey: value", result.Content)
+	assert.Equal(t,
+		"downloaded text file\n"+
+			"<resource uri=\"file:///config.yaml\" mime_type=\"text/plain\">\nkey: value\n</resource>",
+		result.Content)
+}
+
+func TestFormatTextResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource *mcpsdk.ResourceContents
+		want     string
+	}{
+		{
+			name:     "uri and mime type, trailing newline dropped",
+			resource: &mcpsdk.ResourceContents{URI: "file:///a.yaml", MIMEType: "text/plain", Text: "a: 1\nb: 2\n"},
+			want:     "<resource uri=\"file:///a.yaml\" mime_type=\"text/plain\">\na: 1\nb: 2\n</resource>",
+		},
+		{
+			name:     "empty attributes omitted",
+			resource: &mcpsdk.ResourceContents{Text: "plain"},
+			want:     "<resource>\nplain\n</resource>",
+		},
+		{
+			name:     "quotes in uri escaped",
+			resource: &mcpsdk.ResourceContents{URI: `file:///a"b`, Text: "x"},
+			want:     "<resource uri=\"file:///a\\\"b\">\nx\n</resource>",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, formatTextResource(tt.resource))
+		})
+	}
 }
 
 func TestToolExecutor_Execute_KeyValue(t *testing.T) {

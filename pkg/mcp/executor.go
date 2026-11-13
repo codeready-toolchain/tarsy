@@ -196,9 +196,11 @@ func (e *ToolExecutor) resolveToolCall(name string) (serverID, toolName string, 
 
 // extractTextContent extracts text from MCP CallToolResult.
 // Concatenates all TextContent items and the text of embedded resources
-// (e.g. a file returned as a resource next to a status message). Other
-// content (images, audio, binary resources, resource links) is logged at
-// debug level and skipped.
+// (e.g. a file returned as a resource next to a status message). Each
+// resource is wrapped in a <resource> tag with its URI and MIME type, so the
+// LLM can tell it apart from the tool's own messages. Other content (images,
+// audio, binary resources, resource links) is logged at debug level and
+// skipped.
 func extractTextContent(result *mcpsdk.CallToolResult) string {
 	var parts []string
 	for _, c := range result.Content {
@@ -207,7 +209,7 @@ func extractTextContent(result *mcpsdk.CallToolResult) string {
 			parts = append(parts, v.Text)
 		case *mcpsdk.EmbeddedResource:
 			if v.Resource != nil && v.Resource.Text != "" {
-				parts = append(parts, v.Resource.Text)
+				parts = append(parts, formatTextResource(v.Resource))
 				continue
 			}
 			slog.Debug("MCP tool returned non-text embedded resource, skipping")
@@ -217,6 +219,24 @@ func extractTextContent(result *mcpsdk.CallToolResult) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+// formatTextResource wraps a text resource in a <resource> tag. Empty
+// attributes are omitted; one trailing newline of the text is dropped so the
+// closing tag sits on the next line.
+func formatTextResource(r *mcpsdk.ResourceContents) string {
+	var sb strings.Builder
+	sb.WriteString("<resource")
+	if r.URI != "" {
+		fmt.Fprintf(&sb, " uri=%q", r.URI)
+	}
+	if r.MIMEType != "" {
+		fmt.Fprintf(&sb, " mime_type=%q", r.MIMEType)
+	}
+	sb.WriteString(">\n")
+	sb.WriteString(strings.TrimSuffix(r.Text, "\n"))
+	sb.WriteString("\n</resource>")
+	return sb.String()
 }
 
 // marshalSchema serializes a tool's InputSchema to a JSON string.
