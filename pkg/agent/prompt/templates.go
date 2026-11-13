@@ -52,7 +52,7 @@ Review the completed investigation above and decide whether the follow-through d
 2. Gather any extra context your task needs with your tools
 3. Carry it out via your available tools, or explain why you chose not to
 
-When you are done, write a short memo covering: the decision, the evidence, tools used (or why none), the outcome, and links to anything you created. Do not copy the investigation report.
+When you are done, write a brief memo: the decision, the key reason (a few lines at most), and links to anything you created. Details belong in what you created, not in the memo. Do not list the tools you used or copy the investigation report.
 
 ` + postInvestigationOutputSchema
 

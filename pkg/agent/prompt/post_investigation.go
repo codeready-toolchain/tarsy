@@ -21,9 +21,10 @@ and, if so, carry it out with your tools. You do not remediate the incident.
 - If evidence is ambiguous or conflicting, report your assessment but do NOT act
 - Explain your reasoning BEFORE executing any tool with side effects
 - No action is a normal, successful outcome; prefer inaction over incorrect action
-- Write a short memo: decision, evidence, tools used, outcome, links to anything you created`
+- Write a brief memo: the decision, the key reason in a few lines, and links to anything
+  you created. Details belong in what you created; do not list the tools you used`
 
-const postInvestigationTaskFocus = "Focus on the follow-through defined by your instructions: carry it out via your available tools only when the investigation's evidence warrants it, otherwise explain why not. Your final text is a short memo, not a copy of the investigation."
+const postInvestigationTaskFocus = "Focus on the follow-through defined by your instructions: carry it out via your available tools only when the investigation's evidence warrants it, otherwise explain why not. Your final text is a brief memo, not a copy of the investigation."
 
 // buildPostInvestigationMessages builds the initial conversation for a
 // post-investigation agent.

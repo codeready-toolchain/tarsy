@@ -158,7 +158,8 @@ and, if so, carry it out with your tools. You do not remediate the incident.
 - If evidence is ambiguous or conflicting, report your assessment but do NOT act
 - Explain your reasoning BEFORE executing any tool with side effects
 - No action is a normal, successful outcome; prefer inaction over incorrect action
-- Write a short memo: decision, evidence, tools used, outcome, links to anything you created
+- Write a brief memo: the decision, the key reason in a few lines, and links to anything
+  you created. Details belong in what you created; do not list the tools you used
 ```
 
 The last line of the user message requires `YES` or `NO` alone. `YES` only if a tool with side effects carried out the follow-through.
@@ -190,7 +191,7 @@ Post-investigation stages do not appear in other contexts. Scoring context inclu
 ### Dashboard and API
 
 - **Timeline:** post-investigation stages render after the Reflection (scoring) stage, with their own separator.
-- **Session detail:** a Post-investigation card. Each entry that ran shows name, status, an Acted or No action chip, and the memo as markdown with clickable links. A terminal status for a post-investigation stage re-fetches the session (for `actions_executed`) and the timeline, because the YES/NO marker is stripped from the memo without a timeline event. Gate misses are rows in that same card, from `post_investigation_skips` (`name`, `detail`), recorded before the scoring stage event so the refetch includes them. Skipped is the gate. No action is an agent that ran and chose not to act.
+- **Session detail:** a Post-investigation card. Each entry that ran shows name, status, an Acted or No action chip, and the memo as markdown with clickable links. A header button copies all memos and skip reasons as markdown. A terminal status for a post-investigation stage re-fetches the session (for `actions_executed`) and the timeline, because the YES/NO marker is stripped from the memo without a timeline event. Gate misses are rows in that same card, from `post_investigation_skips` (`name`, `detail`), recorded before the scoring stage event so the refetch includes them. Skipped is the gate. No action is an agent that ran and chose not to act.
 - **Session list:** an indicator when post-investigation ran — green when any agent acted, grey otherwise, same styling as the action-stage chip — and a filter:
   - `acted` — at least one post-investigation stage with `actions_executed = true`
   - `ran` — at least one post-investigation stage exists (any status)
@@ -217,7 +218,7 @@ Investigation content is partly attacker-controlled. A deployment that creates a
 | **Gate** | Optional `min_score`, `labels_any`, and `labels_none`, AND-combined. A miss creates no stage. |
 | **Post-investigation stage** | `stage_type: post_investigation`. Fail-open. Never changes session status, score, final analysis, or session-level `actions_executed`. |
 | **`post_investigation` agent type** | Iterating controller, post-investigation behavioral layer, YES/NO marker. |
-| **Memo** | The agent's final answer: decision (acted or no action), evidence, and links. Shown in the dashboard. |
+| **Memo** | The agent's final answer: a brief decision (acted or no action), the key reason, and links. Shown in the dashboard. |
 | **Post-investigation executor** | Gate evaluation, records, context, MCP and sub-agent wiring, execution, and shutdown. |
 
 ## Future Considerations

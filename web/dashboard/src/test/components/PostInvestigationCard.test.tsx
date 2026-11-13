@@ -244,6 +244,42 @@ describe('PostInvestigationCard', () => {
     );
   });
 
+  it('copies every memo and skip reason as markdown without toggling the card', async () => {
+    const user = userEvent.setup();
+    render(
+      <PostInvestigationCard
+        stages={[
+          makeStage('s2', 'file-ticket', 2, { actions_executed: true }),
+          makeStage('s3', 'notify', 3, { actions_executed: false }),
+        ]}
+        timelineEvents={[
+          makeMemo('e1', 's2', 'Ticket created: [OPS-1](https://tickets.example.com/OPS-1)'),
+          makeMemo('e2', 's3', 'No action: nothing to notify.'),
+        ]}
+        skips={[{ name: 'follow-up', detail: 'needs a label in noise' }]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Copy post-investigation' }));
+
+    expect(await navigator.clipboard.readText()).toBe(
+      '## file-ticket\n\nTicket created: [OPS-1](https://tickets.example.com/OPS-1)\n\n' +
+        '## notify\n\nNo action: nothing to notify.\n\n' +
+        '## follow-up (skipped)\n\nneeds a label in noise',
+    );
+    expect(screen.getByRole('button', { name: 'Collapse post-investigation' })).toBeInTheDocument();
+  });
+
+  it('has no copy button while no memo is available', () => {
+    render(
+      <PostInvestigationCard
+        stages={[makeStage('s2', 'file-ticket', 2, { status: EXECUTION_STATUS.ACTIVE })]}
+        timelineEvents={[]}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Copy post-investigation' })).not.toBeInTheDocument();
+  });
+
   it('collapses when collapseCounter changes and expands on header click', async () => {
     const user = userEvent.setup();
     const stages = [makeStage('s2', 'file-ticket', 2, { actions_executed: true })];

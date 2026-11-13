@@ -40,7 +40,8 @@ func TestBuildPostInvestigationMessages_GuidelinesPresent(t *testing.T) {
 	assert.Contains(t, system, "evidence is ambiguous or conflicting")
 	assert.Contains(t, system, "Explain your reasoning BEFORE executing any tool with side effects")
 	assert.Contains(t, system, "No action is a normal, successful outcome")
-	assert.Contains(t, system, "links to anything you created")
+	assert.Contains(t, system, "Write a brief memo")
+	assert.Contains(t, system, "do not list the tools you used")
 
 	// Remediation framing from the action layer must not leak in.
 	assert.NotContains(t, system, "Action Agent Safety Guidelines")

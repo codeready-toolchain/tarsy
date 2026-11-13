@@ -72,9 +72,10 @@ and, if so, carry it out with your tools. You do not remediate the incident.
 - If evidence is ambiguous or conflicting, report your assessment but do NOT act
 - Explain your reasoning BEFORE executing any tool with side effects
 - No action is a normal, successful outcome; prefer inaction over incorrect action
-- Write a short memo: decision, evidence, tools used, outcome, links to anything you created
+- Write a brief memo: the decision, the key reason in a few lines, and links to anything
+  you created. Details belong in what you created; do not list the tools you used
 
-Focus on the follow-through defined by your instructions: carry it out via your available tools only when the investigation's evidence warrants it, otherwise explain why not. Your final text is a short memo, not a copy of the investigation.
+Focus on the follow-through defined by your instructions: carry it out via your available tools only when the investigation's evidence warrants it, otherwise explain why not. Your final text is a brief memo, not a copy of the investigation.
 === message[1] role=user ===
 ## Alert Details
 
@@ -106,7 +107,7 @@ Review the completed investigation above and decide whether the follow-through d
 2. Gather any extra context your task needs with your tools
 3. Carry it out via your available tools, or explain why you chose not to
 
-When you are done, write a short memo covering: the decision, the evidence, tools used (or why none), the outcome, and links to anything you created. Do not copy the investigation report.
+When you are done, write a brief memo: the decision, the key reason (a few lines at most), and links to anything you created. Details belong in what you created, not in the memo. Do not list the tools you used or copy the investigation report.
 
 End your response with YES or NO on the very last line: YES only if you carried out the follow-through with a tool that has side effects (e.g. created or updated something), NO otherwise. Read-only tool calls do not count.
 The last line must contain ONLY YES or NO — no formatting, no markdown, no extra text.
