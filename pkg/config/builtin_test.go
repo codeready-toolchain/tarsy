@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"regexp"
 	"slices"
 	"sync"
@@ -244,7 +245,7 @@ func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
 	}
 
 	nonImageProviders := []string{
-		"google-default", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash",
+		"google-default", "gemini-4-argon", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash",
 	}
 	for _, name := range nonImageProviders {
 		t.Run(name+" has url_context", func(t *testing.T) {
@@ -265,7 +266,22 @@ func TestBuiltinMCPServers(t *testing.T) {
 
 		assert.Equal(t, TransportTypeStdio, server.Transport.Type)
 		assert.Equal(t, "npx", server.Transport.Command)
-		assert.NotEmpty(t, server.Transport.Args)
+		require.Len(t, server.Transport.Args, 4)
+		assert.Equal(t, "-y", server.Transport.Args[0])
+		assert.Equal(t, kubernetesMCPServerPackage, server.Transport.Args[1])
+		assert.Equal(t, "--config", server.Transport.Args[2])
+		assert.NotContains(t, server.Transport.Args, "--read-only")
+		assert.NotContains(t, server.Transport.Args, "--disable-destructive")
+		assert.NotContains(t, server.Transport.Args, "--log-file")
+
+		configPath := server.Transport.Args[3]
+		contents, err := os.ReadFile(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, kubernetesMCPServerConfig, string(contents))
+		info, err := os.Stat(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
 		assert.NotEmpty(t, server.Instructions)
 		assert.NotNil(t, server.DataMasking)
 		assert.True(t, server.DataMasking.Enabled)
@@ -350,6 +366,22 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey: true,
 		},
 		{
+			name:        "gpt-6.1-terra",
+			providerID:  "gpt-6.1-terra",
+			wantType:    LLMProviderTypeOpenAI,
+			wantModel:   "gpt-6.1-terra",
+			wantEffort:  ReasoningEffortMax,
+			checkAPIKey: true,
+		},
+		{
+			name:        "gpt-6-astra",
+			providerID:  "gpt-6-astra",
+			wantType:    LLMProviderTypeOpenAI,
+			wantModel:   "gpt-6-astra",
+			wantEffort:  ReasoningEffortMax,
+			checkAPIKey: true,
+		},
+		{
 			name:        "gpt-6-sol",
 			providerID:  "gpt-6-sol",
 			wantType:    LLMProviderTypeOpenAI,
@@ -419,6 +451,14 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gemini-3.8-flash",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-3.8-flash",
+			wantEffort:  ReasoningEffortHigh,
+			checkAPIKey: true,
+		},
+		{
+			name:        "gemini-4-argon",
+			providerID:  "gemini-4-argon",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-4-argon",
 			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},

@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -201,6 +202,86 @@ agent_chains:
 	require.NoError(t, err)
 	require.NotNil(t, disabled.Chat)
 	assert.False(t, disabled.Chat.IsEnabled())
+}
+
+func TestInitialize_PostInvestigation(t *testing.T) {
+	const agentsYAML = `
+agents:
+  test-agent:
+    mcp_servers: []
+  helper-agent:
+    description: "Helps"
+  proposer:
+    type: post_investigation
+    description: "Proposes changes"
+`
+	const chainYAML = `
+agent_chains:
+  test-chain:
+    alert_types: ["test"]
+    stages:
+      - name: "s1"
+        agents:
+          - name: "test-agent"
+%s
+    post_investigation:
+      - name: "tuning"
+        agent: "proposer"
+        min_score: 60
+        labels_any: [action, noise]
+        labels_none: [watch]
+        include_investigation: true
+        timeout: 5m
+        max_iterations: 8
+        sub_agents: [helper-agent]
+`
+	setup := func(t *testing.T, defaultsYAML, chainScoringYAML string) string {
+		t.Helper()
+		configDir := t.TempDir()
+		tarsyYAML := defaultsYAML + agentsYAML + fmt.Sprintf(chainYAML, chainScoringYAML)
+		require.NoError(t, os.WriteFile(filepath.Join(configDir, "tarsy.yaml"), []byte(tarsyYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(configDir, "llm-providers.yaml"), []byte("llm_providers: {}\n"), 0644))
+		t.Setenv("GOOGLE_API_KEY", "test-key")
+		return configDir
+	}
+
+	t.Run("parses entry with chain scoring", func(t *testing.T) {
+		configDir := setup(t, "", "    scoring:\n      enabled: true")
+
+		cfg, err := Initialize(context.Background(), configDir)
+		require.NoError(t, err)
+
+		chain, err := cfg.GetChain("test-chain")
+		require.NoError(t, err)
+		require.Len(t, chain.PostInvestigation, 1)
+		entry := chain.PostInvestigation[0]
+		assert.Equal(t, "tuning", entry.Name)
+		assert.Equal(t, "proposer", entry.Agent)
+		require.NotNil(t, entry.MinScore)
+		assert.Equal(t, 60, *entry.MinScore)
+		assert.Equal(t, []string{"action", "noise"}, entry.LabelsAny)
+		assert.Equal(t, []string{"watch"}, entry.LabelsNone)
+		assert.True(t, entry.IncludeInvestigation)
+		assert.Equal(t, 5*time.Minute, entry.Timeout)
+		require.NotNil(t, entry.MaxIterations)
+		assert.Equal(t, 8, *entry.MaxIterations)
+		assert.Equal(t, []string{"helper-agent"}, entry.SubAgents.Names())
+	})
+
+	t.Run("scoring enabled via defaults", func(t *testing.T) {
+		configDir := setup(t, "defaults:\n  scoring:\n    enabled: true\n", "")
+
+		_, err := Initialize(context.Background(), configDir)
+		require.NoError(t, err)
+	})
+
+	t.Run("scoring not enabled", func(t *testing.T) {
+		configDir := setup(t, "", "")
+
+		_, err := Initialize(context.Background(), configDir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires scoring to be enabled")
+	})
 }
 
 func TestLoadTarsyYAML(t *testing.T) {

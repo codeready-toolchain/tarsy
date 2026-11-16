@@ -46,9 +46,9 @@ func (Stage) Fields() []ent.Field {
 
 		// Stage Type
 		field.Enum("stage_type").
-			Values("investigation", "synthesis", "chat", "exec_summary", "scoring", "action", "compose").
+			Values("investigation", "synthesis", "chat", "exec_summary", "scoring", "action", "compose", "post_investigation").
 			Default("investigation").
-			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation), compose (amended report after action)"),
+			Comment("Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation), compose (amended report after action), post_investigation (agent run after auto-scoring)"),
 
 		// Stage-Level Status & Timing (aggregated from agent executions)
 		field.Enum("status").
@@ -85,11 +85,11 @@ func (Stage) Fields() []ent.Field {
 			Nillable().
 			Comment("FK to another stage in the same session (e.g. synthesis -> investigation, compose -> action)"),
 
-		// Action stage outcome
+		// Action / post-investigation stage outcome
 		field.Bool("actions_executed").
 			Optional().
 			Nillable().
-			Comment("Whether the action agent executed any remediation tools (null for non-action stages)"),
+			Comment("Whether the agent executed side-effecting tools (action and post_investigation stages; null otherwise)"),
 	}
 }
 

@@ -11,6 +11,13 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
+// PostInvestigationSkip is why one configured post-investigation entry did not
+// run. A gate miss is not a stage; the session detail page shows this as a caption.
+type PostInvestigationSkip struct {
+	Name   string `json:"name"`
+	Detail string `json:"detail"`
+}
+
 // AlertSession holds the schema definition for the AlertSession entity.
 type AlertSession struct {
 	ent.Schema
@@ -65,6 +72,9 @@ func (AlertSession) Fields() []ent.Field {
 		field.JSON("labels", []string{}).
 			Optional().
 			Comment("Canonical session labels from exec-summary LABELS trailer; GIN idx_alert_sessions_labels_gin in CreateGINIndexes"),
+		field.JSON("post_investigation_skips", []PostInvestigationSkip{}).
+			Optional().
+			Comment("Why configured post-investigation entries did not run. Gate misses are not stages."),
 		field.JSON("session_metadata", map[string]interface{}{}).
 			Optional(),
 		field.String("author").

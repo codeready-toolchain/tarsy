@@ -107,6 +107,7 @@ describe('hasActiveFilters', () => {
     date_preset: null,
     scoring_status: '',
     label: [],
+    post_investigation: '',
   };
 
   it('returns false for default filters', () => {
@@ -139,6 +140,10 @@ describe('hasActiveFilters', () => {
 
   it('returns true when scoring_status is set', () => {
     expect(hasActiveFilters({ ...defaultFilters, scoring_status: 'scored' })).toBe(true);
+  });
+
+  it('returns true when post_investigation is set', () => {
+    expect(hasActiveFilters({ ...defaultFilters, post_investigation: 'none' })).toBe(true);
   });
 
   it('returns true when label is set', () => {

@@ -1685,6 +1685,25 @@ func TestStageService_SetActionsExecuted(t *testing.T) {
 		assert.False(t, *updated.ActionsExecuted)
 	})
 
+	t.Run("sets actions_executed on post_investigation stage", func(t *testing.T) {
+		stg, err := stageService.CreateStage(ctx, models.CreateStageRequest{
+			SessionID:          session.ID,
+			StageName:          "follow-through",
+			StageIndex:         4,
+			ExpectedAgentCount: 1,
+			StageType:          string(stage.StageTypePostInvestigation),
+		})
+		require.NoError(t, err)
+
+		err = stageService.SetActionsExecuted(ctx, stg.ID, true)
+		require.NoError(t, err)
+
+		updated, err := stageService.GetStageByID(ctx, stg.ID, false)
+		require.NoError(t, err)
+		require.NotNil(t, updated.ActionsExecuted)
+		assert.True(t, *updated.ActionsExecuted)
+	})
+
 	t.Run("returns ErrNotFound for missing stage", func(t *testing.T) {
 		err := stageService.SetActionsExecuted(ctx, "nonexistent-id", true)
 		assert.ErrorIs(t, err, ErrNotFound)

@@ -105,7 +105,7 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 ### 3. Agent Chains & Orchestration
 
 - **Multi-stage workflows** where specialized agents build upon each other's work
-- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `compose`, `chat`, `exec_summary`, `scoring`) with data accumulating between stages
+- Each chain consists of **sequential typed stages** (`investigation`, `synthesis`, `action`, `compose`, `chat`, `exec_summary`, `scoring`, `post_investigation`) with data accumulating between stages
 - **Flexible chain definitions** via YAML configuration without code changes
 - **Parallel execution support** where multiple agents investigate independently within a stage
 - **Automatic synthesis** after parallel stages -- a SynthesisAgent unifies findings from multiple agents
@@ -116,12 +116,12 @@ The Python service has zero orchestration state and zero MCP knowledge. It recei
 
 Agents are specialized AI-powered components that analyze alerts using domain expertise and configurable iteration controllers. Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"` | `"post_investigation"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 **Three controller types** (text-based ReAct parsing was completely removed):
 
-- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM. Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
+- **IteratingController**: Multi-turn tool-calling loop with tool definitions bound to the LLM (default, action and post-investigation agents). Works with any `LLMBackend` — `google-native` (Gemini native SDK) or `langchain` (multi-provider). Also handles implicit orchestration with push-based sub-agent result injection when the agent has a non-empty sub-agent catalog.
 - **SingleShotController**: Tool-less single LLM call, parameterized via `SingleShotConfig`. Used for synthesis, executive summary, and compose (amended report after action). The exec-summary path also parses a last-line `LABELS:` trailer and persists canonical `session.labels`. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 - **ScoringController**: 2-turn LLM conversation for session quality evaluation. Turn 1 produces an outcome-first score (0–100) with dimension-based analysis and failure tags; Turn 2 produces a tool improvement report (missing tools + existing tool improvements). Runs async after session completion via `ScoringExecutor`.
 
@@ -186,7 +186,7 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 ### 9. Real-time Dashboard
 
 - **React 19 + TypeScript + Vite 7 + MUI 7** single-page application
-- **Session list** with filtering by status, alert type, chain, date range, session labels (`label=` JSON contains), and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index). Historical list and triage show stored `labels` in a Labels column (chips); session detail shows them next to the alert type. See [ADR-0031: Session Labels](adr/0031-session-labels.md). Cancelled sessions show who cancelled and an optional reason on the status tooltip (list, triage, session header); cancelled work is not rendered as a failure. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
+- **Session list** with filtering by status, alert type, chain, date range, session labels (`label=` JSON contains; `label_scope=any|none|names_or_none` for any non-empty labels, unlabeled sessions, or names OR unlabeled), post-investigation outcome (`post_investigation=acted|ran|none`), and full-text search (searches session fields + timeline event content via PostgreSQL FTS with GIN index). Historical list and triage show stored `labels` in a Labels column (chips); session detail shows them next to the alert type. See [ADR-0031: Session Labels](adr/0031-session-labels.md) and [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md). Cancelled sessions show who cancelled and an optional reason on the status tooltip (list, triage, session header); cancelled work is not rendered as a failure. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 - **In-session search** for terminated sessions — client-side substring matching with highlight, auto-expand of collapsed stages, and match navigation
 - **Session deep links** — shareable `/sessions/:id?stage=…[&event=…]` URLs that expand the target stage/event and scroll to it (copy-link affordances on the timeline; no backend API changes). See [ADR-0021: Session Deep Links](adr/0021-session-deep-links.md)
 - **Conversation timeline** with real-time LLM streaming (thinking, tool calls, final answers)
@@ -196,8 +196,9 @@ Built-in support for multiple AI providers with zero-configuration defaults:
 - **Session scoring** with color-coded score badges, dedicated scoring page with full reports (score analysis, failure tags, tool improvement report), and real-time scoring status updates
 - **Alert submission interface** with MCP tool override selection
 - **Usage page** (`/usage`) for date-window fleet token and estimated-cost dig-in; soft Est. $ next to tokens on list/detail/execution surfaces when cost estimation is enabled. Model labels include a stored reasoning effort (`model (effort)`), and the by-model table and cost chart split on that label
-- **System status page** with MCP server health and a read-only Config Viewer tab (includes the `fallback_lists` catalog and raw `fallback_list` selectors, and the `label_maps` catalog and raw `label_map` selectors). See [ADR-0019](adr/0019-config-viewer.md), [ADR-0030](adr/0030-named-fallback-lists.md), [ADR-0031](adr/0031-session-labels.md).
+- **System status page** with MCP server health and a read-only Config Viewer tab (includes the `fallback_lists` catalog and raw `fallback_list` selectors, the `label_maps` catalog and raw `label_map` selectors, and each chain's `post_investigation` entries). See [ADR-0019](adr/0019-config-viewer.md), [ADR-0030](adr/0030-named-fallback-lists.md), [ADR-0031](adr/0031-session-labels.md), and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 - **Triage view** with review workflow for post-investigation human triage — sessions grouped by review status (`needs_review`, `in_progress`, `reviewed`), self-claim assignment, complete with `quality_rating` and `action_taken`, and real-time updates via `review.status` WebSocket events
+- **Review notifications** — while a dashboard tab is open, the tab icon, title, and header switch show how many completed sessions still need review, and a background tab raises one desktop toast per newly matching session. Both signals share a browser-local label selection (default `ban` and `action`). Opening the dashboard asks for notification permission while desktop notifications are on and the browser has not been asked. Left nav → **Settings** (`/settings`) holds the two signal switches, the label field, notification permission, and a reset to those defaults. Slack is unchanged. See [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md).
 - **WebSocket-driven updates** with automatic reconnection and event catchup
 
 ### 10. Follow-up Chat
@@ -252,6 +253,21 @@ After an investigation completes, TARSy can automatically evaluate the quality o
 - **Session labels** — the judge sees stored `labels` (including `[]` / null) under the executive-summary footer, without the label-map catalog. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
 
 **For detailed design**: See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md)
+
+#### Post-Investigation Agents
+
+Chains can declare `post_investigation:` entries: agents (`type: post_investigation`) that run after **automatic** scoring completes and act outside the investigation through their own MCP servers — for example opening an issue or a ticket. TARSy ships only the mechanism; what an agent does is configuration.
+
+- **Trigger** — `ScoringExecutor` calls `PostInvestigationExecutor.RunAsync` (`pkg/queue/post_investigation_executor.go`) after an auto-triggered score completes. API re-scores never trigger it, so each session runs its entries at most once.
+- **Gate** — optional `min_score`, `labels_any`, `labels_none` (AND; label names match case-insensitively). An unset field is no condition. A miss creates no stage. The session stores the entry name and reason (`post_investigation_skips`), and session detail shows a Skipped row. The list indicator stays off.
+- **Execution** — one `post_investigation` stage + agent execution per passing entry (created sequentially, then run concurrently with a per-entry `timeout`, default 10m). Context: session metadata and dashboard link, final report, executive summary, labels and the scoring verdict; `include_investigation: true` adds the full timeline. Entry-level `sub_agents` and memory tools (no briefing) are supported; the session's per-alert MCP override is not applied.
+- **Outcome** — the agent's memo is the stage's final analysis; its YES/NO marker is stored in the stage's `actions_executed`. Session-level `actions_executed` keeps counting action stages only.
+- **Fail-open** — failures mark only that entry's stage failed; session status, score and final analysis are never changed.
+- **Shutdown and recovery** — `queue.post_investigation_shutdown_timeout` (default 3m) drains in-flight runs after scoring's drain (so scoring that completes during it still starts its agents); startup and periodic stale recovery fail abandoned stages.
+- **Metric** — `tarsy_post_investigation_runs_total{chain, name, outcome}`.
+- **Dashboard and API** — session detail shows a Post-investigation card (ran entries: status, Acted / No action, memo with links; gate misses: Skipped and the reason) that updates live; the session list and triage show an indicator when post-investigation ran (green when it acted), and the list filters on `post_investigation=acted|ran|none`. API fields: `stages[].actions_executed` and `post_investigation_skips` on session detail, `has_post_investigation` / `post_investigation_acted` on list rows.
+
+**For detailed design**: See [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md)
 
 ### 15. Investigation Memory
 
@@ -464,6 +480,7 @@ All 4 containers share localhost network within the pod. The same container imag
 - **New Agent Chains**: Deploy multi-stage workflows via `agent_chains` section with alert type mappings, parallel execution, and synthesis
 - **Dynamic Orchestration**: Any agent with configured `sub_agents` automatically gains orchestration tools for LLM-driven sub-agent dispatch. Configure guardrails via `orchestrator:` block on any agent (`max_concurrent_agents`; optional `agent_timeout` clamped to remaining parent — omit to use session/chat time). `sub_agents` can be set at chain/stage/agent level. Chat agents can also become orchestrators via `chat.sub_agents`. See [ADR-0015](adr/0015-implicit-orchestrator.md) and [ADR-0029](adr/0029-sub-agent-execution-limits.md)
 - **Automated Actions**: Use `type: action` agents to enable remediation based on investigation findings. Safety prompt auto-injected, stage type derived for DB auditability and dashboard rendering. Configure which MCP tools (actions) are available and what decision criteria to apply via `custom_instructions`. After a successful action stage, an automatic compose pass copy-edits the upstream investigation, synthesis, or prior compose report with the action memo into session `final_analysis` (skipped on action-only chains; a later action may use the previous compose report; fail-open). See [ADR-0007](adr/0007-automated-actions.md) and [ADR-0025](adr/0025-action-report-compose.md)
+- **Post-Investigation Agents**: Use `type: post_investigation` agents in a chain's `post_investigation:` block to act on finished, scored investigations outside TARSy (issues, tickets, notifications), gated by score and labels. See [Post-Investigation Agents](#post-investigation-agents) and [ADR-0035](adr/0035-post-investigation-agents.md)
 - **Session label maps**: Optional `label_maps` catalog plus last-non-empty `defaults.label_map` / `chain.label_map` (empty inherits; all empty → injected `builtin` watch/action/noise). See [ADR-0031](adr/0031-session-labels.md)
 - **LLM Provider Configuration**: Override built-in providers or add custom proxy configurations via `llm-providers.yaml`
 - **Per-Alert MCP Override**: Fine-grained tool control per alert request via the `mcp_selection` API field

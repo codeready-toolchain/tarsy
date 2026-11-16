@@ -22,7 +22,7 @@ import {
   TableSortLabel,
   Tooltip,
 } from '@mui/material';
-import { Refresh, SearchOff, CallSplit, Hub, BuildOutlined, SmsOutlined as ChatIcon, SwapHoriz } from '@mui/icons-material';
+import { Refresh, SearchOff, CallSplit, Hub, BuildOutlined, AssignmentTurnedInOutlined, SmsOutlined as ChatIcon, SwapHoriz } from '@mui/icons-material';
 import { SessionListItem } from './SessionListItem.tsx';
 import { PaginationControls } from './PaginationControls.tsx';
 import { hasActiveFilters } from '../../utils/search.ts';
@@ -32,7 +32,7 @@ import { QualityGroupHeaders } from './QualityGroupHeaders.tsx';
 
 /**
  * Column order: Status | Indicators | Type | Labels | Author | Time | Duration | Tokens | [Est. Cost] | Eval Score | Review | Actions
- * Indicators column packs: parallel, sub-agents, action, fallback, chat (fixed-slot grid).
+ * Indicators column packs: parallel, sub-agents, action, post-investigation, fallback, chat.
  * Est. Cost column only renders when cost estimation is enabled.
  */
 const BASE_TOTAL_COLUMNS = 11;
@@ -146,8 +146,8 @@ export function HistoricalAlertsList({
                     </TableSortLabel>
                   </TableCell>
 
-                  {/* Session indicators: parallel, sub-agents, action, fallback, chat */}
-                  <TableCell sx={{ width: 130, pl: 1.5, pr: 0.5, textAlign: 'right' }}>
+                  {/* Session indicators: parallel, sub-agents, action, post-investigation, fallback, chat */}
+                  <TableCell sx={{ width: 156, pl: 1.5, pr: 0.5, textAlign: 'right' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                       <Tooltip title="Parallel Agents" arrow>
                         <CallSplit
@@ -174,6 +174,16 @@ export function HistoricalAlertsList({
                           sx={{
                             fontSize: '1.1rem',
                             color: 'success.main',
+                            verticalAlign: 'middle',
+                            cursor: 'help',
+                          }}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Post-investigation" arrow>
+                        <AssignmentTurnedInOutlined
+                          sx={{
+                            fontSize: '1.1rem',
+                            color: 'text.secondary',
                             verticalAlign: 'middle',
                             cursor: 'help',
                           }}

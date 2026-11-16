@@ -24,7 +24,7 @@ This is the Go-based hybrid rewrite of TARSy, replacing the [original Python imp
 
 ## Prerequisites
 
-- **Go 1.26+** -- Backend orchestrator
+- **Go 1.27+** -- Backend orchestrator
 - **Python 3.13+** -- LLM service runtime
 - **Node.js 24+** -- Dashboard development and build tools
 - **uv** -- Modern Python package manager
@@ -92,8 +92,10 @@ For containerized and OpenShift deployment with OAuth authentication, see **[dep
 - **Usage & Estimated Cost**: Soft Est. $ next to session/execution token usage (enabled by default); dedicated Usage page for date-window fleet dig-in and estimated-cost charts. The by-model table and cost chart split a model by stored reasoning effort. Provider prompt-cache read/create tokens are persisted, priced, and shown on Usage totals / by-model and on trace LLM interactions.
 - **Full-Text Search**: Dashboard search extends to timeline event content via PostgreSQL FTS; in-session search with highlight and navigation for terminated sessions
 - **Session Scoring**: Automated quality evaluation of completed investigations (0–100 score across four categories) with missing tools reports, re-scoring via API, and a dedicated scoring dashboard page
+- **Post-Investigation Agents**: Optional chain agents that run after automatic scoring and can act outside TARSy (issues, tickets, notifications), gated by score and session labels. What an agent does is configuration; TARSy ships the mechanism
 - **Investigation Memory**: Cross-session learning — the Reflector extracts discrete learnings after each scored investigation; relevant memories are auto-injected into future investigations via hybrid retrieval (pgvector semantic similarity + keyword matching with RRF fusion). Human review feedback refines memory quality over time. Two agent tools: `recall_past_investigations` searches distilled knowledge (patterns, procedures, anti-patterns), and `search_past_sessions` searches past investigation sessions by entity identifiers (users, namespaces, workloads) with LLM-summarized results
 - **Triage Workflow**: Post-investigation review lifecycle with self-claim assignment, complete with `quality_rating` and `action_taken`, and a grouped Triage view alongside the session list — real-time updates via WebSocket
+- **Review notifications**: While a dashboard tab is open, a tab counter and a desktop toast for completed sessions that still need review. Both follow one browser-local label selection (default `ban` and `action`)
 - **Follow-up Chat**: Continue investigating after sessions complete with full context and tool access
 - **Slack Notifications**: Automatic notifications with thread-based message grouping via fingerprint matching
 - **Comprehensive Audit Trail**: Full visibility into chain processing with stage-level timeline and trace views
@@ -140,7 +142,7 @@ TARSy uses a hybrid Go + Python architecture where the Go orchestrator handles a
 
 | Component | Location | Tech |
 |-----------|----------|------|
-| **Go Orchestrator** | `cmd/tarsy/`, `pkg/` | Go 1.26, Echo v5, Ent ORM, gRPC |
+| **Go Orchestrator** | `cmd/tarsy/`, `pkg/` | Go 1.27, Echo v5, Ent ORM, gRPC |
 | **Python LLM Service** | `llm-service/` | Python 3.13, gRPC, Gemini, LangChain |
 | **Dashboard** | `web/dashboard/` | React 19, TypeScript, Vite 7, MUI 7 |
 | **Database** | `ent/` | PostgreSQL 17, Ent ORM with migrations |

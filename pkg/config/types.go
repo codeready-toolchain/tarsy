@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -318,6 +319,35 @@ type ScoringConfig struct {
 	MCPServers    []string   `yaml:"mcp_servers,omitempty"`
 	MaxIterations *int       `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
 	FallbackList  string     `yaml:"fallback_list,omitempty"`
+}
+
+// PostInvestigationConfig is one chain-level post-investigation agent entry.
+// It runs after automatic scoring when every set gate field passes
+// (min_score, labels_any, labels_none; unset or empty = no condition).
+// MCP servers come from the agent definition and this entry only; chain-level
+// mcp_servers and sub_agents are not inherited.
+type PostInvestigationConfig struct {
+	// Stage name; unique within the chain
+	Name  string `yaml:"name"`
+	Agent string `yaml:"agent"`
+
+	// Gate
+	MinScore   *int     `yaml:"min_score,omitempty"`
+	LabelsAny  []string `yaml:"labels_any,omitempty"`
+	LabelsNone []string `yaml:"labels_none,omitempty"`
+
+	// Also include the full investigation timeline in the agent context
+	IncludeInvestigation bool `yaml:"include_investigation,omitempty"`
+
+	// Per-entry execution timeout; 0 = executor default
+	Timeout time.Duration `yaml:"timeout,omitempty"`
+
+	LLMProvider   string       `yaml:"llm_provider,omitempty"`
+	LLMBackend    LLMBackend   `yaml:"llm_backend,omitempty"`
+	FallbackList  string       `yaml:"fallback_list,omitempty"`
+	MaxIterations *int         `yaml:"max_iterations,omitempty" validate:"omitempty,min=1"`
+	MCPServers    []string     `yaml:"mcp_servers,omitempty"`
+	SubAgents     SubAgentRefs `yaml:"sub_agents,omitempty"`
 }
 
 // EmbeddingProviderType identifies the embedding API provider.

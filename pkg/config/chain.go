@@ -24,6 +24,9 @@ type ChainConfig struct {
 	// Optional scoring configuration
 	Scoring *ScoringConfig `yaml:"scoring,omitempty"`
 
+	// Optional agents run after automatic scoring (requires scoring enabled)
+	PostInvestigation []PostInvestigationConfig `yaml:"post_investigation,omitempty"`
+
 	// Chain-level LLM provider override
 	LLMProvider string `yaml:"llm_provider,omitempty"`
 

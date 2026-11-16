@@ -1,0 +1,4 @@
+llm_providers:
+  test-provider:
+    type: google
+    model: test-model

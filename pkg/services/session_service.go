@@ -15,6 +15,7 @@ import (
 	"github.com/codeready-toolchain/tarsy/ent/alertsession"
 	"github.com/codeready-toolchain/tarsy/ent/llminteraction"
 	"github.com/codeready-toolchain/tarsy/ent/mcpinteraction"
+	"github.com/codeready-toolchain/tarsy/ent/schema"
 	"github.com/codeready-toolchain/tarsy/ent/sessionreviewactivity"
 	"github.com/codeready-toolchain/tarsy/ent/sessionscore"
 	"github.com/codeready-toolchain/tarsy/ent/stage"
@@ -578,6 +579,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 			ReferencedStageID:  stg.ReferencedStageID,
 			StartedAt:          stg.StartedAt,
 			CompletedAt:        stg.CompletedAt,
+			ActionsExecuted:    stg.ActionsExecuted,
 			Executions:         execOverviews,
 		})
 	}
@@ -712,6 +714,7 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		LatestScore:             latestScore,
 		ScoringStatus:           scoringStatus,
 		ScoreID:                 scoreID,
+		PostInvestigationSkips:  postInvestigationSkips(session.PostInvestigationSkips),
 		ReviewStatus:            ptrStringFromReviewStatus(session.ReviewStatus),
 		Assignee:                session.Assignee,
 		QualityRating:           ptrStringFromQualityRating(session.QualityRating),
@@ -726,6 +729,19 @@ func (s *SessionService) GetSessionDetail(ctx context.Context, sessionID string)
 		applySessionCostFields(resp, llmStats)
 	}
 	return resp, nil
+}
+
+// postInvestigationSkips copies gate-miss notes onto the session detail DTO.
+// A nil or empty column stays absent from the JSON.
+func postInvestigationSkips(in []schema.PostInvestigationSkip) []models.PostInvestigationSkip {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]models.PostInvestigationSkip, len(in))
+	for i, skip := range in {
+		out[i] = models.PostInvestigationSkip{Name: skip.Name, Detail: skip.Detail}
+	}
+	return out
 }
 
 // GetSessionSummary returns lightweight statistics for a session.
@@ -935,27 +951,29 @@ type dashboardRow struct {
 	// Aggregated columns from subqueries.
 	// One jsonb object so input, output, total, cache, thinking, and cost
 	// are summed in a single index pass per listed session.
-	LLMTokenSums          []byte     `sql:"llm_token_sums"`
-	MCPCount              int        `sql:"mcp_count"`
-	TotalStages           int        `sql:"total_stages"`
-	CompletedStages       int        `sql:"completed_stages"`
-	HasParallel           int        `sql:"has_parallel"`      // 0/1, mapped to bool on output
-	HasSubAgents          int        `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
-	HasActionStages       int        `sql:"has_action_stages"` // 0/1, mapped to bool on output
-	ActionsExecuted       *bool      `sql:"actions_executed"`
-	ChatMsgCount          int        `sql:"chat_msg_count"`
-	FallbackCount         int        `sql:"fallback_count"`
-	MatchedInContent      int        `sql:"matched_in_content"` // 0/1, mapped to bool on output
-	LatestScore           *int       `sql:"latest_score"`
-	ScoringStatus         *string    `sql:"scoring_status"`
-	ReviewStatus          *string    `sql:"review_status"`
-	Assignee              *string    `sql:"assignee"`
-	QualityRating         *string    `sql:"quality_rating"`
-	ActionTaken           *string    `sql:"action_taken"`
-	InvestigationFeedback *string    `sql:"investigation_feedback"`
-	FeedbackEdited        int        `sql:"feedback_edited"`
-	FeedbackEditedBy      *string    `sql:"feedback_edited_by"`
-	FeedbackEditedAt      *time.Time `sql:"feedback_edited_at"`
+	LLMTokenSums           []byte     `sql:"llm_token_sums"`
+	MCPCount               int        `sql:"mcp_count"`
+	TotalStages            int        `sql:"total_stages"`
+	CompletedStages        int        `sql:"completed_stages"`
+	HasParallel            int        `sql:"has_parallel"`      // 0/1, mapped to bool on output
+	HasSubAgents           int        `sql:"has_sub_agents"`    // 0/1, mapped to bool on output
+	HasActionStages        int        `sql:"has_action_stages"` // 0/1, mapped to bool on output
+	ActionsExecuted        *bool      `sql:"actions_executed"`
+	HasPostInvestigation   int        `sql:"has_post_investigation"`   // 0/1, mapped to bool on output
+	PostInvestigationActed int        `sql:"post_investigation_acted"` // 0/1, mapped to bool on output
+	ChatMsgCount           int        `sql:"chat_msg_count"`
+	FallbackCount          int        `sql:"fallback_count"`
+	MatchedInContent       int        `sql:"matched_in_content"` // 0/1, mapped to bool on output
+	LatestScore            *int       `sql:"latest_score"`
+	ScoringStatus          *string    `sql:"scoring_status"`
+	ReviewStatus           *string    `sql:"review_status"`
+	Assignee               *string    `sql:"assignee"`
+	QualityRating          *string    `sql:"quality_rating"`
+	ActionTaken            *string    `sql:"action_taken"`
+	InvestigationFeedback  *string    `sql:"investigation_feedback"`
+	FeedbackEdited         int        `sql:"feedback_edited"`
+	FeedbackEditedBy       *string    `sql:"feedback_edited_by"`
+	FeedbackEditedAt       *time.Time `sql:"feedback_edited_at"`
 }
 
 // unmarshalLabels maps scanned jsonb into the session labels DTO.
@@ -1011,6 +1029,111 @@ func parseLLMListTokenSums(raw []byte) (llmListTokenSums, error) {
 		return llmListTokenSums{}, fmt.Errorf("failed to parse session list token sums: %w", err)
 	}
 	return sums, nil
+}
+
+// postInvestigationExistsSQL returns an EXISTS clause over the session's
+// post-investigation stages. actedOnly limits it to stages that acted.
+func postInvestigationExistsSQL(sid string, actedOnly bool) string {
+	cond := ""
+	if actedOnly {
+		cond = " AND actions_executed = true"
+	}
+	return fmt.Sprintf("EXISTS(SELECT 1 FROM stages WHERE session_id = %s AND stage_type = '%s'%s)",
+		sid, stage.StageTypePostInvestigation, cond)
+}
+
+// appendPostInvestigationSelects adds the has_post_investigation and
+// post_investigation_acted 0/1 columns used by the session list rows.
+func appendPostInvestigationSelects(sel *sql.Selector, sid string) {
+	sel.AppendSelectAs(
+		fmt.Sprintf("(CASE WHEN %s THEN 1 ELSE 0 END)", postInvestigationExistsSQL(sid, false)),
+		"has_post_investigation",
+	)
+	sel.AppendSelectAs(
+		fmt.Sprintf("(CASE WHEN %s THEN 1 ELSE 0 END)", postInvestigationExistsSQL(sid, true)),
+		"post_investigation_acted",
+	)
+}
+
+// applyDashboardLabelFilter adds the label / label_scope predicate.
+// An empty scope keeps the historical label= contains filter.
+func applyDashboardLabelFilter(query *ent.AlertSessionQuery, params models.DashboardListParams) (*ent.AlertSessionQuery, error) {
+	switch params.LabelScope {
+	case models.LabelScopeAny:
+		return query.Where(func(sel *sql.Selector) {
+			sel.Where(labelAnyPredicate(sel))
+		}), nil
+	case models.LabelScopeNone:
+		return query.Where(func(sel *sql.Selector) {
+			sel.Where(labelNonePredicate(sel))
+		}), nil
+	case models.LabelScopeNamesOrNone, "":
+		if params.Label == "" {
+			return query, nil
+		}
+		payloads, err := labelContainsPayloads(params.Label)
+		if err != nil {
+			return nil, err
+		}
+		includeNone := params.LabelScope == models.LabelScopeNamesOrNone
+		return query.Where(func(sel *sql.Selector) {
+			t := sel.TableName()
+			preds := make([]*sql.Predicate, 0, len(payloads)+1)
+			for _, payload := range payloads {
+				p := payload
+				preds = append(preds, sql.P(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
+					b.Arg(p)
+					b.WriteString("::jsonb")
+				}))
+			}
+			if includeNone {
+				preds = append(preds, labelNonePredicate(sel))
+			}
+			sel.Where(sql.Or(preds...))
+		}), nil
+	default:
+		return nil, fmt.Errorf("invalid label_scope %q", params.LabelScope)
+	}
+}
+
+func labelContainsPayloads(label string) ([]string, error) {
+	payloads := make([]string, 0)
+	for name := range strings.SplitSeq(label, ",") {
+		payload, err := json.Marshal([]string{name})
+		if err != nil {
+			return nil, fmt.Errorf("marshal label filter: %w", err)
+		}
+		payloads = append(payloads, string(payload))
+	}
+	return payloads, nil
+}
+
+func labelsColumn(sel *sql.Selector) string {
+	return fmt.Sprintf("%q.%q", sel.TableName(), alertsession.FieldLabels)
+}
+
+// labelNonePredicate matches SQL NULL, JSON null, a non-array, or an empty array.
+// jsonb_array_length errors on non-arrays, so the length check stays inside CASE.
+func labelNonePredicate(sel *sql.Selector) *sql.Predicate {
+	col := labelsColumn(sel)
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString(fmt.Sprintf(
+			"(%s IS NULL OR CASE WHEN jsonb_typeof(%s) = 'array' THEN jsonb_array_length(%s) = 0 ELSE TRUE END)",
+			col, col, col,
+		))
+	})
+}
+
+// labelAnyPredicate matches a labels array with at least one element.
+func labelAnyPredicate(sel *sql.Selector) *sql.Predicate {
+	col := labelsColumn(sel)
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString(fmt.Sprintf(
+			"(CASE WHEN jsonb_typeof(%s) = 'array' THEN jsonb_array_length(%s) > 0 ELSE FALSE END)",
+			col, col,
+		))
+	})
 }
 
 // ListSessionsForDashboard returns a paginated, filtered session list with aggregated stats.
@@ -1085,6 +1208,23 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			}
 		})
 	}
+	if params.PostInvestigation != "" {
+		query = query.Where(func(sel *sql.Selector) {
+			sid := fmt.Sprintf("%q.%q", sel.TableName(), alertsession.FieldID)
+			var cond string
+			switch params.PostInvestigation {
+			case models.PostInvestigationActed:
+				cond = postInvestigationExistsSQL(sid, true)
+			case models.PostInvestigationRan:
+				cond = postInvestigationExistsSQL(sid, false)
+			case models.PostInvestigationNone:
+				cond = "NOT " + postInvestigationExistsSQL(sid, false)
+			default:
+				return
+			}
+			sel.Where(sql.P(func(b *sql.Builder) { b.WriteString(cond) }))
+		})
+	}
 	if params.ReviewStatus != "" {
 		statuses := strings.Split(params.ReviewStatus, ",")
 		reviewStatuses := make([]alertsession.ReviewStatus, 0, len(statuses))
@@ -1099,28 +1239,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 	if params.QualityRating != "" {
 		query = query.Where(alertsession.QualityRatingEQ(alertsession.QualityRating(params.QualityRating)))
 	}
-	if params.Label != "" {
-		payloads := make([]string, 0)
-		for label := range strings.SplitSeq(params.Label, ",") {
-			payload, err := json.Marshal([]string{label})
-			if err != nil {
-				return nil, fmt.Errorf("marshal label filter: %w", err)
-			}
-			payloads = append(payloads, string(payload))
-		}
-		query = query.Where(func(sel *sql.Selector) {
-			t := sel.TableName()
-			preds := make([]*sql.Predicate, 0, len(payloads))
-			for _, payload := range payloads {
-				p := payload
-				preds = append(preds, sql.P(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("%q.%q @> ", t, alertsession.FieldLabels))
-					b.Arg(p)
-					b.WriteString("::jsonb")
-				}))
-			}
-			sel.Where(sql.Or(preds...))
-		})
+	query, err := applyDashboardLabelFilter(query, params)
+	if err != nil {
+		return nil, err
 	}
 
 	// Count total (before pagination).
@@ -1129,8 +1250,9 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		return nil, fmt.Errorf("failed to count sessions: %w", err)
 	}
 
-	// Apply sorting. Duration and score sort use computed expressions; others use Ent helpers.
-	isComputedSort := params.SortBy == "duration" || params.SortBy == "score"
+	// Apply sorting. Duration, score, and completed_at use ORDER BY expressions
+	// (completed_at needs NULLS LAST). The others use Ent helpers.
+	isComputedSort := params.SortBy == "duration" || params.SortBy == "score" || params.SortBy == "completed_at"
 	if !isComputedSort {
 		orderFunc := ent.Desc(alertsession.FieldCreatedAt)
 		switch params.SortBy {
@@ -1250,6 +1372,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				fmt.Sprintf("(SELECT bool_or(actions_executed) FROM stages WHERE session_id = %s AND stage_type = '%s' AND actions_executed IS NOT NULL)", sid, stage.StageTypeAction),
 				"actions_executed",
 			)
+			appendPostInvestigationSelects(sel, sid)
 
 			// Chat message count (chat_user_messages → chats → session).
 			sel.AppendSelectAs(
@@ -1309,6 +1432,8 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 				dir = "ASC"
 			}
 			switch params.SortBy {
+			case "completed_at":
+				sel.OrderExpr(sql.Expr(fmt.Sprintf("completed_at %s NULLS LAST", dir)))
 			case "duration":
 				sel.OrderExpr(sql.Expr(fmt.Sprintf("(completed_at - started_at) %s NULLS LAST", dir)))
 			case "score":
@@ -1336,49 +1461,51 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 		}
 
 		item := models.DashboardSessionItem{
-			ID:                    row.ID,
-			AlertType:             row.AlertType,
-			ChainID:               row.ChainID,
-			Status:                row.Status,
-			Author:                row.Author,
-			CancelledBy:           row.CancelledBy,
-			CancelReason:          row.CancelReason,
-			CreatedAt:             row.CreatedAt,
-			StartedAt:             row.StartedAt,
-			CompletedAt:           row.CompletedAt,
-			DurationMs:            durationMs,
-			ErrorMessage:          row.ErrorMessage,
-			ExecutiveSummary:      row.ExecutiveSummary,
-			Labels:                unmarshalLabels(row.Labels),
-			LLMInteractionCount:   llmSums.Count,
-			MCPInteractionCount:   row.MCPCount,
-			InputTokens:           llmSums.Input,
-			OutputTokens:          llmSums.Output,
-			TotalTokens:           llmSums.Total,
-			ThinkingTokens:        llmSums.Thinking,
-			CacheReadTokens:       llmSums.CacheRead,
-			CacheCreationTokens:   llmSums.CacheCreation,
-			TotalStages:           row.TotalStages,
-			CompletedStages:       row.CompletedStages,
-			HasParallelStages:     row.HasParallel != 0,
-			HasSubAgents:          row.HasSubAgents != 0,
-			HasActionStages:       row.HasActionStages != 0,
-			ActionsExecuted:       row.ActionsExecuted,
-			ChatMessageCount:      row.ChatMsgCount,
-			ProviderFallbackCount: row.FallbackCount,
-			CurrentStageIndex:     row.CurrentStageIndex,
-			CurrentStageID:        row.CurrentStageID,
-			MatchedInContent:      row.MatchedInContent != 0,
-			LatestScore:           row.LatestScore,
-			ScoringStatus:         row.ScoringStatus,
-			ReviewStatus:          row.ReviewStatus,
-			Assignee:              row.Assignee,
-			QualityRating:         row.QualityRating,
-			ActionTaken:           row.ActionTaken,
-			InvestigationFeedback: row.InvestigationFeedback,
-			FeedbackEdited:        row.FeedbackEdited != 0,
-			FeedbackEditedBy:      row.FeedbackEditedBy,
-			FeedbackEditedAt:      row.FeedbackEditedAt,
+			ID:                     row.ID,
+			AlertType:              row.AlertType,
+			ChainID:                row.ChainID,
+			Status:                 row.Status,
+			Author:                 row.Author,
+			CancelledBy:            row.CancelledBy,
+			CancelReason:           row.CancelReason,
+			CreatedAt:              row.CreatedAt,
+			StartedAt:              row.StartedAt,
+			CompletedAt:            row.CompletedAt,
+			DurationMs:             durationMs,
+			ErrorMessage:           row.ErrorMessage,
+			ExecutiveSummary:       row.ExecutiveSummary,
+			Labels:                 unmarshalLabels(row.Labels),
+			LLMInteractionCount:    llmSums.Count,
+			MCPInteractionCount:    row.MCPCount,
+			InputTokens:            llmSums.Input,
+			OutputTokens:           llmSums.Output,
+			TotalTokens:            llmSums.Total,
+			ThinkingTokens:         llmSums.Thinking,
+			CacheReadTokens:        llmSums.CacheRead,
+			CacheCreationTokens:    llmSums.CacheCreation,
+			TotalStages:            row.TotalStages,
+			CompletedStages:        row.CompletedStages,
+			HasParallelStages:      row.HasParallel != 0,
+			HasSubAgents:           row.HasSubAgents != 0,
+			HasActionStages:        row.HasActionStages != 0,
+			ActionsExecuted:        row.ActionsExecuted,
+			HasPostInvestigation:   row.HasPostInvestigation != 0,
+			PostInvestigationActed: row.PostInvestigationActed != 0,
+			ChatMessageCount:       row.ChatMsgCount,
+			ProviderFallbackCount:  row.FallbackCount,
+			CurrentStageIndex:      row.CurrentStageIndex,
+			CurrentStageID:         row.CurrentStageID,
+			MatchedInContent:       row.MatchedInContent != 0,
+			LatestScore:            row.LatestScore,
+			ScoringStatus:          row.ScoringStatus,
+			ReviewStatus:           row.ReviewStatus,
+			Assignee:               row.Assignee,
+			QualityRating:          row.QualityRating,
+			ActionTaken:            row.ActionTaken,
+			InvestigationFeedback:  row.InvestigationFeedback,
+			FeedbackEdited:         row.FeedbackEdited != 0,
+			FeedbackEditedBy:       row.FeedbackEditedBy,
+			FeedbackEditedAt:       row.FeedbackEditedAt,
 		}
 		if s.costEstimationEnabled {
 			cost := llmSums.Cost

@@ -11,6 +11,7 @@ export const ROUTES = {
   SUBMIT_ALERT: '/submit-alert',
   SYSTEM_STATUS: '/system',
   USAGE: '/usage',
+  SETTINGS: '/settings',
 } as const;
 
 export interface SessionDetailPathOptions {

@@ -147,7 +147,7 @@ func (c *IteratingController) Run(
 			Tools:       tools, // Tools bound for native calling
 			Backend:     execCtx.Config.LLMBackend,
 			ClearCache:  fbState.consumeClearCache(),
-			PromptCache: execCtx.Config.Type != config.AgentTypeAction,
+			PromptCache: promptCacheEnabled(execCtx.Config.Type),
 		}, &eventSeq)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
@@ -379,7 +379,7 @@ func (c *IteratingController) forceConclusion(
 			DisableToolCalls: true,
 			Backend:          execCtx.Config.LLMBackend,
 			ClearCache:       fbState.consumeClearCache(),
-			PromptCache:      execCtx.Config.Type != config.AgentTypeAction,
+			PromptCache:      promptCacheEnabled(execCtx.Config.Type),
 		}, eventSeq, forcedMeta)
 		llmCancel()
 		metrics.ObserveLLMCall(execCtx.Config.LLMProviderName, execCtx.Config.LLMProvider.Model,
@@ -469,6 +469,13 @@ func drainSubAgentResults(
 		storeObservationMessage(ctx, execCtx, msg.Content, msgSeq)
 	}
 	return messages
+}
+
+// promptCacheEnabled reports whether the agent type requests prompt caching.
+// Off for action and post-investigation agents: most runs are short "no action"
+// generates whose cache writes are never read (ADR-0026).
+func promptCacheEnabled(agentType config.AgentType) bool {
+	return agentType != config.AgentTypeAction && agentType != config.AgentTypePostInvestigation
 }
 
 func remainingWorkBudget(ctx context.Context, cfg *agent.ResolvedAgentConfig) (time.Duration, bool) {

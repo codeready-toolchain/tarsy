@@ -90,6 +90,22 @@ func StaticToolHandler(text string) mcpsdk.ToolHandler {
 	}
 }
 
+// ResourceToolHandler returns an mcpsdk.ToolHandler that returns a status
+// message plus the given text as an embedded resource (how some MCP servers
+// return file contents).
+func ResourceToolHandler(message, uri, text string) mcpsdk.ToolHandler {
+	return func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {
+		return &mcpsdk.CallToolResult{
+			Content: []mcpsdk.Content{
+				&mcpsdk.TextContent{Text: message},
+				&mcpsdk.EmbeddedResource{Resource: &mcpsdk.ResourceContents{
+					URI: uri, MIMEType: "text/plain", Text: text,
+				}},
+			},
+		}, nil
+	}
+}
+
 // ErrorToolHandler returns an mcpsdk.ToolHandler that returns the given error.
 func ErrorToolHandler(err error) mcpsdk.ToolHandler {
 	return func(_ context.Context, _ *mcpsdk.CallToolRequest) (*mcpsdk.CallToolResult, error) {

@@ -1,3 +1,7 @@
+---
+description: Research a topic from current primary sources on the internet
+---
+
 # Comprehensive Internet Research
 
 Perform thorough internet research to gather the most current and comprehensive information:

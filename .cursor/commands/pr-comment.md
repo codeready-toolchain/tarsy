@@ -1,3 +1,7 @@
+---
+description: Decide whether a pull request review comment should be implemented
+---
+
 # Pull Request Review Comment - Context
 
 **The user's message contains a Pull Request review comment that needs to be

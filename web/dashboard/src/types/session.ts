@@ -37,6 +37,8 @@ export interface DashboardSessionItem {
   has_sub_agents: boolean;
   has_action_stages: boolean;
   actions_executed: boolean | null;
+  has_post_investigation: boolean;
+  post_investigation_acted: boolean;
   chat_message_count: number;
   provider_fallback_count: number;
   current_stage_index: number | null;
@@ -134,6 +136,10 @@ export interface SessionDetailResponse {
   scoring_status?: string | null;
   score_id?: string | null;
 
+  // Configured post-investigation entries that did not run. Absent when every
+  // configured entry ran, or the chain has none.
+  post_investigation_skips?: PostInvestigationSkip[] | null;
+
   // Review fields
   review_status?: string | null;
   assignee?: string | null;
@@ -146,6 +152,12 @@ export interface SessionDetailResponse {
 
   // Stage list
   stages: StageOverview[];
+}
+
+/** Why one configured post-investigation entry did not run. */
+export interface PostInvestigationSkip {
+  name: string;
+  detail: string;
 }
 
 /** Session status poll response (GET /api/v1/sessions/:id/status). */
@@ -177,6 +189,8 @@ export interface StageOverview {
   referenced_stage_id?: string;
   started_at: string | null;
   completed_at: string | null;
+  /** Set for action and post_investigation stages once the YES/NO marker is parsed. */
+  actions_executed?: boolean | null;
   executions?: ExecutionOverview[];
 }
 

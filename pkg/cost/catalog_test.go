@@ -231,6 +231,8 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	require.Contains(t, entries, "gpt-5.6-terra")
 	require.Contains(t, entries, "gpt-5.6-luna")
 	require.Contains(t, entries, "gpt-6.1-sol")
+	require.Contains(t, entries, "gpt-6.1-terra")
+	require.Contains(t, entries, "gpt-6-astra")
 	require.Contains(t, entries, "gpt-6-sol")
 	require.Contains(t, entries, "gpt-6-luna")
 	require.Contains(t, entries, "claude-opus-5-5")
@@ -258,6 +260,8 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.True(t, sol.RatesValidUntil.Equal(wantUntil))
 	assert.Nil(t, entries["gpt-5.6-terra"].RatesValidUntil)
 	assert.Nil(t, entries["gpt-6.1-sol"].RatesValidUntil)
+	assert.Nil(t, entries["gpt-6.1-terra"].RatesValidUntil)
+	assert.Nil(t, entries["gpt-6-astra"].RatesValidUntil)
 	assert.Nil(t, entries["gpt-6-sol"].RatesValidUntil)
 	assert.Nil(t, entries["gpt-6-luna"].RatesValidUntil)
 
@@ -270,6 +274,26 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.InDelta(t, 2.5e-06, gpt61sol.CacheCreateCost, 1e-15)
 	assert.InDelta(t, 4e-06, gpt61sol.InputCostAbove[272_000], 1e-15)
 	assert.InDelta(t, 1.5e-05, gpt61sol.OutputCostAbove[272_000], 1e-15)
+
+	gpt61terra := entries["gpt-6.1-terra"]
+	assert.True(t, gpt61terra.HasCacheRead)
+	assert.True(t, gpt61terra.HasCacheCreate)
+	assert.InDelta(t, 1e-06, gpt61terra.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 5e-06, gpt61terra.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, 5e-08, gpt61terra.CacheReadCost, 1e-15)
+	assert.InDelta(t, 1.25e-06, gpt61terra.CacheCreateCost, 1e-15)
+	assert.InDelta(t, 2e-06, gpt61terra.InputCostAbove[272_000], 1e-15)
+	assert.InDelta(t, 7.5e-06, gpt61terra.OutputCostAbove[272_000], 1e-15)
+
+	astra := entries["gpt-6-astra"]
+	assert.True(t, astra.HasCacheRead)
+	assert.True(t, astra.HasCacheCreate)
+	assert.InDelta(t, 1e-05, astra.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 5e-05, astra.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, 1e-06, astra.CacheReadCost, 1e-15)
+	assert.InDelta(t, 1.25e-05, astra.CacheCreateCost, 1e-15)
+	assert.InDelta(t, 2e-05, astra.InputCostAbove[272_000], 1e-15)
+	assert.InDelta(t, 7.5e-05, astra.OutputCostAbove[272_000], 1e-15)
 
 	gpt6sol := entries["gpt-6-sol"]
 	assert.True(t, gpt6sol.HasCacheRead)
@@ -316,6 +340,8 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.InDelta(t, grok47.InputCostAbove[200_000], grok46.InputCostAbove[200_000], 1e-15)
 	assert.Nil(t, grok46.RatesValidUntil)
 
+	require.Contains(t, entries, "gemini-4-argon")
+	require.Contains(t, entries, "gemini/gemini-4-argon")
 	require.Contains(t, entries, "gemini-3.8-flash")
 	require.Contains(t, entries, "gemini/gemini-3.8-flash")
 	require.Contains(t, entries, "gemini-3.7-flash")
@@ -331,6 +357,17 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 		require.NotNil(t, e.RatesValidUntil, key)
 		assert.True(t, e.RatesValidUntil.Equal(flashUntil), key)
 	}
+	argon := entries["gemini-4-argon"]
+	assert.True(t, argon.HasCacheRead)
+	assert.False(t, argon.HasCacheCreate)
+	assert.InDelta(t, 4e-06, argon.InputCostPerToken, 1e-15)
+	assert.InDelta(t, 2e-05, argon.OutputCostPerToken, 1e-15)
+	assert.InDelta(t, 2e-07, argon.CacheReadCost, 1e-15)
+	require.NotNil(t, argon.OutputCostPerReasoningToken)
+	assert.InDelta(t, 2e-05, *argon.OutputCostPerReasoningToken, 1e-15)
+	assert.Nil(t, argon.RatesValidUntil)
+	assert.InDelta(t, argon.InputCostPerToken, entries["gemini/gemini-4-argon"].InputCostPerToken, 1e-15)
+
 	flash := entries["gemini-3.8-flash"]
 	assert.True(t, flash.HasCacheRead)
 	assert.InDelta(t, 7.5e-08, flash.CacheReadCost, 1e-15)

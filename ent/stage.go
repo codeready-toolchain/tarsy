@@ -32,7 +32,7 @@ type Stage struct {
 	ParallelType *stage.ParallelType `json:"parallel_type,omitempty"`
 	// null if count=1, 'all'/'any' if count>1
 	SuccessPolicy *stage.SuccessPolicy `json:"success_policy,omitempty"`
-	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation), compose (amended report after action)
+	// Kind of stage: investigation (from chain), synthesis (auto-generated), chat (user message), exec_summary (executive summary), scoring (quality evaluation), action (automated remediation), compose (amended report after action), post_investigation (agent run after auto-scoring)
 	StageType stage.StageType `json:"stage_type,omitempty"`
 	// Status holds the value of the "status" field.
 	Status stage.Status `json:"status,omitempty"`
@@ -50,7 +50,7 @@ type Stage struct {
 	ChatUserMessageID *string `json:"chat_user_message_id,omitempty"`
 	// FK to another stage in the same session (e.g. synthesis -> investigation, compose -> action)
 	ReferencedStageID *string `json:"referenced_stage_id,omitempty"`
-	// Whether the action agent executed any remediation tools (null for non-action stages)
+	// Whether the agent executed side-effecting tools (action and post_investigation stages; null otherwise)
 	ActionsExecuted *bool `json:"actions_executed,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the StageQuery when eager-loading is set.

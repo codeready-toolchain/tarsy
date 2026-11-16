@@ -169,8 +169,15 @@ export interface DashboardListParams {
   start_date?: string;
   end_date?: string;
   scoring_status?: string;
+  review_status?: string;
   label?: string;
+  /** any | none | names_or_none. Omitted keeps the historical label= filter. */
+  label_scope?: 'any' | 'none' | 'names_or_none';
+  post_investigation?: PostInvestigationFilter;
 }
+
+/** Session list filter on post-investigation stages. */
+export type PostInvestigationFilter = 'acted' | 'ran' | 'none';
 
 /**
  * Alert submission request.

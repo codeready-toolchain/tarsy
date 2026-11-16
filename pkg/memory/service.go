@@ -827,7 +827,8 @@ func (s *Service) SearchSessions(ctx context.Context, params SessionSearchParams
 
 	query := `
 		SELECT session_id, alert_data, alert_type, final_analysis,
-		       quality_rating, investigation_feedback, created_at
+		       quality_rating, investigation_feedback, created_at,
+		       COUNT(*) OVER () AS total_matches
 		FROM alert_sessions
 		WHERE search_vector @@ plainto_tsquery('simple', $1)
 		  AND status = 'completed'
@@ -863,6 +864,7 @@ func (s *Service) SearchSessions(ctx context.Context, params SessionSearchParams
 		if err := rows.Scan(
 			&r.SessionID, &r.AlertData, &r.AlertType, &r.FinalAnalysis,
 			&r.QualityRating, &r.InvestigationFeedback, &r.CreatedAt,
+			&r.TotalMatches,
 		); err != nil {
 			return nil, fmt.Errorf("scan session row: %w", err)
 		}

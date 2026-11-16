@@ -1,3 +1,7 @@
+---
+description: Update documentation affected by recent code changes
+---
+
 # Update Documentation
 
 Update relevant documentation to reflect recent code changes.

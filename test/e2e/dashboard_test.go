@@ -333,6 +333,35 @@ func TestDashboardEndpoints(t *testing.T) {
 		resp = app.getJSON(t, "/api/v1/sessions?label=action,1bad", http.StatusBadRequest)
 		msg, _ = resp["message"].(string)
 		assert.Equal(t, "invalid label: must match [A-Za-z][A-Za-z0-9_-]*", msg)
+
+		// Charlie has no LABELS line (NULL or empty). Alpha and Beta are labeled.
+		list = app.GetSessionList(t, "label_scope=none")
+		items = list["sessions"].([]interface{})
+		require.Len(t, items, 1)
+		assert.Equal(t, ids[2], items[0].(map[string]interface{})["id"])
+
+		list = app.GetSessionList(t, "label_scope=any")
+		items = list["sessions"].([]interface{})
+		require.Len(t, items, 2)
+		gotIDs = []string{
+			items[0].(map[string]interface{})["id"].(string),
+			items[1].(map[string]interface{})["id"].(string),
+		}
+		assert.ElementsMatch(t, []string{ids[0], ids[1]}, gotIDs)
+
+		list = app.GetSessionList(t, "status=completed&review_status=needs_review&label=action&label_scope=names_or_none")
+		items = list["sessions"].([]interface{})
+		require.Len(t, items, 2)
+		gotIDs = []string{
+			items[0].(map[string]interface{})["id"].(string),
+			items[1].(map[string]interface{})["id"].(string),
+		}
+		assert.ElementsMatch(t, []string{ids[0], ids[2]}, gotIDs)
+		assert.Equal(t, 2, toInt(list["pagination"].(map[string]interface{})["total_items"]))
+
+		resp = app.getJSON(t, "/api/v1/sessions?label_scope=bogus", http.StatusBadRequest)
+		msg, _ = resp["message"].(string)
+		assert.Equal(t, "invalid label_scope: must be any, none, or names_or_none", msg)
 	})
 
 	// ── Sorting ──

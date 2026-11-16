@@ -21,6 +21,7 @@ import {
   Hub,
   SwapHoriz,
   BuildOutlined,
+  AssignmentTurnedInOutlined,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '../common/StatusBadge.tsx';
@@ -140,7 +141,7 @@ export function SessionListItem({
       </TableCell>
 
       {/* Session indicators: parallel, sub-agents, fallback, chat */}
-      <TableCell sx={{ width: 130, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
+      <TableCell sx={{ width: 156, textAlign: 'right', pl: 1.5, pr: 0.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
           {session.has_parallel_stages && (
             <Tooltip title="Parallel Agents - Multiple agents run in parallel">
@@ -173,6 +174,19 @@ export function SessionListItem({
                 sx={(theme) => ({
                   ...iconOnlyChipSx,
                   ...actionStageChipStyles(theme, !!session.actions_executed),
+                })}
+              />
+            </Tooltip>
+          )}
+          {session.has_post_investigation && (
+            <Tooltip title={session.post_investigation_acted ? 'Post-investigation agent acted' : 'Post-investigation agents ran — no action taken'}>
+              <Chip
+                icon={<AssignmentTurnedInOutlined sx={{ fontSize: '0.875rem' }} />}
+                size="small"
+                variant="outlined"
+                sx={(theme) => ({
+                  ...iconOnlyChipSx,
+                  ...actionStageChipStyles(theme, session.post_investigation_acted),
                 })}
               />
             </Tooltip>

@@ -19,7 +19,9 @@ import (
 	"github.com/codeready-toolchain/tarsy/pkg/config"
 	"github.com/codeready-toolchain/tarsy/pkg/events"
 	"github.com/codeready-toolchain/tarsy/pkg/mcp"
+	"github.com/codeready-toolchain/tarsy/pkg/memory"
 	"github.com/codeready-toolchain/tarsy/pkg/models"
+	"github.com/codeready-toolchain/tarsy/pkg/services"
 )
 
 // ────────────────────────────────────────────────────────────
@@ -514,6 +516,84 @@ func applyOrchestratorConfig(g *orchestrator.OrchestratorGuardrails, oc *config.
 	if oc.AgentTimeout != nil {
 		g.AgentTimeout = *oc.AgentTimeout
 	}
+}
+
+// subAgentWiring groups the dependencies needed to give an agent that runs
+// outside the chain stages (chat, post-investigation) its sub-agents.
+type subAgentWiring struct {
+	cfg      *config.Config
+	chain    *config.ChainConfig
+	registry *config.SubAgentRegistry // full registry; filtered by refs
+	refs     config.SubAgentRefs
+
+	agentName    string // orchestrating agent's definition name
+	parentExecID string
+	stageID      string
+	session      *ent.AlertSession
+	// runbookContent is resolved only when sub-agents are actually wired; may be nil.
+	runbookContent func() string
+
+	agentFactory       *agent.AgentFactory
+	mcpFactory         *mcp.ClientFactory
+	llmClient          agent.LLMClient
+	eventPublisher     agent.EventPublisher
+	promptBuilder      agent.PromptBuilder
+	stageService       *services.StageService
+	timelineService    *services.TimelineService
+	messageService     *services.MessageService
+	interactionService *services.InteractionService
+	memoryService      *memory.Service
+	memoryConfig       *config.MemoryConfig
+}
+
+// attachSubAgents wraps toolExecutor with the orchestrator for the refs.
+// Returns toolExecutor unchanged (nil collector and catalog) when the refs
+// match no registry entries.
+func attachSubAgents(
+	ctx context.Context,
+	w subAgentWiring,
+	toolExecutor agent.ToolExecutor,
+) (agent.ToolExecutor, agent.SubAgentResultCollector, []config.SubAgentEntry, error) {
+	if len(w.refs) == 0 {
+		return toolExecutor, nil, nil, nil
+	}
+	reg := w.registry.Filter(w.refs.Names())
+	if len(reg.Entries()) == 0 {
+		return toolExecutor, nil, nil, nil
+	}
+
+	agentDef, err := w.cfg.GetAgent(w.agentName)
+	if err != nil {
+		return toolExecutor, nil, nil, fmt.Errorf("failed to get agent config for orchestration: %w", err)
+	}
+	guardrails := resolveOrchestratorGuardrails(w.cfg, agentDef)
+
+	runbookContent := ""
+	if w.runbookContent != nil {
+		runbookContent = w.runbookContent()
+	}
+	deps := &orchestrator.SubAgentDeps{
+		Config:             w.cfg,
+		Chain:              w.chain,
+		AgentFactory:       w.agentFactory,
+		MCPFactory:         w.mcpFactory,
+		LLMClient:          w.llmClient,
+		EventPublisher:     w.eventPublisher,
+		PromptBuilder:      w.promptBuilder,
+		StageService:       w.stageService,
+		TimelineService:    w.timelineService,
+		MessageService:     w.messageService,
+		InteractionService: w.interactionService,
+		AlertData:          w.session.AlertData,
+		AlertType:          w.session.AlertType,
+		RunbookContent:     runbookContent,
+		WrapToolExecutor:   MemorySubAgentWrap(w.memoryService, w.memoryConfig, w.session.ID),
+	}
+	runner := orchestrator.NewSubAgentRunner(ctx, deps, w.parentExecID, w.agentName, w.session.ID, w.stageID, reg, guardrails, w.refs)
+	return orchestrator.NewCompositeToolExecutor(toolExecutor, runner, reg),
+		orchestrator.NewResultCollector(runner),
+		applyCatalogOverrides(reg.Entries(), w.refs),
+		nil
 }
 
 // applyCatalogOverrides merges per-ref MCPServers overrides into catalog entries.

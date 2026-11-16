@@ -1,5 +1,5 @@
 /**
- * FilterPanel — search, status, alert type, label, time range filters.
+ * FilterPanel — search, status, alert type, label, post-investigation, time range filters.
  *
  * Ported from old dashboard's FilterPanel.tsx.
  * alert_type/chain_id are single-select strings; status and label are
@@ -29,8 +29,15 @@ import { StatusFilter } from './StatusFilter.tsx';
 import { LabelFilter } from './LabelFilter.tsx';
 import { TimeRangeModal, formatAppliedRange } from './TimeRangeModal.tsx';
 import type { SessionFilter } from '../../types/dashboard.ts';
+import type { PostInvestigationFilter } from '../../types/api.ts';
 import type { FilterOptionsResponse } from '../../types/system.ts';
 import { hasActiveFilters } from '../../utils/search.ts';
+
+const POST_INVESTIGATION_LABELS: Record<PostInvestigationFilter, string> = {
+  acted: 'Acted',
+  ran: 'Ran',
+  none: 'None',
+};
 
 interface FilterPanelProps {
   filters: SessionFilter;
@@ -88,6 +95,7 @@ export function FilterPanel({
     filters.start_date || filters.end_date || filters.date_preset ? 1 : 0,
     filters.scoring_status ? 1 : 0,
     filters.label.length > 0 ? 1 : 0,
+    filters.post_investigation ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
   const typeOptions = filterOptions?.alert_types ?? [];
@@ -231,6 +239,31 @@ export function FilterPanel({
             />
           </Box>
 
+          {/* Post-investigation */}
+          <Box sx={{ flex: '1 1 160px', minWidth: 140 }}>
+            <FormControl size="small" fullWidth>
+              <InputLabel id="post-investigation-label">Post-investigation</InputLabel>
+              <Select
+                labelId="post-investigation-label"
+                value={filters.post_investigation}
+                label="Post-investigation"
+                onChange={(e: SelectChangeEvent) =>
+                  onFiltersChange({
+                    ...filters,
+                    post_investigation: e.target.value as PostInvestigationFilter | '',
+                  })
+                }
+              >
+                <MenuItem value="">All</MenuItem>
+                {(Object.keys(POST_INVESTIGATION_LABELS) as PostInvestigationFilter[]).map((v) => (
+                  <MenuItem key={v} value={v}>
+                    {POST_INVESTIGATION_LABELS[v]}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
           {/* Time Range Button — single button opens modal (matches old dashboard) */}
           <Button
             variant="outlined"
@@ -330,6 +363,15 @@ export function FilterPanel({
                   variant="outlined"
                 />
               ))}
+              {filters.post_investigation && (
+                <Chip
+                  label={`Post-investigation: ${POST_INVESTIGATION_LABELS[filters.post_investigation]}`}
+                  onDelete={() => onFiltersChange({ ...filters, post_investigation: '' })}
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                />
+              )}
               {appliedRangeLabel && (
                 <Chip
                   label={`Range: ${appliedRangeLabel}`}

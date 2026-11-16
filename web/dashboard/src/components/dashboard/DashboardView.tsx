@@ -112,6 +112,9 @@ function buildQueryParams(
   if (filters.label.length > 0) {
     params.label = filters.label.join(',');
   }
+  if (filters.post_investigation) {
+    params.post_investigation = filters.post_investigation;
+  }
 
   return params;
 }

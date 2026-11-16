@@ -39,6 +39,8 @@ const (
 	FieldExecutiveSummaryError = "executive_summary_error"
 	// FieldLabels holds the string denoting the labels field in the database.
 	FieldLabels = "labels"
+	// FieldPostInvestigationSkips holds the string denoting the post_investigation_skips field in the database.
+	FieldPostInvestigationSkips = "post_investigation_skips"
 	// FieldSessionMetadata holds the string denoting the session_metadata field in the database.
 	FieldSessionMetadata = "session_metadata"
 	// FieldAuthor holds the string denoting the author field in the database.
@@ -226,6 +228,7 @@ var Columns = []string{
 	FieldExecutiveSummary,
 	FieldExecutiveSummaryError,
 	FieldLabels,
+	FieldPostInvestigationSkips,
 	FieldSessionMetadata,
 	FieldAuthor,
 	FieldCancelledBy,

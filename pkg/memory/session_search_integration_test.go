@@ -3,6 +3,8 @@ package memory_test
 import (
 	stdsql "database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,6 +280,43 @@ func TestToolExecutor_SessionSearch_ReturnsSummarizationRequest(t *testing.T) {
 	assert.Contains(t, result.Content, "john-doe")
 }
 
+func TestSearchSessions_TotalMatchesBeyondLimit(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	for i := range 3 {
+		env.createSession(t, fmt.Sprintf("Alert: libfoo match %d", i), "security", "completed", nil)
+	}
+	env.createSession(t, "Alert: unrelated", "security", "completed", nil)
+
+	results, err := env.svc.SearchSessions(ctx, memory.SessionSearchParams{Query: "libfoo", Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	for _, r := range results {
+		assert.Equal(t, 3, r.TotalMatches)
+	}
+}
+
+func TestToolExecutor_SessionSearch_StatesMatchCount(t *testing.T) {
+	env := newSessionSearchEnv(t)
+	ctx := t.Context()
+
+	for i := range 3 {
+		env.createSession(t, fmt.Sprintf("Alert: libfoo match %d", i), "security", "completed", nil)
+	}
+
+	te := memory.NewToolExecutor(nil, env.svc, "", "default", nil)
+	result, err := te.Execute(ctx, sessionSearchToolCall(t, "libfoo", 2))
+	require.NoError(t, err)
+	require.NotNil(t, result.RequiredSummarization)
+	assert.Contains(t, result.RequiredSummarization.UserPrompt, "Matched sessions (2 most recent of 3 keyword matches)")
+
+	transformed := result.RequiredSummarization.TransformResult("test summary")
+	assert.True(t, strings.HasPrefix(transformed,
+		"<historical_context>\nKeyword matches in the last 30 days: 3; summarized the 2 most recent.\n\ntest summary"),
+		transformed)
+}
+
 func TestToolExecutor_SessionSearch_NoMatches(t *testing.T) {
 	env := newSessionSearchEnv(t)
 	ctx := t.Context()
@@ -345,7 +384,7 @@ func TestToolExecutor_SessionSearch_LimitClampedToMax(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	require.NotNil(t, result.RequiredSummarization)
-	assert.Contains(t, result.RequiredSummarization.UserPrompt, "Matched sessions (10)")
+	assert.Contains(t, result.RequiredSummarization.UserPrompt, "Matched sessions (10 most recent of 12 keyword matches)")
 }
 
 // createChatStage creates a chat stage with an agent execution and timeline

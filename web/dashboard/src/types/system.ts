@@ -282,6 +282,23 @@ export interface ScoringView {
   fallback_list?: string;
 }
 
+/** One chain post_investigation entry. */
+export interface PostInvestigationView {
+  name: string;
+  agent: string;
+  min_score?: number | null;
+  labels_any?: string[];
+  labels_none?: string[];
+  include_investigation: boolean;
+  timeout?: string;
+  llm_provider?: string;
+  llm_backend?: string;
+  fallback_list?: string;
+  max_iterations?: number | null;
+  mcp_servers?: string[];
+  sub_agents?: SubAgentView[];
+}
+
 /** compose / executive_summary pairing (same shape as named-agent pairing). */
 export interface JobPairingView {
   llm_provider?: string;
@@ -295,6 +312,7 @@ export interface ChainConfigView {
   stages: StageView[];
   chat?: ChatView | null;
   scoring?: ScoringView | null;
+  post_investigation?: PostInvestigationView[];
   llm_provider?: string;
   executive_summary?: JobPairingView | null;
   compose?: JobPairingView | null;
@@ -383,6 +401,7 @@ export interface QueueView {
   session_timeout: string;
   graceful_shutdown_timeout: string;
   scoring_shutdown_timeout: string;
+  post_investigation_shutdown_timeout: string;
   orphan_detection_interval: string;
   orphan_threshold: string;
   heartbeat_interval: string;

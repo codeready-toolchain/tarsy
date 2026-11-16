@@ -1,7 +1,7 @@
 import type { Theme } from '@mui/material/styles';
 
 /**
- * Action-stage wrench chip: filled green when remediation ran, light grey outline when it did not.
+ * Action-stage wrench chip (also the post-investigation chip): green when the agent acted, light grey outline when it did not.
  * Shared by HistoricalAlertsList (SessionListItem) and Triage (TriageSessionRow).
  */
 export function actionStageChipStyles(theme: Theme, actionsExecuted: boolean) {

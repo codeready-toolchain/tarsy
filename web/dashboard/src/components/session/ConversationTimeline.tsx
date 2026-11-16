@@ -392,7 +392,12 @@ export default function ConversationTimeline({
     () => stageGroups.some(g => g.stageType === STAGE_TYPE.SCORING && !TERMINAL_EXECUTION_STATUSES.has(g.stageStatus)),
     [stageGroups],
   );
-  const showProcessingIndicator = isActive || !!chatStageInProgress || scoringInProgress;
+  // Post-investigation agents run after the session is terminal, like scoring.
+  const postInvestigationInProgress = useMemo(
+    () => stageGroups.some(g => g.stageType === STAGE_TYPE.POST_INVESTIGATION && !TERMINAL_EXECUTION_STATUSES.has(g.stageStatus)),
+    [stageGroups],
+  );
+  const showProcessingIndicator = isActive || !!chatStageInProgress || scoringInProgress || postInvestigationInProgress;
 
   const displayStatus = useMemo(() => {
     let status = progressStatus || 'Processing...';
@@ -401,7 +406,7 @@ export default function ConversationTimeline({
       status = (scoringStatus && scoringStatus in SCORING_STATUS_MESSAGE)
         ? SCORING_STATUS_MESSAGE[scoringStatus]
         : SCORING_STATUS_MESSAGE.in_progress;
-    } else if (chatStageInProgress && !isActive) {
+    } else if ((chatStageInProgress || postInvestigationInProgress) && !isActive) {
       status = 'Processing...';
     }
 
@@ -451,7 +456,7 @@ export default function ConversationTimeline({
     }
 
     return status;
-  }, [progressStatus, scoringStatus, scoringInProgress, chatStageInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
+  }, [progressStatus, scoringStatus, scoringInProgress, chatStageInProgress, postInvestigationInProgress, isActive, selectedAgentExecutionId, agentProgressStatuses, executionStatuses, stages]);
 
   // Empty FlowItems alone is not enough to bail out — backend stages with no
   // events still need StageSeparator mounts (incl. deep-link stageSeparator

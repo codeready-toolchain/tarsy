@@ -242,7 +242,7 @@ graph TB
 - `pkg/config/builtin.go` -- Built-in agents, MCP servers, chains, LLM providers
 - `pkg/config/validator.go` -- Configuration validation
 - `pkg/config/system.go` -- System config types (GitHub, Runbook, Slack, Retention, CostEstimation, PromptCaching)
-- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `compose`, `synthesis`, `scoring`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
+- `pkg/config/enums.go` -- AgentType (`exec_summary`, `action`, `compose`, `synthesis`, `scoring`, `post_investigation`), LLMBackend, LLMProviderType, SuccessPolicy, TransportType
 - `pkg/config/skill.go` -- SkillConfig, SkillRegistry (thread-safe in-memory store)
 - `pkg/config/skill_loader.go` -- LoadSkills(), SKILL.md frontmatter parsing (directory and flat file layouts)
 - `pkg/config/sub_agent_registry.go` -- SubAgentRegistry for orchestrator agent discovery
@@ -374,7 +374,7 @@ Agents are specialized AI-powered components that analyze alerts using domain ex
 
 Agent behavior is governed by two orthogonal configuration axes:
 
-- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"`) — determines which controller runs the agent
+- **`AgentType`** (`""` | `"synthesis"` | `"exec_summary"` | `"action"` | `"compose"` | `"scoring"` | `"post_investigation"`) — determines which controller runs the agent
 - **`LLMBackend`** (`"google-native"` | `"langchain"`) — determines which Python SDK path handles LLM calls
 
 #### Agent Framework Architecture
@@ -456,6 +456,7 @@ type Controller interface {
 |-----------|-----------|---------|----------|
 | `""` (default) | IteratingController | Iterating (multi-turn loop with tools) | Investigation agents (+ implicit orchestration when sub-agents present) |
 | `"action"` | IteratingController | Iterating (multi-turn with tools) + safety prompt | Automated remediation based on findings |
+| `"post_investigation"` | IteratingController | Iterating (multi-turn with tools) + post-investigation guidelines | Follow-through outside TARSy after auto-scoring (issues, tickets) |
 | `"synthesis"` | SingleShotController | Single-shot (one LLM call, no tools) | Synthesis of parallel results |
 | `"exec_summary"` | SingleShotController | Single-shot (one LLM call, no tools) | Executive summary generation |
 | `"compose"` | SingleShotController | Single-shot (one LLM call, no tools) | Copy-edit upstream report + action memo into session report |
@@ -481,7 +482,7 @@ Multi-turn iterating controller that loops: LLM call → tool execution → LLM 
    - If **no tool calls**: this is the final answer -- create `final_analysis` event, return
 4. If max iterations reached: `forceConclusion()` with reason `max_iterations` -- same tools bound, `disable_tool_calls` so the model must answer in text
 
-Investigation / chat / orchestrator / sub-agent loops (`AgentTypeDefault`) set `PromptCache` on the iterating Generate so Python can attach Claude `cache_control` / GPT-5.6+ OpenAI implicit cache options. Forced conclusion uses the same eligibility so the looping prefix can be **read**; action loops leave it off. GPT-5.6+ ineligible calls still send explicit mode with no breakpoints (no implicit write tax). See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md).
+Investigation / chat / orchestrator / sub-agent loops (`AgentTypeDefault`) set `PromptCache` on the iterating Generate so Python can attach Claude `cache_control` / GPT-5.6+ OpenAI implicit cache options. Forced conclusion uses the same eligibility so the looping prefix can be **read**; action and post-investigation loops leave it off. GPT-5.6+ ineligible calls still send explicit mode with no breakpoints (no implicit write tax). See [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md) and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 
 #### SingleShotController — single-shot (`pkg/agent/controller/single_shot.go`)
 
@@ -507,7 +508,7 @@ ScoringExecutor.ScoreSession(sessionID)
 
 Turn 1 uses an outcome-first ceiling mechanic: conclusion quality determines the score range (60-100 correct / 35-59 partial / 0-34 wrong), then process quality places the score within that range. A failure vocabulary (defined as a Go slice in `pkg/agent/prompt/vocabulary.go`) is dynamically injected into the prompt; after scoring, `scanFailureTags()` extracts matched terms into a `failure_tags` JSON column. Turn 2 covers both missing MCP tools and improvements to existing tools.
 
-Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled via per-chain `scoring:` block or globally via `defaults.scoring`) or on-demand via `POST /api/v1/sessions/:id/score`. The `defaults.scoring` block also supports `llm_provider` and `llm_backend` overrides specific to scoring, inserted into the resolution hierarchy between global defaults and chain-level settings. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md) and [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md).
+Both turns persist LLM interactions and create streaming timeline events via `callLLMWithStreaming`. Auto-triggered by the worker after session completion (if chain scoring enabled via per-chain `scoring:` block or globally via `defaults.scoring`) or on-demand via `POST /api/v1/sessions/:id/score`. After an auto-triggered score completes, the chain's `post_investigation` entries (if any) are handed to `PostInvestigationExecutor`; re-scores never start them. The `defaults.scoring` block also supports `llm_provider` and `llm_backend` overrides specific to scoring, inserted into the resolution hierarchy between global defaults and chain-level settings. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md), [ADR-0011: Scoring Framework Redesign](adr/0011-scoring-framework-redesign.md), and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 
 #### Implicit Orchestration (`pkg/agent/orchestrator/`)
 
@@ -634,6 +635,7 @@ No-partial provider errors emit a timeline `error` event and are not appended to
 - `pkg/agent/prompt/skills.go` -- formatRequiredSkill(), formatSkillCatalog() for Tier 2.5/2.6
 - `pkg/agent/scoring_agent.go` -- ScoringAgent (delegates to ScoringController)
 - `pkg/queue/scoring_executor.go` -- ScoringExecutor (scoring workflow + memory extraction orchestration)
+- `pkg/queue/post_investigation_executor.go` -- PostInvestigationExecutor (gates, stage/execution records, context, MCP/sub-agent/memory wiring, YES/NO → stage `actions_executed`, shutdown)
 - `pkg/agent/config_resolver.go` -- Hierarchical config resolution (AgentType, LLMBackend, provider, iterations, fallback providers, adaptive timeouts, stage-level skill merging)
 - `pkg/agent/iteration.go` -- IterationState tracking
 - `pkg/agent/context.go` -- ExecutionContext, ResolvedAgentConfig, ChatContext, SubAgentContext
@@ -863,6 +865,7 @@ Shared convention between Go and Python:
 | Name | Type | Model | Context |
 |------|------|-------|---------|
 | `google-default` | google | gemini-3.8-flash | 1M |
+| `gemini-4-argon` | google | gemini-4-argon | 1M |
 | `gemini-3.1-pro` | google | gemini-3.1-pro-preview | 1M |
 | `openai-default` | openai | gpt-6.1-sol | 1.05M |
 | `gpt-5.6` | openai | gpt-5.6 | 1.05M |
@@ -870,6 +873,8 @@ Shared convention between Go and Python:
 | `gpt-5.6-terra` | openai | gpt-5.6-terra | 1.05M |
 | `gpt-5.6-luna` | openai | gpt-5.6-luna | 1.05M |
 | `gpt-6.1-sol` | openai | gpt-6.1-sol | 1.05M |
+| `gpt-6.1-terra` | openai | gpt-6.1-terra | 1.05M |
+| `gpt-6-astra` | openai | gpt-6-astra | 1.05M |
 | `gpt-6-sol` | openai | gpt-6-sol | 1.05M |
 | `gpt-6-luna` | openai | gpt-6-luna | 1.05M |
 | `gpt-5.2` | openai | gpt-5.2 | 400K |
@@ -883,7 +888,7 @@ Shared convention between Go and Python:
 
 Google providers include native tools (google_search, url_context enabled; code_execution disabled by default). Native tools are disabled when MCP tools are present.
 
-Eligible built-in providers set `reasoning_effort`: `max` for GPT 5.6 and newer, `xhigh` for Claude Sonnet 5, Sonnet 5.5, and Opus 5.5, and `high` for Grok 4.6+ and Gemini 3.8. `gpt-5.2` and Gemini builtins below 3.8 leave the field unset. A user provider that replaces a builtin by name does not inherit that value. GPT stays at `max` because that ladder still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality. Gemini's documented set already stops at `high`.
+Eligible built-in providers set `reasoning_effort`: `max` for GPT 5.6 and newer, `xhigh` for Claude Sonnet 5, Sonnet 5.5, and Opus 5.5, and `high` for Grok 4.6+, Gemini 3.8, and Gemini 4 Argon. `gpt-5.2` and Gemini builtins below 3.8 leave the field unset. A user provider that replaces a builtin by name does not inherit that value. GPT stays at `max` because that ladder still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality. Gemini's documented set already stops at `high`.
 
 **Key Implementation Files**:
 - `pkg/agent/llm_client.go` -- GRPCLLMClient, GenerateInput, Chunk types
@@ -1011,10 +1016,10 @@ AlertSession (session metadata, status, alert data)
 #### Key Entity Fields
 
 **AlertSession** (`ent/schema/alertsession.go`):
-`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels; GIN `idx_alert_sessions_labels_gin` for `label=` contains), `mcp_selection`, `author`, `cancelled_by` (optional — proxy identity, or `system`), `cancel_reason` (optional text, max 500 runes), `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
+`id`, `alert_data`, `agent_type`, `alert_type`, `status` (pending/in_progress/cancelling/completed/failed/cancelled/timed_out), `chain_id`, `pod_id`, `final_analysis`, `executive_summary`, `labels` (optional JSON `[]string` from the exec-summary `LABELS:` trailer; NULL while in progress / skipped / parse-fail; `[]` when the summary completed with no labels; GIN `idx_alert_sessions_labels_gin` for `label=` contains), `post_investigation_skips` (JSON notes for gate misses: entry `name` and `detail`; empty when nothing was skipped), `mcp_selection`, `author`, `cancelled_by` (optional — proxy identity, or `system`), `cancel_reason` (optional text, max 500 runes), `runbook_url`, `review_status` (needs_review/in_progress/reviewed, nullable — NULL while investigation active), `assignee`, `assigned_at`, `reviewed_at`, `quality_rating` (accurate/partially_accurate/inaccurate), `action_taken`, `investigation_feedback`, `deleted_at` (soft delete), timestamps. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md) and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 
 **Stage** (`ent/schema/stage.go`):
-`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
+`id`, `session_id`, `stage_name`, `stage_index`, `stage_type` (investigation/synthesis/chat/exec_summary/scoring/action/compose/post_investigation), `actions_executed` (YES/NO marker of action and post_investigation stages), `referenced_stage_id` (nullable FK — synthesis→investigation pairing, compose→action trigger), `expected_agent_count`, `parallel_type`, `success_policy`, `chat_id`, `chat_user_message_id`, `status`, `error_message`, timestamps
 
 **AgentExecution** (`ent/schema/agentexecution.go`):
 `id`, `stage_id`, `session_id`, `agent_name`, `agent_index`, `llm_backend`, `llm_provider`, `model_name` (nullable — model at execution time), `reasoning_effort` (nullable — effective effort of the current provider; null when unset or recorded before the column existed), `original_llm_provider` (nullable — set on fallback), `original_llm_backend` (nullable — set on fallback), `original_model_name` (nullable — set on fallback), `original_reasoning_effort` (nullable — primary effort, set on fallback; null when there was no fallback or the primary effort was unset), `status`, `error_message`, `parent_execution_id` (nullable — links sub-agents to orchestrator), `task` (nullable — orchestrator dispatch description), timestamps.
@@ -1043,10 +1048,10 @@ AlertSession (session metadata, status, alert data)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/v1/sessions` | Paginated session list with filtering (`label=` contains a stored canonical name) |
+| GET | `/api/v1/sessions` | Paginated session list with filtering (`label=` contains a stored canonical name. `label_scope=any` matches non-empty labels, `label_scope=none` matches unlabeled sessions, and `label_scope=names_or_none` matches names or unlabeled sessions; `post_investigation=acted|ran|none` matches sessions with a post-investigation stage that acted, any post-investigation stage, or none). Rows carry `has_post_investigation` / `post_investigation_acted`. See [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md) and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md) |
 | GET | `/api/v1/sessions/active` | Active + queued sessions |
 | GET | `/api/v1/sessions/filter-options` | Distinct alert types, chain IDs, and stored labels |
-| GET | `/api/v1/sessions/:id` | Session details (includes `labels`) |
+| GET | `/api/v1/sessions/:id` | Session details (includes `labels` and `post_investigation_skips`; `stages[].actions_executed` for action and post_investigation stages) |
 | GET | `/api/v1/sessions/:id/summary` | Final analysis + executive summary |
 | GET | `/api/v1/sessions/:id/status` | Lightweight poll (single `AlertSession` PK lookup): status, summaries, labels, `error_message`, `cancelled_by`, `cancel_reason`, and review fields |
 | GET | `/api/v1/sessions/:id/timeline` | Timeline events ordered by sequence |
@@ -1107,7 +1112,7 @@ graph TB
 - Spawns one goroutine per message (no pool -- chats are rare, one-at-a-time per chat enforced)
 - Resolves chain + chat agent config via `ResolveChatAgentConfig()`
 - Creates Stage (type: `chat`) and AgentExecution records (reusing existing audit trail infrastructure)
-- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only). The posted `executive_summary` is a footer; the exec-summary stage is skipped; session `labels` are not injected. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- Builds context using `stage_type` filtering and `referenced_stage_id` for synthesis→investigation pairing (replaces name-based backward scanning). Compose is included as a document stage (`final_analysis` only). The posted `executive_summary` is a footer; the exec-summary stage is skipped (as are scoring and post_investigation stages); session `labels` are not injected. See [ADR-0031: Session Labels](adr/0031-session-labels.md) and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 - Runs `agent.Execute()` with same controllers as investigation
 
 **Chat Service** (`pkg/services/chat_service.go`):
@@ -1161,6 +1166,7 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 | `/submit-alert` | SubmitAlertPage | Alert submission with MCP override selection |
 | `/sessions/:id/scoring` | ScoringPage | Scoring reports (score analysis, failure tags, tool improvement report), re-score trigger |
 | `/usage` | UsagePage | Fleet token/cost dig-in over date windows (hamburger → Usage) |
+| `/settings` | SettingsPage | Review notifications: tab counter, desktop toasts, label selection, browser permission |
 | `/system` | SystemStatusPage | MCP health + read-only Config Viewer (tabs) |
 
 #### Data Flow
@@ -1173,11 +1179,12 @@ TARSy provides a React SPA served statically by the Go backend, with real-time u
 - **Provider fallback indicators**: `provider_fallback` timeline events render in the conversation timeline showing original → fallback provider, model, reasoning effort, and reason. Trace view shows original vs. active provider on executions where `original_llm_provider` is set (`ProviderFallbackIndicator` component). A stored effort is appended to the model label as `model (effort)`.
 - **Reasoning effort**: Session detail shows the effective effort on each stage execution (and the original effort after fallback). Trace list and detail show the effort stored on each LLM interaction. Summarization captions include the summarizer's effort. Labels with no stored effort stay as the bare model name.
 - **Scoring flow**: Session list shows a color-coded `ScoreBadge` (green ≥80, yellow ≥60, red <60) from `latest_score` on each session item. Session detail page includes a score indicator linking to the dedicated `ScoringPage` (`/sessions/:id/scoring`). ScoringPage fetches the full scoring report via `GET /api/v1/sessions/:id/score` and supports on-demand re-scoring via `POST /api/v1/sessions/:id/score`. Real-time scoring progress is delivered through existing WebSocket `stage.status` events for the `scoring` stage type. See [ADR-0008: Session Scoring](adr/0008-session-scoring.md).
-- **Session labels**: Historical list and triage have a Labels column between Type and Submitted by. Session detail shows stored `labels` as chips next to the alert type. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. Triage has no label query param. See [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- **Session labels**: Historical list and triage have a Labels column between Type and Submitted by. Session detail shows stored `labels` as chips next to the alert type. FilterPanel has a Label select populated from `GET /api/v1/sessions/filter-options` (`labels`). `GET /api/v1/sessions?label=<token>` filters to sessions whose `labels` JSON contains that canonical name. `label_scope=any` matches a non-empty labels array, `label_scope=none` matches null or empty labels, and `label_scope=names_or_none` ORs `label=` with unlabeled sessions. Sessions and Triage do not send `label_scope`. Triage has no label query param. See [ADR-0031: Session Labels](adr/0031-session-labels.md) and [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md).
+- **Post-investigation**: Session detail has a Post-investigation card after the final analysis: one row per `post_investigation` stage with entry name, agent, status, an Acted / No action chip from `stages[].actions_executed`, and the stage's top-level `final_analysis` memo as markdown (links open in a new tab). Gate misses are Skipped rows in that card (`post_investigation_skips`: entry name and reason), not timeline stages. A terminal `stage.status` for a `post_investigation` stage re-fetches the session and the timeline (the YES/NO marker is stripped without a timeline event). Historical list and triage show an indicator chip when post-investigation ran (green when it acted); FilterPanel has a Post-investigation select (`post_investigation=acted|ran|none`). The Config Viewer shows each chain's `post_investigation` entries. See [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 - **Cancel attribution**: Session and queued-alert cancel dialogs take an optional reason. Cancelled status tooltips (list, triage, header) and Slack show `Cancelled by {actor}` plus an optional reason. Timeline, trace, chat, and sub-agent cards render `cancelled` as cancelled, not failed. See [ADR-0032: Session Cancel Reason and Actor](adr/0032-session-cancel-reason.md).
 - **Triage view**: The dashboard has a "Triage" tab alongside the existing "Sessions" tab. Triage shows sessions grouped by review status (`investigating`, `needs_review`, `in_progress`, `reviewed`) with collapsible sections and action buttons (Claim, Acknowledge, Complete, Reopen). Review transitions use `PATCH /api/v1/sessions/review` with optimistic UI. Real-time updates via `review.status` WebSocket events move sessions between groups. Filter bar supports assignee and alert type filtering. Acknowledge moves a session to "reviewed" without a quality rating (single click, no modal). See [ADR-0009: Session Workflow](adr/0009-session-workflow.md), [ADR-0016: Triage Acknowledge](adr/0016-triage-acknowledge.md).
 - **Usage & estimated cost**: Soft **Est. $** next to tokens on Alert History, session detail, and parallel/sub-agent surfaces when cost estimation is enabled. Hamburger → **Usage** opens `/usage` for date-window fleet totals and breakdowns via `GET /api/v1/usage/summary`, plus estimated-cost charts via `GET /api/v1/usage/series`. The by-model table and cost chart split a model by stored reasoning effort (`model (effort)`). Time-bounded intro rates use GitOps `promotions` (active promo beats permanent overrides). Usage totals and by-model include cache-read / cache-creation SUMs (session list / header / `ExecutionOverview` do not). See [Session Usage Cost Estimation](session-usage-cost.md), [ADR-0020: Session Usage Cost](adr/0020-session-usage-cost.md), [ADR-0023: Cost Promotions](adr/0023-cost-promotions.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), and [ADR-0033: Usage Charts](adr/0033-usage-charts.md).
-- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status), `system.prompt_caching.enabled`, the `fallback_lists` catalog, the `label_maps` catalog (including injected `builtin`), `defaults.agents` pairing, nested `compose` / `executive_summary` job blocks, and raw `fallback_list` / `label_map` selectors (no per-agent expanded walks). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md), and [ADR-0031: Session Labels](adr/0031-session-labels.md).
+- **Config Viewer**: `/system` has MCP Health and Configuration tabs. Configuration shows sanitized effective config including `system.cost_estimation` (toggle, overrides, promotions with lifecycle status, catalog status), `system.prompt_caching.enabled`, the `fallback_lists` catalog, the `label_maps` catalog (including injected `builtin`), `defaults.agents` pairing, nested `compose` / `executive_summary` job blocks, each chain's `post_investigation` entries, and raw `fallback_list` / `label_map` selectors (no per-agent expanded walks). See [ADR-0019: Read-Only Configuration Viewer](adr/0019-config-viewer.md), [ADR-0026: Prompt Caching](adr/0026-prompt-caching.md), [ADR-0030: Named Fallback Lists](adr/0030-named-fallback-lists.md), [ADR-0031: Session Labels](adr/0031-session-labels.md), and [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md).
 
 #### Text Search
 
@@ -1195,13 +1202,23 @@ Shareable anchors into the session timeline (dashboard-only; no API changes). Se
 - **Open behavior**: After REST load, expand the timeline/stage (and collapsible event when targeting an event), then `scrollIntoView`. Stage-only links focus the first real event in the stage (or the stage separator when empty). Invalid anchors show a page-local snackbar; a valid stage with a bad event falls back to stage focus.
 - **Copy-only**: The address bar is not live-synced while browsing; focus runs once after the initial load so live WebSocket updates continue normally.
 
+#### Review notifications
+
+A tab counter and a desktop toast for completed sessions that still need review, while a dashboard tab is open. See [ADR-0034: Browser Notifications](adr/0034-browser-notifications.md).
+
+- **Qualifier**: `status=completed`, `review_status=needs_review`, and one label selection. Default chips are `ban` and `action`. **All sessions** ignores labels. **Any label** matches a session that has a label, whatever the name. **No label** matches an unlabeled session. Typed names are choices in that field. The field's clear button selects **All sessions**. Removing chips one by one can leave the field empty, and an empty field matches nothing. The same selection feeds the counter and the toast, and it is independent of the Sessions and Triage filters.
+- **Counter**: The tab icon, the title (`(N) TARSy`), and the header switch show the live backlog (`total_items`), including sessions that finished before the tab opened. A backlog of zero is not shown. `100` or more is `99+` on the icon and the real total in the title and on the switch. Focusing the tab does not clear it.
+- **Toast**: One OS notification per newly matching session, and only while the tab is in the background. The title is the alert type and labels; the body is the executive summary shortened to about 180 characters. Activating it opens that session. Tabs in this browser share the announced set, so two open tabs produce one toast.
+- **Controls**: The header switch, immediately before the theme switch, suspends or resumes both signals. While it is off, Settings shows both signal switches off without changing the saved choices. Left nav → **Settings** (`/settings`) holds the two signal switches, the label field, browser permission, and a reset to the default switches and label selection. Both signals and the master switch default to on. Opening the dashboard asks for notification permission while desktop notifications are on and the browser has not been asked. Settings is available when login is not configured.
+- **Wake-up**: A completed session or a review change refreshes the list. The list, not the websocket payload, decides what is new. Labels stay off the websocket payload. Slack terminal messages are unchanged.
+
 #### State Management
 
 No global state library. State is local `useState` per page + two React Contexts:
 - **AuthContext**: User identity, auth availability
 - **VersionContext**: Polls `/health` and `index.html` for version mismatch detection
 
-Filter state, pagination, and sort preferences persist in `localStorage`.
+Filter state, pagination, sort preferences, and review-notification settings persist in `localStorage`.
 
 #### Static Serving from Go
 
@@ -1211,7 +1228,7 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - API routes registered first take priority over the SPA fallback
 
 **Key Implementation Files**:
-- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx`, `UsagePage.tsx`)
+- `web/dashboard/src/pages/` -- Page components (including `ScoringPage.tsx`, `UsagePage.tsx`, `SettingsPage.tsx`)
 - `web/dashboard/src/components/` -- UI components (timeline, trace, chat, session, etc.)
 - `web/dashboard/src/components/timeline/SubAgentCard.tsx` -- Collapsible inline sub-agent card with streaming
 - `web/dashboard/src/components/session/SessionSearchBar.tsx` -- In-session search bar with match navigation
@@ -1224,8 +1241,9 @@ Filter state, pagination, and sort preferences persist in `localStorage`.
 - `web/dashboard/src/components/dashboard/TriageGroupedList.tsx` -- Triage grouped list with collapsible sections
 - `web/dashboard/src/components/dashboard/TriageFilterBar.tsx` -- Triage filter bar with assignee filter
 - `web/dashboard/src/components/common/SessionLabelChips.tsx` -- Display-only chips for stored session labels
+- `web/dashboard/src/components/layout/NotificationWatcher.tsx` -- App-shell review backlog counter and desktop toasts
 - `web/dashboard/src/hooks/` -- useChatState, useVersionMonitor, useAdvancedAutoScroll
-- `web/dashboard/src/contexts/` -- AuthContext, VersionContext
+- `web/dashboard/src/contexts/` -- AuthContext, VersionContext, NotificationSettingsContext
 
 ---
 
@@ -1637,6 +1655,7 @@ All metrics are declared as package-level vars registered against `prometheus.De
 | MCP Tool Calls | `tarsy_mcp_calls_total`, `tarsy_mcp_errors_total`, `tarsy_mcp_duration_seconds`, `tarsy_mcp_health_status` | `server`, `tool` |
 | HTTP API | `tarsy_http_requests_total`, `tarsy_http_duration_seconds` | `method`, `path`, `status_code` |
 | WebSocket | `tarsy_ws_connections_active` | — |
+| Post-investigation | `tarsy_post_investigation_runs_total` | `chain`, `name`, `outcome` (`skipped_gate`, `completed_acted`, `completed_no_action`, `failed`, `timed_out`, `cancelled`) |
 
 #### Gauge Strategy
 

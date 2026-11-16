@@ -808,6 +808,48 @@ func TestEstimate_GPT6AndGrokSnapshotRates(t *testing.T) {
 			wantProv: Provenance("snapshot:gpt-6.1-sol"),
 		},
 		{
+			name:     "terra 6.1 short context",
+			model:    "gpt-6.1-terra",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*1e-6 + 1000*5e-6,
+			wantProv: Provenance("snapshot:gpt-6.1-terra"),
+		},
+		{
+			name:     "terra 6.1 long context",
+			model:    "gpt-6.1-terra",
+			tokens:   Tokens{Input: 272_000, Output: 1000},
+			wantUSD:  272_000*2e-6 + 1000*7.5e-6,
+			wantProv: Provenance("snapshot:gpt-6.1-terra"),
+		},
+		{
+			name:     "terra 6.1 cache write",
+			model:    "gpt-6.1-terra",
+			tokens:   Tokens{CacheCreation: 1_000_000},
+			wantUSD:  1.25,
+			wantProv: Provenance("snapshot:gpt-6.1-terra"),
+		},
+		{
+			name:     "astra short context",
+			model:    "gpt-6-astra",
+			tokens:   Tokens{Input: 100_000, Output: 1000},
+			wantUSD:  100_000*1e-5 + 1000*5e-5,
+			wantProv: Provenance("snapshot:gpt-6-astra"),
+		},
+		{
+			name:     "astra long context",
+			model:    "gpt-6-astra",
+			tokens:   Tokens{Input: 272_000, Output: 1000},
+			wantUSD:  272_000*2e-5 + 1000*7.5e-5,
+			wantProv: Provenance("snapshot:gpt-6-astra"),
+		},
+		{
+			name:     "astra cache read",
+			model:    "gpt-6-astra",
+			tokens:   Tokens{CacheRead: 1_000_000},
+			wantUSD:  1,
+			wantProv: Provenance("snapshot:gpt-6-astra"),
+		},
+		{
 			name:     "sol short context",
 			model:    "gpt-6-sol",
 			tokens:   Tokens{Input: 100_000, Output: 1000},
@@ -915,6 +957,12 @@ func TestEstimate_GeminiFlashSnapshotIntroExpiresWhenCatalogUnavailable(t *testi
 		assert.Nil(t, alias, model)
 		assert.Equal(t, ProvenanceUnpriced, aliasProv, model)
 	}
+
+	// Argon snapshot is the durable list price ($4/$20), not the intro window.
+	argon, argonProv := book.Estimate("gemini-4-argon", Tokens{Input: 1_000_000, Output: 1_000_000, Thinking: 1_000_000})
+	require.NotNil(t, argon)
+	assert.Equal(t, Provenance("snapshot:gemini-4-argon"), argonProv)
+	assert.InDelta(t, 44.0, *argon, 1e-9)
 
 	// 3.6 snapshot is durable GA ($1.50/$7.50), not intro.
 	flash36, flash36Prov := book.Estimate("gemini-3.6-flash", Tokens{Input: 1_000_000})

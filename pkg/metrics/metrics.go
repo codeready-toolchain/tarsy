@@ -147,6 +147,13 @@ var ActionStageOutcomesTotal = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Help: "Action stages by agent name and whether actions were executed (DB-polled).",
 }, []string{"agent_name", "actions_executed"})
 
+// PostInvestigationRunsTotal tracks post-investigation entries by chain, entry name and outcome
+// (skipped_gate, completed_acted, completed_no_action, failed, timed_out, cancelled).
+var PostInvestigationRunsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "tarsy_post_investigation_runs_total",
+	Help: "Post-investigation agent runs by outcome.",
+}, []string{"chain", "name", "outcome"})
+
 // HTTP API metrics.
 var (
 	HTTPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{

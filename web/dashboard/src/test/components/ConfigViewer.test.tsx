@@ -136,3 +136,42 @@ describe('ConfigViewer label maps', () => {
     expect(await screen.findByText('builtin')).toBeInTheDocument();
   });
 });
+
+describe('ConfigViewer chains', () => {
+  it('shows a chain post_investigation block', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        chains: {
+          'incident-chain': {
+            alert_types: ['pod-crash'],
+            stages: [],
+            post_investigation: [
+              { name: 'file-ticket', agent: 'TicketFiler', min_score: 60, include_investigation: false },
+            ],
+          },
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    const { container } = render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('incident-chain'));
+    expect(await screen.findByText('post_investigation')).toBeInTheDocument();
+    expect(container).toHaveTextContent('file-ticket');
+    expect(container).toHaveTextContent('TicketFiler');
+  });
+
+  it('omits the post_investigation block when the chain has no entries', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        chains: { 'incident-chain': { alert_types: ['pod-crash'], stages: [] } },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('incident-chain'));
+    expect(await screen.findByText('alert_types')).toBeInTheDocument();
+    expect(screen.queryByText('post_investigation')).not.toBeInTheDocument();
+  });
+});

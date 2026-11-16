@@ -5,17 +5,9 @@ description: Review and clean up auto-generated database migration files after r
 
 # DB Migration Review
 
-## When to Apply
+Atlas diffs the Ent schema against a dev database and often emits operations unrelated to the change, because it can't model some indexes. Review every generated `.up.sql` in `pkg/database/migrations/` before it is committed.
 
-After every `make migrate-create` run, review the generated `.up.sql` file before committing. Atlas diffs the Ent schema against a dev database and frequently emits unrelated operations due to schema drift it cannot model.
-
-## Known Atlas Drift Patterns
-
-### 1. Dropping manually-managed partial indexes
-
-Atlas cannot express `WHERE` clauses in index definitions. Several indexes are created manually in migrations and documented in Ent schema comments. Atlas sees them in the database but not in the Ent schema, so it generates `DROP INDEX` statements.
-
-**Known indexes Atlas cannot model (must never be dropped):**
+## Indexes Atlas can't model (never drop)
 
 | Index | Table | Created in |
 |-------|-------|------------|
@@ -26,53 +18,16 @@ Atlas cannot express `WHERE` clauses in index definitions. Several indexes are c
 | `idx_timeline_events_content_gin` | `timeline_events` | `CreateGINIndexes` in `pkg/database/migrations.go` |
 | `idx_alert_sessions_labels_gin` | `alert_sessions` | `CreateGINIndexes` in `pkg/database/migrations.go` |
 
-The first two enforce sub-agent ordering uniqueness with `WHERE parent_execution_id IS NULL / IS NOT NULL` clauses. The Ent schema at `ent/schema/agentexecution.go` documents this explicitly. The GIN indexes are created at startup by `CreateGINIndexes` (FTS and JSONB containment); Atlas cannot express them.
+The first two are partial unique indexes (`WHERE parent_execution_id IS [NOT] NULL`) documented in `ent/schema/agentexecution.go`. The GIN indexes are created at startup.
 
-**Action:** Remove any `DROP INDEX` targeting these indexes.
+## Checklist
 
-### 2. No-op index drop + recreate
+1. Wrap the file in `BEGIN;` / `COMMIT;` if Atlas didn't. A failed migration then rolls back cleanly and `recoverDirtyMigration` (`pkg/database/client.go`) can retry on the next deploy. Exception: statements that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) go in their own migration file without `BEGIN`/`COMMIT`.
+2. Remove any `DROP INDEX` for an index in the table above, or any other index created by hand or with a `WHERE` clause (search `pkg/database/migrations/` for where it was created).
+3. Remove `DROP INDEX` + `CREATE INDEX` pairs whose `CREATE` matches the existing definition in an earlier migration (common with `sessionscore_session_id`).
+4. Remove `ALTER TABLE` statements on tables unrelated to the migration's purpose. If unsure, find the Ent schema change that caused it.
+5. Run `make migrate-hash` to update `atlas.sum`.
 
-Atlas sometimes re-emits a `DROP INDEX` + `CREATE INDEX` pair for indexes that already exist with identical definitions. This commonly affects partial unique indexes like `sessionscore_session_id`.
+## Adding a new index Atlas can't model
 
-**How to identify:** The `CREATE INDEX` statement after the `DROP` is identical to what already exists in a prior migration.
-
-**Action:** Remove the entire drop + recreate pair.
-
-### 3. Unrelated table modifications
-
-Occasionally Atlas includes `ALTER TABLE` statements for tables unrelated to the migration's purpose (e.g., adding default values or constraints that were pending in the schema diff).
-
-**Action:** If the operation is clearly unrelated to the migration's named purpose, remove it. If uncertain, investigate the Ent schema change that caused it.
-
-## Transactional Migrations (Required)
-
-Every migration **must** be wrapped in `BEGIN;` / `COMMIT;` so that a failure rolls back all DDL atomically. This keeps the database schema clean on error and enables the app's auto-recovery logic (`recoverDirtyMigration` in `pkg/database/client.go`) to retry on the next deploy without manual intervention.
-
-```sql
-BEGIN;
-
--- ... migration statements ...
-
-COMMIT;
-```
-
-**Exception:** Statements that cannot run inside a transaction (e.g., `CREATE INDEX CONCURRENTLY`) must be in a separate migration file without `BEGIN`/`COMMIT`.
-
-## Review Checklist
-
-After `make migrate-create NAME=<name>`:
-
-1. **Wrap the migration in `BEGIN;` / `COMMIT;`** — add these if the generated file doesn't include them.
-2. **Read the generated `.up.sql` file end to end**
-3. **For every `DROP INDEX` statement:** verify the index name relates to the migration's purpose. Cross-reference with `pkg/database/migrations/` to find where it was created. If it was created manually (not by Atlas) or with a `WHERE` clause, remove the `DROP`.
-4. **For every `DROP INDEX` + `CREATE INDEX` pair on the same index:** compare the `CREATE` definition with the prior migration. If identical, remove both.
-5. **For every `ALTER TABLE` statement:** verify it targets a table related to the migration's purpose.
-6. **After edits:** run `make migrate-hash` to update `atlas.sum`.
-
-## Adding New Manually-Managed Indexes
-
-When creating a partial index (with `WHERE` clause) or any index Atlas cannot model:
-
-1. Add it as raw SQL in the migration file.
-2. Add a comment in the corresponding Ent schema `Indexes()` method documenting the index name and the migration file that creates it.
-3. Add the index to the "Known partial indexes" table above so future reviews catch drift.
+Write it as raw SQL in the migration, add a comment naming it and its migration file in the Ent schema's `Indexes()`, and add a row to the table above.

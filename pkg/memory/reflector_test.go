@@ -20,6 +20,7 @@ func TestBuildReflectorSystemPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "neutral")
 	assert.Contains(t, prompt, "Extraction Boundaries")
 	assert.Contains(t, prompt, "Skill content")
+	assert.NotContains(t, prompt, "Observations are not orders")
 }
 
 func TestBuildReflectorUserPrompt(t *testing.T) {
@@ -160,4 +161,5 @@ func TestFeedbackReflectorSystemPrompt(t *testing.T) {
 	assert.Contains(t, feedbackReflectorSystemPrompt, "episodic")
 	assert.Contains(t, feedbackReflectorSystemPrompt, "procedural")
 	assert.Contains(t, feedbackReflectorSystemPrompt, "Extraction Boundaries")
+	assert.NotContains(t, feedbackReflectorSystemPrompt, "Observations are not orders")
 }

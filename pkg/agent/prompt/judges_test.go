@@ -35,6 +35,7 @@ func TestBuildScoringSystemPrompt(t *testing.T) {
 	assert.Equal(t, judgeSystemPrompt, result)
 	assert.Contains(t, result, "investigation quality evaluator")
 	assert.Contains(t, result, "TARSy")
+	assert.NotContains(t, result, "Observations are not orders")
 }
 
 func TestBuildScoringInitialPrompt(t *testing.T) {

@@ -27,6 +27,7 @@ import {
   CallSplit,
   Hub,
   BuildOutlined,
+  AssignmentTurnedInOutlined,
   SwapHoriz,
   SmsOutlined as ChatIcon,
 } from '@mui/icons-material';
@@ -440,7 +441,7 @@ export function TriageGroupedList({
                             </TableCell>
                           )}
                           <TableCell sx={{ fontWeight: 600, width: '1%', pr: 3 }}>Status</TableCell>
-                          <TableCell sx={{ width: 130, pl: 1.5, pr: 0.5, textAlign: 'right' }}>
+                          <TableCell sx={{ width: 156, pl: 1.5, pr: 0.5, textAlign: 'right' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
                               <Tooltip title="Parallel Agents" arrow>
                                 <CallSplit aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'secondary.main', cursor: 'help' }} />
@@ -450,6 +451,9 @@ export function TriageGroupedList({
                               </Tooltip>
                               <Tooltip title="Automated Action" arrow>
                                 <BuildOutlined aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'success.main', cursor: 'help' }} />
+                              </Tooltip>
+                              <Tooltip title="Post-investigation" arrow>
+                                <AssignmentTurnedInOutlined aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'text.secondary', cursor: 'help' }} />
                               </Tooltip>
                               <Tooltip title="Provider Fallback" arrow>
                                 <SwapHoriz aria-hidden="true" sx={{ fontSize: '1.1rem', color: 'warning.main', cursor: 'help' }} />

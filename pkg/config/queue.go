@@ -31,6 +31,11 @@ type QueueConfig struct {
 	// evaluations to complete naturally during shutdown before cancelling them.
 	ScoringShutdownTimeout time.Duration `yaml:"scoring_shutdown_timeout"`
 
+	// PostInvestigationShutdownTimeout is how long to wait for in-flight
+	// post-investigation agents to complete naturally during shutdown before
+	// cancelling them.
+	PostInvestigationShutdownTimeout time.Duration `yaml:"post_investigation_shutdown_timeout"`
+
 	// OrphanDetectionInterval is how often to scan for orphaned sessions.
 	OrphanDetectionInterval time.Duration `yaml:"orphan_detection_interval"`
 
@@ -46,15 +51,16 @@ type QueueConfig struct {
 // DefaultQueueConfig returns the built-in queue defaults.
 func DefaultQueueConfig() *QueueConfig {
 	return &QueueConfig{
-		WorkerCount:             5,
-		MaxConcurrentSessions:   5,
-		PollInterval:            1 * time.Second,
-		PollIntervalJitter:      500 * time.Millisecond,
-		SessionTimeout:          40 * time.Minute,
-		GracefulShutdownTimeout: 40 * time.Minute,
-		ScoringShutdownTimeout:  3 * time.Minute,
-		OrphanDetectionInterval: 5 * time.Minute,
-		OrphanThreshold:         5 * time.Minute,
-		HeartbeatInterval:       30 * time.Second,
+		WorkerCount:                      5,
+		MaxConcurrentSessions:            5,
+		PollInterval:                     1 * time.Second,
+		PollIntervalJitter:               500 * time.Millisecond,
+		SessionTimeout:                   40 * time.Minute,
+		GracefulShutdownTimeout:          40 * time.Minute,
+		ScoringShutdownTimeout:           3 * time.Minute,
+		PostInvestigationShutdownTimeout: 3 * time.Minute,
+		OrphanDetectionInterval:          5 * time.Minute,
+		OrphanThreshold:                  5 * time.Minute,
+		HeartbeatInterval:                30 * time.Second,
 	}
 }

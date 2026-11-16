@@ -80,6 +80,10 @@ vi.mock('../../components/session/ExtractedLearningsCard.tsx', () => ({
   default: () => null,
 }));
 
+vi.mock('../../components/session/PostInvestigationCard.tsx', () => ({
+  default: () => null,
+}));
+
 vi.mock('../../components/chat/ChatPanel.tsx', () => ({
   default: () => null,
 }));

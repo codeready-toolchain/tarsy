@@ -870,6 +870,16 @@ func LabelsNotNil() predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldNotNull(FieldLabels))
 }
 
+// PostInvestigationSkipsIsNil applies the IsNil predicate on the "post_investigation_skips" field.
+func PostInvestigationSkipsIsNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldIsNull(FieldPostInvestigationSkips))
+}
+
+// PostInvestigationSkipsNotNil applies the NotNil predicate on the "post_investigation_skips" field.
+func PostInvestigationSkipsNotNil() predicate.AlertSession {
+	return predicate.AlertSession(sql.FieldNotNull(FieldPostInvestigationSkips))
+}
+
 // SessionMetadataIsNil applies the IsNil predicate on the "session_metadata" field.
 func SessionMetadataIsNil() predicate.AlertSession {
 	return predicate.AlertSession(sql.FieldIsNull(FieldSessionMetadata))

@@ -1,3 +1,7 @@
+---
+description: Write Python LLM service tests for new or changed functionality
+---
+
 # Writing Tests for Python LLM Service
 
 ## Running Tests

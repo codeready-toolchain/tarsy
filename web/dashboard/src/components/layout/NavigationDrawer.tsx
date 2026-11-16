@@ -14,6 +14,7 @@ import FactCheckIcon from '@mui/icons-material/FactCheck';
 import SendIcon from '@mui/icons-material/Send';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import DnsIcon from '@mui/icons-material/Dns';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { ROUTES } from '../../constants/routes.ts';
 import { useNavDrawer, NAV_DRAWER_WIDTH, NAV_DRAWER_WIDTH_COLLAPSED } from '../../contexts/NavDrawerContext.tsx';
 
@@ -47,6 +48,12 @@ const NAV_ITEMS = [
     to: ROUTES.SYSTEM_STATUS,
     icon: <DnsIcon fontSize="small" />,
     match: (pathname: string) => pathname.startsWith(ROUTES.SYSTEM_STATUS),
+  },
+  {
+    label: 'Settings',
+    to: ROUTES.SETTINGS,
+    icon: <SettingsIcon fontSize="small" />,
+    match: (pathname: string) => pathname.startsWith(ROUTES.SETTINGS),
   },
 ] as const;
 

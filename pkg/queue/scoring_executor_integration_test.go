@@ -411,7 +411,7 @@ func TestScoringExecutor_ExecuteScoring_FailsGracefully(t *testing.T) {
 	require.NoError(t, err)
 
 	// Execute (will fail because LLM doesn't produce parseable score)
-	executor.executeScoring(t.Context(), scoreID, stageID, session.ID)
+	executor.executeScoring(t.Context(), scoreID, stageID, session.ID, false)
 
 	// Verify the score was marked as failed
 	score, err := entClient.SessionScore.Get(t.Context(), scoreID)

@@ -41,7 +41,7 @@ func createStdioTransport(cfg config.TransportConfig) (*mcpsdk.CommandTransport,
 
 	cmd := exec.Command(cfg.Command, cfg.Args...)
 	// exec.Cmd discards stderr when Stderr is nil (os.DevNull). Forward it so
-	// stdio MCP servers can log diagnostics with --log-file stderr.
+	// stdio MCP servers can log diagnostics with log_file = "stderr".
 	cmd.Stderr = os.Stderr
 
 	// Inherit parent environment + config overrides.

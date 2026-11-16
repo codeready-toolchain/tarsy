@@ -18,6 +18,7 @@ func TestDefaultQueueConfig(t *testing.T) {
 	assert.Equal(t, 40*time.Minute, cfg.SessionTimeout)
 	assert.Equal(t, 40*time.Minute, cfg.GracefulShutdownTimeout)
 	assert.Equal(t, 3*time.Minute, cfg.ScoringShutdownTimeout)
+	assert.Equal(t, 3*time.Minute, cfg.PostInvestigationShutdownTimeout)
 	assert.Equal(t, 5*time.Minute, cfg.OrphanDetectionInterval)
 	assert.Equal(t, 5*time.Minute, cfg.OrphanThreshold)
 	assert.Equal(t, 30*time.Second, cfg.HeartbeatInterval)
@@ -126,6 +127,25 @@ func TestValidateQueue(t *testing.T) {
 			queue: func() *QueueConfig {
 				q := DefaultQueueConfig()
 				q.ScoringShutdownTimeout = 0
+				return q
+			}(),
+			wantErr: false,
+		},
+		{
+			name: "post-investigation shutdown timeout negative",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.PostInvestigationShutdownTimeout = -1 * time.Second
+				return q
+			}(),
+			wantErr: true,
+			errMsg:  "post_investigation_shutdown_timeout must be non-negative",
+		},
+		{
+			name: "post-investigation shutdown timeout zero is valid",
+			queue: func() *QueueConfig {
+				q := DefaultQueueConfig()
+				q.PostInvestigationShutdownTimeout = 0
 				return q
 			}(),
 			wantErr: false,

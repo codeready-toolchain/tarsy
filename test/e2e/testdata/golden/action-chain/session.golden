@@ -81,6 +81,7 @@
       "status": "completed"
     },
     {
+      "actions_executed": true,
       "completed_at": "{TIMESTAMP}",
       "executions": [
         {
