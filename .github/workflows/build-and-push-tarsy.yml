@@ -18,7 +18,7 @@ env:
   IMAGE_REGISTRY: quay.io
   IMAGE_NAME: codeready-toolchain/tarsy
   REGISTRY_USER: "codeready-toolchain+tarsy_push"
-  REGISTRY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+  REGISTRY_PASSWORD: ${{ secrets.QUAY_TOKEN }}
 
 jobs:
   build-and-push:
