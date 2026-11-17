@@ -961,6 +961,7 @@ type dashboardRow struct {
 	ActionsExecuted        *bool      `sql:"actions_executed"`
 	HasPostInvestigation   int        `sql:"has_post_investigation"`   // 0/1, mapped to bool on output
 	PostInvestigationActed int        `sql:"post_investigation_acted"` // 0/1, mapped to bool on output
+	PostInvestigationMemos *string    `sql:"post_investigation_memos"`
 	ChatMsgCount           int        `sql:"chat_msg_count"`
 	FallbackCount          int        `sql:"fallback_count"`
 	MatchedInContent       int        `sql:"matched_in_content"` // 0/1, mapped to bool on output
@@ -1043,7 +1044,8 @@ func postInvestigationExistsSQL(sid string, actedOnly bool) string {
 }
 
 // appendPostInvestigationSelects adds the has_post_investigation and
-// post_investigation_acted 0/1 columns used by the session list rows.
+// post_investigation_acted 0/1 columns, plus the concatenated memos used to
+// extract post_investigation_links, for session list rows.
 func appendPostInvestigationSelects(sel *sql.Selector, sid string) {
 	sel.AppendSelectAs(
 		fmt.Sprintf("(CASE WHEN %s THEN 1 ELSE 0 END)", postInvestigationExistsSQL(sid, false)),
@@ -1052,6 +1054,32 @@ func appendPostInvestigationSelects(sel *sql.Selector, sid string) {
 	sel.AppendSelectAs(
 		fmt.Sprintf("(CASE WHEN %s THEN 1 ELSE 0 END)", postInvestigationExistsSQL(sid, true)),
 		"post_investigation_acted",
+	)
+	sel.AppendSelectAs(postInvestigationMemosSQL(sid), "post_investigation_memos")
+}
+
+// postInvestigationMemosSQL returns the latest top-level final_analysis memo
+// for each post-investigation stage, concatenated in stage_index order.
+// NULL when the session has no post-investigation stage. The stage primary
+// key is stages.stage_id.
+func postInvestigationMemosSQL(sid string) string {
+	return fmt.Sprintf(`(CASE WHEN %s THEN (
+		SELECT string_agg(memo, E'\n' ORDER BY stage_index)
+		FROM (
+			SELECT DISTINCT ON (s.stage_id) s.stage_index, te.content AS memo
+			FROM stages s
+			JOIN timeline_events te ON te.stage_id = s.stage_id
+			WHERE s.session_id = %s
+				AND s.stage_type = '%s'
+				AND te.event_type = '%s'
+				AND te.parent_execution_id IS NULL
+			ORDER BY s.stage_id, te.sequence_number DESC
+		) latest
+	) ELSE NULL END)`,
+		postInvestigationExistsSQL(sid, false),
+		sid,
+		stage.StageTypePostInvestigation,
+		timelineevent.EventTypeFinalAnalysis,
 	)
 }
 
@@ -1491,6 +1519,7 @@ func (s *SessionService) ListSessionsForDashboard(ctx context.Context, params mo
 			ActionsExecuted:        row.ActionsExecuted,
 			HasPostInvestigation:   row.HasPostInvestigation != 0,
 			PostInvestigationActed: row.PostInvestigationActed != 0,
+			PostInvestigationLinks: postInvestigationLinks(row.PostInvestigationMemos),
 			ChatMessageCount:       row.ChatMsgCount,
 			ProviderFallbackCount:  row.FallbackCount,
 			CurrentStageIndex:      row.CurrentStageIndex,

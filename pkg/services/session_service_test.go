@@ -3480,11 +3480,12 @@ func TestSessionService_ListSessionsForDashboard_LabelScope(t *testing.T) {
 	})
 }
 
-// seedTypedStage adds a completed stage of the given type to a session.
-func seedTypedStage(t *testing.T, client *ent.Client, sessionID, name string, index int, stageType stage.StageType, actionsExecuted *bool) {
+// seedTypedStage adds a completed stage of the given type to a session and returns its ID.
+func seedTypedStage(t *testing.T, client *ent.Client, sessionID, name string, index int, stageType stage.StageType, actionsExecuted *bool) string {
 	t.Helper()
+	id := uuid.New().String()
 	client.Stage.Create().
-		SetID(uuid.New().String()).
+		SetID(id).
 		SetSessionID(sessionID).
 		SetStageName(name).
 		SetStageIndex(index).
@@ -3493,6 +3494,25 @@ func seedTypedStage(t *testing.T, client *ent.Client, sessionID, name string, in
 		SetExpectedAgentCount(1).
 		SetStatus(stage.StatusCompleted).
 		SaveX(context.Background())
+	return id
+}
+
+// seedFinalAnalysis writes one final_analysis timeline event. parentExecutionID
+// marks a sub-agent event, which list-row link extraction ignores.
+func seedFinalAnalysis(t *testing.T, client *ent.Client, sessionID, stageID string, parentExecutionID *string, seq int, content string) {
+	t.Helper()
+	create := client.TimelineEvent.Create().
+		SetID(uuid.New().String()).
+		SetSessionID(sessionID).
+		SetStageID(stageID).
+		SetSequenceNumber(seq).
+		SetEventType(timelineevent.EventTypeFinalAnalysis).
+		SetStatus(timelineevent.StatusCompleted).
+		SetContent(content)
+	if parentExecutionID != nil {
+		create.SetParentExecutionID(*parentExecutionID)
+	}
+	create.SaveX(context.Background())
 }
 
 func TestSessionService_ListSessionsForDashboard_PostInvestigation(t *testing.T) {
@@ -3501,11 +3521,24 @@ func TestSessionService_ListSessionsForDashboard_PostInvestigation(t *testing.T)
 	ctx := context.Background()
 
 	acted := seedDashboardSession(t, client.Client, "Acted data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
-	seedTypedStage(t, client.Client, acted, "file-ticket", 2, stage.StageTypePostInvestigation, new(true))
-	seedTypedStage(t, client.Client, acted, "notify", 3, stage.StageTypePostInvestigation, new(false))
+	actedTicket := seedTypedStage(t, client.Client, acted, "file-ticket", 2, stage.StageTypePostInvestigation, new(true))
+	actedNotify := seedTypedStage(t, client.Client, acted, "notify", 3, stage.StageTypePostInvestigation, new(false))
+	parentExec := client.Client.AgentExecution.Query().Where(agentexecution.SessionID(acted)).OnlyX(ctx)
+	investigation := client.Client.Stage.Query().
+		Where(stage.SessionID(acted), stage.StageTypeEQ(stage.StageTypeInvestigation)).
+		OnlyX(ctx)
+	// An earlier memo and a sub-agent memo must not win over the latest top-level memo.
+	seedFinalAnalysis(t, client.Client, acted, actedTicket, nil, 1, "earlier https://tickets.example/OLD")
+	seedFinalAnalysis(t, client.Client, acted, actedTicket, nil, 2,
+		"Filed [SANDBOX-1](https://tickets.example/SANDBOX-1). Session: https://tarsy.example/sessions/"+acted)
+	seedFinalAnalysis(t, client.Client, acted, actedTicket, &parentExec.ID, 3, "sub-agent https://ignored.example/sub")
+	seedFinalAnalysis(t, client.Client, acted, actedNotify, nil, 4,
+		"See https://tickets.example/SANDBOX-1 and https://notes.example/n")
+	seedFinalAnalysis(t, client.Client, acted, investigation.ID, nil, 5, "investigation https://ignored.example/investigation")
 
 	noAction := seedDashboardSession(t, client.Client, "No action data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
-	seedTypedStage(t, client.Client, noAction, "file-ticket", 2, stage.StageTypePostInvestigation, new(false))
+	noActionStage := seedTypedStage(t, client.Client, noAction, "file-ticket", 2, stage.StageTypePostInvestigation, new(false))
+	seedFinalAnalysis(t, client.Client, noAction, noActionStage, nil, 1, "Already tracked: https://tickets.example/EXISTING.")
 
 	// A failed run leaves actions_executed NULL; it still counts as ran.
 	failed := seedDashboardSession(t, client.Client, "Failed run data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
@@ -3513,7 +3546,8 @@ func TestSessionService_ListSessionsForDashboard_PostInvestigation(t *testing.T)
 
 	// An action stage that acted is not a post-investigation outcome.
 	actionOnly := seedDashboardSession(t, client.Client, "Action only data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
-	seedTypedStage(t, client.Client, actionOnly, "Remediation", 2, stage.StageTypeAction, new(true))
+	actionStage := seedTypedStage(t, client.Client, actionOnly, "Remediation", 2, stage.StageTypeAction, new(true))
+	seedFinalAnalysis(t, client.Client, actionOnly, actionStage, nil, 1, "https://actions.example/ran")
 
 	plain := seedDashboardSession(t, client.Client, "Plain data", "pod-crash", "k8s-analysis", 100, 50, 150, 0)
 
@@ -3540,6 +3574,18 @@ func TestSessionService_ListSessionsForDashboard_PostInvestigation(t *testing.T)
 			w := want[s.ID]
 			assert.Equal(t, w[0], s.HasPostInvestigation, "has_post_investigation for %s", s.ID)
 			assert.Equal(t, w[1], s.PostInvestigationActed, "post_investigation_acted for %s", s.ID)
+			switch s.ID {
+			case acted:
+				assert.Equal(t, []string{
+					"https://tickets.example/SANDBOX-1",
+					"https://tarsy.example/sessions/" + acted,
+					"https://notes.example/n",
+				}, s.PostInvestigationLinks)
+			case noAction:
+				assert.Equal(t, []string{"https://tickets.example/EXISTING"}, s.PostInvestigationLinks)
+			default:
+				assert.Nil(t, s.PostInvestigationLinks, "post_investigation_links for %s", s.ID)
+			}
 			if s.ID == acted || s.ID == noAction || s.ID == failed {
 				assert.False(t, s.HasActionStages, "post-investigation stages are not action stages")
 				assert.Nil(t, s.ActionsExecuted)

@@ -153,21 +153,24 @@ type DashboardSessionItem struct {
 	ActionsExecuted        *bool            `json:"actions_executed"`
 	HasPostInvestigation   bool             `json:"has_post_investigation"`
 	PostInvestigationActed bool             `json:"post_investigation_acted"`
-	ChatMessageCount       int              `json:"chat_message_count"`
-	ProviderFallbackCount  int              `json:"provider_fallback_count"`
-	CurrentStageIndex      *int             `json:"current_stage_index"`
-	CurrentStageID         *string          `json:"current_stage_id"`
-	MatchedInContent       bool             `json:"matched_in_content"`
-	LatestScore            *int             `json:"latest_score"`
-	ScoringStatus          *string          `json:"scoring_status"`
-	ReviewStatus           *string          `json:"review_status"`
-	Assignee               *string          `json:"assignee"`
-	QualityRating          *string          `json:"quality_rating"`
-	ActionTaken            *string          `json:"action_taken"`
-	InvestigationFeedback  *string          `json:"investigation_feedback"`
-	FeedbackEdited         bool             `json:"feedback_edited"`
-	FeedbackEditedBy       *string          `json:"feedback_edited_by"`
-	FeedbackEditedAt       *time.Time       `json:"feedback_edited_at"`
+	// PostInvestigationLinks are http(s) URLs from each post-investigation
+	// stage's latest top-level final-analysis memo. Nil when there are none.
+	PostInvestigationLinks []string   `json:"post_investigation_links,omitempty"`
+	ChatMessageCount       int        `json:"chat_message_count"`
+	ProviderFallbackCount  int        `json:"provider_fallback_count"`
+	CurrentStageIndex      *int       `json:"current_stage_index"`
+	CurrentStageID         *string    `json:"current_stage_id"`
+	MatchedInContent       bool       `json:"matched_in_content"`
+	LatestScore            *int       `json:"latest_score"`
+	ScoringStatus          *string    `json:"scoring_status"`
+	ReviewStatus           *string    `json:"review_status"`
+	Assignee               *string    `json:"assignee"`
+	QualityRating          *string    `json:"quality_rating"`
+	ActionTaken            *string    `json:"action_taken"`
+	InvestigationFeedback  *string    `json:"investigation_feedback"`
+	FeedbackEdited         bool       `json:"feedback_edited"`
+	FeedbackEditedBy       *string    `json:"feedback_edited_by"`
+	FeedbackEditedAt       *time.Time `json:"feedback_edited_at"`
 }
 
 // DashboardListResponse is the paginated session list response for the dashboard.

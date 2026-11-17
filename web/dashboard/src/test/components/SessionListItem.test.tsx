@@ -126,4 +126,23 @@ describe('SessionListItem post-investigation indicator', () => {
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(tooltipText);
   });
+
+  it('appends artifact urls and omits the session link', async () => {
+    const user = userEvent.setup();
+    renderItem(makeSession({
+      has_post_investigation: true,
+      post_investigation_acted: true,
+      post_investigation_links: [
+        'https://tickets.example/SANDBOX-1',
+        'https://tarsy.example/sessions/sess-1',
+      ],
+    }));
+
+    await user.hover(screen.getByTestId('AssignmentTurnedInOutlinedIcon'));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Post-investigation agent acted');
+    expect(tooltip).toHaveTextContent('https://tickets.example/SANDBOX-1');
+    expect(tooltip).not.toHaveTextContent('https://tarsy.example/sessions/sess-1');
+  });
 });

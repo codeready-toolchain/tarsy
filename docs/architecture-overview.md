@@ -265,7 +265,7 @@ Chains can declare `post_investigation:` entries: agents (`type: post_investigat
 - **Fail-open** — failures mark only that entry's stage failed; session status, score and final analysis are never changed.
 - **Shutdown and recovery** — `queue.post_investigation_shutdown_timeout` (default 3m) drains in-flight runs after scoring's drain (so scoring that completes during it still starts its agents); startup and periodic stale recovery fail abandoned stages.
 - **Metric** — `tarsy_post_investigation_runs_total{chain, name, outcome}`.
-- **Dashboard and API** — session detail shows a Post-investigation card (ran entries: status, Acted / No action, memo with links; gate misses: Skipped and the reason) that updates live; the session list and triage show an indicator when post-investigation ran (green when it acted), and the list filters on `post_investigation=acted|ran|none`. API fields: `stages[].actions_executed` and `post_investigation_skips` on session detail, `has_post_investigation` / `post_investigation_acted` on list rows.
+- **Dashboard and API** — session detail shows a Post-investigation card (ran entries: status, Acted / No action, memo with links; gate misses: Skipped and the reason) that updates live; the session list and triage show an indicator when post-investigation ran (green when it acted), and the list filters on `post_investigation=acted|ran|none`. The list and triage tooltips append artifact URLs from the memos. API fields: `stages[].actions_executed` and `post_investigation_skips` on session detail, `has_post_investigation` / `post_investigation_acted` / `post_investigation_links` on list rows.
 
 **For detailed design**: See [ADR-0035: Post-Investigation Agents](adr/0035-post-investigation-agents.md)
 

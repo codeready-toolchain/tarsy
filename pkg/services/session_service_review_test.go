@@ -1223,8 +1223,9 @@ func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 		SetStatus(stage.StatusCompleted).
 		SaveX(ctx)
 
-	// Post-investigation stage that acted.
-	seedTypedStage(t, client.Client, indicatorID, "file-ticket", 4, stage.StageTypePostInvestigation, new(true))
+	// Post-investigation stage that acted, with one memo URL.
+	piStageID := seedTypedStage(t, client.Client, indicatorID, "file-ticket", 4, stage.StageTypePostInvestigation, new(true))
+	seedFinalAnalysis(t, client.Client, indicatorID, piStageID, nil, 200, "Filed https://tickets.example/TRIAGE-1")
 
 	// Provider fallback timeline events (×2).
 	for i := range 2 {
@@ -1275,6 +1276,7 @@ func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 			assert.True(t, *s.ActionsExecuted, "should report actions were executed")
 			assert.True(t, s.HasPostInvestigation, "should detect post-investigation stages")
 			assert.True(t, s.PostInvestigationActed, "should report the post-investigation agent acted")
+			assert.Equal(t, []string{"https://tickets.example/TRIAGE-1"}, s.PostInvestigationLinks)
 			assert.Equal(t, 2, s.ProviderFallbackCount, "should count fallback events")
 			assert.Equal(t, 3, s.ChatMessageCount, "should count chat messages")
 			assert.Equal(t, []string{"page"}, s.Labels)
@@ -1287,6 +1289,7 @@ func TestGetTriageGroup_SessionIndicators(t *testing.T) {
 			assert.Nil(t, s.ActionsExecuted)
 			assert.False(t, s.HasPostInvestigation)
 			assert.False(t, s.PostInvestigationActed)
+			assert.Nil(t, s.PostInvestigationLinks)
 			assert.Equal(t, 0, s.ProviderFallbackCount)
 			assert.Equal(t, 0, s.ChatMessageCount)
 			assert.Nil(t, s.Labels)

@@ -32,6 +32,7 @@ import { sessionDetailPath } from '../../constants/routes.ts';
 import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
+import { postInvestigationTooltip } from './postInvestigationTooltip.ts';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
 
@@ -152,7 +153,13 @@ export function TriageSessionRow({
             </Tooltip>
           )}
           {session.has_post_investigation && (
-            <Tooltip title={session.post_investigation_acted ? 'Post-investigation agent acted' : 'Post-investigation agents ran — no action taken'}>
+            <Tooltip
+              title={
+                <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
+                  {postInvestigationTooltip(session)}
+                </Box>
+              }
+            >
               <Chip
                 icon={<AssignmentTurnedInOutlined sx={{ fontSize: '0.875rem' }} />}
                 label="Post-investigation"

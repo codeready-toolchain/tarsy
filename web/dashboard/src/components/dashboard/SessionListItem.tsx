@@ -39,6 +39,7 @@ import { sessionDetailPath } from '../../constants/routes.ts';
 import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
+import { postInvestigationTooltip } from './postInvestigationTooltip.ts';
 
 interface SessionListItemProps {
   session: DashboardSessionItem;
@@ -179,7 +180,13 @@ export function SessionListItem({
             </Tooltip>
           )}
           {session.has_post_investigation && (
-            <Tooltip title={session.post_investigation_acted ? 'Post-investigation agent acted' : 'Post-investigation agents ran — no action taken'}>
+            <Tooltip
+              title={
+                <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
+                  {postInvestigationTooltip(session)}
+                </Box>
+              }
+            >
               <Chip
                 icon={<AssignmentTurnedInOutlined sx={{ fontSize: '0.875rem' }} />}
                 size="small"
