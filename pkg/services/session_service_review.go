@@ -682,6 +682,7 @@ type triageRow struct {
 	ActionsExecuted        *bool      `sql:"actions_executed"`
 	HasPostInvestigation   int        `sql:"has_post_investigation"`
 	PostInvestigationActed int        `sql:"post_investigation_acted"`
+	PostInvestigationMemos *string    `sql:"post_investigation_memos"`
 	ChatMsgCount           int        `sql:"chat_msg_count"`
 	FallbackCount          int        `sql:"fallback_count"`
 	LatestScore            *int       `sql:"latest_score"`
@@ -846,6 +847,7 @@ func (s *SessionService) queryTriageGroup(ctx context.Context, page, pageSize in
 			ActionsExecuted:        row.ActionsExecuted,
 			HasPostInvestigation:   row.HasPostInvestigation != 0,
 			PostInvestigationActed: row.PostInvestigationActed != 0,
+			PostInvestigationLinks: postInvestigationLinks(row.PostInvestigationMemos),
 			ChatMessageCount:       row.ChatMsgCount,
 			ProviderFallbackCount:  row.FallbackCount,
 			LatestScore:            row.LatestScore,

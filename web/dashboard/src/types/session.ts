@@ -39,6 +39,8 @@ export interface DashboardSessionItem {
   actions_executed: boolean | null;
   has_post_investigation: boolean;
   post_investigation_acted: boolean;
+  /** http(s) URLs from post-investigation memos. Absent when there are none. */
+  post_investigation_links?: string[];
   chat_message_count: number;
   provider_fallback_count: number;
   current_stage_index: number | null;

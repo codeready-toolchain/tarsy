@@ -197,7 +197,7 @@ Post-investigation stages do not appear in other contexts. Scoring context inclu
   - `ran` — at least one post-investigation stage exists (any status)
   - `none` — no post-investigation stage
 
-  The list row carries `has_post_investigation` and `post_investigation_acted`. The triage view shares that row shape, so triage shows the same indicator and has no separate filter.
+  The list row carries `has_post_investigation`, `post_investigation_acted`, and `post_investigation_links` (http(s) URLs from each entry's latest top-level final-analysis memo, de-duplicated, capped at 5). The sessions list and triage tooltips keep the acted / no-action sentence and append those URLs, omitting a URL whose path is this session (`/sessions/{id}`). The triage view shares that row shape and has no separate filter.
 - **Config viewer:** each chain's post-investigation entries are part of the read-only configuration view ([ADR-0019](0019-config-viewer.md)).
 
 ### Metrics

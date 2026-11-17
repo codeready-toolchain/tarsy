@@ -214,6 +214,7 @@ func TestE2E_PostInvestigation_AutoScoringRunsGatedEntries(t *testing.T) {
 	assert.Equal(t, sessionID, item["id"])
 	assert.Equal(t, true, item["has_post_investigation"])
 	assert.Equal(t, true, item["post_investigation_acted"])
+	assert.Equal(t, []interface{}{"https://tracker.example.com/TCK-1"}, item["post_investigation_links"])
 
 	none := app.GetSessionList(t, "post_investigation=none")
 	assert.Empty(t, none["sessions"])
@@ -280,7 +281,7 @@ func TestE2E_PostInvestigation_SubAgent(t *testing.T) {
 		},
 	})
 	llm.AddRouted("Researcher", LLMScriptEntry{
-		Text: "Found an existing open ticket for pod-1 memory limits.",
+		Text: "Found an existing open ticket for pod-1 memory limits: https://tracker.example.com/EXISTING.",
 	})
 
 	app := NewTestApp(t,
@@ -363,6 +364,8 @@ func TestE2E_PostInvestigation_SubAgent(t *testing.T) {
 	assert.Equal(t, sessionID, item["id"])
 	assert.Equal(t, true, item["has_post_investigation"])
 	assert.Equal(t, false, item["post_investigation_acted"])
+	_, hasLinks := item["post_investigation_links"]
+	assert.False(t, hasLinks, "a sub-agent memo URL is not a list link, and this memo has none of its own")
 
 	acted := app.GetSessionList(t, "post_investigation=acted")
 	assert.Empty(t, acted["sessions"])
@@ -580,6 +583,7 @@ func TestE2E_PostInvestigation_MultipleAgentsSkillsAndTools(t *testing.T) {
 	assert.Equal(t, sessionID, item["id"])
 	assert.Equal(t, true, item["has_post_investigation"])
 	assert.Equal(t, true, item["post_investigation_acted"])
+	assert.Equal(t, []interface{}{"https://tracker.example.com/TCK-1"}, item["post_investigation_links"])
 }
 
 // agentInputs returns captured LLM calls whose system prompt identifies the agent.
