@@ -872,6 +872,7 @@ Shared convention between Go and Python:
 | `gpt-5.6-sol` | openai | gpt-5.6-sol | 1.05M |
 | `gpt-5.6-terra` | openai | gpt-5.6-terra | 1.05M |
 | `gpt-5.6-luna` | openai | gpt-5.6-luna | 1.05M |
+| `gpt-6.2-sol` | openai | gpt-6.2-sol | 1.05M |
 | `gpt-6.1-sol` | openai | gpt-6.1-sol | 1.05M |
 | `gpt-6.1-terra` | openai | gpt-6.1-terra | 1.05M |
 | `gpt-6-astra` | openai | gpt-6-astra | 1.05M |
