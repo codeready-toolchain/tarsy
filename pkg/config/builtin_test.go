@@ -358,6 +358,14 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			checkAPIKey: true,
 		},
 		{
+			name:        "gpt-6.2-sol",
+			providerID:  "gpt-6.2-sol",
+			wantType:    LLMProviderTypeOpenAI,
+			wantModel:   "gpt-6.2-sol",
+			wantEffort:  ReasoningEffortMax,
+			checkAPIKey: true,
+		},
+		{
 			name:        "gpt-6.1-sol",
 			providerID:  "gpt-6.1-sol",
 			wantType:    LLMProviderTypeOpenAI,

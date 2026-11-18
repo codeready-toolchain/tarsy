@@ -16,6 +16,7 @@ class TestClassifyCache:
             ("GPT-5.6", True),
             ("gpt-5.6-sol", True),
             ("gpt-5.7", True),
+            ("gpt-6.2-sol", True),
             ("gpt-6.1-sol", True),
             ("gpt-6.1-terra", True),
             ("gpt-6-astra", True),
