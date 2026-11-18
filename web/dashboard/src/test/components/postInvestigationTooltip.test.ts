@@ -7,7 +7,10 @@ describe('postInvestigationTooltip', () => {
     expect(postInvestigationTooltip({
       id: sessionId,
       post_investigation_acted: false,
-    })).toBe('Post-investigation agents ran — no action taken');
+    })).toEqual({
+      status: 'Post-investigation agents ran — no action taken',
+      links: [],
+    });
   });
 
   it('lists artifact urls and omits this session link', () => {
@@ -22,12 +25,14 @@ describe('postInvestigationTooltip', () => {
         'https://notes.example/n',
         'https://tickets.example/browse?session=sess-1',
       ],
-    })).toBe([
-      'Post-investigation agent acted',
-      'https://tickets.example/SANDBOX-1',
-      'https://notes.example/n',
-      'https://tickets.example/browse?session=sess-1',
-    ].join('\n'));
+    })).toEqual({
+      status: 'Post-investigation agent acted',
+      links: [
+        'https://tickets.example/SANDBOX-1',
+        'https://notes.example/n',
+        'https://tickets.example/browse?session=sess-1',
+      ],
+    });
   });
 
   it('stays the status sentence when every link is this session', () => {
@@ -35,6 +40,9 @@ describe('postInvestigationTooltip', () => {
       id: sessionId,
       post_investigation_acted: true,
       post_investigation_links: ['https://tarsy.example/sessions/sess-1'],
-    })).toBe('Post-investigation agent acted');
+    })).toEqual({
+      status: 'Post-investigation agent acted',
+      links: [],
+    });
   });
 });

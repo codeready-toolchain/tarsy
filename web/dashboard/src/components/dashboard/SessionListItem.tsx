@@ -39,7 +39,7 @@ import { sessionDetailPath } from '../../constants/routes.ts';
 import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
-import { postInvestigationTooltip } from './postInvestigationTooltip.ts';
+import { PostInvestigationTooltip } from './postInvestigationTooltip.tsx';
 
 interface SessionListItemProps {
   session: DashboardSessionItem;
@@ -180,13 +180,7 @@ export function SessionListItem({
             </Tooltip>
           )}
           {session.has_post_investigation && (
-            <Tooltip
-              title={
-                <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
-                  {postInvestigationTooltip(session)}
-                </Box>
-              }
-            >
+            <PostInvestigationTooltip session={session}>
               <Chip
                 icon={<AssignmentTurnedInOutlined sx={{ fontSize: '0.875rem' }} />}
                 size="small"
@@ -196,7 +190,7 @@ export function SessionListItem({
                   ...actionStageChipStyles(theme, session.post_investigation_acted),
                 })}
               />
-            </Tooltip>
+            </PostInvestigationTooltip>
           )}
           {session.provider_fallback_count > 0 && (
             <Tooltip

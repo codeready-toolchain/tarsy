@@ -3,16 +3,17 @@ import type { DashboardSessionItem } from '../../types/session.ts';
 const ACTED = 'Post-investigation agent acted';
 const RAN = 'Post-investigation agents ran — no action taken';
 
-/** Status sentence, then artifact URLs. The session's own dashboard link is omitted. */
-export function postInvestigationTooltip(
-  session: Pick<DashboardSessionItem, 'id' | 'post_investigation_acted' | 'post_investigation_links'>,
-): string {
+type TooltipSession = Pick<DashboardSessionItem, 'id' | 'post_investigation_acted' | 'post_investigation_links'>;
+
+export interface PostInvestigationTooltipContent {
+  status: string;
+  links: string[];
+}
+
+/** Status sentence and artifact URLs. The session's own dashboard link is omitted. */
+export function postInvestigationTooltip(session: TooltipSession): PostInvestigationTooltipContent {
   const status = session.post_investigation_acted ? ACTED : RAN;
-  const links = artifactLinks(session.id, session.post_investigation_links);
-  if (links.length === 0) {
-    return status;
-  }
-  return [status, ...links].join('\n');
+  return { status, links: artifactLinks(session.id, session.post_investigation_links) };
 }
 
 function artifactLinks(sessionId: string, links: string[] | null | undefined): string[] {
