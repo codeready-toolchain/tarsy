@@ -32,7 +32,7 @@ import { sessionDetailPath } from '../../constants/routes.ts';
 import { SESSION_STATUS } from '../../constants/sessionStatus.ts';
 import type { DashboardSessionItem } from '../../types/session.ts';
 import { actionStageChipStyles } from './sessionActionChipSx.ts';
-import { postInvestigationTooltip } from './postInvestigationTooltip.ts';
+import { PostInvestigationTooltip } from './postInvestigationTooltip.tsx';
 
 export type TriageGroup = 'investigating' | 'needs_review' | 'in_progress' | 'reviewed';
 
@@ -153,13 +153,7 @@ export function TriageSessionRow({
             </Tooltip>
           )}
           {session.has_post_investigation && (
-            <Tooltip
-              title={
-                <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
-                  {postInvestigationTooltip(session)}
-                </Box>
-              }
-            >
+            <PostInvestigationTooltip session={session}>
               <Chip
                 icon={<AssignmentTurnedInOutlined sx={{ fontSize: '0.875rem' }} />}
                 label="Post-investigation"
@@ -171,7 +165,7 @@ export function TriageSessionRow({
                   ...actionStageChipStyles(theme, session.post_investigation_acted),
                 })}
               />
-            </Tooltip>
+            </PostInvestigationTooltip>
           )}
           {session.provider_fallback_count > 0 && (
             <Tooltip title={`Provider fallback${session.provider_fallback_count > 1 ? ` (${session.provider_fallback_count}×)` : ''}`}>

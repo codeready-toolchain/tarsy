@@ -142,7 +142,9 @@ describe('SessionListItem post-investigation indicator', () => {
 
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip).toHaveTextContent('Post-investigation agent acted');
-    expect(tooltip).toHaveTextContent('https://tickets.example/SANDBOX-1');
-    expect(tooltip).not.toHaveTextContent('https://tarsy.example/sessions/sess-1');
+    const link = screen.getByRole('link', { name: 'https://tickets.example/SANDBOX-1' });
+    expect(link).toHaveAttribute('href', 'https://tickets.example/SANDBOX-1');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.queryByRole('link', { name: 'https://tarsy.example/sessions/sess-1' })).not.toBeInTheDocument();
   });
 });
