@@ -1,9 +1,10 @@
 /**
  * Configuration viewer — read-only effective config from GET /api/v1/system/config.
  *
- * Primary: structured browsable sections.
+ * Primary: structured browsable sections, with each nested block rendered as
+ * colourised YAML.
  * Secondary: JSON/YAML of the same sanitized DTO with copy.
- * Syntax coloring reuses JsonDisplay styles (react-json-view-lite + highlightYaml).
+ * Syntax coloring reuses the shared highlightYaml classes.
  */
 
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
@@ -54,6 +55,8 @@ const jsonViewStyle = {
   punctuation: 'json-punctuation',
 };
 
+const yamlDumpOptions = { lineWidth: 120, noRefs: true, sortKeys: true } as const;
+
 const codePanelSx = {
   p: 2,
   maxHeight: '70vh',
@@ -68,6 +71,7 @@ const codePanelSx = {
   },
 } as const;
 
+/** Whole-document JSON tab (the Structured view now uses YAML for its snippets). */
 function HighlightedJson({ data, maxHeight }: { data: object; maxHeight?: string | number }) {
   return (
     <Paper
@@ -164,9 +168,7 @@ export function ConfigViewer() {
   }
 
   const serialized =
-    viewMode === 'yaml'
-      ? dumpYaml(config, { lineWidth: 120, noRefs: true, sortKeys: true })
-      : JSON.stringify(config, null, 2);
+    viewMode === 'yaml' ? dumpYaml(config, yamlDumpOptions) : JSON.stringify(config, null, 2);
 
   return (
     <Box>
@@ -392,7 +394,7 @@ function ChipList({ items }: { items?: string[] | null }) {
 
 function KeyValueBlock({ data }: { data: unknown }) {
   if (data !== null && typeof data === 'object') {
-    return <HighlightedJson data={data as object} maxHeight={360} />;
+    return <HighlightedYaml source={dumpYaml(data, yamlDumpOptions)} maxHeight={360} />;
   }
   return (
     <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>

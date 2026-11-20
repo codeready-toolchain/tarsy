@@ -75,6 +75,26 @@ describe('ConfigViewer fallback lists', () => {
   });
 });
 
+describe('ConfigViewer structured snippets', () => {
+  it('renders nested config blocks as colourised YAML', async () => {
+    mockGetSystemConfig.mockResolvedValue(
+      makeConfig(true, {
+        fallback_lists: {
+          premium: [{ llm_provider: 'claude-opus', llm_backend: 'langchain' }],
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    const { container } = render(<ConfigViewer />);
+
+    await user.click(await screen.findByText('Fallback lists'));
+    expect(await screen.findByText('premium')).toBeInTheDocument();
+    expect(container.querySelector('.yaml-key')).not.toBeNull();
+    expect(container.querySelector('.yaml-string')).not.toBeNull();
+    expect(container.querySelector('.json-custom-container')).toBeNull();
+  });
+});
+
 describe('ConfigViewer LLM providers', () => {
   it('shows reasoning_effort when the API sends it', async () => {
     mockGetSystemConfig.mockResolvedValue(

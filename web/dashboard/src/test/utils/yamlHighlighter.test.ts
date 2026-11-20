@@ -167,6 +167,96 @@ spec:
     });
   });
 
+  describe('list items with mappings', () => {
+    it('highlights the key and value of a `- key: value` item', () => {
+      const result = highlightYaml('- name: nginx');
+      expect(result).toContain('class="yaml-list-marker"');
+      expect(result).toContain('class="yaml-key">name');
+      expect(result).toContain('class="yaml-string">nginx');
+    });
+
+    it('colours a plain scalar list item as a string', () => {
+      const result = highlightYaml('servers:\n  - kubernetes');
+      expect(result).toContain('class="yaml-string">kubernetes');
+    });
+
+    it('does not treat a URL list item as a mapping', () => {
+      const result = highlightYaml('- http://example.com');
+      expect(result).not.toContain('class="yaml-key"');
+      expect(result).toContain('class="yaml-string">http://example.com');
+    });
+  });
+
+  describe('inline comments', () => {
+    it('separates a trailing comment from the value', () => {
+      const result = highlightYaml('name: nginx # web server');
+      expect(result).toContain('class="yaml-string">nginx');
+      expect(result).toContain('class="yaml-comment"># web server');
+    });
+
+    it('keeps a hash inside a quoted value', () => {
+      const result = highlightYaml('name: "a # b"');
+      expect(result).not.toContain('class="yaml-comment"');
+      expect(result).toContain('class="yaml-string"');
+    });
+  });
+
+  describe('flow collections', () => {
+    it('dims brackets and commas while colouring scalars', () => {
+      const result = highlightYaml('servers: [a, b]');
+      expect(result).toContain('class="yaml-punctuation">[');
+      expect(result).toContain('class="yaml-punctuation">,');
+      expect(result).toContain('class="yaml-string">a');
+      expect(result).toContain('class="yaml-string">b');
+    });
+
+    it('colours bare keys in flow maps', () => {
+      const result = highlightYaml('limits: {cpu: 2, memory: 4}');
+      expect(result).toContain('class="yaml-key">cpu');
+      expect(result).toContain('class="yaml-number">2');
+      expect(result).toContain('class="yaml-key">memory');
+      expect(result).toContain('class="yaml-number">4');
+    });
+  });
+
+  describe('block scalars', () => {
+    it('colours the indicator and the indented body', () => {
+      const yaml = `instructions: |-
+  line one
+  line two
+next: value`;
+      const result = highlightYaml(yaml);
+      expect(result).toContain('class="yaml-block-scalar">|-');
+      expect(result).toContain('class="yaml-string">line one');
+      expect(result).toContain('class="yaml-string">line two');
+      expect(result).toContain('class="yaml-key">next');
+    });
+
+    it('ends the block at the next dedented key', () => {
+      const result = highlightYaml('body: |\n  text\nsibling: 3');
+      expect(result).toContain('class="yaml-number">3');
+      expect(result).not.toContain('class="yaml-string">text\nsibling');
+    });
+  });
+
+  describe('document markers and anchors', () => {
+    it('dims a document marker', () => {
+      expect(highlightYaml('---')).toContain('class="yaml-punctuation">---');
+    });
+
+    it('colours an alias', () => {
+      expect(highlightYaml('value: *defaults')).toContain('class="yaml-anchor">*defaults');
+    });
+  });
+
+  describe('keys containing colons', () => {
+    it('splits on the colon outside a quoted key', () => {
+      const result = highlightYaml('"a: b": value');
+      expect(result).toContain('class="yaml-key">&quot;a: b&quot;');
+      expect(result).toContain('class="yaml-string">value');
+    });
+  });
+
   describe('edge cases', () => {
     it('handles empty string', () => {
       expect(highlightYaml('')).toBe('');
