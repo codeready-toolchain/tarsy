@@ -126,7 +126,13 @@ const highlightFlow = (value: string): string => {
     if (/^["']/.test(token)) {
       return `<span class="yaml-string">${escapeHtml(token)}</span>`;
     }
-    const next = tokens.slice(index + 1).find((candidate) => !/^\s+$/.test(candidate));
+    let next: string | undefined;
+    for (let i = index + 1; i < tokens.length; i++) {
+      if (!/^\s+$/.test(tokens[i])) {
+        next = tokens[i];
+        break;
+      }
+    }
     if (next === ':') {
       return `<span class="yaml-key">${escapeHtml(token)}</span>`;
     }
