@@ -100,6 +100,21 @@
   font-style: italic;
 }
 
+.yaml-punctuation {
+  color: #424242;
+  font-weight: 500;
+}
+
+.yaml-block-scalar {
+  color: #BF616A;
+  font-weight: 600;
+}
+
+.yaml-anchor {
+  color: #B48EAD;
+  font-weight: 600;
+}
+
 /* ── YAML highlighting: Dark mode ── */
 
 [data-theme="dark"] .yaml-key {
@@ -128,4 +143,16 @@
 
 [data-theme="dark"] .yaml-comment {
   color: #9e9e9e;
+}
+
+[data-theme="dark"] .yaml-punctuation {
+  color: #bdbdbd;
+}
+
+[data-theme="dark"] .yaml-block-scalar {
+  color: #ef9a9a;
+}
+
+[data-theme="dark"] .yaml-anchor {
+  color: #d1b3e0;
 }
