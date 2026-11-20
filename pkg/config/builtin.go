@@ -263,7 +263,7 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 		// --- Google Gemini ---
 		"google-default": {
 			Type:            LLMProviderTypeGoogle,
-			Model:           "gemini-3.8-flash",
+			Model:           "gemini-4-hydrogen",
 			APIKeyEnv:       "GOOGLE_API_KEY",
 			ReasoningEffort: ReasoningEffortHigh,
 			NativeTools:     geminiNativeTools(),

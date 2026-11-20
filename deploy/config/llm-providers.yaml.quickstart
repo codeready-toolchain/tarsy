@@ -1,6 +1,6 @@
 # TARSy LLM Provider Configuration — Quickstart
 #
-# Built-in providers (google-default, gemini-3.8-flash, etc.)
+# Built-in providers (google-default = Gemini 4 Hydrogen, gemini-4-argon, etc.)
 # are available without any configuration here. They all use GOOGLE_API_KEY.
 #
 # Add custom providers below to override built-ins or add new ones.

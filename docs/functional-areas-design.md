@@ -864,7 +864,7 @@ Shared convention between Go and Python:
 
 | Name | Type | Model | Context |
 |------|------|-------|---------|
-| `google-default` | google | gemini-3.8-flash | 1M |
+| `google-default` | google | gemini-4-hydrogen | 1M |
 | `gemini-4-argon` | google | gemini-4-argon | 1M |
 | `gemini-4-carbon` | google | gemini-4-carbon | 1M |
 | `gemini-4-hydrogen` | google | gemini-4-hydrogen | 1M |

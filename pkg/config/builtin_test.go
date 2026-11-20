@@ -306,7 +306,7 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			name:        "google-default",
 			providerID:  "google-default",
 			wantType:    LLMProviderTypeGoogle,
-			wantModel:   "gemini-3.8-flash",
+			wantModel:   "gemini-4-hydrogen",
 			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},

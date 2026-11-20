@@ -306,7 +306,7 @@ agent_chains:
 
 ### Built-in LLM Providers
 
-- **google-default** - Gemini 3.8 Flash
+- **google-default** - Gemini 4 Hydrogen
 - **gemini-4-argon** - Gemini 4 Argon
 - **gemini-4-carbon** - Gemini 4 Carbon
 - **gemini-4-hydrogen** - Gemini 4 Hydrogen
