@@ -219,7 +219,7 @@ Startup logs one warning per provider and still boots when the configured value 
 |--------|-------------------|
 | GPT 5.6+, excluding `-chat` and `-main` | `low`, `medium`, `high`, `xhigh`, `max` |
 | Grok 4.6+ | `low`, `medium`, `high`, `xhigh` |
-| Gemini 3.8+, excluding `image` | `low`, `medium`, `high` |
+| Gemini 3.8+, excluding `image` | `low`, `medium`, `high`. `xhigh` is also documented for Gemini 4 Neon and Hydrogen |
 | Claude 4.8+ | `low`, `medium`, `high`, `max`. `xhigh` is also documented for Opus 4.8+ and generation 5, including 5.5 |
 
 A custom `base_url` skips the documented-set warning. A recognized model below its floor, a GPT ID containing `-chat` or `-main`, or a Gemini ID containing `image` has no documented set, so any configured value warns. Eligible built-in providers set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8+. Built-ins below the floor leave the field unset.

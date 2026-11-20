@@ -892,7 +892,7 @@ Shared convention between Go and Python:
 
 Google providers include native tools (google_search, url_context enabled; code_execution disabled by default). Native tools are disabled when MCP tools are present.
 
-Eligible built-in providers set `reasoning_effort`: `max` for GPT 5.6 and newer, `xhigh` for Claude Sonnet 5, Sonnet 5.5, and Opus 5.5, and `high` for Grok 4.6+ and the Gemini 3.8+ family, including Gemini 4 Argon, Carbon, Hydrogen, and Neon. `gpt-5.2` and Gemini builtins below 3.8 leave the field unset. A user provider that replaces a builtin by name does not inherit that value. GPT stays at `max` because that ladder still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality. Gemini's documented set already stops at `high`.
+Eligible built-in providers set `reasoning_effort`: `max` for GPT 5.6 and newer, `xhigh` for Claude Sonnet 5, Sonnet 5.5, and Opus 5.5, and `high` for Grok 4.6+ and the Gemini 3.8+ family, including Gemini 4 Argon, Carbon, Hydrogen, and Neon. `gpt-5.2` and Gemini builtins below 3.8 leave the field unset. A user provider that replaces a builtin by name does not inherit that value. GPT stays at `max` because that ladder still climbs. Claude and Grok stop one step below the top, where the last step does not reliably improve quality. Gemini stays at `high`: it is the top of the documented set for Gemini 3.8, Carbon, and Argon, and Google's default for Neon and Hydrogen, which add `xhigh`.
 
 **Key Implementation Files**:
 - `pkg/agent/llm_client.go` -- GRPCLLMClient, GenerateInput, Chunk types
