@@ -36,6 +36,7 @@ type modelClass struct {
 	major        int
 	minor        int
 	claudeFamily string
+	geminiXHigh  bool
 }
 
 var (
@@ -46,6 +47,9 @@ var (
 	claudeDateRE    = regexp.MustCompile(`-\d{8}$`)
 	claudeVersionRE = regexp.MustCompile(`^(\d+)(?:[.-](\d+))?$`)
 )
+
+// Gemini 4 Neon and Hydrogen add xhigh; Carbon and Argon stop at high.
+var geminiXHighRE = regexp.MustCompile(`(?i)^gemini-4-(neon|hydrogen)\b`)
 
 // EffectiveReasoningEffort is the value sent on LLMConfig and shown in the config viewer.
 // A non-empty configured value is returned unchanged. An omitted value is "high" when the
@@ -119,6 +123,9 @@ func documentedReasoningEfforts(class modelClass) []string {
 	case familyXAI:
 		return []string{ReasoningEffortLow, ReasoningEffortMedium, ReasoningEffortHigh, ReasoningEffortXHigh}
 	case familyGemini:
+		if class.geminiXHigh {
+			return []string{ReasoningEffortLow, ReasoningEffortMedium, ReasoningEffortHigh, ReasoningEffortXHigh}
+		}
 		return []string{ReasoningEffortLow, ReasoningEffortMedium, ReasoningEffortHigh}
 	case familyClaude:
 		if class.claudeFamily == "opus" || class.major >= 5 {
@@ -167,11 +174,12 @@ func classifyModel(model string) modelClass {
 		}
 		eligible := versionGTE(major, minor, 3, 8) && !modelContains(model, "image")
 		return modelClass{
-			family:     familyGemini,
-			recognized: true,
-			eligible:   eligible,
-			major:      major,
-			minor:      minor,
+			family:      familyGemini,
+			recognized:  true,
+			eligible:    eligible,
+			major:       major,
+			minor:       minor,
+			geminiXHigh: geminiXHighRE.MatchString(model),
 		}
 	}
 	if m := claudeModelRE.FindStringSubmatch(model); m != nil {
