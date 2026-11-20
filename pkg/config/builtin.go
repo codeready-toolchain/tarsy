@@ -306,6 +306,27 @@ func initBuiltinLLMProviders() map[string]LLMProviderConfig {
 			ReasoningEffort: ReasoningEffortHigh,
 			NativeTools:     geminiNativeTools(),
 		},
+		"gemini-4-carbon": {
+			Type:            LLMProviderTypeGoogle,
+			Model:           "gemini-4-carbon",
+			APIKeyEnv:       "GOOGLE_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
+			NativeTools:     geminiNativeTools(),
+		},
+		"gemini-4-hydrogen": {
+			Type:            LLMProviderTypeGoogle,
+			Model:           "gemini-4-hydrogen",
+			APIKeyEnv:       "GOOGLE_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
+			NativeTools:     geminiNativeTools(),
+		},
+		"gemini-4-neon": {
+			Type:            LLMProviderTypeGoogle,
+			Model:           "gemini-4-neon",
+			APIKeyEnv:       "GOOGLE_API_KEY",
+			ReasoningEffort: ReasoningEffortHigh,
+			NativeTools:     geminiNativeTools(),
+		},
 		"gemini-3.7-flash": {
 			Type:        LLMProviderTypeGoogle,
 			Model:       "gemini-3.7-flash",

@@ -245,7 +245,7 @@ func TestBuiltinImageProviderDisablesURLContext(t *testing.T) {
 	}
 
 	nonImageProviders := []string{
-		"google-default", "gemini-4-argon", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash",
+		"google-default", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash", "gemini-3.1-pro", "gemini-3.1-flash",
 	}
 	for _, name := range nonImageProviders {
 		t.Run(name+" has url_context", func(t *testing.T) {
@@ -467,6 +467,30 @@ func TestBuiltinLLMProviders(t *testing.T) {
 			providerID:  "gemini-4-argon",
 			wantType:    LLMProviderTypeGoogle,
 			wantModel:   "gemini-4-argon",
+			wantEffort:  ReasoningEffortHigh,
+			checkAPIKey: true,
+		},
+		{
+			name:        "gemini-4-carbon",
+			providerID:  "gemini-4-carbon",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-4-carbon",
+			wantEffort:  ReasoningEffortHigh,
+			checkAPIKey: true,
+		},
+		{
+			name:        "gemini-4-hydrogen",
+			providerID:  "gemini-4-hydrogen",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-4-hydrogen",
+			wantEffort:  ReasoningEffortHigh,
+			checkAPIKey: true,
+		},
+		{
+			name:        "gemini-4-neon",
+			providerID:  "gemini-4-neon",
+			wantType:    LLMProviderTypeGoogle,
+			wantModel:   "gemini-4-neon",
 			wantEffort:  ReasoningEffortHigh,
 			checkAPIKey: true,
 		},
