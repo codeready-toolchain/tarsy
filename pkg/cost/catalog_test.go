@@ -380,6 +380,28 @@ func TestLoadSnapshot_ShippedKeysAndCacheRates(t *testing.T) {
 	assert.Nil(t, argon.RatesValidUntil)
 	assert.InDelta(t, argon.InputCostPerToken, entries["gemini/gemini-4-argon"].InputCostPerToken, 1e-15)
 
+	gemini4 := map[string]struct{ input, output, cacheRead float64 }{
+		"gemini-4-carbon":   {4e-06, 2e-05, 2e-07},
+		"gemini-4-hydrogen": {1.5e-06, 7.5e-06, 7.5e-08},
+		"gemini-4-neon":     {3e-06, 1.5e-05, 1.5e-07},
+	}
+	for model, want := range gemini4 {
+		e, ok := entries[model]
+		require.True(t, ok, model)
+		assert.True(t, e.HasCacheRead, model)
+		assert.False(t, e.HasCacheCreate, model)
+		assert.InDelta(t, want.input, e.InputCostPerToken, 1e-15, model)
+		assert.InDelta(t, want.output, e.OutputCostPerToken, 1e-15, model)
+		assert.InDelta(t, want.cacheRead, e.CacheReadCost, 1e-15, model)
+		require.NotNil(t, e.OutputCostPerReasoningToken, model)
+		assert.InDelta(t, want.output, *e.OutputCostPerReasoningToken, 1e-15, model)
+		assert.Nil(t, e.RatesValidUntil, model)
+		alias, ok := entries["gemini/"+model]
+		require.True(t, ok, model)
+		assert.InDelta(t, e.InputCostPerToken, alias.InputCostPerToken, 1e-15, model)
+		assert.InDelta(t, e.OutputCostPerToken, alias.OutputCostPerToken, 1e-15, model)
+	}
+
 	flash := entries["gemini-3.8-flash"]
 	assert.True(t, flash.HasCacheRead)
 	assert.InDelta(t, 7.5e-08, flash.CacheReadCost, 1e-15)

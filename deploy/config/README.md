@@ -222,7 +222,7 @@ Startup logs one warning per provider and still boots when the configured value 
 | Gemini 3.8+, excluding `image` | `low`, `medium`, `high` |
 | Claude 4.8+ | `low`, `medium`, `high`, `max`. `xhigh` is also documented for Opus 4.8+ and generation 5, including 5.5 |
 
-A custom `base_url` skips the documented-set warning. A recognized model below its floor, a GPT ID containing `-chat` or `-main`, or a Gemini ID containing `image` has no documented set, so any configured value warns. Eligible built-in providers set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8. Built-ins below the floor leave the field unset.
+A custom `base_url` skips the documented-set warning. A recognized model below its floor, a GPT ID containing `-chat` or `-main`, or a Gemini ID containing `image` has no documented set, so any configured value warns. Eligible built-in providers set `max` for GPT 5.6+, `xhigh` for Claude 4.8+, and `high` for Grok 4.6+ and Gemini 3.8+. Built-ins below the floor leave the field unset.
 
 The value sent on a call is stored on that agent execution and on each LLM interaction. Session detail shows it on every stage execution, including the original effort after a provider fallback. The dashboard appends a stored effort to the model label as `model (effort)` on those executions, in the trace view, and on the Usage page. A call that sent no effort, and a row written before the column existed, stays unlabeled.
 
@@ -308,6 +308,9 @@ agent_chains:
 
 - **google-default** - Gemini 3.8 Flash
 - **gemini-4-argon** - Gemini 4 Argon
+- **gemini-4-carbon** - Gemini 4 Carbon
+- **gemini-4-hydrogen** - Gemini 4 Hydrogen
+- **gemini-4-neon** - Gemini 4 Neon
 - **openai-default** - GPT-6.1 Sol
 - **gpt-5.6**, **gpt-5.6-sol**, **gpt-5.6-terra**, **gpt-5.6-luna** - GPT-5.6 family
 - **gpt-6.2-sol** - GPT-6.2 Sol
